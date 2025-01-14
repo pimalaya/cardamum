@@ -21,4 +21,10 @@ default = []
 cardamum = { path = ".", features = [] }
 
 [dependencies]
+base64 = { version = "0.22", features = [] }
+chrono = { version = "0.4", features = [] }
+http = { version = "1", features = [] }
+httparse = { version = "1.9", features = [] }
+quick-xml = { version = "0.37", features = ["serialize"] }
+serde = { version = "1", features = ["derive"] }
 thiserror = { version = "2", features = [] }

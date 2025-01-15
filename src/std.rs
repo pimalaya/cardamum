@@ -66,8 +66,8 @@ impl IoConnector {
         }
     }
 
-    pub fn list_contacts(&mut self) -> Result<Multistatus<AddressDataProp>> {
-        let mut flow = ListContactsFlow::new(&self.host, self.port);
+    pub fn list_contacts(&mut self, collection_id: &str) -> Result<Multistatus<AddressDataProp>> {
+        let mut flow = ListContactsFlow::new("test", collection_id);
 
         while let Some(io) = flow.next() {
             match io {

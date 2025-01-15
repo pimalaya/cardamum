@@ -1,31 +1,30 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
-use http::{
-    header::{AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, DATE},
-    Request,
-};
-use httparse::{Header, Response, Status, EMPTY_HEADER};
+use chrono::Utc;
+use memchr::memmem;
 
 use crate::serde::{AddressDataProp, Multistatus};
 
 use super::{EnqueueResponseBytes, Flow, Io, TakeRequestBytes};
 
-const REPORT: &str = "REPORT";
-const DEPTH: &str = "DEPTH";
+const LF: u8 = b'\n';
+const CR: u8 = b'\r';
+
+const CONTENT_LENGTH: &[u8] = b"\r\nContent-Length";
 
 #[derive(Clone, Debug)]
 pub enum State {
     SerializeHttpRequest,
     SendHttpRequest,
-    ReceiveHttpResponseHeader,
-    ReceiveHttpResponseBody,
+    ReceiveHttpResponse,
     DeserializeHttpResponse,
 }
 
 /// [`Flow`] for listing a secret from a keyring contacts.
 #[derive(Debug)]
 pub struct ListContactsFlow {
-    host: String,
-    port: u16,
+    user: String,
+    collection_id: String,
+
     state: Option<State>,
 
     read_bytes: Vec<u8>,
@@ -34,8 +33,8 @@ pub struct ListContactsFlow {
     write_buf: Vec<u8>,
 
     response_bytes: Vec<u8>,
+    response_body_start: usize,
     response_body_length: usize,
-    response_headers: [Header<'static>; 16],
 
     contacts: Option<Result<Multistatus<AddressDataProp>, quick_xml::de::DeError>>,
 }
@@ -43,17 +42,17 @@ pub struct ListContactsFlow {
 impl ListContactsFlow {
     /// Creates a new [`ListContactsFlow`] from the given keyring contacts
     /// key.
-    pub fn new(host: impl ToString, port: u16) -> Self {
+    pub fn new(user: impl ToString, collection_id: impl ToString) -> Self {
         Self {
-            host: host.to_string(),
-            port,
+            user: user.to_string(),
+            collection_id: collection_id.to_string(),
             state: Some(State::SerializeHttpRequest),
             read_bytes: vec![0; 16],
             read_bytes_count: 0,
             write_buf: vec![],
             response_bytes: vec![],
+            response_body_start: 0,
             response_body_length: 0,
-            response_headers: [EMPTY_HEADER; 16],
             contacts: None,
         }
     }
@@ -88,133 +87,150 @@ impl Iterator for ListContactsFlow {
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            match self.state.take() {
+            let state = self.state.take();
+            println!("state: {state:?}");
+
+            match state {
                 None => return None,
                 Some(State::SerializeHttpRequest) => {
-                    let auth = BASE64_STANDARD.encode(format!("test:test"));
+                    let body = r#"
+                        <C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
+                            <D:prop>
+                                <D:getetag />
+                                <D:getlastmodified />
+                                <C:address-data />
+                            </D:prop>
+                        </C:addressbook-query>
+                    "#;
 
-                    let uri = format!(
-                        "http://{}:{}/test/6fa928d4-e344-3021-1ad2-c652209ae251/",
-                        self.host, self.port
-                    );
+                    let uri = format!("/{}/{}", self.user, self.collection_id);
 
-                    let body = br#"
-                    <C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
-                        <D:prop>
-                            <D:getetag />
-                            <D:getlastmodified />
-                            <C:address-data />
-                        </D:prop>
-                    </C:addressbook-query>
-                "#;
+                    let request = Request::report(&uri)
+                        .basic_auth("test", "test")
+                        .depth("1")
+                        .body(body);
 
-                    let (parts, body) = Request::builder()
-                        .method(REPORT)
-                        .uri(uri)
-                        .header(DATE, "Mon, 13 Jan 2025 14:44:31 GMT")
-                        .header(CONTENT_TYPE, "text/plain; charset=utf-8")
-                        .header(CONTENT_LENGTH, body.len())
-                        .header(AUTHORIZATION, auth)
-                        .header(DEPTH, 0)
-                        .body(body)
-                        .unwrap()
-                        .into_parts();
-
-                    let mut request_bytes = Vec::<u8>::new();
-
-                    request_bytes.extend(parts.method.as_str().as_bytes());
-                    request_bytes.push(b' ');
-
-                    request_bytes.extend(parts.uri.path_and_query().unwrap().as_str().as_bytes());
-                    request_bytes.push(b' ');
-
-                    request_bytes.extend(format!("{:?}", parts.version).as_bytes());
-                    request_bytes.push(b'\r');
-                    request_bytes.push(b'\n');
-
-                    for (k, v) in parts.headers {
-                        if let Some(k) = k {
-                            request_bytes.extend(k.as_str().as_bytes());
-                            request_bytes.push(b':');
-                            request_bytes.push(b' ');
-                            request_bytes.extend(v.as_bytes());
-                            request_bytes.push(b'\r');
-                            request_bytes.push(b'\n');
-                        }
-                    }
-
-                    request_bytes.push(b'\r');
-                    request_bytes.push(b'\n');
-
-                    request_bytes.extend(body);
-
-                    self.write_buf = request_bytes;
                     self.state = Some(State::SendHttpRequest);
+                    self.write_buf = request.into();
+                    println!("request: {:?}", String::from_utf8_lossy(&self.write_buf));
                     return Some(Io::TcpWrite);
                 }
                 Some(State::SendHttpRequest) => {
-                    self.state = Some(State::ReceiveHttpResponseHeader);
+                    self.state = Some(State::ReceiveHttpResponse);
                     return Some(Io::TcpRead);
                 }
-                Some(State::ReceiveHttpResponseHeader) => {
+                Some(State::ReceiveHttpResponse) => {
                     let bytes = &self.read_bytes[..self.read_bytes_count];
+                    self.response_bytes.extend(bytes);
+
                     println!(
-                        "bytes({}): {:?}",
+                        "bytes({}/{}): {:?}",
                         self.read_bytes_count,
+                        self.read_bytes.len(),
                         String::from_utf8_lossy(bytes)
                     );
 
-                    if self.response_body_length == 0 {
-                        for header in self.response_headers {
-                            if header.name.eq_ignore_ascii_case(CONTENT_LENGTH.as_str()) {
-                                // FIXME: find a better way?
-                                self.response_body_length = String::from_utf8_lossy(header.value)
-                                    .parse::<usize>()
-                                    .unwrap();
-                                break;
-                            }
+                    if self.response_body_start == 0 {
+                        let body_start = memmem::find(&self.response_bytes, &[CR, LF, CR, LF]);
+
+                        if let Some(n) = body_start {
+                            self.response_body_start = n + 4;
                         }
                     }
 
-                    match self.response.as_mut().unwrap().parse(&bytes).unwrap() {
-                        Status::Partial => {
-                            self.state = Some(State::ReceiveHttpResponseHeader);
-                            return Some(Io::TcpRead);
-                        }
-                        Status::Complete(n) => {
-                            let body = &bytes[n..];
-                            self.response_body_length -= body.len();
-                            self.response_bytes.extend(body);
+                    if self.response_body_start > 0 && self.response_body_length == 0 {
+                        let content_length = memmem::find(&self.response_bytes, CONTENT_LENGTH);
 
-                            if self.response_body_length == 0 {
-                                self.state = Some(State::DeserializeHttpResponse);
-                                continue;
-                            } else {
-                                self.state = Some(State::ReceiveHttpResponseBody);
-                                return Some(Io::TcpRead);
-                            }
+                        if let Some(mut begin) = content_length {
+                            begin += CONTENT_LENGTH.len() + 1;
+
+                            let bytes = &self.response_bytes[begin..];
+                            let end = memmem::find(bytes, &[CR, LF]).unwrap();
+
+                            let content_length = &bytes[..end];
+                            let content_length = String::from_utf8_lossy(content_length);
+                            self.response_body_length = content_length.trim().parse().unwrap();
                         }
                     }
-                }
-                Some(State::ReceiveHttpResponseBody) => {
-                    let bytes = &self.read_bytes[..self.read_bytes_count];
-                    self.response_body_length -= bytes.len();
-                    self.response_bytes.extend(bytes);
 
-                    if self.response_body_length == 0 {
-                        self.state = Some(State::DeserializeHttpResponse);
-                        continue;
-                    } else {
-                        self.state = Some(State::ReceiveHttpResponseBody);
-                        return Some(Io::TcpRead);
+                    if self.response_body_start > 0 && self.response_body_length > 0 {
+                        let body_bytes = &self.response_bytes[self.response_body_start..];
+                        if body_bytes.len() >= self.response_body_length {
+                            self.state = Some(State::DeserializeHttpResponse);
+                            continue;
+                        }
                     }
+
+                    self.state = Some(State::ReceiveHttpResponse);
+                    return Some(Io::TcpRead);
                 }
                 Some(State::DeserializeHttpResponse) => {
-                    let bytes = self.response_bytes.as_slice();
+                    let bytes = &self.response_bytes[self.response_body_start..];
                     self.contacts = Some(quick_xml::de::from_reader(bytes));
                     return None;
                 }
             }
         }
+    }
+}
+
+pub struct Request {
+    bytes: Vec<u8>,
+}
+
+impl Request {
+    pub const REPORT: &str = "REPORT";
+
+    pub fn new(method: &str, uri: &str) -> Self {
+        let mut bytes = Vec::new();
+
+        bytes.extend(method.as_bytes());
+        bytes.push(b' ');
+
+        bytes.extend(uri.as_bytes());
+        bytes.push(b' ');
+
+        bytes.extend(b"HTTP/1.1\r\n");
+
+        bytes.extend(b"Date: ");
+        bytes.extend(Utc::now().format("%a, %d %b %Y %T").to_string().as_bytes());
+        bytes.extend(b" GMT\r\n");
+
+        bytes.extend(b"Content-Type: application/xml\r\n");
+
+        Self { bytes }
+    }
+
+    pub fn report(uri: &str) -> Self {
+        Self::new(Self::REPORT, uri)
+    }
+
+    pub fn basic_auth(mut self, user: &str, pass: &str) -> Self {
+        let auth = BASE64_STANDARD.encode(format!("{user}:{pass}"));
+        self.bytes.extend(b"Authorization: Basic ");
+        self.bytes.extend(auth.as_bytes());
+        self.bytes.extend(b"\r\n");
+        self
+    }
+
+    pub fn depth(mut self, depth: &str) -> Self {
+        self.bytes.extend(b"Depth: ");
+        self.bytes.extend(depth.as_bytes());
+        self.bytes.extend(b"\r\n");
+        self
+    }
+
+    pub fn body(mut self, body: &str) -> Self {
+        self.bytes.extend(b"Content-Length: ");
+        self.bytes.extend(body.len().to_string().as_bytes());
+        self.bytes.extend(b"\r\n\r\n");
+        self.bytes.extend(body.as_bytes());
+        self
+    }
+}
+
+impl From<Request> for Vec<u8> {
+    fn from(request: Request) -> Self {
+        request.bytes
     }
 }

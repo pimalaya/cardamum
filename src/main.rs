@@ -13,6 +13,12 @@ fn main() {
     let port = port.parse::<u16>().expect("should be an integer");
     println!("using port: {port:?}");
 
+    let user = env::var("USER").unwrap_or(String::from("test"));
+    println!("using user: {user:?}");
+
+    let password = env::var("PASSWORD").unwrap_or(String::from("test"));
+    println!("using password: {password:?}");
+
     // Current user principal
 
     // NOTE: ideally, this should be needed once in order to re-use

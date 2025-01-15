@@ -5,7 +5,7 @@ use std::{
 
 use thiserror::Error;
 
-use super::sans_io::{ReadBytes, WroteBytes};
+use super::sans_io::{ReadBytes, WriteBytes};
 
 #[derive(Debug, Error)]
 pub enum Error {
@@ -16,25 +16,27 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
-pub struct IoConnector {
+pub struct StdConnector {
     stream: TcpStream,
 }
 
-impl IoConnector {
+impl StdConnector {
     pub fn connect(host: impl AsRef<str>, port: u16) -> Result<Self> {
         let stream = TcpStream::connect((host.as_ref(), port))?;
         Ok(Self { stream })
     }
 
-    pub fn read<'a, F: ReadBytes>(&mut self, flow: &'a mut F) -> Result<&'a [u8]> {
-        let count = self.stream.read(flow.read_buffer_mut())?;
+    pub fn read<F: ReadBytes>(&mut self, flow: &mut F) -> Result<()> {
+        let buffer = flow.get_buffer_mut();
+        let count = self.stream.read(buffer)?;
         flow.set_read_bytes_count(count);
-        Ok(&flow.read_buffer()[..count])
+        Ok(())
     }
 
-    pub fn write<'a, F: WroteBytes>(&mut self, flow: &mut F, bytes: &'a [u8]) -> Result<&'a [u8]> {
-        let count = self.stream.write(bytes)?;
+    pub fn write<F: WriteBytes>(&mut self, flow: &mut F) -> Result<()> {
+        let buffer = flow.get_buffer();
+        let count = self.stream.write(buffer)?;
         flow.set_wrote_bytes_count(count);
-        Ok(&bytes[..count])
+        Ok(())
     }
 }

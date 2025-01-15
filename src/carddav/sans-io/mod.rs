@@ -4,10 +4,8 @@
 //! definitions, as well as commonly-used flows definition like
 //! [`ReadEntryFlow`], [`WriteEntryFlow`] and [`DeleteEntryFlow`].
 
-mod flow;
 #[path = "flow-contact-list.rs"]
 mod flow_contact_list;
-mod io;
 
 #[doc(inline)]
-pub use self::{flow::*, flow_contact_list::*, io::*};
+pub use self::flow_contact_list::*;

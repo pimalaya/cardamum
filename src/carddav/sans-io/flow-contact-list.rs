@@ -2,9 +2,10 @@ use base64::{prelude::BASE64_STANDARD, Engine};
 use chrono::Utc;
 use memchr::memmem;
 
-use crate::serde::{AddressDataProp, Multistatus};
-
-use super::{EnqueueResponseBytes, Flow, Io, TakeRequestBytes};
+use crate::{
+    carddav::serde::{AddressDataProp, Multistatus},
+    tcp::sans_io::{Flow, Io, ReadBytes, WriteBytes},
+};
 
 const LF: u8 = b'\n';
 const CR: u8 = b'\r';
@@ -19,7 +20,6 @@ pub enum State {
     DeserializeHttpResponse,
 }
 
-/// [`Flow`] for listing a secret from a keyring contacts.
 #[derive(Debug)]
 pub struct ListContactsFlow {
     user: String,
@@ -27,10 +27,11 @@ pub struct ListContactsFlow {
 
     state: Option<State>,
 
-    read_bytes: Vec<u8>,
+    read_buffer: Vec<u8>,
     read_bytes_count: usize,
 
-    write_buf: Vec<u8>,
+    write_buffer: Vec<u8>,
+    wrote_bytes_count: usize,
 
     response_bytes: Vec<u8>,
     response_body_start: usize,
@@ -40,16 +41,15 @@ pub struct ListContactsFlow {
 }
 
 impl ListContactsFlow {
-    /// Creates a new [`ListContactsFlow`] from the given keyring contacts
-    /// key.
     pub fn new(user: impl ToString, collection_id: impl ToString) -> Self {
         Self {
             user: user.to_string(),
             collection_id: collection_id.to_string(),
             state: Some(State::SerializeHttpRequest),
-            read_bytes: vec![0; 16],
+            read_buffer: vec![0; 512],
             read_bytes_count: 0,
-            write_buf: vec![],
+            write_buffer: vec![],
+            wrote_bytes_count: 0,
             response_bytes: vec![],
             response_body_start: 0,
             response_body_length: 0,
@@ -66,18 +66,22 @@ impl ListContactsFlow {
 
 impl Flow for ListContactsFlow {}
 
-impl TakeRequestBytes for ListContactsFlow {
-    fn take_request_bytes(&mut self) -> Vec<u8> {
-        self.write_buf.drain(..).collect()
+impl WriteBytes for ListContactsFlow {
+    fn get_buffer(&mut self) -> &[u8] {
+        &self.write_buffer
+    }
+
+    fn set_wrote_bytes_count(&mut self, count: usize) {
+        self.wrote_bytes_count = count;
     }
 }
 
-impl EnqueueResponseBytes for ListContactsFlow {
-    fn buf(&mut self) -> &mut [u8] {
-        &mut self.read_bytes
+impl ReadBytes for ListContactsFlow {
+    fn get_buffer_mut(&mut self) -> &mut [u8] {
+        &mut self.read_buffer
     }
 
-    fn read_bytes_count(&mut self, count: usize) {
+    fn set_read_bytes_count(&mut self, count: usize) {
         self.read_bytes_count = count;
     }
 }
@@ -111,22 +115,22 @@ impl Iterator for ListContactsFlow {
                         .body(body);
 
                     self.state = Some(State::SendHttpRequest);
-                    self.write_buf = request.into();
-                    println!("request: {:?}", String::from_utf8_lossy(&self.write_buf));
-                    return Some(Io::TcpWrite);
+                    self.write_buffer = request.into();
+                    println!("request: {:?}", String::from_utf8_lossy(&self.write_buffer));
+                    return Some(Io::Write);
                 }
                 Some(State::SendHttpRequest) => {
                     self.state = Some(State::ReceiveHttpResponse);
-                    return Some(Io::TcpRead);
+                    return Some(Io::Read);
                 }
                 Some(State::ReceiveHttpResponse) => {
-                    let bytes = &self.read_bytes[..self.read_bytes_count];
+                    let bytes = &self.read_buffer[..self.read_bytes_count];
                     self.response_bytes.extend(bytes);
 
                     println!(
                         "bytes({}/{}): {:?}",
                         self.read_bytes_count,
-                        self.read_bytes.len(),
+                        self.read_buffer.len(),
                         String::from_utf8_lossy(bytes)
                     );
 
@@ -162,7 +166,7 @@ impl Iterator for ListContactsFlow {
                     }
 
                     self.state = Some(State::ReceiveHttpResponse);
-                    return Some(Io::TcpRead);
+                    return Some(Io::Read);
                 }
                 Some(State::DeserializeHttpResponse) => {
                     let bytes = &self.response_bytes[self.response_body_start..];

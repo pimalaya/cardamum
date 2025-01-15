@@ -1,7 +1,9 @@
 use std::env;
 
 use cardamum::{
-    carddav::sans_io::{AddressbookHomeSetFlow, CurrentUserPrincipalFlow, ListContactsFlow},
+    carddav::sans_io::{
+        AddressbookHomeSetFlow, Addressbooks, CurrentUserPrincipalFlow, ListContactsFlow,
+    },
     tcp::{sans_io::Io as TcpIo, std::StdConnector},
 };
 
@@ -38,10 +40,11 @@ fn main() {
         }
     }
 
-    let current_user_principal_url = flow
-        .output()
-        .unwrap()
-        .unwrap()
+    let output = flow.output().unwrap().unwrap();
+
+    println!("current user principal output: {output:#?}");
+
+    let current_user_principal_url = output
         .responses
         .into_iter()
         .next()
@@ -73,10 +76,11 @@ fn main() {
         }
     }
 
-    let addressbook_home_set_url = flow
-        .output()
-        .unwrap()
-        .unwrap()
+    let output = flow.output().unwrap().unwrap();
+
+    println!("addressbook home set output: {output:#?}");
+
+    let addressbook_home_set_url = output
         .responses
         .into_iter()
         .next()
@@ -92,10 +96,39 @@ fn main() {
 
     println!("addressbook home set: {addressbook_home_set_url:?}");
 
-    // List CardDAV contacts
+    // Addressbooks
 
     let mut tcp = StdConnector::connect(&host, port).unwrap();
-    let mut flow = ListContactsFlow::new("test", "6fa928d4-e344-3021-1ad2-c652209ae251");
+
+    let mut flow = Addressbooks::new("test", addressbook_home_set_url);
+    while let Some(io) = flow.next() {
+        match io {
+            TcpIo::Read => {
+                tcp.read(&mut flow).unwrap();
+            }
+            TcpIo::Write => {
+                tcp.write(&mut flow).unwrap();
+            }
+        }
+    }
+
+    let output = flow.output().unwrap().unwrap();
+
+    println!("addressbooks output: {output:#?}");
+
+    let addressbook_hrefs = output.get_addressbook_hrefs().collect::<Vec<_>>();
+
+    println!(
+        "found {} addressbooks: {addressbook_hrefs:#?}",
+        addressbook_hrefs.len()
+    );
+
+    // List CardDAV contacts
+
+    let addressbook_href = addressbook_hrefs.into_iter().next().unwrap();
+
+    let mut tcp = StdConnector::connect(&host, port).unwrap();
+    let mut flow = ListContactsFlow::new("test", addressbook_href);
     while let Some(io) = flow.next() {
         match io {
             TcpIo::Read => {
@@ -108,5 +141,6 @@ fn main() {
     }
 
     let output = flow.output().unwrap();
-    println!("contacts: {output:#?}");
+
+    println!("contacts output: {output:#?}");
 }

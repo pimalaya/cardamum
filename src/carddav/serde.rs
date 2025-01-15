@@ -7,11 +7,31 @@ pub struct Multistatus<T> {
     pub responses: Vec<Response<T>>,
 }
 
+impl Multistatus<AddressbookProp> {
+    pub fn get_addressbook_hrefs(&self) -> impl Iterator<Item = &str> {
+        self.responses
+            .iter()
+            .filter_map(Response::get_addressbook_href)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct Response<T> {
     pub href: Href,
     #[serde(rename = "propstat")]
     pub propstats: Vec<Propstat<T>>,
+}
+
+impl Response<AddressbookProp> {
+    pub fn get_addressbook_href(&self) -> Option<&str> {
+        for propstat in &self.propstats {
+            if propstat.prop.resourcetype.addressbook.is_some() {
+                return Some(self.href.value.as_str());
+            }
+        }
+
+        None
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

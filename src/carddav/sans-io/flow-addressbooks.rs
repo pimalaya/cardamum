@@ -1,27 +1,19 @@
 use crate::{
-    carddav::serde::{AddressDataProp, Multistatus},
+    carddav::serde::{AddressbookProp, Multistatus},
     http::sans_io::{Request, SendReceiveFlow},
     tcp::sans_io::{Flow, Io, ReadBytes, WriteBytes},
 };
 
 #[derive(Debug)]
-pub struct ListContactsFlow {
-    http: SendReceiveFlow<Multistatus<AddressDataProp>>,
+pub struct Addressbooks {
+    http: SendReceiveFlow<Multistatus<AddressbookProp>>,
 }
 
-impl ListContactsFlow {
-    const BODY: &str = r#"
-        <C:addressbook-query xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
-            <prop>
-                <getetag />
-                <getlastmodified />
-                <C:address-data />
-            </prop>
-        </C:addressbook-query>
-    "#;
+impl Addressbooks {
+    const BODY: &str = "";
 
-    pub fn new(user: impl AsRef<str>, href: impl AsRef<str>) -> Self {
-        let request = Request::report(href.as_ref())
+    pub fn new(user: impl AsRef<str>, uri: impl AsRef<str>) -> Self {
+        let request = Request::propfind(uri.as_ref())
             .basic_auth(user.as_ref(), "test")
             .depth("1")
             .body(Self::BODY);
@@ -31,14 +23,14 @@ impl ListContactsFlow {
         }
     }
 
-    pub fn output(self) -> Option<Result<Multistatus<AddressDataProp>, quick_xml::de::DeError>> {
+    pub fn output(self) -> Option<Result<Multistatus<AddressbookProp>, quick_xml::de::DeError>> {
         self.http.output()
     }
 }
 
-impl Flow for ListContactsFlow {}
+impl Flow for Addressbooks {}
 
-impl WriteBytes for ListContactsFlow {
+impl WriteBytes for Addressbooks {
     fn get_buffer(&mut self) -> &[u8] {
         self.http.get_buffer()
     }
@@ -48,7 +40,7 @@ impl WriteBytes for ListContactsFlow {
     }
 }
 
-impl ReadBytes for ListContactsFlow {
+impl ReadBytes for Addressbooks {
     fn get_buffer_mut(&mut self) -> &mut [u8] {
         self.http.get_buffer_mut()
     }
@@ -58,7 +50,7 @@ impl ReadBytes for ListContactsFlow {
     }
 }
 
-impl Iterator for ListContactsFlow {
+impl Iterator for Addressbooks {
     type Item = Io;
 
     fn next(&mut self) -> Option<Self::Item> {

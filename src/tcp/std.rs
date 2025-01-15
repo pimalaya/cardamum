@@ -29,6 +29,9 @@ impl StdConnector {
     pub fn read<F: ReadBytes>(&mut self, flow: &mut F) -> Result<()> {
         let buffer = flow.get_buffer_mut();
         let count = self.stream.read(buffer)?;
+        if count == 0 {
+            panic!("connection over")
+        }
         flow.set_read_bytes_count(count);
         Ok(())
     }
@@ -36,6 +39,9 @@ impl StdConnector {
     pub fn write<F: WriteBytes>(&mut self, flow: &mut F) -> Result<()> {
         let buffer = flow.get_buffer();
         let count = self.stream.write(buffer)?;
+        if count == 0 {
+            panic!("connection over")
+        }
         flow.set_wrote_bytes_count(count);
         Ok(())
     }

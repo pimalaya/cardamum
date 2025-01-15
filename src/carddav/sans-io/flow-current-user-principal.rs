@@ -3,7 +3,7 @@ use chrono::Utc;
 use memchr::memmem;
 
 use crate::{
-    carddav::serde::{AddressDataProp, Multistatus},
+    carddav::serde::{CurrentUserPrincipalProp, Multistatus},
     tcp::sans_io::{Flow, Io, ReadBytes, WriteBytes},
 };
 
@@ -15,9 +15,8 @@ const CR: u8 = b'\r';
 const CONTENT_LENGTH: &[u8] = b"\r\nContent-Length";
 
 #[derive(Debug)]
-pub struct ListContactsFlow {
+pub struct CurrentUserPrincipalFlow {
     user: String,
-    collection_id: String,
 
     state: Option<State>,
 
@@ -31,14 +30,13 @@ pub struct ListContactsFlow {
     response_body_start: usize,
     response_body_length: usize,
 
-    contacts: Option<Result<Multistatus<AddressDataProp>, quick_xml::de::DeError>>,
+    output: Option<Result<Multistatus<CurrentUserPrincipalProp>, quick_xml::de::DeError>>,
 }
 
-impl ListContactsFlow {
-    pub fn new(user: impl ToString, collection_id: impl ToString) -> Self {
+impl CurrentUserPrincipalFlow {
+    pub fn new(user: impl ToString) -> Self {
         Self {
             user: user.to_string(),
-            collection_id: collection_id.to_string(),
             state: Some(State::SerializeHttpRequest),
             read_buffer: vec![0; 512],
             read_bytes_count: 0,
@@ -47,20 +45,20 @@ impl ListContactsFlow {
             response_bytes: vec![],
             response_body_start: 0,
             response_body_length: 0,
-            contacts: None,
+            output: None,
         }
     }
 
     pub fn output(
         &mut self,
-    ) -> Option<Result<Multistatus<AddressDataProp>, quick_xml::de::DeError>> {
-        self.contacts.take()
+    ) -> Option<Result<Multistatus<CurrentUserPrincipalProp>, quick_xml::de::DeError>> {
+        self.output.take()
     }
 }
 
-impl Flow for ListContactsFlow {}
+impl Flow for CurrentUserPrincipalFlow {}
 
-impl WriteBytes for ListContactsFlow {
+impl WriteBytes for CurrentUserPrincipalFlow {
     fn get_buffer(&mut self) -> &[u8] {
         &self.write_buffer
     }
@@ -70,7 +68,7 @@ impl WriteBytes for ListContactsFlow {
     }
 }
 
-impl ReadBytes for ListContactsFlow {
+impl ReadBytes for CurrentUserPrincipalFlow {
     fn get_buffer_mut(&mut self) -> &mut [u8] {
         &mut self.read_buffer
     }
@@ -80,7 +78,7 @@ impl ReadBytes for ListContactsFlow {
     }
 }
 
-impl Iterator for ListContactsFlow {
+impl Iterator for CurrentUserPrincipalFlow {
     type Item = Io;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -92,20 +90,15 @@ impl Iterator for ListContactsFlow {
                 None => return None,
                 Some(State::SerializeHttpRequest) => {
                     let body = r#"
-                        <C:addressbook-query xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav">
-                            <D:prop>
-                                <D:getetag />
-                                <D:getlastmodified />
-                                <C:address-data />
-                            </D:prop>
-                        </C:addressbook-query>
+                        <d:propfind xmlns:d="DAV:">
+                            <d:prop>
+                                <d:current-user-principal />
+                            </d:prop>
+                        </d:propfind>
                     "#;
 
-                    let uri = format!("/{}/{}", self.user, self.collection_id);
-
-                    let request = Request::report(&uri)
-                        .basic_auth("test", "test")
-                        .depth("1")
+                    let request = Request::propfind("/")
+                        .basic_auth(&self.user, "test")
                         .body(body);
 
                     self.state = Some(State::SendHttpRequest);
@@ -164,7 +157,7 @@ impl Iterator for ListContactsFlow {
                 }
                 Some(State::DeserializeHttpResponse) => {
                     let bytes = &self.response_bytes[self.response_body_start..];
-                    self.contacts = Some(quick_xml::de::from_reader(bytes));
+                    self.output = Some(quick_xml::de::from_reader(bytes));
                     return None;
                 }
             }
@@ -177,6 +170,7 @@ pub struct Request {
 }
 
 impl Request {
+    pub const PROPFIND: &str = "PROPFIND";
     pub const REPORT: &str = "REPORT";
 
     pub fn new(method: &str, uri: &str) -> Self {
@@ -194,9 +188,13 @@ impl Request {
         bytes.extend(Utc::now().format("%a, %d %b %Y %T").to_string().as_bytes());
         bytes.extend(b" GMT\r\n");
 
-        bytes.extend(b"Content-Type: application/xml\r\n");
+        bytes.extend(b"Content-Type: application/xml; charset=utf-8\r\n");
 
         Self { bytes }
+    }
+
+    pub fn propfind(uri: &str) -> Self {
+        Self::new(Self::PROPFIND, uri)
     }
 
     pub fn report(uri: &str) -> Self {

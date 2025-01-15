@@ -99,12 +99,12 @@ impl<T: for<'de> Deserialize<'de>> Iterator for SendReceiveFlow<T> {
                     let bytes = &self.read_buffer[..self.read_bytes_count];
                     self.response_bytes.extend(bytes);
 
-                    println!(
-                        "bytes({}/{}): {:?}",
-                        self.read_bytes_count,
-                        self.read_buffer.len(),
-                        String::from_utf8_lossy(bytes)
-                    );
+                    // println!(
+                    //     "bytes({}/{}): {:?}",
+                    //     self.read_bytes_count,
+                    //     self.read_buffer.len(),
+                    //     String::from_utf8_lossy(bytes)
+                    // );
 
                     if self.response_body_start == 0 {
                         let body_start = memmem::find(&self.response_bytes, &[CR, LF, CR, LF]);

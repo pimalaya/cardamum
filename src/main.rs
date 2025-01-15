@@ -1,7 +1,7 @@
 use std::env;
 
 use cardamum::{
-    carddav::sans_io::{CurrentUserPrincipalFlow, ListContactsFlow},
+    carddav::sans_io::{AddressbookHomeSetFlow, CurrentUserPrincipalFlow, ListContactsFlow},
     tcp::{sans_io::Io as TcpIo, std::StdConnector},
 };
 
@@ -38,8 +38,59 @@ fn main() {
         }
     }
 
-    let output = flow.output().unwrap();
-    println!("current user principal: {output:#?}");
+    let current_user_principal_url = flow
+        .output()
+        .unwrap()
+        .unwrap()
+        .responses
+        .into_iter()
+        .next()
+        .unwrap()
+        .propstats
+        .into_iter()
+        .next()
+        .unwrap()
+        .prop
+        .current_user_principal
+        .href
+        .value;
+
+    println!("current user principal: {current_user_principal_url:?}");
+
+    // Addressbook home set
+
+    let mut tcp = StdConnector::connect(&host, port).unwrap();
+
+    let mut flow = AddressbookHomeSetFlow::new("test", current_user_principal_url);
+    while let Some(io) = flow.next() {
+        match io {
+            TcpIo::Read => {
+                tcp.read(&mut flow).unwrap();
+            }
+            TcpIo::Write => {
+                tcp.write(&mut flow).unwrap();
+            }
+        }
+    }
+
+    let addressbook_home_set_url = flow
+        .output()
+        .unwrap()
+        .unwrap()
+        .responses
+        .into_iter()
+        .next()
+        .unwrap()
+        .propstats
+        .into_iter()
+        .next()
+        .unwrap()
+        .prop
+        .addressbook_home_set
+        .href
+        .value;
+
+    println!("addressbook home set: {addressbook_home_set_url:?}");
 
     // List CardDAV contacts
 

@@ -1,7 +1,7 @@
 use crate::{
     carddav::serde::{AddressbookHomeSetProp, Multistatus},
     http::sans_io::{Request, SendReceiveFlow},
-    tcp::sans_io::{Flow, Io, ReadBytes, WriteBytes},
+    tcp::sans_io::{Flow, Io, Read, Write},
 };
 
 #[derive(Debug)]
@@ -42,7 +42,7 @@ impl AddressbookHomeSetFlow {
 
 impl Flow for AddressbookHomeSetFlow {}
 
-impl WriteBytes for AddressbookHomeSetFlow {
+impl Write for AddressbookHomeSetFlow {
     fn get_buffer(&mut self) -> &[u8] {
         self.http.get_buffer()
     }
@@ -52,7 +52,7 @@ impl WriteBytes for AddressbookHomeSetFlow {
     }
 }
 
-impl ReadBytes for AddressbookHomeSetFlow {
+impl Read for AddressbookHomeSetFlow {
     fn get_buffer_mut(&mut self) -> &mut [u8] {
         self.http.get_buffer_mut()
     }

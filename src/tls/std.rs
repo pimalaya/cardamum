@@ -7,7 +7,7 @@ use std::{
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
 use rustls_platform_verifier::ConfigVerifierExt;
 
-use crate::tcp::sans_io::{ReadBytes, WriteBytes};
+use crate::tcp::sans_io::{Read as TcpRead, Write as TcpWrite};
 
 #[derive(Debug)]
 pub struct RustlsConnector {
@@ -25,14 +25,14 @@ impl RustlsConnector {
         Ok(Self { stream })
     }
 
-    pub fn read<F: ReadBytes>(&mut self, flow: &mut F) -> Result<()> {
+    pub fn read<F: TcpRead>(&mut self, flow: &mut F) -> Result<()> {
         let buffer = flow.get_buffer_mut();
         let read_bytes_count = self.stream.read(buffer)?;
         flow.set_read_bytes_count(read_bytes_count);
         Ok(())
     }
 
-    pub fn write<F: WriteBytes>(&mut self, flow: &mut F) -> Result<()> {
+    pub fn write<F: TcpWrite>(&mut self, flow: &mut F) -> Result<()> {
         let buffer = flow.get_buffer();
         let wrote_bytes_count = self.stream.write(buffer)?;
         flow.set_wrote_bytes_count(wrote_bytes_count);

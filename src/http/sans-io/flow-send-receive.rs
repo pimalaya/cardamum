@@ -5,7 +5,7 @@ use serde::Deserialize;
 
 use crate::{
     http::sans_io::CRLF,
-    tcp::sans_io::{Flow, Io, ReadBytes, WriteBytes},
+    tcp::sans_io::{Flow, Io, Read, Write},
 };
 
 use super::{Request, State, CR, LF};
@@ -58,7 +58,7 @@ impl<T> SendReceiveFlow<T> {
 
 impl<T: for<'de> Deserialize<'de>> Flow for SendReceiveFlow<T> {}
 
-impl<T: for<'de> Deserialize<'de>> WriteBytes for SendReceiveFlow<T> {
+impl<T: for<'de> Deserialize<'de>> Write for SendReceiveFlow<T> {
     fn get_buffer(&mut self) -> &[u8] {
         &self.write_buffer
     }
@@ -68,7 +68,7 @@ impl<T: for<'de> Deserialize<'de>> WriteBytes for SendReceiveFlow<T> {
     }
 }
 
-impl<T: for<'de> Deserialize<'de>> ReadBytes for SendReceiveFlow<T> {
+impl<T: for<'de> Deserialize<'de>> Read for SendReceiveFlow<T> {
     fn get_buffer_mut(&mut self) -> &mut [u8] {
         &mut self.read_buffer
     }

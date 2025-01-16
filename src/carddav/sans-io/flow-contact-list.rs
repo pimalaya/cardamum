@@ -1,7 +1,7 @@
 use crate::{
     carddav::serde::{AddressDataProp, Multistatus},
     http::sans_io::{Request, SendReceiveFlow},
-    tcp::sans_io::{Flow, Io, ReadBytes, WriteBytes},
+    tcp::sans_io::{Flow, Io, Read, Write},
 };
 
 #[derive(Debug)]
@@ -43,7 +43,7 @@ impl ListContactsFlow {
 
 impl Flow for ListContactsFlow {}
 
-impl WriteBytes for ListContactsFlow {
+impl Write for ListContactsFlow {
     fn get_buffer(&mut self) -> &[u8] {
         self.http.get_buffer()
     }
@@ -53,7 +53,7 @@ impl WriteBytes for ListContactsFlow {
     }
 }
 
-impl ReadBytes for ListContactsFlow {
+impl Read for ListContactsFlow {
     fn get_buffer_mut(&mut self) -> &mut [u8] {
         self.http.get_buffer_mut()
     }

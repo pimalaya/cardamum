@@ -3,14 +3,15 @@ use std::mem;
 use memchr::memmem;
 use serde::Deserialize;
 
-use crate::tcp::sans_io::{Flow, Io, ReadBytes, WriteBytes};
+use crate::{
+    http::sans_io::CRLF,
+    tcp::sans_io::{Flow, Io, ReadBytes, WriteBytes},
+};
 
-use super::{Request, State};
+use super::{Request, State, CR, LF};
 
-const LF: u8 = b'\n';
-const CR: u8 = b'\r';
-
-const CONTENT_LENGTH: &[u8] = b"\r\nContent-Length";
+const CRLF_CRLF: [u8; 4] = [CR, LF, CR, LF];
+const CONTENT_LENGTH: &[u8] = b"Content-Length";
 
 #[derive(Debug)]
 pub struct SendReceiveFlow<T> {
@@ -96,6 +97,11 @@ impl<T: for<'de> Deserialize<'de>> Iterator for SendReceiveFlow<T> {
                     return Some(Io::Read);
                 }
                 Some(State::ReceiveHttpResponse) => {
+                    if self.read_bytes_count == 0 {
+                        self.state = Some(State::DeserializeHttpResponse);
+                        continue;
+                    }
+
                     let bytes = &self.read_buffer[..self.read_bytes_count];
                     self.response_bytes.extend(bytes);
 
@@ -107,7 +113,7 @@ impl<T: for<'de> Deserialize<'de>> Iterator for SendReceiveFlow<T> {
                     // );
 
                     if self.response_body_start == 0 {
-                        let body_start = memmem::find(&self.response_bytes, &[CR, LF, CR, LF]);
+                        let body_start = memmem::find(&self.response_bytes, &CRLF_CRLF);
 
                         if let Some(n) = body_start {
                             self.response_body_start = n + 4;
@@ -115,17 +121,34 @@ impl<T: for<'de> Deserialize<'de>> Iterator for SendReceiveFlow<T> {
                     }
 
                     if self.response_body_start > 0 && self.response_body_length == 0 {
-                        let content_length = memmem::find(&self.response_bytes, CONTENT_LENGTH);
+                        let mut content_length_start = None;
 
-                        if let Some(mut begin) = content_length {
-                            begin += CONTENT_LENGTH.len() + 1;
+                        for crlf in memmem::find_iter(&self.response_bytes, &CRLF) {
+                            if let Some(start) = content_length_start {
+                                let length = &self.response_bytes[start..crlf];
+                                let length = String::from_utf8_lossy(length);
+                                self.response_body_length = length.trim().parse().unwrap();
+                                break;
+                            }
 
-                            let bytes = &self.response_bytes[begin..];
-                            let end = memmem::find(bytes, &[CR, LF]).unwrap();
+                            // take bytes after the found CRLF
+                            let crlf = crlf + CRLF.len();
+                            let bytes = &self.response_bytes[crlf..];
 
-                            let content_length = &bytes[..end];
-                            let content_length = String::from_utf8_lossy(content_length);
-                            self.response_body_length = content_length.trim().parse().unwrap();
+                            // break if length of bytes after CRLF is
+                            // smaller than `Content-Length: 0`
+                            let colon_space_digit = 3;
+                            if bytes.len() < CONTENT_LENGTH.len() + colon_space_digit {
+                                break;
+                            }
+
+                            // search for another CRLF if header does
+                            // not match Content-Type
+                            if !bytes[..CONTENT_LENGTH.len()].eq_ignore_ascii_case(CONTENT_LENGTH) {
+                                continue;
+                            }
+
+                            content_length_start = Some(crlf + CONTENT_LENGTH.len() + 1);
                         }
                     }
 

@@ -25,5 +25,7 @@ base64 = { version = "0.22", features = [] }
 chrono = { version = "0.4", features = [] }
 memchr = { version = "2.7.4", features = [] }
 quick-xml = { version = "0.37", features = ["serialize"] }
+rustls = { version = "0.23", features = [] }
+rustls-platform-verifier = { version = "0.5", features = [] }
 serde = { version = "1", features = ["derive"] }
 thiserror = { version = "2", features = [] }

@@ -12,9 +12,14 @@ pub struct Addressbooks {
 impl Addressbooks {
     const BODY: &str = "";
 
-    pub fn new(user: impl AsRef<str>, uri: impl AsRef<str>) -> Self {
-        let request = Request::propfind(uri.as_ref())
-            .basic_auth(user.as_ref(), "test")
+    pub fn new(
+        uri: impl AsRef<str>,
+        version: impl AsRef<str>,
+        user: impl AsRef<str>,
+        pass: impl AsRef<str>,
+    ) -> Self {
+        let request = Request::propfind(uri.as_ref(), version.as_ref())
+            .basic_auth(user.as_ref(), pass.as_ref())
             .depth("1")
             .body(Self::BODY);
 

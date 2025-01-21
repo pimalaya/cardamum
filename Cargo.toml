@@ -41,6 +41,7 @@ crossterm = { version = "0.27", features = ["serde"] }
 pimalaya-tui = { version = "0.2", default-features = false, features = ["cli", "config", "path", "tracing"] }
 serde = { version = "1", features = ["derive"] }
 tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }
 zeroize = "1"
 
 [patch.crates-io]

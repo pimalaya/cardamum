@@ -3,7 +3,7 @@
 
 pub mod account;
 pub mod addressbook;
-// pub mod card;
+pub mod card;
 #[cfg(any(
     feature = "carddav",
     feature = "carddav-native-tls",

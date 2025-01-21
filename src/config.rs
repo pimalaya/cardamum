@@ -1,7 +1,3 @@
-//! # Configuration
-//!
-//! Module dedicated to the main configuration of Neverest CLI.
-
 use std::{collections::HashMap, fmt};
 
 use serde::{Deserialize, Serialize};
@@ -10,7 +6,7 @@ use crate::account::config::TomlAccountConfig;
 
 /// The main configuration.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct TomlConfig {
     /// The configuration of all the accounts.
     pub accounts: HashMap<String, TomlAccountConfig>,
@@ -24,13 +20,13 @@ impl pimalaya_tui::terminal::config::TomlConfig for TomlConfig {
     }
 
     fn get_default_account_config(&self) -> Option<(String, Self::TomlAccountConfig)> {
-        self.accounts.iter().find_map(|(name, account)| {
+        for (name, account) in &self.accounts {
             if account.default {
-                Some((name.to_owned(), account.clone()))
-            } else {
-                None
+                return Some((name.clone(), account.clone()));
             }
-        })
+        }
+
+        None
     }
 
     fn get_account_config(&self, name: &str) -> Option<(String, Self::TomlAccountConfig)> {

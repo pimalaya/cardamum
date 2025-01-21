@@ -304,34 +304,6 @@ impl Serialize for AddressbooksTable {
     }
 }
 
-impl TryFrom<ListAddressbooksFlow> for Addressbooks {
-    type Error = quick_xml::DeError;
-
-    fn try_from(flow: ListAddressbooksFlow) -> Result<Self, Self::Error> {
-        let mut addressbooks = Vec::new();
-        let output = flow.output()?;
-
-        for response in output.responses {
-            let id = &response.href.value;
-
-            for propstat in response.propstats {
-                if let Some(t) = propstat.prop.resourcetype {
-                    if t.addressbook.is_some() {
-                        addressbooks.push(Addressbook {
-                            id: id.clone(),
-                            name: propstat.prop.displayname,
-                            desc: propstat.prop.addressbook_description,
-                            color: propstat.prop.addressbook_color,
-                        })
-                    }
-                }
-            }
-        }
-
-        Ok(Self(addressbooks))
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Card {

@@ -24,26 +24,24 @@ cardamum = { path = ".", features = [] }
 pimalaya-tui = { version = "0.2", default-features = false, features = ["build-envs"] }
 
 [dependencies]
-base64 = { version = "0.22", features = [] }
-chrono = { version = "0.4", features = [] }
-memchr = { version = "2.7.4", features = [] }
-quick-xml = { version = "0.37", features = ["serialize"] }
-rustls = { version = "0.23", features = [] }
-rustls-platform-verifier = { version = "0.5", features = [] }
-serde = { version = "1", features = ["derive"] }
-thiserror = { version = "2", features = [] }
-tracing = { version = "0.1", features = [] }
-uuid = { version = "1", features = ["v4"] }
-vparser = { version = "1", features = [] }
-
-# CLI
+addressbook = { version = "0.1", features = [] }
+addressbook-std = { version = "0.1", features = [] }
+addressbook-std-native-tls = { version = "0.1", features = [] }
+addressbook-std-rustls = { version = "0.1", features = [] }
 clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
-clap_complete = { version = "4.4", features = [] }
-clap_mangen = { version = "0.2", features = [] }
-color-eyre = { version = "0.6", features = [] }
-comfy-table = { version = "7.1", features = [] }
+clap_complete = "4.4"
+clap_mangen = "0.2"
+color-eyre = "0.6"
+comfy-table = "7.1"
 crossterm = { version = "0.27", features = ["serde"] }
 pimalaya-tui = { version = "0.2", default-features = false, features = ["cli", "config", "path", "tracing"] }
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1"
+zeroize = "1"
 
 [patch.crates-io]
+addressbook-std-native-tls.git = "https://github.com/pimalaya/addressbook"
+addressbook-std-rustls.git = "https://github.com/pimalaya/addressbook"
+addressbook-std.git = "https://github.com/pimalaya/addressbook"
+addressbook.git = "https://github.com/pimalaya/addressbook"
 pimalaya-tui.git = "https://github.com/pimalaya/tui"

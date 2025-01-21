@@ -14,8 +14,10 @@ use pimalaya_tui::{
 };
 
 use crate::{
-    addressbook::command::AddressbookSubcommand, card::command::CardSubcommand,
-    completion::command::GenerateCompletionsCommand, config::TomlConfig,
+    addressbook::command::AddressbookSubcommand,
+    // card::command::CardSubcommand,
+    completion::command::GenerateCompletionsCommand,
+    config::TomlConfig,
     manual::command::GenerateManualsCommand,
 };
 
@@ -88,9 +90,8 @@ pub enum CardamumCommand {
     #[command(subcommand)]
     Addressbooks(AddressbookSubcommand),
 
-    #[command(subcommand)]
-    Cards(CardSubcommand),
-
+    // #[command(subcommand)]
+    // Cards(CardSubcommand),
     #[command(arg_required_else_help = true)]
     #[command(alias = "mans")]
     Manuals(GenerateManualsCommand),
@@ -106,10 +107,10 @@ impl CardamumCommand {
                 let config = TomlConfig::from_paths_or_default(config_paths)?;
                 cmd.execute(printer, config)
             }
-            Self::Cards(cmd) => {
-                let config = TomlConfig::from_paths_or_default(config_paths)?;
-                cmd.execute(printer, config)
-            }
+            // Self::Cards(cmd) => {
+            //     let config = TomlConfig::from_paths_or_default(config_paths)?;
+            //     cmd.execute(printer, config)
+            // }
             Self::Manuals(cmd) => cmd.execute(printer),
             Self::Completions(cmd) => cmd.execute(printer),
         }

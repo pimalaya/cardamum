@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8" ?>
-<propfind xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:carddav" xmlns:I="http://inf-it.com/ns/ab/">
-  <prop>
-    <resourcetype />
-    <displayname />
-    <C:addressbook-description />
-    <I:addressbook-color />
-  </prop>
-</propfind>

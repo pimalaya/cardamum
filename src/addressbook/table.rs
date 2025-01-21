@@ -38,6 +38,7 @@ impl ListAddressbooksTableConfig {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AddressbooksTable {
     addressbooks: Addressbooks,
     width: Option<u16>,

@@ -15,19 +15,22 @@ repository = "https://github.com/pimalaya/cardamum/"
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = []
-
-[dev-dependencies]
-cardamum = { path = ".", features = [] }
+carddav = ["dep:addressbook-carddav", "addressbook/carddav"]
+carddav-rustls = ["dep:addressbook-carddav-rustls", "addressbook/carddav"]
+carddav-rustls-aws-lc = ["carddav-rustls", "addressbook-carddav-rustls/aws-lc"]
+carddav-rustls-ring = ["carddav-rustls", "addressbook-carddav-rustls/ring"]
+carddav-native-tls = ["dep:addressbook-carddav-native-tls", "addressbook/carddav"]
+vendored = ["addressbook-carddav-native-tls?/vendored"]
+full = ["carddav", "carddav-rustls-aws-lc", "carddav-rustls-ring", "carddav-native-tls"]
 
 [build-dependencies]
 pimalaya-tui = { version = "0.2", default-features = false, features = ["build-envs"] }
 
 [dependencies]
-addressbook = { version = "0.1", features = [] }
-addressbook-std = { version = "0.1", features = [] }
-addressbook-std-native-tls = { version = "0.1", features = [] }
-addressbook-std-rustls = { version = "0.1", features = [] }
+addressbook = "0.1"
+addressbook-carddav = { version = "0.1", default-features = false, optional = true }
+addressbook-carddav-native-tls = { version = "0.1", default-features = false, optional = true }
+addressbook-carddav-rustls = { version = "0.1", default-features = false, optional = true }
 clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
@@ -40,8 +43,8 @@ tracing = "0.1"
 zeroize = "1"
 
 [patch.crates-io]
-addressbook-std-native-tls.git = "https://github.com/pimalaya/addressbook"
-addressbook-std-rustls.git = "https://github.com/pimalaya/addressbook"
-addressbook-std.git = "https://github.com/pimalaya/addressbook"
+addressbook-carddav-native-tls.git = "https://github.com/pimalaya/addressbook"
+addressbook-carddav-rustls.git = "https://github.com/pimalaya/addressbook"
+addressbook-carddav.git = "https://github.com/pimalaya/addressbook"
 addressbook.git = "https://github.com/pimalaya/addressbook"
 pimalaya-tui.git = "https://github.com/pimalaya/tui"

@@ -4,6 +4,12 @@
 pub mod account;
 pub mod addressbook;
 // pub mod card;
+#[cfg(any(
+    feature = "carddav",
+    feature = "carddav-native-tls",
+    feature = "carddav-rustls",
+))]
+pub mod carddav;
 pub mod cli;
 pub mod completion;
 pub mod config;

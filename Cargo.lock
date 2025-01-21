@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "addressbook"
 version = "0.1.0"
-source = "git+https://github.com/pimalaya/addressbook#7e5b86354a8501221c0d39c0f7afb99f2e412ff2"
+source = "git+https://github.com/pimalaya/addressbook#29ed647ed146100c425bf4154a714eb05aaccb33"
 dependencies = [
  "base64",
  "chrono",
@@ -31,7 +31,7 @@ dependencies = [
 [[package]]
 name = "addressbook-carddav"
 version = "0.1.0"
-source = "git+https://github.com/pimalaya/addressbook#7e5b86354a8501221c0d39c0f7afb99f2e412ff2"
+source = "git+https://github.com/pimalaya/addressbook#29ed647ed146100c425bf4154a714eb05aaccb33"
 dependencies = [
  "addressbook",
 ]
@@ -39,7 +39,7 @@ dependencies = [
 [[package]]
 name = "addressbook-carddav-native-tls"
 version = "0.1.0"
-source = "git+https://github.com/pimalaya/addressbook#7e5b86354a8501221c0d39c0f7afb99f2e412ff2"
+source = "git+https://github.com/pimalaya/addressbook#29ed647ed146100c425bf4154a714eb05aaccb33"
 dependencies = [
  "addressbook",
  "native-tls",
@@ -49,7 +49,7 @@ dependencies = [
 [[package]]
 name = "addressbook-carddav-rustls"
 version = "0.1.0"
-source = "git+https://github.com/pimalaya/addressbook#7e5b86354a8501221c0d39c0f7afb99f2e412ff2"
+source = "git+https://github.com/pimalaya/addressbook#29ed647ed146100c425bf4154a714eb05aaccb33"
 dependencies = [
  "addressbook",
  "rustls",

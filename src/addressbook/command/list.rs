@@ -1,8 +1,6 @@
-use addressbook::Addressbooks;
 use clap::Parser;
 use color_eyre::Result;
 use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
-use tracing::warn;
 
 use crate::{
     account::{arg::name::AccountNameFlag, config::Backend},
@@ -25,8 +23,8 @@ impl ListAddressbooksCommand {
 
         let addressbooks = match config.backend {
             Backend::None => {
-                warn!("no addressbook backend defined, return empty result");
-                Addressbooks::default()
+                // SAFETY: case handled by the config deserializer
+                unreachable!();
             }
             #[cfg(any(
                 feature = "carddav",
@@ -34,10 +32,8 @@ impl ListAddressbooksCommand {
                 feature = "carddav-rustls",
             ))]
             Backend::CardDav(config) => {
-                let client = addressbook::carddav::Client::try_from(config.clone())?;
-                let mut flow = client.list_addressbooks();
-                config.encryption.run(&client, &mut flow)?;
-                flow.output()?
+                use crate::carddav::Client;
+                Client::new(config)?.list_addressbooks()?
             }
         };
 

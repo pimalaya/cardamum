@@ -1,9 +1,6 @@
 use std::process::Command;
 
-use addressbook::{
-    carddav::{self, Client},
-    tcp::{self, Flow},
-};
+use addressbook::carddav::{self, Client};
 use color_eyre::{eyre::Error, Result};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
@@ -148,79 +145,6 @@ impl TryFrom<EncryptionDeserializer> for Encryption {
     }
 }
 
-impl Encryption {
-    pub fn run<F>(&self, client: &Client, flow: &mut F) -> Result<()>
-    where
-        F: Flow<Item = tcp::Io>,
-        F: tcp::Read + tcp::Write,
-    {
-        match self {
-            #[cfg(feature = "carddav")]
-            Encryption::None => {
-                use addressbook_carddav::Connector;
-
-                let mut tcp = Connector::connect(&client.config.hostname, client.config.port)?;
-
-                while let Some(io) = flow.next() {
-                    match io {
-                        tcp::Io::Read => {
-                            tcp.read(flow)?;
-                        }
-                        tcp::Io::Write => {
-                            tcp.write(flow)?;
-                        }
-                    }
-                }
-            }
-            #[cfg(feature = "carddav-native-tls")]
-            Encryption::NativeTls(_) => {
-                use addressbook_carddav_native_tls::Connector;
-
-                let mut tls = Connector::connect(&client.config.hostname, client.config.port)?;
-
-                while let Some(io) = flow.next() {
-                    match io {
-                        tcp::Io::Read => {
-                            tls.read(flow)?;
-                        }
-                        tcp::Io::Write => {
-                            tls.write(flow)?;
-                        }
-                    }
-                }
-            }
-            #[cfg(feature = "carddav-rustls")]
-            Encryption::Rustls(config) => {
-                use addressbook_carddav_rustls::{Connector, CryptoProvider};
-
-                let crypto = match config.crypto {
-                    RustlsCrypto::Default => CryptoProvider::Default,
-                    #[cfg(feature = "carddav-rustls-aws-lc")]
-                    RustlsCrypto::AwsLc => CryptoProvider::AwsLc,
-                    #[cfg(feature = "carddav-rustls-ring")]
-                    RustlsCrypto::Ring => CryptoProvider::Ring,
-                };
-
-                let mut tls =
-                    Connector::connect(&client.config.hostname, client.config.port, &crypto)?;
-
-                while let Some(io) = flow.next() {
-                    match io {
-                        tcp::Io::Read => {
-                            tls.read(flow)?;
-                        }
-                        tcp::Io::Write => {
-                            tls.write(flow)?;
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 pub struct NativeTls {}
 
@@ -229,7 +153,7 @@ pub struct NativeTls {}
 pub struct Rustls {
     #[cfg(feature = "carddav-rustls")]
     #[serde(default)]
-    crypto: RustlsCrypto,
+    pub crypto: RustlsCrypto,
 }
 
 #[cfg(feature = "carddav-rustls")]

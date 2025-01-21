@@ -15,6 +15,7 @@ repository = "https://github.com/pimalaya/cardamum/"
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
+default = ["full"]
 carddav = ["dep:addressbook-carddav", "addressbook/carddav"]
 carddav-rustls = ["dep:addressbook-carddav-rustls", "addressbook/carddav"]
 carddav-rustls-aws-lc = ["carddav-rustls", "addressbook-carddav-rustls/aws-lc"]

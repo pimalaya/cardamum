@@ -11,7 +11,6 @@ use color_eyre::{
     Result,
 };
 use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
-use uuid::Uuid;
 
 use crate::{
     account::{arg::name::AccountNameFlag, config::Backend},
@@ -49,8 +48,8 @@ impl CreateCardCommand {
             Backend::CardDav(config) => {
                 use crate::carddav::Client;
 
-                let uid = Uuid::new_v4();
-                let path = temp_dir().join(format!("{uid:x}.vcf"));
+                let uid = Card::generate_id();
+                let path = temp_dir().join(format!("{uid}.vcf"));
                 let tpl = format!(include_str!("./create.vcf"), uid);
                 fs::write(&path, tpl)?;
 
@@ -69,9 +68,9 @@ impl CreateCardCommand {
                     bail!("error while editing vCard: error code {code:?}");
                 }
 
-                let content = fs::read_to_string(&path)?.replace('\n', "\r\n");
-                println!("content: {content:?}");
-
+                let content = fs::read_to_string(&path)?
+                    .replace('\r', "")
+                    .replace('\n', "\r\n");
                 let card =
                     Card::parse(Card::generate_id(), content).ok_or(eyre!("cannot parse vCard"))?;
 

@@ -284,7 +284,6 @@ dependencies = [
  "pimalaya-tui",
  "serde",
  "tracing",
- "uuid",
  "zeroize",
 ]
 

@@ -1,3 +1,4 @@
+use addressbook::Addressbooks;
 use clap::Parser;
 use color_eyre::Result;
 use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
@@ -21,16 +22,12 @@ impl ListAddressbooksCommand {
     pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
         let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
 
-        let addressbooks = match config.backend {
+        let addressbooks: Addressbooks = match config.backend {
             Backend::None => {
                 // SAFETY: case handled by the config deserializer
                 unreachable!();
             }
-            #[cfg(any(
-                feature = "carddav",
-                feature = "carddav-native-tls",
-                feature = "carddav-rustls",
-            ))]
+            #[cfg(feature = "_carddav")]
             Backend::CardDav(config) => {
                 use crate::carddav::Client;
                 Client::new(config)?.list_addressbooks()?

@@ -109,7 +109,7 @@ pub enum Encryption {
     None,
     #[cfg(feature = "carddav-native-tls")]
     NativeTls(#[serde(default)] NativeTls),
-    #[cfg(feature = "carddav-rustls")]
+    #[cfg(feature = "_carddav-rustls")]
     Rustls(#[serde(default)] Rustls),
 }
 
@@ -137,9 +137,10 @@ impl TryFrom<EncryptionDeserializer> for Encryption {
             EncryptionDeserializer::NativeTls(_) => {
                 Err("missing cargo feature `carddav-native-tls`")
             }
-            #[cfg(feature = "carddav-rustls")]
+            #[cfg(feature = "_carddav-rustls")]
             EncryptionDeserializer::Rustls(config) => Ok(Self::Rustls(config)),
-            #[cfg(not(feature = "carddav-rustls"))]
+            #[cfg(not(feature = "carddav-rustls-aws-lc"))]
+            #[cfg(not(feature = "carddav-rustls-ring"))]
             EncryptionDeserializer::Rustls(_) => Err("missing cargo feature `carddav-rustls`"),
         }
     }
@@ -149,14 +150,14 @@ impl TryFrom<EncryptionDeserializer> for Encryption {
 pub struct NativeTls {}
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[cfg_attr(feature = "carddav-rustls", serde(deny_unknown_fields))]
+#[cfg_attr(feature = "_carddav-rustls", serde(deny_unknown_fields))]
 pub struct Rustls {
-    #[cfg(feature = "carddav-rustls")]
+    #[cfg(feature = "_carddav-rustls")]
     #[serde(default)]
     pub crypto: RustlsCrypto,
 }
 
-#[cfg(feature = "carddav-rustls")]
+#[cfg(feature = "_carddav-rustls")]
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "RustlsCryptoDeserializer")]
 #[serde(rename_all = "kebab-case")]
@@ -169,7 +170,7 @@ pub enum RustlsCrypto {
     Ring,
 }
 
-#[cfg(feature = "carddav-rustls")]
+#[cfg(feature = "_carddav-rustls")]
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RustlsCryptoDeserializer {
@@ -179,7 +180,7 @@ pub enum RustlsCryptoDeserializer {
     Ring,
 }
 
-#[cfg(feature = "carddav-rustls")]
+#[cfg(feature = "_carddav-rustls")]
 impl TryFrom<RustlsCryptoDeserializer> for RustlsCrypto {
     type Error = &'static str;
 

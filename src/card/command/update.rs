@@ -44,11 +44,7 @@ impl UpdateCardCommand {
                 // SAFETY: case handled by the config deserializer
                 unreachable!();
             }
-            #[cfg(any(
-                feature = "carddav",
-                feature = "carddav-native-tls",
-                feature = "carddav-rustls",
-            ))]
+            #[cfg(feature = "_carddav")]
             Backend::CardDav(config) => {
                 use crate::carddav::Client;
 

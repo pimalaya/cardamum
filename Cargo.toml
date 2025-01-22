@@ -15,13 +15,30 @@ repository = "https://github.com/pimalaya/cardamum/"
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-carddav = ["dep:addressbook-carddav", "addressbook/carddav"]
-carddav-rustls = ["dep:addressbook-carddav-rustls", "addressbook/carddav"]
-carddav-rustls-aws-lc = ["carddav-rustls", "addressbook-carddav-rustls/aws-lc"]
-carddav-rustls-ring = ["carddav-rustls", "addressbook-carddav-rustls/ring"]
-carddav-native-tls = ["dep:addressbook-carddav-native-tls", "addressbook/carddav"]
-vendored = ["addressbook-carddav-native-tls?/vendored"]
+default = []
 full = ["carddav", "carddav-rustls-aws-lc", "carddav-rustls-ring", "carddav-native-tls"]
+
+# CardDAV without TLS support
+#
+carddav = ["dep:addressbook-carddav", "_carddav"]
+
+# CardDAV with TLS support, based on rustls
+#
+carddav-rustls-aws-lc = ["addressbook-carddav-rustls/aws-lc", "_carddav-rustls"]
+carddav-rustls-ring = ["addressbook-carddav-rustls/ring", "_carddav-rustls"]
+
+# CardDAV with TLS support, based on native-tls
+#
+carddav-native-tls = ["dep:addressbook-carddav-native-tls", "_carddav"]
+
+# Bring external libs to the build
+#
+vendored = ["addressbook-carddav-native-tls?/vendored"]
+
+# Internal flags, do not use!
+#
+_carddav = ["addressbook/carddav"]
+_carddav-rustls = ["dep:addressbook-carddav-rustls", "_carddav"]
 
 [build-dependencies]
 pimalaya-tui = { version = "0.2", default-features = false, features = ["build-envs"] }

@@ -4,8 +4,6 @@ use addressbook::{
 };
 use color_eyre::Result;
 
-use crate::carddav::config::RustlsCrypto;
-
 use super::config::{CardDavConfig, Encryption};
 
 pub struct Client {
@@ -124,9 +122,11 @@ impl Client {
                     }
                 }
             }
-            #[cfg(feature = "carddav-rustls")]
+            #[cfg(feature = "_carddav-rustls")]
             Encryption::Rustls(config) => {
                 use addressbook_carddav_rustls::{Connector, CryptoProvider};
+
+                use crate::carddav::config::RustlsCrypto;
 
                 let crypto = match config.crypto {
                     RustlsCrypto::Default => CryptoProvider::Default,

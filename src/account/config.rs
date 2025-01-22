@@ -4,16 +4,10 @@
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(any(
-    feature = "carddav",
-    feature = "carddav-native-tls",
-    feature = "carddav-rustls",
-))]
+#[cfg(feature = "_carddav")]
 use crate::carddav::config::CardDavConfig;
 
-#[cfg(not(feature = "carddav"))]
-#[cfg(not(feature = "carddav-native-tls"))]
-#[cfg(not(feature = "carddav-rustls"))]
+#[cfg(not(feature = "_carddav"))]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CardDavConfig {}
 
@@ -34,11 +28,7 @@ pub struct TomlAccountConfig {
 pub enum Backend {
     #[serde(skip_serializing)]
     None,
-    #[cfg(any(
-        feature = "carddav",
-        feature = "carddav-native-tls",
-        feature = "carddav-rustls",
-    ))]
+    #[cfg(feature = "_carddav")]
     CardDav(CardDavConfig),
 }
 
@@ -54,15 +44,9 @@ impl TryFrom<BackendDeserializer> for Backend {
 
     fn try_from(backend: BackendDeserializer) -> Result<Self, Self::Error> {
         match backend {
-            #[cfg(any(
-                feature = "carddav",
-                feature = "carddav-native-tls",
-                feature = "carddav-rustls",
-            ))]
+            #[cfg(feature = "_carddav")]
             BackendDeserializer::CardDav(config) => Ok(Self::CardDav(config)),
-            #[cfg(not(feature = "carddav"))]
-            #[cfg(not(feature = "carddav-native-tls"))]
-            #[cfg(not(feature = "carddav-rustls"))]
+            #[cfg(not(feature = "_carddav"))]
             BackendDeserializer::CardDav(_) => {
                 Err("missing cargo feature `carddav`, `carddav-native-tls` or `carddav-rustls`")
             }

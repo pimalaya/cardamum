@@ -6,7 +6,10 @@ use std::{
 
 use addressbook::Card;
 use clap::Parser;
-use color_eyre::{eyre::bail, Result};
+use color_eyre::{
+    eyre::{bail, eyre},
+    Result,
+};
 use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
 use uuid::Uuid;
 
@@ -23,7 +26,8 @@ pub struct CreateCardCommand {
     #[command(flatten)]
     pub account: AccountNameFlag,
 
-    /// The addressbook identifier where the vCard should be added to.
+    /// The identifier of the addressbook where the vCard should be
+    /// added to.
     #[arg(name = "ADDRESSBOOK-ID")]
     pub addressbook_id: String,
 }
@@ -65,8 +69,11 @@ impl CreateCardCommand {
                     bail!("error while editing vCard: error code {code:?}");
                 }
 
-                let mut card = Card::default();
-                card.content = fs::read_to_string(&path)?;
+                let content = fs::read_to_string(&path)?.replace('\n', "\r\n");
+                println!("content: {content:?}");
+
+                let card =
+                    Card::parse(Card::generate_id(), content).ok_or(eyre!("cannot parse vCard"))?;
 
                 Client::new(config)?.create_card(self.addressbook_id, card)?
             }

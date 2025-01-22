@@ -1,6 +1,6 @@
 use addressbook::{
     tcp::{self, Flow},
-    Addressbook, Addressbooks, Card, PartialAddressbook,
+    Addressbook, Addressbooks, Card, Cards, PartialAddressbook,
 };
 use color_eyre::Result;
 
@@ -27,6 +27,12 @@ impl Client {
 
     pub fn list_addressbooks(&self) -> Result<Addressbooks> {
         let mut flow = self.client.list_addressbooks();
+        self.execute(&mut flow)?;
+        Ok(flow.output()?)
+    }
+
+    pub fn list_cards(&self, addressbook_id: impl AsRef<str>) -> Result<Cards> {
+        let mut flow = self.client.list_cards(addressbook_id);
         self.execute(&mut flow)?;
         Ok(flow.output()?)
     }

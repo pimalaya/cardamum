@@ -14,7 +14,7 @@ dependencies = [
 [[package]]
 name = "addressbook"
 version = "0.1.0"
-source = "git+https://github.com/pimalaya/addressbook#29ed647ed146100c425bf4154a714eb05aaccb33"
+source = "git+https://github.com/pimalaya/addressbook#ab5c7e4764646968854bf5a4785b71a1b0a8313d"
 dependencies = [
  "base64",
  "chrono",
@@ -31,7 +31,7 @@ dependencies = [
 [[package]]
 name = "addressbook-carddav"
 version = "0.1.0"
-source = "git+https://github.com/pimalaya/addressbook#29ed647ed146100c425bf4154a714eb05aaccb33"
+source = "git+https://github.com/pimalaya/addressbook#ab5c7e4764646968854bf5a4785b71a1b0a8313d"
 dependencies = [
  "addressbook",
 ]
@@ -39,7 +39,7 @@ dependencies = [
 [[package]]
 name = "addressbook-carddav-native-tls"
 version = "0.1.0"
-source = "git+https://github.com/pimalaya/addressbook#29ed647ed146100c425bf4154a714eb05aaccb33"
+source = "git+https://github.com/pimalaya/addressbook#ab5c7e4764646968854bf5a4785b71a1b0a8313d"
 dependencies = [
  "addressbook",
  "native-tls",
@@ -49,7 +49,7 @@ dependencies = [
 [[package]]
 name = "addressbook-carddav-rustls"
 version = "0.1.0"
-source = "git+https://github.com/pimalaya/addressbook#29ed647ed146100c425bf4154a714eb05aaccb33"
+source = "git+https://github.com/pimalaya/addressbook#ab5c7e4764646968854bf5a4785b71a1b0a8313d"
 dependencies = [
  "addressbook",
  "rustls",
@@ -156,9 +156,9 @@ checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
 name = "aws-lc-rs"
-version = "1.12.1"
+version = "1.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ea835662a0af02443aa1396d39be523bbf8f11ee6fad20329607c480bea48c3"
+checksum = "4c2b7ddaa2c56a367ad27a094ad8ef4faacf8a617c2575acb2ba88949df999ca"
 dependencies = [
  "aws-lc-sys",
  "paste",
@@ -1512,9 +1512,9 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustix"
-version = "0.38.43"
+version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a78891ee6bf2340288408954ac787aa063d8e8817e9f53abb37c695c6d834ef6"
+checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
 dependencies = [
  "bitflags 2.8.0",
  "errno",

@@ -18,7 +18,7 @@ pub struct CardDavConfig {}
 pub struct VdirConfig {}
 
 /// The account configuration.
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TomlAccountConfig {
     /// The defaultness of the current account.
@@ -27,11 +27,12 @@ pub struct TomlAccountConfig {
     pub backend: Backend,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "type", content = "conf")]
 #[serde(try_from = "BackendDeserializer")]
 #[serde(rename_all = "lowercase")]
 pub enum Backend {
+    #[default]
     #[serde(skip_serializing)]
     None,
     #[cfg(feature = "_carddav")]

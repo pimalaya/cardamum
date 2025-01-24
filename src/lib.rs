@@ -14,6 +14,8 @@ pub mod manual;
 pub mod table;
 #[cfg(feature = "_vdir")]
 pub mod vdir;
+#[cfg(feature = "wizard")]
+pub mod wizard;
 
 #[doc(inline)]
 pub use client::Client;

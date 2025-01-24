@@ -15,7 +15,7 @@ repository = "https://github.com/pimalaya/cardamum/"
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = []
+default = ["carddav", "carddav-rustls-aws-lc", "vdir"]
 full = ["carddav", "carddav-rustls-aws-lc", "carddav-rustls-ring", "carddav-native-tls", "vdir"]
 
 # CardDAV support without TLS (blocking)
@@ -36,6 +36,12 @@ carddav-native-tls = ["dep:addressbook-carddav-native-tls", "_carddav"]
 #
 vdir = ["dep:addressbook-vdir", "_vdir"]
 
+# Wizard to help you configure accounts interactively
+# WIP: not ready, do not use!
+#
+wizard = []
+
+#
 # Bring external libs to the build
 #
 vendored = ["addressbook-carddav-native-tls?/vendored"]

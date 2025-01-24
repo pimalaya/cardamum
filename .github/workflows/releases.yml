@@ -4,9 +4,8 @@ on:
   push:
     tags:
       - v*
-    # FIXME: till first release
-    # branches:
-    #   - master
+    branches:
+      - master
 
 jobs:
   release:

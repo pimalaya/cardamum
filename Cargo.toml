@@ -15,7 +15,7 @@ repository = "https://github.com/pimalaya/cardamum/"
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["carddav", "carddav-rustls-aws-lc", "vdir"]
+default = ["carddav", "carddav-rustls-ring", "vdir"]
 full = ["carddav", "carddav-rustls-aws-lc", "carddav-rustls-ring", "carddav-native-tls", "vdir"]
 
 # CardDAV support without TLS (blocking)

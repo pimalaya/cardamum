@@ -44,7 +44,7 @@ vendored = ["addressbook-carddav-native-tls?/vendored"]
 #
 _carddav = ["addressbook/carddav"]
 _carddav-rustls = ["dep:addressbook-carddav-rustls", "_carddav"]
-_vdir = ["addressbook/vdir"]
+_vdir = ["dep:shellexpand-utils", "addressbook/vdir"]
 
 [build-dependencies]
 pimalaya-tui = { version = "0.2", default-features = false, features = ["build-envs"] }
@@ -63,6 +63,7 @@ comfy-table = "7.1"
 crossterm = { version = "0.27", features = ["serde"] }
 pimalaya-tui = { version = "0.2", default-features = false, features = ["cli", "config", "path", "tracing"] }
 serde = { version = "1", features = ["derive"] }
+shellexpand-utils = { version = "0.2", optional = true }
 tracing = "0.1"
 zeroize = "1"
 

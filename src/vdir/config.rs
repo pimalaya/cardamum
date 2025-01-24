@@ -1,7 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use addressbook::vdir::Client;
 use serde::{Deserialize, Serialize};
+use shellexpand_utils::shellexpand_path;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -9,14 +10,9 @@ pub struct VdirConfig {
     pub home_dir: PathBuf,
 }
 
-impl VdirConfig {
-    pub fn home_dir(&self) -> &Path {
-        self.home_dir.as_ref()
-    }
-}
-
 impl From<VdirConfig> for Client {
     fn from(config: VdirConfig) -> Client {
-        Client::new(config.home_dir)
+        let home_dir = shellexpand_path(&config.home_dir);
+        Client::new(home_dir)
     }
 }

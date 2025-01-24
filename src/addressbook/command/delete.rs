@@ -4,10 +4,7 @@ use clap::Parser;
 use color_eyre::Result;
 use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _, prompt};
 
-use crate::{
-    account::{arg::name::AccountNameFlag, config::Backend},
-    config::TomlConfig,
-};
+use crate::{account::arg::name::AccountNameFlag, config::TomlConfig, Client};
 
 /// Delete all folders.
 ///
@@ -34,19 +31,9 @@ impl DeleteAddressbookCommand {
         };
 
         let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
+        let client = Client::new(config.backend)?;
 
-        match config.backend {
-            Backend::None => {
-                // SAFETY: case handled by the config deserializer
-                unreachable!();
-            }
-            #[cfg(feature = "_carddav")]
-            Backend::CardDav(config) => {
-                use crate::carddav::Client;
-                Client::new(config)?.delete_addressbook(self.id)?
-            }
-        };
-
+        client.delete_addressbook(self.id)?;
         printer.out("Addressbook successfully deleted")
     }
 }

@@ -1,12 +1,10 @@
-use addressbook::Addressbooks;
 use clap::Parser;
 use color_eyre::Result;
 use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
 
 use crate::{
-    account::{arg::name::AccountNameFlag, config::Backend},
-    addressbook::table::AddressbooksTable,
-    config::TomlConfig,
+    account::arg::name::AccountNameFlag, addressbook::table::AddressbooksTable, config::TomlConfig,
+    Client,
 };
 
 /// List all folders.
@@ -21,19 +19,9 @@ pub struct ListAddressbooksCommand {
 impl ListAddressbooksCommand {
     pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
         let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
+        let client = Client::new(config.backend)?;
 
-        let addressbooks: Addressbooks = match config.backend {
-            Backend::None => {
-                // SAFETY: case handled by the config deserializer
-                unreachable!();
-            }
-            #[cfg(feature = "_carddav")]
-            Backend::CardDav(config) => {
-                use crate::carddav::Client;
-                Client::new(config)?.list_addressbooks()?
-            }
-        };
-
+        let addressbooks = client.list_addressbooks()?;
         let table = AddressbooksTable::from(addressbooks);
         printer.out(table)
     }

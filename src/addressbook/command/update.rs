@@ -3,10 +3,7 @@ use clap::Parser;
 use color_eyre::Result;
 use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
 
-use crate::{
-    account::{arg::name::AccountNameFlag, config::Backend},
-    config::TomlConfig,
-};
+use crate::{account::arg::name::AccountNameFlag, config::TomlConfig, Client};
 
 /// Update all folders.
 ///
@@ -15,12 +12,16 @@ use crate::{
 pub struct UpdateAddressbookCommand {
     #[command(flatten)]
     pub account: AccountNameFlag,
+
     #[arg()]
     pub id: String,
+
     #[arg(long, short)]
     pub name: Option<String>,
+
     #[arg(long, short = 'C')]
     pub color: Option<String>,
+
     #[arg(long = "desc", short)]
     pub desc: Option<String>,
 }
@@ -28,6 +29,7 @@ pub struct UpdateAddressbookCommand {
 impl UpdateAddressbookCommand {
     pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
         let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
+        let client = Client::new(config.backend)?;
 
         let addressbook = PartialAddressbook {
             id: self.id,
@@ -36,16 +38,7 @@ impl UpdateAddressbookCommand {
             color: self.color,
         };
 
-        match config.backend {
-            // SAFETY: case handled by the config deserializer
-            Backend::None => unreachable!(),
-            #[cfg(feature = "_carddav")]
-            Backend::CardDav(config) => {
-                use crate::carddav::Client;
-                Client::new(config)?.update_addressbook(addressbook)?;
-            }
-        };
-
+        client.update_addressbook(addressbook)?;
         printer.out("Addressbook successfully updated")
     }
 }

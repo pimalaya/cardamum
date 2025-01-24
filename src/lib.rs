@@ -7,7 +7,13 @@ pub mod card;
 #[cfg(feature = "_carddav")]
 pub mod carddav;
 pub mod cli;
+mod client;
 pub mod completion;
 pub mod config;
 pub mod manual;
 pub mod table;
+#[cfg(feature = "_vdir")]
+pub mod vdir;
+
+#[doc(inline)]
+pub use client::Client;

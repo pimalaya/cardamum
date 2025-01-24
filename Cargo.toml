@@ -16,20 +16,25 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 default = []
-full = ["carddav", "carddav-rustls-aws-lc", "carddav-rustls-ring", "carddav-native-tls"]
+full = ["carddav", "carddav-rustls-aws-lc", "carddav-rustls-ring", "carddav-native-tls", "vdir"]
 
-# CardDAV without TLS support
+# CardDAV support without TLS (blocking)
 #
 carddav = ["dep:addressbook-carddav", "_carddav"]
 
-# CardDAV with TLS support, based on rustls
+# CardDAV over TLS support, based on rustls (blocking)
 #
 carddav-rustls-aws-lc = ["addressbook-carddav-rustls/aws-lc", "_carddav-rustls"]
 carddav-rustls-ring = ["addressbook-carddav-rustls/ring", "_carddav-rustls"]
 
-# CardDAV with TLS support, based on native-tls
+# CardDAV over TLS support, based on native-tls (blocking)
 #
 carddav-native-tls = ["dep:addressbook-carddav-native-tls", "_carddav"]
+
+# Vdir support (blocking)
+# See <https://vdirsyncer.pimutils.org/en/stable/vdir.html>
+#
+vdir = ["dep:addressbook-vdir", "_vdir"]
 
 # Bring external libs to the build
 #
@@ -39,6 +44,7 @@ vendored = ["addressbook-carddav-native-tls?/vendored"]
 #
 _carddav = ["addressbook/carddav"]
 _carddav-rustls = ["dep:addressbook-carddav-rustls", "_carddav"]
+_vdir = ["addressbook/vdir"]
 
 [build-dependencies]
 pimalaya-tui = { version = "0.2", default-features = false, features = ["build-envs"] }
@@ -48,6 +54,7 @@ addressbook = "0.1"
 addressbook-carddav = { version = "0.1", default-features = false, optional = true }
 addressbook-carddav-native-tls = { version = "0.1", default-features = false, optional = true }
 addressbook-carddav-rustls = { version = "0.1", default-features = false, optional = true }
+addressbook-vdir = { version = "0.1", default-features = false, optional = true }
 clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
@@ -63,5 +70,6 @@ zeroize = "1"
 addressbook-carddav-native-tls.git = "https://github.com/pimalaya/addressbook"
 addressbook-carddav-rustls.git = "https://github.com/pimalaya/addressbook"
 addressbook-carddav.git = "https://github.com/pimalaya/addressbook"
+addressbook-vdir.git = "https://github.com/pimalaya/addressbook"
 addressbook.git = "https://github.com/pimalaya/addressbook"
 pimalaya-tui.git = "https://github.com/pimalaya/tui"

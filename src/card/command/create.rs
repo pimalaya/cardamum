@@ -12,10 +12,7 @@ use color_eyre::{
 };
 use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
 
-use crate::{
-    account::{arg::name::AccountNameFlag, config::Backend},
-    config::TomlConfig,
-};
+use crate::{account::arg::name::AccountNameFlag, config::TomlConfig, Client};
 
 /// Create all folders.
 ///
@@ -34,45 +31,33 @@ pub struct CreateCardCommand {
 impl CreateCardCommand {
     pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
         let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
+        let client = Client::new(config.backend)?;
+        let uid = Card::generate_id();
+        let path = temp_dir().join(format!("{uid}.vcf"));
+        let tpl = format!(include_str!("./create.vcf"), uid);
+        fs::write(&path, tpl)?;
 
-        match config.backend {
-            Backend::None => {
-                // SAFETY: case handled by the config deserializer
-                unreachable!();
-            }
-            #[cfg(feature = "_carddav")]
-            Backend::CardDav(config) => {
-                use crate::carddav::Client;
+        let args = env::var("EDITOR")?;
+        let mut args = args.split_whitespace();
+        let editor = args.next().unwrap();
+        let edition = Command::new(editor)
+            .args(args)
+            .arg(&path)
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()?;
 
-                let uid = Card::generate_id();
-                let path = temp_dir().join(format!("{uid}.vcf"));
-                let tpl = format!(include_str!("./create.vcf"), uid);
-                fs::write(&path, tpl)?;
+        if !edition.success() {
+            let code = edition.code();
+            bail!("error while editing vCard: error code {code:?}");
+        }
 
-                let args = env::var("EDITOR")?;
-                let mut args = args.split_whitespace();
-                let editor = args.next().unwrap();
-                let edition = Command::new(editor)
-                    .args(args)
-                    .arg(&path)
-                    .stdout(Stdio::inherit())
-                    .stderr(Stdio::inherit())
-                    .status()?;
+        let content = fs::read_to_string(&path)?
+            .replace('\r', "")
+            .replace('\n', "\r\n");
+        let card = Card::parse(Card::generate_id(), content).ok_or(eyre!("cannot parse vCard"))?;
 
-                if !edition.success() {
-                    let code = edition.code();
-                    bail!("error while editing vCard: error code {code:?}");
-                }
-
-                let content = fs::read_to_string(&path)?
-                    .replace('\r', "")
-                    .replace('\n', "\r\n");
-                let card =
-                    Card::parse(Card::generate_id(), content).ok_or(eyre!("cannot parse vCard"))?;
-
-                Client::new(config)?.create_card(self.addressbook_id, card)?
-            }
-        };
+        client.create_card(self.addressbook_id, card)?;
 
         printer.out("Card successfully created")
     }

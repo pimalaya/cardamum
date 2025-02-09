@@ -1,27 +1,26 @@
 # TODO: move this to nixpkgs
-# This file aims to be a replacement for the nixpkgs derivation.
+# This file aims to be an up-to-date replacement on master for the nixpkgs derivation.
 
-{
-  lib,
-  pkg-config,
-  rustPlatform,
-  fetchFromGitHub,
-  stdenv,
-  apple-sdk,
-  installShellFiles,
-  installShellCompletions ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
-  installManPages ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
-  withNoDefaultFeatures ? false,
-  withFeatures ? [ ],
+{ lib
+, pkg-config
+, buildPackages
+, rustPlatform
+, fetchFromGitHub
+, stdenv
+, apple-sdk
+, installShellFiles
+, installShellCompletions ? stdenv.buildPlatform.canExecute stdenv.hostPlatform
+, installManPages ? stdenv.buildPlatform.canExecute stdenv.hostPlatform
+, withNoDefaultFeatures ? false
+, withFeatures ? [ ]
+,
 }:
 
 let
   version = "0.1.0";
   hash = "";
   cargoHash = "";
-in
-
-rustPlatform.buildRustPackage rec {
+in rustPlatform.buildRustPackage {
   inherit cargoHash version;
 
   pname = "cardamum";
@@ -47,35 +46,29 @@ rustPlatform.buildRustPackage rec {
   doCheck = false;
   auditable = false;
 
-  postInstall =
+  postInstall = let emulator = stdenv.hostPlatform.emulator buildPackages; in
     ''
       mkdir -p $out/share/{completions,man}
-    ''
-    + lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
-      "$out"/bin/cardamum man "$out"/share/man
+      ${emulator} "$out"/bin/cardamum man "$out"/share/man
+      ${emulator} "$out"/bin/cardamum completion bash > "$out"/share/completions/cardamum.bash
+      ${emulator} "$out"/bin/cardamum completion elvish > "$out"/share/completions/cardamum.elvish
+      ${emulator} "$out"/bin/cardamum completion fish > "$out"/share/completions/cardamum.fish
+      ${emulator} "$out"/bin/cardamum completion powershell > "$out"/share/completions/cardamum.powershell
+      ${emulator} "$out"/bin/cardamum completion zsh > "$out"/share/completions/cardamum.zsh
     ''
     + lib.optionalString installManPages ''
       installManPage "$out"/share/man/*
-    ''
-    + lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
-      "$out"/bin/cardamum completion bash > "$out"/share/completions/cardamum.bash
-      "$out"/bin/cardamum completion elvish > "$out"/share/completions/cardamum.elvish
-      "$out"/bin/cardamum completion fish > "$out"/share/completions/cardamum.fish
-      "$out"/bin/cardamum completion powershell > "$out"/share/completions/cardamum.powershell
-      "$out"/bin/cardamum completion zsh > "$out"/share/completions/cardamum.zsh
     ''
     + lib.optionalString installShellCompletions ''
       installShellCompletion "$out"/share/completions/cardamum.{bash,fish,zsh}
     '';
 
-  meta = rec {
+  meta = with lib; {
     description = "CLI to manage contacts";
     mainProgram = "cardamum";
     homepage = "https://github.com/pimalaya/cardamum";
-    changelog = "${homepage}/blob/v${version}/CHANGELOG.md";
-    license = lib.licenses.mit;
-    maintainers = with lib.maintainers; [
-      soywod
-    ];
+    changelog = "https://github.com/pimalaya/cardamum/blob/v${version}/CHANGELOG.md";
+    license = licenses.mit;
+    maintainers = with maintainers; [ soywod ];
   };
 }

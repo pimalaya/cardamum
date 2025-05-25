@@ -7,34 +7,34 @@ edition = "2021"
 license = "MIT"
 categories = ["command-line-utilities"]
 keywords = ["cli", "contact", "addressbook", "carddav", "webdav"]
-homepage = "https://pimalaya.org/"
-documentation = "https://github.com/pimalaya/cardamum/"
-repository = "https://github.com/pimalaya/cardamum/"
+homepage = "https://pimalaya.org"
+documentation = "https://github.com/pimalaya/cardamum"
+repository = "https://github.com/pimalaya/cardamum"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["carddav", "carddav-rustls-ring", "vdir"]
-full = ["carddav", "carddav-rustls-aws-lc", "carddav-rustls-ring", "carddav-native-tls", "vdir"]
+default = []
+# full = ["carddav", "carddav-rustls-aws-lc", "carddav-rustls-ring", "carddav-native-tls", "vdir"]
 
 # CardDAV support without TLS (blocking)
 #
-carddav = ["dep:addressbook-carddav", "_carddav"]
+# carddav = ["dep:addressbook-carddav", "_carddav"]
 
 # CardDAV over TLS support, based on rustls (blocking)
 #
-carddav-rustls-aws-lc = ["addressbook-carddav-rustls/aws-lc", "_carddav-rustls"]
-carddav-rustls-ring = ["addressbook-carddav-rustls/ring", "_carddav-rustls"]
+# carddav-rustls-aws-lc = ["addressbook-carddav-rustls/aws-lc", "_carddav-rustls"]
+# carddav-rustls-ring = ["addressbook-carddav-rustls/ring", "_carddav-rustls"]
 
 # CardDAV over TLS support, based on native-tls (blocking)
 #
-carddav-native-tls = ["dep:addressbook-carddav-native-tls", "_carddav"]
+# carddav-native-tls = ["dep:addressbook-carddav-native-tls", "_carddav"]
 
 # Vdir support (blocking)
 # See <https://vdirsyncer.pimutils.org/en/stable/vdir.html>
 #
-vdir = ["dep:addressbook-vdir", "_vdir"]
+# vdir = ["dep:addressbook-vdir", "_vdir"]
 
 # Wizard to help you configure accounts interactively
 # WIP: not ready, do not use!
@@ -44,23 +44,19 @@ wizard = []
 #
 # Bring external libs to the build
 #
-vendored = ["addressbook-carddav-native-tls?/vendored"]
+# vendored = ["addressbook-carddav-native-tls?/vendored"]
 
 # Internal flags, do not use!
 #
-_carddav = ["addressbook/carddav"]
-_carddav-rustls = ["dep:addressbook-carddav-rustls", "_carddav"]
-_vdir = ["dep:shellexpand-utils", "addressbook/vdir"]
+# _carddav = ["addressbook/carddav"]
+# _carddav-rustls = ["dep:addressbook-carddav-rustls", "_carddav"]
+# _vdir = ["dep:shellexpand-utils", "addressbook/vdir"]
 
 [build-dependencies]
 pimalaya-tui = { version = "0.2", default-features = false, features = ["build-envs"] }
 
 [dependencies]
-addressbook = "0.1"
-addressbook-carddav = { version = "0.1", default-features = false, optional = true }
-addressbook-carddav-native-tls = { version = "0.1", default-features = false, optional = true }
-addressbook-carddav-rustls = { version = "0.1", default-features = false, optional = true }
-addressbook-vdir = { version = "0.1", default-features = false, optional = true }
+io-addressbook = { version = "1", default-features = false }
 clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
@@ -74,9 +70,7 @@ tracing = "0.1"
 zeroize = "1"
 
 [patch.crates-io]
-addressbook-carddav-native-tls.git = "https://github.com/pimalaya/addressbook"
-addressbook-carddav-rustls.git = "https://github.com/pimalaya/addressbook"
-addressbook-carddav.git = "https://github.com/pimalaya/addressbook"
-addressbook-vdir.git = "https://github.com/pimalaya/addressbook"
-addressbook.git = "https://github.com/pimalaya/addressbook"
-pimalaya-tui.git = "https://github.com/pimalaya/tui"
+# io-addressbook.git = "https://github.com/pimalaya/io-addressbook"
+# pimalaya-tui.git = "https://github.com/pimalaya/tui"
+io-addressbook.path = "../addressbook"
+pimalaya-tui.path = "../tui"

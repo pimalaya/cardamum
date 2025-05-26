@@ -1,21 +1,21 @@
 use std::path::PathBuf;
 
+use anyhow::Result;
 use clap::{Parser, Subcommand};
-use color_eyre::Result;
 use pimalaya_tui::{
     long_version,
     terminal::{
-        cli::{
-            arg::path_parser,
-            printer::{OutputFmt, Printer},
-        },
+        cli::{arg::path_parser, printer::Printer},
         config::TomlConfig as _,
     },
 };
 
 use crate::{
-    addressbook::command::AddressbookSubcommand, card::command::CardSubcommand,
-    completion::command::GenerateCompletionsCommand, config::TomlConfig,
+    // addressbook::command::AddressbookSubcommand,
+    // card::command::CardSubcommand,
+    addressbook::command::AddressbookSubcommand,
+    completion::command::GenerateCompletionsCommand,
+    config::TomlConfig,
     manual::command::GenerateManualsCommand,
 };
 
@@ -26,7 +26,7 @@ use crate::{
 #[command(propagate_version = true, infer_subcommands = true)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Option<CardamumCommand>,
+    pub command: CardamumCommand,
 
     /// Override the default configuration file path.
     ///
@@ -40,43 +40,35 @@ pub struct Cli {
     #[arg(value_name = "PATH", value_parser = path_parser)]
     pub config_paths: Vec<PathBuf>,
 
-    /// Customize the output format.
+    /// Enable JSON output.
     ///
-    /// The output format determine how to display commands output to
-    /// the terminal.
-    ///
-    /// The possible values are:
-    ///
-    ///  - json: output will be in a form of a JSON-compatible object
-    ///
-    ///  - plain: output will be in a form of either a plain text or
-    ///    table, depending on the command
-    #[arg(long, short, global = true)]
-    #[arg(value_name = "FORMAT", value_enum, default_value_t = Default::default())]
-    pub output: OutputFmt,
+    /// When set, command output (data and errors) is displayed as
+    /// JSON string.
+    #[arg(long, global = true)]
+    pub json: bool,
 
-    /// Disable logs.
+    /// Disable all logs.
     ///
-    /// This is the same as running the command with `RUST_LOG=off`
-    /// environment variable.
+    /// Same as running command with `RUST_LOG=off` environment
+    /// variable.
     #[arg(long, global = true)]
     #[arg(conflicts_with = "debug")]
     #[arg(conflicts_with = "trace")]
     pub quiet: bool,
 
-    /// Enable debug logs with spantrace.
+    /// Enable debug logs.
     ///
-    /// This is the same as running the command with `RUST_LOG=debug`
-    /// environment variable.
+    /// Same as running command with `RUST_LOG=debug` environment
+    /// variable.
     #[arg(long, global = true)]
     #[arg(conflicts_with = "quiet")]
     #[arg(conflicts_with = "trace")]
     pub debug: bool,
 
-    /// Enable trace logs with backtrace.
+    /// Enable verbose trace logs with backtrace.
     ///
-    /// This is the same as running the command with `RUST_LOG=trace`
-    /// and `RUST_BACKTRACE=1` environment variables.
+    /// Same as running command with `RUST_LOG=trace` and
+    /// `RUST_BACKTRACE=1` environment variables.
     #[arg(long, global = true)]
     #[arg(conflicts_with = "quiet")]
     #[arg(conflicts_with = "debug")]
@@ -88,9 +80,8 @@ pub enum CardamumCommand {
     #[command(subcommand)]
     Addressbooks(AddressbookSubcommand),
 
-    #[command(subcommand)]
-    Cards(CardSubcommand),
-
+    // #[command(subcommand)]
+    // Cards(CardSubcommand),
     #[command(arg_required_else_help = true)]
     #[command(alias = "mans")]
     Manuals(GenerateManualsCommand),
@@ -106,10 +97,10 @@ impl CardamumCommand {
                 let config = TomlConfig::from_paths_or_default(config_paths)?;
                 cmd.execute(printer, config)
             }
-            Self::Cards(cmd) => {
-                let config = TomlConfig::from_paths_or_default(config_paths)?;
-                cmd.execute(printer, config)
-            }
+            // Self::Cards(cmd) => {
+            //     let config = TomlConfig::from_paths_or_default(config_paths)?;
+            //     cmd.execute(printer, config)
+            // }
             Self::Manuals(cmd) => cmd.execute(printer),
             Self::Completions(cmd) => cmd.execute(printer),
         }

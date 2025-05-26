@@ -1,10 +1,10 @@
 use std::{fs, path::PathBuf};
 
+use anyhow::Result;
 use clap::{CommandFactory, Parser};
 use clap_mangen::Man;
-use color_eyre::Result;
+use log::info;
 use pimalaya_tui::terminal::cli::{arg::path_parser, printer::Printer};
-use tracing::info;
 
 use crate::cli::Cli;
 

@@ -1,8 +1,8 @@
-use std::{borrow::Cow, fmt};
+use std::{borrow::Cow, collections::HashSet, fmt};
 
-use addressbook::Addressbooks;
 use comfy_table::{presets, Cell, ContentArrangement, Row, Table};
 use crossterm::style::Color;
+use io_addressbook::Addressbook;
 use serde::{
     de::{value::CowStrDeserializer, IntoDeserializer},
     Deserialize, Serialize, Serializer,
@@ -40,7 +40,7 @@ impl ListAddressbooksTableConfig {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AddressbooksTable {
-    addressbooks: Addressbooks,
+    addressbooks: Vec<Addressbook>,
     width: Option<u16>,
     config: ListAddressbooksTableConfig,
 }
@@ -72,8 +72,11 @@ impl AddressbooksTable {
     }
 }
 
-impl From<Addressbooks> for AddressbooksTable {
-    fn from(addressbooks: Addressbooks) -> Self {
+impl From<HashSet<Addressbook>> for AddressbooksTable {
+    fn from(addressbooks: HashSet<Addressbook>) -> Self {
+        let mut addressbooks: Vec<_> = addressbooks.into_iter().collect();
+        addressbooks.sort_by(|a, b| a.display_name.cmp(&b.display_name));
+
         Self {
             addressbooks,
             width: None,
@@ -100,9 +103,14 @@ impl fmt::Display for AddressbooksTable {
                 row.max_height(1);
 
                 row.add_cell(Cell::new(&addressbook.id).fg(self.config.id_color()));
-                row.add_cell(Cell::new(&addressbook.name).fg(self.config.name_color()));
 
-                if let Some(desc) = &addressbook.desc {
+                if let Some(name) = &addressbook.display_name {
+                    row.add_cell(Cell::new(name).fg(self.config.name_color()));
+                } else {
+                    row.add_cell(Cell::new(String::new()));
+                }
+
+                if let Some(desc) = &addressbook.description {
                     row.add_cell(Cell::new(desc).fg(self.config.desc_color()));
                 } else {
                     row.add_cell(Cell::new(String::new()));

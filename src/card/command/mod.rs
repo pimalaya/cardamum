@@ -4,8 +4,8 @@ mod list;
 mod read;
 mod update;
 
+use anyhow::Result;
 use clap::Subcommand;
-use color_eyre::Result;
 use pimalaya_tui::terminal::cli::printer::Printer;
 
 use crate::config::TomlConfig;

@@ -7,59 +7,15 @@
 #
 default = true
 
+backend.carddav.host = "127.0.0.1"
+backend.carddav.port = 8001
+backend.carddav.ssl = "plain"
+backend.carddav.auth.basic.username = "user"
+backend.carddav.auth.basic.password.raw = ""
+backend.carddav.home-uri = "/user"
 
-# Enable contact management using a local or remote CardDAV server.
-#
-# Read more about the CardDAV protocol:
-# <https://en.wikipedia.org/wiki/CardDAV>
-#
-backend.type = "carddav"
-
-# The CardDAV server host name.
-#
-backend.conf.hostname = "localhost"
-
-# The CardDAV server port.
-#
-#backend.port = 8001
-backend.conf.port = 8843
-
-# The home URI where to find addressbooks.
-#
-backend.conf.home-uri = "/default"
-
-# The HTTP version to use to communicate with the CardDAV server.
-#
-#backend.conf.http-version = "1.0"
-backend.conf.http-version = "1.1"
-
-# The encryption used to communicate with the CardDAV server.
-#
-#backend.conf.encryption.type = "none"       # plain HTTP (not recommended)
-#backend.conf.encryption.type = "native-tls" # HTTPS using native TLS
-backend.conf.encryption.type = "rustls"      # HTTPS using Rustls
-
-# The crypto provider to use.
-# NOTE: only works with encryption.type = "rustls"
-#
-#backend.conf.encryption.conf.crypto = "ring"
-backend.conf.encryption.conf.crypto = "aws-lc"
-
-# The HTTP Authentication method.
-#
-#backend.conf.authentication.type = "none"
-backend.conf.authentication.type = "basic"
-backend.conf.authentication.conf.username = "test@localhost"
-backend.conf.authentication.conf.password-command = "pass show password"
-
-
-# Enable contact management using a local vdir.
-#
-# Read more about the Vdir storage:
-# <https://vdirsyncer.pimutils.org/en/stable/vdir.html>
-#
-#backend.type = "vdir"
-
-# The home path where to find addressbooks.
-#
-#backend.conf.home-dir = "/path/to/addressbooks"
+# backend.carddav.host = "posteo.de"
+# backend.carddav.port = 8843
+# backend.carddav.ssl.rustls.crypto = "ring"
+# backend.carddav.auth.basic.username = "clement.douin"
+# backend.carddav.auth.basic.password.command = "pass show posteo"

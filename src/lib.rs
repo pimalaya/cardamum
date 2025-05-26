@@ -3,8 +3,8 @@
 
 pub mod account;
 pub mod addressbook;
-pub mod card;
-#[cfg(feature = "_carddav")]
+// pub mod card;
+#[cfg(feature = "carddav")]
 pub mod carddav;
 pub mod cli;
 mod client;
@@ -12,10 +12,10 @@ pub mod completion;
 pub mod config;
 pub mod manual;
 pub mod table;
-#[cfg(feature = "_vdir")]
+#[cfg(feature = "vdir")]
 pub mod vdir;
-#[cfg(feature = "wizard")]
-pub mod wizard;
+// #[cfg(feature = "wizard")]
+// pub mod wizard;
 
 #[doc(inline)]
 pub use client::Client;

@@ -2,23 +2,17 @@
 //!
 //! Module dedicated to account configuration.
 
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
-#[cfg(feature = "_carddav")]
-use crate::carddav::config::CardDavConfig;
-#[cfg(feature = "_vdir")]
+#[cfg(feature = "carddav")]
+use crate::carddav::config::CarddavConfig;
+#[cfg(feature = "vdir")]
 use crate::vdir::config::VdirConfig;
 
-#[cfg(not(feature = "_carddav"))]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct CardDavConfig {}
-
-#[cfg(not(feature = "_vdir"))]
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct VdirConfig {}
-
 /// The account configuration.
-#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TomlAccountConfig {
     /// The defaultness of the current account.
@@ -27,43 +21,73 @@ pub struct TomlAccountConfig {
     pub backend: Backend,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
-#[serde(tag = "type", content = "conf")]
-#[serde(try_from = "BackendDeserializer")]
-#[serde(rename_all = "lowercase")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Backend {
-    #[default]
-    #[serde(skip_serializing)]
-    None,
-    #[cfg(feature = "_carddav")]
-    CardDav(CardDavConfig),
-    #[cfg(feature = "_vdir")]
+    #[cfg(feature = "carddav")]
+    Carddav(CarddavConfig),
+    #[cfg(not(feature = "carddav"))]
+    Carddav(MissingCarddavFeature),
+
+    #[cfg(feature = "vdir")]
     Vdir(VdirConfig),
+    #[cfg(not(feature = "vdir"))]
+    Vdir(MissingVdirFeature),
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
-#[serde(tag = "type", content = "conf")]
-#[serde(rename_all = "lowercase")]
-pub enum BackendDeserializer {
-    CardDav(CardDavConfig),
-    Vdir(VdirConfig),
+trait MissingCargoFeature {
+    const FEATURE_NAME: &'static str;
+
+    fn message(&self) -> String {
+        format!("missing `{}` cargo feature", Self::FEATURE_NAME)
+    }
 }
 
-impl TryFrom<BackendDeserializer> for Backend {
-    type Error = &'static str;
+#[derive(Clone, Debug)]
+pub struct MissingVdirFeature;
 
-    fn try_from(backend: BackendDeserializer) -> Result<Self, Self::Error> {
-        match backend {
-            #[cfg(feature = "_carddav")]
-            BackendDeserializer::CardDav(config) => Ok(Self::CardDav(config)),
-            #[cfg(not(feature = "_carddav"))]
-            BackendDeserializer::CardDav(_) => {
-                Err("missing cargo feature `carddav`, `carddav-native-tls` or `carddav-rustls`")
-            }
-            #[cfg(feature = "_vdir")]
-            BackendDeserializer::Vdir(config) => Ok(Self::Vdir(config)),
-            #[cfg(not(feature = "_vdir"))]
-            BackendDeserializer::Vdir(_) => Err("missing cargo feature `vdir`"),
-        }
+impl MissingCargoFeature for MissingVdirFeature {
+    const FEATURE_NAME: &'static str = "vdir";
+}
+
+impl fmt::Display for MissingVdirFeature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message())
+    }
+}
+
+impl Serialize for MissingVdirFeature {
+    fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+        Err(serde::ser::Error::custom(self.message()))
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for MissingVdirFeature {
+    fn deserialize<D: serde::Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+        Err(serde::de::Error::custom(Self.message()))
+    }
+}
+
+pub struct MissingCarddavFeature;
+
+impl MissingCargoFeature for MissingCarddavFeature {
+    const FEATURE_NAME: &'static str = "carddav";
+}
+
+impl fmt::Display for MissingCarddavFeature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.message())
+    }
+}
+
+impl Serialize for MissingCarddavFeature {
+    fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+        Err(serde::ser::Error::custom(self.message()))
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for MissingCarddavFeature {
+    fn deserialize<D: serde::Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+        Err(serde::de::Error::custom(Self.message()))
     }
 }

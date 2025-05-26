@@ -15,62 +15,66 @@ repository = "https://github.com/pimalaya/cardamum"
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = []
-# full = ["carddav", "carddav-rustls-aws-lc", "carddav-rustls-ring", "carddav-native-tls", "vdir"]
+default = ["carddav", "rustls-aws-lc",  "native-tls", "command", "keyring"]
 
 # CardDAV support without TLS (blocking)
 #
-# carddav = ["dep:addressbook-carddav", "_carddav"]
+carddav = ["dep:io-stream", "dep:http", "dep:secrecy", "io-addressbook/carddav"]
 
-# CardDAV over TLS support, based on rustls (blocking)
-#
-# carddav-rustls-aws-lc = ["addressbook-carddav-rustls/aws-lc", "_carddav-rustls"]
-# carddav-rustls-ring = ["addressbook-carddav-rustls/ring", "_carddav-rustls"]
+rustls = ["dep:rustls", "dep:rustls-platform-verifier"]
+rustls-aws-lc = ["rustls/aws_lc_rs"]
+rustls-ring = ["rustls/ring"]
 
-# CardDAV over TLS support, based on native-tls (blocking)
-#
-# carddav-native-tls = ["dep:addressbook-carddav-native-tls", "_carddav"]
+native-tls = ["dep:native-tls"]
 
 # Vdir support (blocking)
 # See <https://vdirsyncer.pimutils.org/en/stable/vdir.html>
 #
-# vdir = ["dep:addressbook-vdir", "_vdir"]
+vdir = ["dep:io-fs", "io-addressbook/vdir"]
+
+keyring = ["dep:io-keyring"]
+command = ["dep:io-process"]
 
 # Wizard to help you configure accounts interactively
 # WIP: not ready, do not use!
 #
-wizard = []
+# wizard = []
 
-#
 # Bring external libs to the build
 #
-# vendored = ["addressbook-carddav-native-tls?/vendored"]
-
-# Internal flags, do not use!
-#
-# _carddav = ["addressbook/carddav"]
-# _carddav-rustls = ["dep:addressbook-carddav-rustls", "_carddav"]
-# _vdir = ["dep:shellexpand-utils", "addressbook/vdir"]
+vendored = ["native-tls?/vendored"]
 
 [build-dependencies]
 pimalaya-tui = { version = "0.2", default-features = false, features = ["build-envs"] }
 
 [dependencies]
-io-addressbook = { version = "1", default-features = false }
+anyhow = "1"
 clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
-color-eyre = "0.6"
 comfy-table = "7.1"
 crossterm = { version = "0.27", features = ["serde"] }
-pimalaya-tui = { version = "0.2", default-features = false, features = ["cli", "config", "path", "tracing"] }
+env_logger = "0.11"
+http = { version = "1", optional = true }
+io-addressbook = { version = "1", default-features = false }
+io-fs = { version = "1", default-features = false, features = ["std"], optional = true }
+io-keyring = { version = "1", default-features = false, features = ["serde", "std"], optional = true }
+io-process = { version = "1", default-features = false, features = ["serde", "std"], optional = true }
+io-stream = { version = "1", default-features = false, features = ["std"], optional = true }
+log = "0.4"
+native-tls = { version = "0.2", optional = true }
+pimalaya-tui = { version = "0.2", default-features = false, features = ["cli", "config", "path"] }
+rustls = { version = "0.23", default-features = false, features = ["logging", "std", "tls12"], optional = true }
+rustls-platform-verifier = { version = "0.5", optional = true }
+secrecy = { version = "0.10", features = ["serde"], optional = true }
 serde = { version = "1", features = ["derive"] }
-shellexpand-utils = { version = "0.2", optional = true }
-tracing = "0.1"
-zeroize = "1"
 
 [patch.crates-io]
-# io-addressbook.git = "https://github.com/pimalaya/io-addressbook"
-# pimalaya-tui.git = "https://github.com/pimalaya/tui"
 io-addressbook.path = "../addressbook"
+io-fs.path = "../fs"
+io-http.path = "../http"
+io-keyring.path = "../keyring"
+io-process.path = "../process"
+io-stream.path = "../stream"
+io-vdir.path = "../vdir"
 pimalaya-tui.path = "../tui"

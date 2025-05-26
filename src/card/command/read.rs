@@ -1,5 +1,5 @@
+use anyhow::Result;
 use clap::Parser;
-use color_eyre::Result;
 use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
 
 use crate::{account::arg::name::AccountNameFlag, config::TomlConfig, Client};

@@ -5,11 +5,11 @@ use std::{
 };
 
 use addressbook::Card;
-use clap::Parser;
-use color_eyre::{
+use anyhow::{
     eyre::{bail, eyre},
     Result,
 };
+use clap::Parser;
 use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
 
 use crate::{account::arg::name::AccountNameFlag, config::TomlConfig, Client};

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use anyhow::{bail, Result};
 use io_addressbook::Addressbook;
 
-use crate::account::config::{Backend, TomlAccountConfig};
+use crate::account::config::TomlAccountConfig;
 
 pub enum Client {
     #[cfg(feature = "carddav")]
@@ -15,16 +15,18 @@ pub enum Client {
 
 impl Client {
     pub fn new(config: TomlAccountConfig) -> Result<Self> {
-        let client = match config.backend {
+        let client = match config {
             #[cfg(feature = "carddav")]
-            Backend::Carddav(config) => Self::CardDav(crate::carddav::Client::new(config)?),
+            TomlAccountConfig::Carddav(config) => {
+                Self::CardDav(crate::carddav::Client::new(config)?)
+            }
             #[cfg(not(feature = "carddav"))]
-            Backend::Carddav(err) => bail!("{err}"),
+            TomlAccountConfig::Carddav(err) => bail!("{err}"),
 
             #[cfg(feature = "vdir")]
-            Backend::Vdir(config) => Self::CardDav(crate::vdir::Client::new(config)?),
+            TomlAccountConfig::Vdir(config) => Self::CardDav(crate::vdir::Client::new(config)?),
             #[cfg(not(feature = "vdir"))]
-            Backend::Vdir(err) => bail!("{err}"),
+            TomlAccountConfig::Vdir(err) => bail!("{err}"),
         };
 
         Ok(client)

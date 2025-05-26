@@ -5,6 +5,9 @@ use super::Secret;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CarddavConfig {
+    #[serde(default)]
+    pub default: bool,
+
     pub host: String,
     pub port: u16,
 
@@ -12,12 +15,12 @@ pub struct CarddavConfig {
     #[serde(default)]
     pub ssl: Ssl,
 
-    #[serde(default = "CarddavConfig::default_home_uri")]
-    pub home_uri: String,
+    #[serde(default = "CarddavConfig::default_home")]
+    pub home: String,
 }
 
 impl CarddavConfig {
-    pub fn default_home_uri() -> String {
+    pub fn default_home() -> String {
         String::from("/")
     }
 }

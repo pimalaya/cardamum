@@ -1,21 +1,13 @@
 # The account name should be unique.
 #
-[accounts.example]
+[accounts.example.carddav]
 
 # Make this current account the default one to use when no account is
 # specified in the CLI with the --account argument.
 #
 default = true
-
-backend.carddav.host = "127.0.0.1"
-backend.carddav.port = 8001
-backend.carddav.ssl = "plain"
-backend.carddav.auth.basic.username = "user"
-backend.carddav.auth.basic.password.raw = ""
-backend.carddav.home-uri = "/user"
-
-# backend.carddav.host = "posteo.de"
-# backend.carddav.port = 8843
-# backend.carddav.ssl.rustls.crypto = "ring"
-# backend.carddav.auth.basic.username = "clement.douin"
-# backend.carddav.auth.basic.password.command = "pass show posteo"
+host = "127.0.0.1"
+port = 8001
+ssl = "plain"
+auth = "plain"
+home = "/user"

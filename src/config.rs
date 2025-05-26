@@ -28,8 +28,12 @@ impl pimalaya_tui::terminal::config::TomlConfig for TomlConfig {
 
     fn get_default_account_config(&self) -> Option<(String, Self::TomlAccountConfig)> {
         for (name, account) in &self.accounts {
-            if account.default {
-                return Some((name.clone(), account.clone()));
+            match account {
+                #[cfg(feature = "carddav")]
+                TomlAccountConfig::Carddav(config) if config.default => {
+                    return Some((name.clone(), account.clone()));
+                }
+                _ => continue,
             }
         }
 

@@ -147,7 +147,7 @@ impl Client {
         let config = carddav::Config {
             host: self.config.host.clone(),
             port: self.config.port,
-            home_uri: self.config.home_uri.clone(),
+            home_uri: self.config.home.clone(),
             http_version: Default::default(),
             authentication: match self.basic_auth()? {
                 Some((user, pass)) => carddav::config::Authentication::Basic(user.to_owned(), pass),

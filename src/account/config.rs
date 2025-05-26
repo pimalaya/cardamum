@@ -14,16 +14,7 @@ use crate::vdir::config::VdirConfig;
 /// The account configuration.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct TomlAccountConfig {
-    /// The defaultness of the current account.
-    #[serde(default)]
-    pub default: bool,
-    pub backend: Backend,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Backend {
+pub enum TomlAccountConfig {
     #[cfg(feature = "carddav")]
     Carddav(CarddavConfig),
     #[cfg(not(feature = "carddav"))]

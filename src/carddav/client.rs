@@ -1,22 +1,16 @@
-use std::{collections::HashSet, net::TcpStream};
+use std::collections::HashSet;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use io_addressbook::{
     carddav::{self, coroutines::ListAddressbooks},
     Addressbook,
 };
-#[cfg(feature = "keyring")]
-use io_keyring::{coroutines::Read as ReadEntry, runtimes::std::handle as handle_keyring};
-#[cfg(feature = "command")]
-use io_process::{coroutines::SpawnThenWaitWithOutput, runtimes::std::handle as handle_process};
 use io_stream::{runtimes::std::handle, Io};
-use secrecy::SecretString;
+use pimalaya_toolbox::stream::Stream;
 
-use super::{
-    config::{Auth, CarddavConfig, Ssl},
-    Secret, Stream,
-};
+use super::config::{Auth, CarddavConfig};
 
+#[derive(Debug)]
 pub struct Client {
     config: CarddavConfig,
     stream: Stream,
@@ -24,117 +18,8 @@ pub struct Client {
 
 impl Client {
     pub fn new(config: CarddavConfig) -> Result<Self> {
-        let stream = Self::connect(&config)?;
+        let stream = Stream::connect(&config.host, config.port, &config.tls)?;
         Ok(Self { config, stream })
-    }
-
-    fn connect(config: &CarddavConfig) -> Result<Stream> {
-        match &config.ssl {
-            Ssl::Plain => {
-                let tcp = TcpStream::connect((config.host.as_str(), config.port))?;
-                Ok(Stream::Plain(tcp))
-            }
-            Ssl::Rustls { crypto } => {
-                use std::sync::Arc;
-
-                use rustls::{ClientConfig, ClientConnection, StreamOwned};
-                use rustls_platform_verifier::ConfigVerifierExt;
-
-                use super::config::RustlsCrypto;
-
-                let provider = match crypto {
-                    #[cfg(feature = "rustls-aws-lc")]
-                    RustlsCrypto::Aws => rustls::crypto::aws_lc_rs::default_provider(),
-                    #[cfg(not(feature = "rustls-aws-lc"))]
-                    RustlsCrypto::Aws => {
-                        bail!("Missing `rustls-aws-lc` cargo feature");
-                    }
-
-                    #[cfg(feature = "rustls-ring")]
-                    RustlsCrypto::Ring => rustls::crypto::ring::default_provider(),
-                    #[cfg(not(feature = "rustls-ring"))]
-                    RustlsCrypto::Ring => {
-                        bail!("Missing `rustls-ring` cargo feature");
-                    }
-                };
-
-                if let Err(_) = provider.install_default() {
-                    bail!("Install Rustls crypto provider error");
-                }
-
-                let conf = ClientConfig::with_platform_verifier();
-                let sname = config.host.clone().try_into().unwrap();
-                let conn = ClientConnection::new(Arc::new(conf), sname).unwrap();
-                let tcp = TcpStream::connect((config.host.as_str(), config.port)).unwrap();
-                let tls = StreamOwned::new(conn, tcp);
-
-                Ok(Stream::Rustls(tls))
-            }
-            #[cfg(feature = "native-tls")]
-            Ssl::NativeTls => {
-                use native_tls::TlsConnector;
-
-                let connector = TlsConnector::new()?;
-                let tcp = TcpStream::connect((config.host.as_str(), config.port))?;
-                let tls = connector.connect(&config.host, tcp)?;
-
-                Ok(Stream::NativeTls(tls))
-            }
-        }
-    }
-
-    pub fn basic_auth(&self) -> Result<Option<(&String, SecretString)>> {
-        let Auth::Basic { username, password } = &self.config.auth else {
-            return Ok(None);
-        };
-
-        let secret = match password {
-            Secret::Plain(secret) => secret.clone(),
-            #[cfg(feature = "command")]
-            Secret::Command(cmd) => {
-                let mut spawn = SpawnThenWaitWithOutput::new(cmd.clone());
-                let mut arg = None;
-
-                loop {
-                    match spawn.resume(arg.take()) {
-                        Ok(output) => {
-                            if !output.status.success() {
-                                let err = String::from_utf8_lossy(&output.stderr);
-                                bail!("get basic auth password from command error: {err}");
-                            }
-
-                            let secret = String::from_utf8_lossy(&output.stdout);
-                            let Some(secret) = secret.lines().next() else {
-                                break SecretString::default();
-                            };
-
-                            break SecretString::from(secret);
-                        }
-                        Err(io) => {
-                            arg = Some(handle_process(io).context("get basic auth error")?);
-                        }
-                    }
-                }
-            }
-            #[cfg(feature = "keyring")]
-            Secret::Keyring(entry) => {
-                let mut read = ReadEntry::new(entry.clone());
-                let mut arg = None;
-
-                loop {
-                    match read.resume(arg.take()) {
-                        Ok(secret) => {
-                            break secret;
-                        }
-                        Err(io) => {
-                            arg = Some(handle_keyring(io).context("get basic auth error")?);
-                        }
-                    }
-                }
-            }
-        };
-
-        Ok(Some((username, secret)))
     }
 
     // pub fn create_addressbook(&self, addressbook: Addressbook) -> Result<Addressbook> {
@@ -149,9 +34,15 @@ impl Client {
             port: self.config.port,
             home_uri: self.config.home.clone(),
             http_version: Default::default(),
-            authentication: match self.basic_auth()? {
-                Some((user, pass)) => carddav::config::Authentication::Basic(user.to_owned(), pass),
-                None => carddav::config::Authentication::None,
+            auth: match &self.config.auth {
+                Auth::Plain => carddav::config::Auth::Plain,
+                Auth::Bearer(token) => carddav::config::Auth::Bearer {
+                    token: token.get()?,
+                },
+                Auth::Basic { username, password } => carddav::config::Auth::Basic {
+                    username: username.clone(),
+                    password: password.get()?,
+                },
             },
         };
 
@@ -161,7 +52,7 @@ impl Client {
         loop {
             match list.resume(arg.take()) {
                 Ok(addressbooks) => break Ok(addressbooks),
-                Err(Io::Error(err)) => bail!("list addressbooks error: {err}"),
+                Err(Io::Error(err)) => return Err(anyhow!(err).context("List addressbooks error")),
                 Err(io) => {
                     arg = Some(handle(&mut self.stream, io).context("list addressbooks error")?)
                 }

@@ -1,8 +1,7 @@
-use serde::{Deserialize, Serialize};
+use pimalaya_toolbox::{secret::Secret, stream::Tls};
+use serde::Deserialize;
 
-use super::Secret;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CarddavConfig {
     #[serde(default)]
@@ -11,9 +10,10 @@ pub struct CarddavConfig {
     pub host: String,
     pub port: u16,
 
+    #[serde(default)]
     pub auth: Auth,
     #[serde(default)]
-    pub ssl: Ssl,
+    pub tls: Tls,
 
     #[serde(default = "CarddavConfig::default_home")]
     pub home: String,
@@ -25,34 +25,14 @@ impl CarddavConfig {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Auth {
-    Plain,
-    Basic { username: String, password: Secret },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Ssl {
-    Plain,
-    NativeTls,
-    Rustls { crypto: RustlsCrypto },
-}
-
-impl Default for Ssl {
-    fn default() -> Self {
-        Self::Rustls {
-            crypto: Default::default(),
-        }
-    }
-}
-
-#[cfg(feature = "rustls")]
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum RustlsCrypto {
     #[default]
-    Aws,
-    Ring,
+    Plain,
+    Bearer(Secret),
+    Basic {
+        username: String,
+        password: Secret,
+    },
 }

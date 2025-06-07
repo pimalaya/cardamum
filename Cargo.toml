@@ -15,25 +15,25 @@ repository = "https://github.com/pimalaya/cardamum"
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["carddav", "rustls-aws-lc", "rustls-ring", "native-tls", "command", "keyring"]
+default = ["carddav", "command", "keyring", "rustls-ring"]
 
 # CardDAV support without TLS (blocking)
 #
 carddav = ["dep:io-stream", "dep:http", "dep:secrecy", "io-addressbook/carddav"]
 
-rustls = ["dep:rustls", "dep:rustls-platform-verifier"]
-rustls-aws-lc = ["rustls/aws_lc_rs"]
-rustls-ring = ["rustls/ring"]
-
-native-tls = ["dep:native-tls"]
+# TLS
+#
+native-tls = ["pimalaya-toolbox/native-tls"]
+rustls-aws = ["pimalaya-toolbox/rustls-aws"]
+rustls-ring = ["pimalaya-toolbox/rustls-ring"]
 
 # Vdir support (blocking)
 # See <https://vdirsyncer.pimutils.org/en/stable/vdir.html>
 #
 vdir = ["dep:io-fs", "io-addressbook/vdir"]
 
-keyring = ["dep:io-keyring"]
-command = ["dep:io-process"]
+command = ["pimalaya-toolbox/command"]
+keyring = ["pimalaya-toolbox/keyring"]
 
 # Wizard to help you configure accounts interactively
 # WIP: not ready, do not use!
@@ -42,30 +42,25 @@ command = ["dep:io-process"]
 
 # Bring external libs to the build
 #
-vendored = ["native-tls?/vendored"]
+vendored = ["pimalaya-toolbox/vendored"]
 
 [build-dependencies]
-pimalaya-tui = { version = "0.2", default-features = false, features = ["build-envs"] }
+pimalaya-toolbox = { version = "0.0.1", default-features = false, features = ["build"] }
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
+clap = { version = "4.4", features = ["derive", "wrap_help"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
 comfy-table = "7.1"
 crossterm = { version = "0.27", features = ["serde"] }
 env_logger = "0.11"
 http = { version = "1", optional = true }
-io-addressbook = { version = "1", default-features = false }
-io-fs = { version = "1", default-features = false, features = ["std"], optional = true }
-io-keyring = { version = "1", default-features = false, features = ["serde", "std"], optional = true }
-io-process = { version = "1", default-features = false, features = ["serde", "std"], optional = true }
-io-stream = { version = "1", default-features = false, features = ["std"], optional = true }
+io-addressbook = { version = "0.0.1", default-features = false }
+io-fs = { version = "0.0.1", default-features = false, features = ["std"], optional = true }
+io-stream = { version = "0.0.1", default-features = false, features = ["std"], optional = true }
 log = "0.4"
-native-tls = { version = "0.2", optional = true }
-pimalaya-tui = { version = "0.2", default-features = false, features = ["cli", "config", "path"] }
-rustls = { version = "0.23", default-features = false, features = ["logging", "std", "tls12"], optional = true }
-rustls-platform-verifier = { version = "0.5", optional = true }
+pimalaya-toolbox = { version = "0.0.1", default-features = false, features = ["config", "secret", "stream", "terminal"] }
 secrecy = { version = "0.10", features = ["serde"], optional = true }
 serde = { version = "1", features = ["derive"] }
 
@@ -73,8 +68,6 @@ serde = { version = "1", features = ["derive"] }
 io-addressbook.path = "../addressbook"
 io-fs.path = "../fs"
 io-http.path = "../http"
-io-keyring.path = "../keyring"
-io-process.path = "../process"
 io-stream.path = "../stream"
 io-vdir.path = "../vdir"
-pimalaya-tui.path = "../tui"
+pimalaya-toolbox.path = "../toolbox"

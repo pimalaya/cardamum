@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use pimalaya_toolbox::config::TomlConfig;
+use serde::Deserialize;
 
-use crate::account::config::TomlAccountConfig;
+use crate::account::Account;
 
 /// The main configuration.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct TomlConfig {
+pub struct Config {
     /// The configuration of all the accounts.
-    pub accounts: HashMap<String, TomlAccountConfig>,
+    pub accounts: HashMap<String, Account>,
 }
 
 // #[cfg(feature = "wizard")]
@@ -19,18 +20,19 @@ pub struct TomlConfig {
 //     }
 // }
 
-impl pimalaya_tui::terminal::config::TomlConfig for TomlConfig {
-    type TomlAccountConfig = TomlAccountConfig;
+impl TomlConfig for Config {
+    type Account = Account;
 
     fn project_name() -> &'static str {
         env!("CARGO_PKG_NAME")
     }
 
-    fn get_default_account_config(&self) -> Option<(String, Self::TomlAccountConfig)> {
+    fn find_default_account(&self) -> Option<(String, Self::Account)> {
+        #[allow(unused)]
         for (name, account) in &self.accounts {
             match account {
                 #[cfg(feature = "carddav")]
-                TomlAccountConfig::Carddav(config) if config.default => {
+                Account::Carddav(config) if config.default => {
                     return Some((name.clone(), account.clone()));
                 }
                 _ => continue,
@@ -40,7 +42,7 @@ impl pimalaya_tui::terminal::config::TomlConfig for TomlConfig {
         None
     }
 
-    fn get_account_config(&self, name: &str) -> Option<(String, Self::TomlAccountConfig)> {
+    fn find_account(&self, name: &str) -> Option<(String, Self::Account)> {
         self.accounts
             .get(name)
             .map(|account| (name.to_owned(), account.clone()))

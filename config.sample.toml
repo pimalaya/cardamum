@@ -1,6 +1,6 @@
 # The account name should be unique.
 #
-[accounts.example.carddav]
+[accounts.radicale.carddav]
 
 # Make this current account the default one to use when no account is
 # specified in the CLI with the --account argument.
@@ -8,6 +8,26 @@
 default = true
 host = "127.0.0.1"
 port = 8001
-ssl = "plain"
 auth = "plain"
+tls = "plain"
 home = "/user"
+
+[accounts.google.carddav]
+host = "carddav.googleapis.com"
+port = 443
+auth.bearer.command = "/home/soywod/code/pimalaya/ortie/target/debug/ortie -a google token show"
+home = "/carddav/v1/principals/pimalaya.org@gmail.com/lists/default"
+
+[accounts.posteo.carddav]
+host = "posteo.de"
+port = 8843
+auth.basic.username = "clement.douin"
+auth.basic.password.command = "pass show posteo"
+home = "/addressbooks/clement.douin"
+
+[accounts.icloud.carddav]
+host = "p156-contacts.icloud.com"
+port = 443
+auth.basic.username = "clement.douin@posteo.net"
+auth.basic.password.command = "pass show apple"
+home = "/17170244959/carddavhome/"

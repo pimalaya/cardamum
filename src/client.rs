@@ -3,33 +3,29 @@ use std::collections::HashSet;
 use anyhow::{bail, Result};
 use io_addressbook::Addressbook;
 
-use crate::account::config::TomlAccountConfig;
+use crate::account::Account;
+#[cfg(feature = "carddav")]
+use crate::carddav::client::Client as CarddavClient;
 
+#[derive(Debug, Default)]
 pub enum Client {
+    #[default]
+    None,
     #[cfg(feature = "carddav")]
-    CardDav(crate::carddav::Client),
-
+    Carddav(CarddavClient),
     #[cfg(feature = "vdir")]
     Vdir(crate::vdir::Client),
 }
 
 impl Client {
-    pub fn new(config: TomlAccountConfig) -> Result<Self> {
-        let client = match config {
+    pub fn new(account: Account) -> Result<Self> {
+        match account {
+            Account::None => bail!("Missing addressbook backend"),
             #[cfg(feature = "carddav")]
-            TomlAccountConfig::Carddav(config) => {
-                Self::CardDav(crate::carddav::Client::new(config)?)
-            }
-            #[cfg(not(feature = "carddav"))]
-            TomlAccountConfig::Carddav(err) => bail!("{err}"),
-
+            Account::Carddav(config) => Ok(Self::Carddav(CarddavClient::new(config)?)),
             #[cfg(feature = "vdir")]
-            TomlAccountConfig::Vdir(config) => Self::CardDav(crate::vdir::Client::new(config)?),
-            #[cfg(not(feature = "vdir"))]
-            TomlAccountConfig::Vdir(err) => bail!("{err}"),
-        };
-
-        Ok(client)
+            Account::Vdir(config) => Ok(Self::CardDav(crate::vdir::Client::new(account)?)),
+        }
     }
 
     // pub fn create_addressbook(&self, addressbook: Addressbook) -> Result<Addressbook> {
@@ -44,8 +40,9 @@ impl Client {
 
     pub fn list_addressbooks(&mut self) -> Result<HashSet<Addressbook>> {
         match self {
+            Self::None => bail!("Missing addressbook backend"),
             #[cfg(feature = "carddav")]
-            Self::CardDav(client) => client.list_addressbooks(),
+            Self::Carddav(client) => client.list_addressbooks(),
             #[cfg(feature = "vdir")]
             Self::Vdir(client) => client.list_addressbooks(),
         }

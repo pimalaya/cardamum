@@ -1,11 +1,8 @@
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
+use pimalaya_toolbox::terminal::{clap::args::AccountArg, printer::Printer};
 
-use crate::{
-    account::arg::name::AccountNameFlag, addressbook::table::AddressbooksTable, config::TomlConfig,
-    Client,
-};
+use crate::{account::Account, addressbook::table::AddressbooksTable, client::Client};
 
 /// List all folders.
 ///
@@ -13,13 +10,12 @@ use crate::{
 #[derive(Debug, Parser)]
 pub struct ListAddressbooksCommand {
     #[command(flatten)]
-    pub account: AccountNameFlag,
+    pub account: AccountArg,
 }
 
 impl ListAddressbooksCommand {
-    pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
-        let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
-        let mut client = Client::new(config)?;
+    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
+        let mut client = Client::new(account)?;
 
         let addressbooks = client.list_addressbooks()?;
         let table = AddressbooksTable::from(addressbooks);

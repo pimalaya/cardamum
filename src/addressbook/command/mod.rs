@@ -5,9 +5,9 @@ mod list;
 
 use anyhow::Result;
 use clap::Subcommand;
-use pimalaya_tui::terminal::cli::printer::Printer;
+use pimalaya_toolbox::terminal::printer::Printer;
 
-use crate::config::TomlConfig;
+use crate::account::Account;
 
 use self::{
     // create::CreateAddressbookCommand,
@@ -30,10 +30,10 @@ pub enum AddressbookSubcommand {
 }
 
 impl AddressbookSubcommand {
-    pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
         match self {
             // Self::Create(cmd) => cmd.execute(printer, config),
-            Self::List(cmd) => cmd.execute(printer, config),
+            Self::List(cmd) => cmd.execute(printer, account),
             // Self::Update(cmd) => cmd.execute(printer, config),
             // Self::Delete(cmd) => cmd.execute(printer, config),
         }

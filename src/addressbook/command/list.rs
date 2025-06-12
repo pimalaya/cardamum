@@ -15,7 +15,7 @@ pub struct ListAddressbooksCommand {
 
 impl ListAddressbooksCommand {
     pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
-        let mut client = Client::new(account)?;
+        let mut client = Client::new(&account)?;
 
         let addressbooks = client.list_addressbooks()?;
         let table = AddressbooksTable::from(addressbooks);

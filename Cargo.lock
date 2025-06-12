@@ -1049,6 +1049,7 @@ dependencies = [
  "io-stream",
  "log",
  "memchr",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -1081,6 +1082,7 @@ name = "io-stream"
 version = "0.0.1"
 dependencies = [
  "log",
+ "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -1602,6 +1604,7 @@ dependencies = [
  "dirs",
  "env_logger",
  "git2",
+ "http",
  "io-keyring",
  "io-process",
  "log",
@@ -1613,6 +1616,7 @@ dependencies = [
  "serde-toml-merge",
  "serde_json",
  "shellexpand",
+ "thiserror 2.0.12",
  "toml",
 ]
 

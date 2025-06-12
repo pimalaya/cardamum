@@ -1,187 +1,313 @@
-use std::collections::HashSet;
+use std::{borrow::Cow, collections::HashSet};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
+use http::Uri;
+
 use io_addressbook::{
-    carddav::{self, coroutines::ListAddressbooks},
+    carddav::{
+        coroutines::{
+            addressbook_home_set::AddressbookHomeSet,
+            current_user_principal::CurrentUserPrincipal,
+            list_addressbooks::ListAddressbooks,
+            send::SendResult,
+            well_known::{WellKnown, WellKnownResult},
+        },
+        request::set_uri_path,
+    },
     Addressbook,
 };
-use io_stream::{runtimes::std::handle, Io};
-use pimalaya_toolbox::stream::Stream;
+use io_stream::runtimes::std::handle;
+use pimalaya_toolbox::stream::{Stream, Tls};
 
-use super::config::{Auth, CarddavConfig};
+use super::config::CarddavConfig;
 
 #[derive(Debug)]
-pub struct Client {
-    config: CarddavConfig,
+pub struct Client<'a> {
+    config: io_addressbook::carddav::config::CarddavConfig<'a>,
+    tls: &'a Tls,
     stream: Stream,
 }
 
-impl Client {
-    pub fn new(config: CarddavConfig) -> Result<Self> {
-        let stream = Stream::connect(&config.host, config.port, &config.tls)?;
-        Ok(Self { config, stream })
+impl<'a> Client<'a> {
+    pub fn new(config: &'a CarddavConfig) -> Result<Self> {
+        let tls = &config.tls;
+
+        if let Some(uri) = &config.home_uri {
+            let stream = Stream::connect(uri, tls)?;
+            return Self::from_home_uri(config, stream, Cow::Borrowed(uri));
+        };
+
+        if let Some(uri) = &config.server_uri {
+            let stream = Stream::connect(&uri, tls)?;
+            return Self::from_server_uri(config, stream, uri.clone());
+        }
+
+        if let Some(discover) = &config.discover {
+            let hostname = if let Some(port) = discover.port {
+                Cow::from(format!("{}:{port}", discover.host))
+            } else {
+                Cow::from(&discover.host)
+            };
+
+            let scheme = match &discover.scheme {
+                Some(scheme) => Cow::from(scheme),
+                None => Cow::from("https"),
+            };
+
+            let uri: Uri = format!("{scheme}://{hostname}/.well-known/carddav")
+                .parse()
+                .unwrap();
+
+            let mut stream = Stream::connect(&uri, tls)?;
+
+            let remote_config = io_addressbook::carddav::config::CarddavConfig {
+                uri: Cow::Borrowed(&uri),
+                auth: TryFrom::try_from(&config.auth)?,
+            };
+
+            let mut well_known = WellKnown::new(&remote_config, discover.method.clone());
+            let mut arg = None;
+
+            let ok = loop {
+                match well_known.resume(arg.take()) {
+                    WellKnownResult::Ok(ok) => break ok,
+                    WellKnownResult::Err(err) => {
+                        return Err(anyhow!(err).context("Discover CardDAV server error"));
+                    }
+                    WellKnownResult::Io(io) => arg = Some(handle(&mut stream, io)?),
+                }
+            };
+
+            if !ok.keep_alive {
+                stream = Stream::connect(&ok.uri, tls)?;
+            }
+
+            return Self::from_server_uri(config, stream, ok.uri);
+        }
+
+        let ctx = "Cannot discover CardDAV home URI";
+        let err = "Missing one of `discover`, `server-uri` or `home-uri` config option";
+        Err(anyhow!(err).context(ctx))
     }
 
-    // pub fn create_addressbook(&self, addressbook: Addressbook) -> Result<Addressbook> {
-    //     let mut flow = self.client.create_addressbook(addressbook);
-    //     self.execute(&mut flow)?;
-    //     Ok(flow.output()?)
+    fn from_home_uri(config: &'a CarddavConfig, stream: Stream, uri: Cow<'a, Uri>) -> Result<Self> {
+        let tls = &config.tls;
+        let auth = TryFrom::try_from(&config.auth)?;
+        let config = io_addressbook::carddav::config::CarddavConfig { uri, auth };
+
+        let client = Self {
+            config,
+            tls,
+            stream,
+        };
+
+        return Ok(client);
+    }
+
+    fn from_server_uri(
+        config: &'a CarddavConfig,
+        mut stream: Stream,
+        mut uri: Uri,
+    ) -> Result<Self> {
+        let tls = &config.tls;
+        println!("uri: {uri:?}");
+
+        let remote_config = io_addressbook::carddav::config::CarddavConfig {
+            uri: Cow::Borrowed(&uri),
+            auth: TryFrom::try_from(&config.auth)?,
+        };
+
+        let mut principal = CurrentUserPrincipal::new(&remote_config);
+        let mut arg = None;
+
+        let ok = loop {
+            match principal.resume(arg.take()) {
+                SendResult::Ok(ok) => break ok,
+                SendResult::Err(err) => {
+                    return Err(anyhow!(err).context("Get current user principal error"))
+                }
+                SendResult::Io(io) => arg = Some(handle(&mut stream, io)?),
+                SendResult::Reset(new_uri) => {
+                    println!("RESET: {new_uri:?}");
+                    uri = new_uri;
+                    stream = Stream::connect(&uri, tls)?;
+                }
+            }
+        };
+
+        let mut same_scheme = true;
+        let mut same_authority = true;
+
+        if let Some(discovered_uri) = ok.body {
+            println!("found URI: {discovered_uri:?}");
+            uri = if let Some(auth) = discovered_uri.authority() {
+                same_authority = uri.authority() == Some(auth);
+                same_scheme = uri.scheme() == discovered_uri.scheme();
+                discovered_uri
+            } else {
+                set_uri_path(uri, discovered_uri.path())
+            };
+        }
+
+        println!("uri: {uri:?}");
+
+        if !ok.keep_alive || !same_scheme || !same_authority {
+            stream = Stream::connect(&uri, tls)?;
+        }
+
+        let remote_config = io_addressbook::carddav::config::CarddavConfig {
+            uri: Cow::Borrowed(&uri),
+            auth: TryFrom::try_from(&config.auth)?,
+        };
+
+        let mut home = AddressbookHomeSet::new(&remote_config);
+        let mut arg = None;
+
+        let ok = loop {
+            match home.resume(arg.take()) {
+                SendResult::Ok(ok) => break ok,
+                SendResult::Err(err) => {
+                    return Err(anyhow!(err).context("Get addressbook home set error"));
+                }
+                SendResult::Io(io) => arg = Some(handle(&mut stream, io)?),
+                SendResult::Reset(new_uri) => {
+                    println!("RESET: {new_uri:?}");
+                    uri = new_uri;
+                    stream = Stream::connect(&uri, tls)?;
+                }
+            }
+        };
+
+        let mut same_scheme = true;
+        let mut same_authority = true;
+
+        if let Some(discovered_uri) = ok.body {
+            println!("found URI: {discovered_uri:?}");
+            uri = if let Some(auth) = discovered_uri.authority() {
+                same_authority = uri.authority() == Some(auth);
+                same_scheme = uri.scheme() == discovered_uri.scheme();
+                discovered_uri
+            } else {
+                set_uri_path(uri, discovered_uri.path())
+            };
+        }
+
+        println!("uri: {uri:?}");
+
+        if !ok.keep_alive || !same_scheme || !same_authority {
+            stream = Stream::connect(&uri, tls)?;
+        }
+
+        Self::from_home_uri(config, stream, Cow::Owned(uri))
+    }
+
+    // pub fn create_addressbook(&mut self, addressbook: Addressbook) -> Result<()> {
+    //     let mut create = CreateAddressbook::new(&self.config, addressbook);
+    //     let mut arg = None;
+
+    //     loop {
+    //         match create.resume(arg.take()) {
+    //             Ok(_) => break Ok(()),
+    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
+    //         }
+    //     }
     // }
 
     pub fn list_addressbooks(&mut self) -> Result<HashSet<Addressbook>> {
-        let config = carddav::Config {
-            host: self.config.host.clone(),
-            port: self.config.port,
-            home_uri: self.config.home.clone(),
-            http_version: Default::default(),
-            auth: match &self.config.auth {
-                Auth::Plain => carddav::config::Auth::Plain,
-                Auth::Bearer(token) => carddav::config::Auth::Bearer {
-                    token: token.get()?,
-                },
-                Auth::Basic { username, password } => carddav::config::Auth::Basic {
-                    username: username.clone(),
-                    password: password.get()?,
-                },
-            },
-        };
-
-        let mut list = ListAddressbooks::new(&config);
+        let mut list = ListAddressbooks::new(&self.config);
         let mut arg = None;
 
         loop {
             match list.resume(arg.take()) {
-                Ok(addressbooks) => break Ok(addressbooks),
-                Err(Io::Error(err)) => return Err(anyhow!(err).context("List addressbooks error")),
-                Err(io) => {
-                    arg = Some(handle(&mut self.stream, io).context("list addressbooks error")?)
-                }
+                SendResult::Ok(ok) => break Ok(ok.body),
+                SendResult::Err(err) => return Err(anyhow!(err).context("List addressbooks error")),
+                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
+                SendResult::Reset(uri) => self.stream = Stream::connect(&uri, self.tls)?,
             }
         }
     }
 
-    // pub fn list_cards(&self, addressbook_id: impl AsRef<str>) -> Result<Cards> {
-    //     let mut flow = self.client.list_cards(addressbook_id);
-    //     self.execute(&mut flow)?;
-    //     Ok(flow.output()?)
-    // }
+    // pub fn update_addressbook(&mut self, addressbook: Addressbook) -> Result<()> {
+    //     let mut update = UpdateAddressbook::new(&self.config, addressbook);
+    //     let mut arg = None;
 
-    // pub fn update_addressbook(
-    //     &self,
-    //     addressbook: PartialAddressbook,
-    // ) -> Result<PartialAddressbook> {
-    //     let mut flow = self.client.update_addressbook(addressbook);
-    //     self.execute(&mut flow)?;
-    //     Ok(flow.output()?)
-    // }
-
-    // pub fn delete_addressbook(&self, id: impl AsRef<str>) -> Result<bool> {
-    //     let mut flow = self.client.delete_addressbook(id);
-    //     self.execute(&mut flow)?;
-    //     Ok(flow.output()?)
-    // }
-
-    // pub fn create_card(&self, addressbook_id: impl AsRef<str>, card: Card) -> Result<Card> {
-    //     let mut flow = self.client.create_card(addressbook_id, card);
-    //     self.execute(&mut flow)?;
-    //     Ok(flow.output())
-    // }
-
-    // pub fn read_card(
-    //     &self,
-    //     addressbook_id: impl AsRef<str>,
-    //     card_id: impl ToString,
-    // ) -> Result<Card> {
-    //     let mut flow = self.client.read_card(addressbook_id, card_id);
-    //     self.execute(&mut flow)?;
-    //     Ok(flow.output()?)
-    // }
-
-    // pub fn update_card(&self, addressbook_id: impl AsRef<str>, card: Card) -> Result<Card> {
-    //     let mut flow = self.client.update_card(addressbook_id, card);
-    //     self.execute(&mut flow)?;
-    //     Ok(flow.output())
-    // }
-
-    // pub fn delete_card(
-    //     &self,
-    //     addressbook_id: impl AsRef<str>,
-    //     card_id: impl AsRef<str>,
-    // ) -> Result<()> {
-    //     let mut flow = self.client.delete_card(addressbook_id, card_id);
-    //     self.execute(&mut flow)?;
-    //     Ok(())
-    // }
-
-    // fn execute<F>(&self, flow: &mut F) -> Result<()>
-    // where
-    //     F: Flow<Item = tcp::Io>,
-    //     F: tcp::Read + tcp::Write,
-    // {
-    //     match &self.config.encryption {
-    //         #[cfg(feature = "carddav")]
-    //         Encryption::None => {
-    //             use addressbookcarddav::Connector;
-
-    //             let mut tcp = Connector::connect(&self.config.hostname, self.config.port)?;
-
-    //             while let Some(io) = flow.next() {
-    //                 match io {
-    //                     tcp::Io::Read => {
-    //                         tcp.read(flow)?;
-    //                     }
-    //                     tcp::Io::Write => {
-    //                         tcp.write(flow)?;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         #[cfg(feature = "carddav-native-tls")]
-    //         Encryption::NativeTls(_) => {
-    //             use addressbookcarddav_native_tls::Connector;
-
-    //             let mut tls = Connector::connect(&self.config.hostname, self.config.port)?;
-
-    //             while let Some(io) = flow.next() {
-    //                 match io {
-    //                     tcp::Io::Read => {
-    //                         tls.read(flow)?;
-    //                     }
-    //                     tcp::Io::Write => {
-    //                         tls.write(flow)?;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //         #[cfg(feature = "carddav-rustls")]
-    //         Encryption::Rustls(config) => {
-    //             use addressbookcarddav_rustls::{Connector, CryptoProvider};
-
-    //             use crate::carddav::config::RustlsCrypto;
-
-    //             let crypto = match config.crypto {
-    //                 RustlsCrypto::Default => CryptoProvider::Default,
-    //                 #[cfg(feature = "carddav-rustls-aws-lc")]
-    //                 RustlsCrypto::AwsLc => CryptoProvider::AwsLc,
-    //                 #[cfg(feature = "carddav-rustls-ring")]
-    //                 RustlsCrypto::Ring => CryptoProvider::Ring,
-    //             };
-
-    //             let mut tls = Connector::connect(&self.config.hostname, self.config.port, &crypto)?;
-
-    //             while let Some(io) = flow.next() {
-    //                 match io {
-    //                     tcp::Io::Read => {
-    //                         tls.read(flow)?;
-    //                     }
-    //                     tcp::Io::Write => {
-    //                         tls.write(flow)?;
-    //                     }
-    //                 }
-    //             }
+    //     loop {
+    //         match update.resume(arg.take()) {
+    //             Ok(_) => break Ok(()),
+    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
     //         }
     //     }
+    // }
 
-    //     Ok(())
+    // pub fn delete_addressbook(&mut self, addressbook: Addressbook) -> Result<()> {
+    //     let mut delete = DeleteAddressbook::new(&self.config, addressbook.id);
+    //     let mut arg = None;
+
+    //     loop {
+    //         match delete.resume(arg.take()) {
+    //             Ok(_) => break Ok(()),
+    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
+    //         }
+    //     }
+    // }
+
+    // pub fn create_card(&mut self, card: Card) -> Result<()> {
+    //     let mut create = CreateCard::new(&self.config, card);
+    //     let mut arg = None;
+
+    //     loop {
+    //         match create.resume(arg.take()) {
+    //             Ok(_) => break Ok(()),
+    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
+    //         }
+    //     }
+    // }
+
+    // pub fn list_cards(&mut self, addressbook_id: impl ToString) -> Result<HashSet<Card>> {
+    //     let mut list = ListCards::new(&self.config, addressbook_id);
+    //     let mut arg = None;
+
+    //     loop {
+    //         match list.resume(arg.take()) {
+    //             Ok(addressbooks) => break Ok(addressbooks),
+    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
+    //         }
+    //     }
+    // }
+
+    // pub fn read_card(&mut self, card: Card) -> Result<()> {
+    //     let mut read = ReadCard::new(&self.config, &card.addressbook_id, &card.id);
+    //     let mut arg = None;
+
+    //     loop {
+    //         match read.resume(arg.take()) {
+    //             Ok(_) => break Ok(()),
+    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
+    //         }
+    //     }
+    // }
+
+    // pub fn update_card(&mut self, card: Card) -> Result<()> {
+    //     let mut update = UpdateCard::new(&self.config, card);
+    //     let mut arg = None;
+
+    //     loop {
+    //         match update.resume(arg.take()) {
+    //             Ok(_) => break Ok(()),
+    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
+    //         }
+    //     }
+    // }
+
+    // pub fn delete_card(&mut self, card: Card) -> Result<()> {
+    //     let mut delete = DeleteCard::new(&self.config, &card.addressbook_id, &card.id);
+    //     let mut arg = None;
+
+    //     loop {
+    //         match delete.resume(arg.take()) {
+    //             Ok(_) => break Ok(()),
+    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
+    //         }
+    //     }
     // }
 }

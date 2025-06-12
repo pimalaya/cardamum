@@ -1,28 +1,76 @@
-use pimalaya_toolbox::{secret::Secret, stream::Tls};
-use serde::Deserialize;
+use std::{borrow::Cow, fmt};
 
+use anyhow::Error;
+use http::{Method, Uri};
+use pimalaya_toolbox::secret::Secret;
+#[cfg(feature = "carddav")]
+use pimalaya_toolbox::stream::Tls;
+use serde::{de::Visitor, Deserialize, Deserializer};
+
+/// The account configuration.
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CarddavConfig {
-    #[serde(default)]
-    pub default: bool,
-
-    pub host: String,
-    pub port: u16,
-
+    pub discover: Option<CarddavDiscoverConfig>,
+    #[serde(default, deserialize_with = "uri")]
+    pub server_uri: Option<Uri>,
+    #[serde(default, deserialize_with = "uri")]
+    pub home_uri: Option<Uri>,
     #[serde(default)]
     pub auth: Auth,
     #[serde(default)]
     pub tls: Tls,
-
-    #[serde(default = "CarddavConfig::default_home")]
-    pub home: String,
 }
 
-impl CarddavConfig {
-    pub fn default_home() -> String {
-        String::from("/")
+#[derive(Clone, Debug, Deserialize)]
+pub struct CarddavDiscoverConfig {
+    pub host: String,
+    pub port: Option<u16>,
+    pub scheme: Option<String>,
+    #[serde(default, deserialize_with = "method")]
+    pub method: Option<Method>,
+}
+
+struct UriVisitor;
+
+impl<'de> Visitor<'de> for UriVisitor {
+    type Value = Uri;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("an URI string")
     }
+
+    fn visit_str<E: serde::de::Error>(self, uri: &str) -> Result<Self::Value, E> {
+        match uri.parse() {
+            Ok(uri) => Ok(uri),
+            Err(err) => Err(serde::de::Error::custom(err)),
+        }
+    }
+}
+
+struct MethodVisitor;
+
+impl<'de> Visitor<'de> for MethodVisitor {
+    type Value = Method;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("a HTTP method string")
+    }
+
+    fn visit_str<E: serde::de::Error>(self, method: &str) -> Result<Self::Value, E> {
+        match method.parse() {
+            Ok(method) => Ok(method),
+            Err(err) => Err(serde::de::Error::custom(err)),
+        }
+    }
+}
+
+pub fn uri<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Uri>, D::Error> {
+    deserializer.deserialize_str(UriVisitor).map(Some)
+}
+
+pub fn method<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Method>, D::Error> {
+    deserializer.deserialize_str(MethodVisitor).map(Some)
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -30,9 +78,28 @@ impl CarddavConfig {
 pub enum Auth {
     #[default]
     Plain,
-    Bearer(Secret),
     Basic {
         username: String,
         password: Secret,
     },
+    Bearer(Secret),
+}
+
+impl<'a> TryFrom<&'a Auth> for io_addressbook::carddav::config::CarddavAuth<'a> {
+    type Error = Error;
+
+    fn try_from(auth: &'a Auth) -> Result<Self, Self::Error> {
+        Ok(match auth {
+            Auth::Plain => io_addressbook::carddav::config::CarddavAuth::Plain,
+            Auth::Basic { username, password } => {
+                io_addressbook::carddav::config::CarddavAuth::Basic {
+                    username: username.into(),
+                    password: Cow::Owned(password.get()?),
+                }
+            }
+            Auth::Bearer(token) => io_addressbook::carddav::config::CarddavAuth::Bearer {
+                token: Cow::Owned(token.get()?),
+            },
+        })
+    }
 }

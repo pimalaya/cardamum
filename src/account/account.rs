@@ -13,11 +13,11 @@ use super::de;
 
 /// The account configuration.
 #[derive(Clone, Debug, Deserialize)]
-#[serde(try_from = "de::Account")]
-pub enum Account {
-    None,
+#[serde(from = "de::Account")]
+pub struct Account {
+    pub default: bool,
     #[cfg(feature = "carddav")]
-    Carddav(CarddavConfig),
+    pub carddav: Option<CarddavConfig>,
     #[cfg(feature = "vdir")]
-    Vdir(VdirConfig),
+    pub vdir: Option<VdirConfig>,
 }

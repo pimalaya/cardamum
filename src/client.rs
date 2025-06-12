@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use io_addressbook::Addressbook;
 
 use crate::account::Account;
@@ -8,24 +8,29 @@ use crate::account::Account;
 use crate::carddav::client::Client as CarddavClient;
 
 #[derive(Debug, Default)]
-pub enum Client {
+pub enum Client<'a> {
     #[default]
     None,
     #[cfg(feature = "carddav")]
-    Carddav(CarddavClient),
+    Carddav(CarddavClient<'a>),
     #[cfg(feature = "vdir")]
     Vdir(crate::vdir::Client),
 }
 
-impl Client {
-    pub fn new(account: Account) -> Result<Self> {
-        match account {
-            Account::None => bail!("Missing addressbook backend"),
-            #[cfg(feature = "carddav")]
-            Account::Carddav(config) => Ok(Self::Carddav(CarddavClient::new(config)?)),
-            #[cfg(feature = "vdir")]
-            Account::Vdir(config) => Ok(Self::CardDav(crate::vdir::Client::new(account)?)),
+impl<'a> Client<'a> {
+    pub fn new(account: &'a Account) -> Result<Self> {
+        #[cfg(feature = "carddav")]
+        if let Some(config) = &account.carddav {
+            return Ok(Self::Carddav(CarddavClient::new(config)?));
         }
+
+        #[cfg(feature = "vdir")]
+        if scheme == "file" || scheme == "" {
+            return Ok(Self::Vdir(VdirClient::new(account)?));
+        }
+
+        Err(anyhow!("Cannot find CardDAV nor Vdir config")
+            .context("Create addressbook client error"))
     }
 
     // pub fn create_addressbook(&self, addressbook: Addressbook) -> Result<Addressbook> {

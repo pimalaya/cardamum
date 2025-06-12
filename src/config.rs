@@ -28,18 +28,10 @@ impl TomlConfig for Config {
     }
 
     fn find_default_account(&self) -> Option<(String, Self::Account)> {
-        #[allow(unused)]
-        for (name, account) in &self.accounts {
-            match account {
-                #[cfg(feature = "carddav")]
-                Account::Carddav(config) if config.default => {
-                    return Some((name.clone(), account.clone()));
-                }
-                _ => continue,
-            }
-        }
-
-        None
+        self.accounts
+            .iter()
+            .find(|(_, account)| account.default)
+            .map(|(name, account)| (name.to_owned(), account.clone()))
     }
 
     fn find_account(&self, name: &str) -> Option<(String, Self::Account)> {

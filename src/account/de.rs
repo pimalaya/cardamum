@@ -1,13 +1,8 @@
 #[allow(unused)]
-use anyhow::{bail, Error};
-use serde::Deserialize;
-
-#[cfg(feature = "carddav")]
-use crate::carddav::config::CarddavConfig;
-#[cfg(feature = "vdir")]
-use crate::vdir::config::VdirConfig;
-#[allow(unused)]
 use pimalaya_toolbox::feat;
+use serde::{de::Error, Deserialize, Deserializer};
+
+use crate::carddav::config::CarddavConfig;
 
 #[cfg(not(feature = "carddav"))]
 pub type CarddavConfig = ();
@@ -16,36 +11,59 @@ pub type VdirConfig = ();
 
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum Account {
-    #[cfg_attr(not(feature = "carddav"), serde(deserialize_with = "carddav"))]
-    Carddav(CarddavConfig),
-    #[cfg_attr(not(feature = "vdir"), serde(deserialize_with = "vdir"))]
-    Vdir(VdirConfig),
+pub struct Account {
+    #[serde(default)]
+    pub default: bool,
+    #[cfg_attr(not(feature = "carddav"), serde(default, deserialize_with = "carddav"))]
+    pub carddav: Option<CarddavConfig>,
+    #[cfg_attr(not(feature = "vdir"), serde(default, deserialize_with = "vdir"))]
+    pub vdir: Option<VdirConfig>,
 }
 
-impl TryFrom<Account> for super::Account {
-    type Error = Error;
-
-    fn try_from(account: Account) -> Result<Self, Self::Error> {
-        match account {
+impl From<Account> for super::Account {
+    fn from(account: Account) -> Self {
+        super::Account {
+            default: account.default,
             #[cfg(feature = "carddav")]
-            Account::Carddav(cmd) => Ok(Self::Carddav(cmd)),
-            #[cfg(not(feature = "carddav"))]
-            Account::Carddav(_) => bail!(feat!("carddav")),
+            carddav: account.carddav,
             #[cfg(feature = "vdir")]
-            Account::Vdir(entry) => Ok(Self::Vdir(entry)),
-            #[cfg(not(feature = "vdir"))]
-            Account::Vdir(_) => bail!(feat!("vdir")),
+            vdir: account.vdir,
         }
     }
 }
 
+// pub fn uri<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Url, D::Error> {
+//     let uri = Url::deserialize(deserializer)?;
+
+//     let scheme = uri.scheme();
+//     let carddav = scheme.starts_with("http");
+//     let vdir = scheme == "file" || !uri.has_authority();
+
+//     #[cfg(not(feature = "carddav"))]
+//     if carddav {
+//         return Err(Error::custom(feat!("carddav")));
+//     }
+
+//     #[cfg(not(feature = "vdir"))]
+//     if vdir {
+//         return Err(Error::custom(feat!("vdir")));
+//     }
+
+//     if !carddav && !vdir {
+//         let expected = "`file`, `http`, `https`";
+//         let err = format!("unknown scheme `{scheme}`, expected one of {expected}");
+//         return Err(Error::custom(err));
+//     }
+
+//     Ok(uri)
+// }
+
 #[cfg(not(feature = "carddav"))]
-pub fn carddav<'de, T, D: serde::Deserializer<'de>>(_: D) -> Result<T, D::Error> {
-    Err(serde::de::Error::custom(feat!("carddav")))
+pub fn carddav<'de, T, D: Deserializer<'de>>(_: D) -> Result<T, D::Error> {
+    Err(Error::custom(feat!("carddav")))
 }
 
 #[cfg(not(feature = "vdir"))]
-pub fn vdir<'de, T, D: serde::Deserializer<'de>>(_: D) -> Result<T, D::Error> {
-    Err(serde::de::Error::custom(feat!("vdir")))
+pub fn vdir<'de, T, D: Deserializer<'de>>(_: D) -> Result<T, D::Error> {
+    Err(Error::custom(feat!("vdir")))
 }

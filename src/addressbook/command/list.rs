@@ -4,9 +4,9 @@ use pimalaya_toolbox::terminal::printer::Printer;
 
 use crate::{account::Account, addressbook::table::AddressbooksTable, client::Client};
 
-/// List all folders.
+/// List all addressbooks.
 ///
-/// This command allows you to list all exsting folders.
+/// This command allows you to list all exsting addressbooks.
 #[derive(Debug, Parser)]
 pub struct ListAddressbooksCommand;
 

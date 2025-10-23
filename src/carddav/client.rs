@@ -4,21 +4,27 @@ use anyhow::{anyhow, Result};
 use http::Uri;
 
 use io_addressbook::{
+    addressbook::Addressbook,
+    card::Card,
     carddav::{
         coroutines::{
             addressbook_home_set::AddressbookHomeSet,
             create_addressbook::CreateAddressbook,
+            create_card::CreateCard,
             current_user_principal::CurrentUserPrincipal,
             delete_addressbook::DeleteAddressbook,
+            delete_card::DeleteCard,
             follow_redirects::FollowRedirectsResult,
             list_addressbooks::ListAddressbooks,
+            list_cards::ListCards,
+            read_card::ReadCard,
             send::SendResult,
             update_addressbook::UpdateAddressbook,
+            update_card::UpdateCard,
             well_known::{WellKnown, WellKnownResult},
         },
         request::set_uri_path,
     },
-    Addressbook,
 };
 use io_stream::runtimes::std::handle;
 use pimalaya_toolbox::stream::Stream;
@@ -26,12 +32,12 @@ use pimalaya_toolbox::stream::Stream;
 use super::config::CarddavConfig;
 
 #[derive(Debug)]
-pub struct Client<'a> {
+pub struct CarddavClient<'a> {
     config: io_addressbook::carddav::config::CarddavConfig<'a>,
     stream: Stream,
 }
 
-impl<'a> Client<'a> {
+impl<'a> CarddavClient<'a> {
     pub fn new(config: &'a CarddavConfig) -> Result<Self> {
         let tls = &config.tls;
 
@@ -245,63 +251,86 @@ impl<'a> Client<'a> {
         }
     }
 
-    // pub fn create_card(&mut self, card: Card) -> Result<()> {
-    //     let mut create = CreateCard::new(&self.config, card);
-    //     let mut arg = None;
+    pub fn create_card(&mut self, card: Card) -> Result<()> {
+        let mut create = CreateCard::new(&self.config, card);
+        let mut arg = None;
 
-    //     loop {
-    //         match create.resume(arg.take()) {
-    //             Ok(_) => break Ok(()),
-    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
-    //         }
-    //     }
-    // }
+        loop {
+            match create.resume(arg.take()) {
+                SendResult::Ok(_) => break Ok(()),
+                SendResult::Err(err) => {
+                    return Err(anyhow!(err).context("Delete addressbook error"))
+                }
+                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
+            }
+        }
+    }
 
-    // pub fn list_cards(&mut self, addressbook_id: impl ToString) -> Result<HashSet<Card>> {
-    //     let mut list = ListCards::new(&self.config, addressbook_id);
-    //     let mut arg = None;
+    pub fn list_cards(&mut self, addressbook_id: impl AsRef<str>) -> Result<HashSet<Card>> {
+        let mut list = ListCards::new(&self.config, addressbook_id);
+        let mut arg = None;
 
-    //     loop {
-    //         match list.resume(arg.take()) {
-    //             Ok(addressbooks) => break Ok(addressbooks),
-    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
-    //         }
-    //     }
-    // }
+        loop {
+            match list.resume(arg.take()) {
+                SendResult::Ok(ok) => break Ok(ok.body),
+                SendResult::Err(err) => {
+                    return Err(anyhow!(err).context("Delete addressbook error"))
+                }
+                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
+            }
+        }
+    }
 
-    // pub fn read_card(&mut self, card: Card) -> Result<()> {
-    //     let mut read = ReadCard::new(&self.config, &card.addressbook_id, &card.id);
-    //     let mut arg = None;
+    pub fn read_card(
+        &mut self,
+        addressbook_id: impl AsRef<str>,
+        card_id: impl AsRef<str>,
+    ) -> Result<Card> {
+        let mut read = ReadCard::new(&self.config, addressbook_id, card_id);
+        let mut arg = None;
 
-    //     loop {
-    //         match read.resume(arg.take()) {
-    //             Ok(_) => break Ok(()),
-    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
-    //         }
-    //     }
-    // }
+        loop {
+            match read.resume(arg.take()) {
+                SendResult::Ok(ok) => break Ok(ok.body),
+                SendResult::Err(err) => {
+                    return Err(anyhow!(err).context("Delete addressbook error"))
+                }
+                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
+            }
+        }
+    }
 
-    // pub fn update_card(&mut self, card: Card) -> Result<()> {
-    //     let mut update = UpdateCard::new(&self.config, card);
-    //     let mut arg = None;
+    pub fn update_card(&mut self, card: Card) -> Result<()> {
+        let mut update = UpdateCard::new(&self.config, card);
+        let mut arg = None;
 
-    //     loop {
-    //         match update.resume(arg.take()) {
-    //             Ok(_) => break Ok(()),
-    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
-    //         }
-    //     }
-    // }
+        loop {
+            match update.resume(arg.take()) {
+                SendResult::Ok(_) => break Ok(()),
+                SendResult::Err(err) => {
+                    return Err(anyhow!(err).context("Delete addressbook error"))
+                }
+                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
+            }
+        }
+    }
 
-    // pub fn delete_card(&mut self, card: Card) -> Result<()> {
-    //     let mut delete = DeleteCard::new(&self.config, &card.addressbook_id, &card.id);
-    //     let mut arg = None;
+    pub fn delete_card(
+        &mut self,
+        addressbook_id: impl AsRef<str>,
+        card_id: impl AsRef<str>,
+    ) -> Result<()> {
+        let mut delete = DeleteCard::new(&self.config, addressbook_id, card_id);
+        let mut arg = None;
 
-    //     loop {
-    //         match delete.resume(arg.take()) {
-    //             Ok(_) => break Ok(()),
-    //             Err(io) => arg = Some(handle(&mut self.stream, io)?),
-    //         }
-    //     }
-    // }
+        loop {
+            match delete.resume(arg.take()) {
+                SendResult::Ok(_) => break Ok(()),
+                SendResult::Err(err) => {
+                    return Err(anyhow!(err).context("Delete addressbook error"))
+                }
+                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
+            }
+        }
+    }
 }

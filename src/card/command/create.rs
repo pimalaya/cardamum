@@ -4,24 +4,19 @@ use std::{
     process::{Command, Stdio},
 };
 
-use addressbook::Card;
-use anyhow::{
-    eyre::{bail, eyre},
-    Result,
-};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
-use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
+use io_addressbook::card::Card;
+use pimalaya_toolbox::terminal::printer::Printer;
 
-use crate::{account::arg::name::AccountNameFlag, config::TomlConfig, Client};
+use crate::{account::Account, client::Client};
 
-/// Create all folders.
+/// Create a new card.
 ///
-/// This command allows you to create all exsting folders.
+/// This command allows you to add a new vCard to the given
+/// addressbook.
 #[derive(Debug, Parser)]
 pub struct CreateCardCommand {
-    #[command(flatten)]
-    pub account: AccountNameFlag,
-
     /// The identifier of the addressbook where the vCard should be
     /// added to.
     #[arg(name = "ADDRESSBOOK-ID")]
@@ -29,10 +24,10 @@ pub struct CreateCardCommand {
 }
 
 impl CreateCardCommand {
-    pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
-        let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
-        let client = Client::new(config.backend)?;
-        let uid = Card::generate_id();
+    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
+        let mut client = Client::new(&account)?;
+
+        let uid = Card::new_uuid();
         let path = temp_dir().join(format!("{uid}.vcf"));
         let tpl = format!(include_str!("./create.vcf"), uid);
         fs::write(&path, tpl)?;
@@ -55,9 +50,14 @@ impl CreateCardCommand {
         let content = fs::read_to_string(&path)?
             .replace('\r', "")
             .replace('\n', "\r\n");
-        let card = Card::parse(Card::generate_id(), content).ok_or(eyre!("cannot parse vCard"))?;
 
-        client.create_card(self.addressbook_id, card)?;
+        let card = Card {
+            id: Card::new_uuid().to_string(),
+            addressbook_id: self.addressbook_id,
+            vcard: Card::parse(content).context("cannot parse vCard")?,
+        };
+
+        client.create_card(card)?;
 
         printer.out("Card successfully created")
     }

@@ -9,9 +9,10 @@ use pimalaya_toolbox::terminal::{
 
 use crate::{account::Account, client::Client};
 
-/// Delete all folders.
+/// Delete an addressbook.
 ///
-/// This command allows you to delete all exsting folders.
+/// This command allows you to delete an existing addressbook, by its
+/// ID.
 #[derive(Debug, Parser)]
 pub struct DeleteAddressbookCommand {
     pub id: String,

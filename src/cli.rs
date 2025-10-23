@@ -15,10 +15,7 @@ use pimalaya_toolbox::{
 };
 
 use crate::{
-    // addressbook::command::AddressbookSubcommand,
-    // card::command::CardSubcommand,
-    addressbook::command::AddressbookSubcommand,
-    config::Config,
+    addressbook::command::AddressbookSubcommand, card::command::CardSubcommand, config::Config,
 };
 
 #[derive(Parser, Debug)]
@@ -43,8 +40,8 @@ pub struct Cli {
 pub enum Cardamum {
     #[command(arg_required_else_help = true, subcommand)]
     Addressbooks(AddressbookSubcommand),
-    // #[command(arg_required_else_help = true, subcommand)]
-    // Cards(CardSubcommand),
+    #[command(arg_required_else_help = true, subcommand)]
+    Cards(CardSubcommand),
     #[command(arg_required_else_help = true, alias = "mans")]
     Manuals(ManualCommand),
     #[command(arg_required_else_help = true)]
@@ -64,10 +61,11 @@ impl Cardamum {
                 let (_, account) = config.get_account(account_name)?;
                 cmd.execute(printer, account)
             }
-            // Self::Cards(cmd) => {
-            //     let config = TomlConfig::from_paths_or_default(config_paths)?;
-            //     cmd.execute(printer, config)
-            // }
+            Self::Cards(cmd) => {
+                let config = Config::from_paths_or_default(config_paths)?;
+                let (_, account) = config.get_account(account_name)?;
+                cmd.execute(printer, account)
+            }
             Self::Manuals(cmd) => cmd.execute(printer, Cli::command()),
             Self::Completions(cmd) => cmd.execute(printer, Cli::command()),
         }

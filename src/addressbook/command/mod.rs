@@ -14,6 +14,10 @@ use self::{
     list::ListAddressbooksCommand, update::UpdateAddressbookCommand,
 };
 
+/// Create, list, update and delete addressbooks.
+///
+/// This subcommand allows you to create, list, update and delete
+/// addressbooks.
 #[derive(Debug, Subcommand)]
 pub enum AddressbookSubcommand {
     #[command(alias = "new", alias = "add")]

@@ -1,13 +1,14 @@
 use anyhow::Result;
 use clap::Parser;
-use io_addressbook::Addressbook;
+use io_addressbook::addressbook::Addressbook;
 use pimalaya_toolbox::terminal::printer::{Message, Printer};
 
 use crate::{account::Account, client::Client};
 
-/// Update all folders.
+/// Update an addressbook.
 ///
-/// This command allows you to update all exsting folders.
+/// This command allows you to update properties of an existing
+/// addressbook (mostly the name, the description and the color).
 #[derive(Debug, Parser)]
 pub struct UpdateAddressbookCommand {
     pub id: String,

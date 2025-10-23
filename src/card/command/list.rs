@@ -1,28 +1,22 @@
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
+use pimalaya_toolbox::terminal::printer::Printer;
 
-use crate::{
-    account::arg::name::AccountNameFlag, card::table::CardsTable, config::TomlConfig, Client,
-};
+use crate::{account::Account, card::table::CardsTable, client::Client};
 
-/// List all folders.
+/// List all cards.
 ///
-/// This command allows you to list all exsting folders.
+/// This command allows you to list vCards from a given addressbook.
 #[derive(Debug, Parser)]
 pub struct ListCardsCommand {
-    #[command(flatten)]
-    pub account: AccountNameFlag,
-
     /// The identifier of the CardDAV addressbook to list vCards from.
     #[arg(name = "ADDRESSBOOK-ID")]
     pub addressbook_id: String,
 }
 
 impl ListCardsCommand {
-    pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
-        let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
-        let client = Client::new(config.backend)?;
+    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
+        let mut client = Client::new(&account)?;
 
         let cards = client.list_cards(self.addressbook_id)?;
         let table = CardsTable::from(cards);

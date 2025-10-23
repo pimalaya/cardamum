@@ -1,11 +1,13 @@
 use std::collections::HashSet;
 
 use anyhow::{anyhow, bail, Result};
-use io_addressbook::Addressbook;
+use io_addressbook::{addressbook::Addressbook, card::Card};
 
 use crate::account::Account;
 #[cfg(feature = "carddav")]
-use crate::carddav::client::Client as CarddavClient;
+use crate::carddav::client::CarddavClient;
+#[cfg(feature = "vdir")]
+use crate::vdir::client::VdirClient;
 
 #[derive(Debug, Default)]
 pub enum Client<'a> {
@@ -14,7 +16,7 @@ pub enum Client<'a> {
     #[cfg(feature = "carddav")]
     Carddav(CarddavClient<'a>),
     #[cfg(feature = "vdir")]
-    Vdir(crate::vdir::Client),
+    Vdir(VdirClient),
 }
 
 impl<'a> Client<'a> {
@@ -25,8 +27,8 @@ impl<'a> Client<'a> {
         }
 
         #[cfg(feature = "vdir")]
-        if scheme == "file" || scheme == "" {
-            return Ok(Self::Vdir(VdirClient::new(account)?));
+        if let Some(config) = &account.vdir {
+            return Ok(Self::Vdir(VdirClient::new(config)));
         }
 
         Err(anyhow!("Cannot find CardDAV nor Vdir config")
@@ -53,15 +55,15 @@ impl<'a> Client<'a> {
         }
     }
 
-    // pub fn list_cards(&self, addressbook_id: impl AsRef<str>) -> Result<HashSet<Card>> {
-    //     match self {
-    //         #[cfg(feature = "carddav")]
-    //         Self::CardDav(client) => client.list_cards(addressbook_id),
-    //         #[cfg(feature = "vdir")]
-    //         Self::Vdir(client) => client.list_cards(addressbook_id),
-    //         Self::None => bail!("client not defined"),
-    //     }
-    // }
+    pub fn list_cards(&mut self, addressbook_id: impl AsRef<str>) -> Result<HashSet<Card>> {
+        match self {
+            #[cfg(feature = "carddav")]
+            Self::Carddav(client) => client.list_cards(addressbook_id),
+            #[cfg(feature = "vdir")]
+            Self::Vdir(client) => client.list_cards(addressbook_id),
+            Self::None => bail!("client not defined"),
+        }
+    }
 
     pub fn update_addressbook(&mut self, addressbook: Addressbook) -> Result<()> {
         match self {
@@ -83,51 +85,51 @@ impl<'a> Client<'a> {
         }
     }
 
-    // pub fn create_card(&self, addressbook_id: impl AsRef<str>, card: Card) -> Result<Card> {
-    //     match self {
-    //         #[cfg(feature = "carddav")]
-    //         Self::CardDav(client) => client.create_card(addressbook_id, card),
-    //         #[cfg(feature = "vdir")]
-    //         Self::Vdir(client) => client.create_card(addressbook_id, card),
-    //         Self::None => bail!("client not defined"),
-    //     }
-    // }
+    pub fn create_card(&mut self, card: Card) -> Result<()> {
+        match self {
+            Self::None => bail!("Missing addressbook backend"),
+            #[cfg(feature = "carddav")]
+            Self::Carddav(client) => client.create_card(card),
+            #[cfg(feature = "vdir")]
+            Self::Vdir(client) => client.create_card(card),
+        }
+    }
 
-    // pub fn read_card(
-    //     &self,
-    //     addressbook_id: impl AsRef<str>,
-    //     card_id: impl ToString,
-    // ) -> Result<Card> {
-    //     match self {
-    //         #[cfg(feature = "carddav")]
-    //         Self::CardDav(client) => client.read_card(addressbook_id, card_id),
-    //         #[cfg(feature = "vdir")]
-    //         Self::Vdir(client) => client.read_card(addressbook_id, card_id),
-    //         Self::None => bail!("client not defined"),
-    //     }
-    // }
+    pub fn read_card(
+        &mut self,
+        addressbook_id: impl AsRef<str>,
+        card_id: impl AsRef<str>,
+    ) -> Result<Card> {
+        match self {
+            Self::None => bail!("Missing addressbook backend"),
+            #[cfg(feature = "carddav")]
+            Self::Carddav(client) => client.read_card(addressbook_id, card_id),
+            #[cfg(feature = "vdir")]
+            Self::Vdir(client) => client.read_card(addressbook_id, card_id),
+        }
+    }
 
-    // pub fn update_card(&self, addressbook_id: impl AsRef<str>, card: Card) -> Result<Card> {
-    //     match self {
-    //         #[cfg(feature = "carddav")]
-    //         Self::CardDav(client) => client.update_card(addressbook_id, card),
-    //         #[cfg(feature = "vdir")]
-    //         Self::Vdir(client) => client.update_card(addressbook_id, card),
-    //         Self::None => bail!("client not defined"),
-    //     }
-    // }
+    pub fn update_card(&mut self, card: Card) -> Result<()> {
+        match self {
+            Self::None => bail!("Missing addressbook backend"),
+            #[cfg(feature = "carddav")]
+            Self::Carddav(client) => client.update_card(card),
+            #[cfg(feature = "vdir")]
+            Self::Vdir(client) => client.update_card(card),
+        }
+    }
 
-    // pub fn delete_card(
-    //     &self,
-    //     addressbook_id: impl AsRef<str>,
-    //     card_id: impl AsRef<str>,
-    // ) -> Result<()> {
-    //     match self {
-    //         #[cfg(feature = "carddav")]
-    //         Self::CardDav(client) => client.delete_card(addressbook_id, card_id),
-    //         #[cfg(feature = "vdir")]
-    //         Self::Vdir(client) => client.delete_card(addressbook_id, card_id),
-    //         Self::None => bail!("client not defined"),
-    //     }
-    // }
+    pub fn delete_card(
+        &mut self,
+        addressbook_id: impl AsRef<str>,
+        card_id: impl AsRef<str>,
+    ) -> Result<()> {
+        match self {
+            Self::None => bail!("Missing addressbook backend"),
+            #[cfg(feature = "carddav")]
+            Self::Carddav(client) => client.delete_card(addressbook_id, card_id),
+            #[cfg(feature = "vdir")]
+            Self::Vdir(client) => client.delete_card(addressbook_id, card_id),
+        }
+    }
 }

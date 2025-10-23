@@ -1,6 +1,168 @@
 # 📇 Cardamum [![Matrix](https://img.shields.io/matrix/pimalaya:matrix.org?color=success&label=chat)](https://matrix.to/#/#pimalaya:matrix.org)
 
-*🚧 Work in progress, stay tuned! 🚧*
+CLI to manage contacts
+
+## Table of contents
+
+- [Features](#features)
+- [Usage](#usage)
+  - [List addressbooks](#list-addressbooks)
+  - [List vCards](#list-vcards)
+  - [Edit vCard](#edit-vcard)
+- [Installation](#installation)
+- [Configuration](#configuration)
+  - [Google](#google)
+  - [Apple](#apple)
+  - [Microsoft](#microsoft)
+  - [Posteo](#posteo)
+- [FAQ](#faq)
+- [Sponsoring](#sponsoring)
+
+## Features
+
+- **CardDAV** et **Vdir** support
+- Native TLS support via [native-tls](https://crates.io/crates/native-tls) crate (requires `native-tls` feature)
+- Rust TLS support via [rustls](https://crates.io/crates/rustls) crate with:
+  - AWS crypto support (requires `rustls-aws` feature)
+  - Ring crypto support (requires `rustls-ring` feature)
+- Shell command and keyring **storages** (requires `command` and `keyring` features)
+- **JSON** support with `--json`
+
+*Cardamum CLI is written in [Rust](https://www.rust-lang.org/), and relies on [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to enable or disable functionalities. Default features can be found in the `features` section of the [`Cargo.toml`](https://github.com/pimalaya/cardamum/blob/master/Cargo.toml#L18), or on [docs.rs](https://docs.rs/crate/cardamum/latest/features).*
+
+## Usage
+
+### List addressbooks
+
+```
+$ cardamum addressbooks list
+
+| ID      | NAME                | DESC | COLOR |
+|---------|---------------------|------|-------|
+| default | default addressbook |      |       |
+```
+
+### List vCards
+
+```
+$ cardamum card list default
+
+| ID                                              | VERSION   | FN           | EMAIL                   | TEL             |
+|-------------------------------------------------|-----------|--------------|-------------------------|-----------------|
+| pimp_X3Xwu-58rVRwlbUeiptAUMyVK3HkJ45jJt3PjZaE7g | 3.0       | Forrest Gump | forrestgump@example.com | (404) 555-1212  |
+| 62196d36-65cb-4a6b-b107-f3d8dc8d8b62            | 3.0       | Jean Dupont  | jean.dupont@example.com | +1234 56789     |
+```
+
+### Edit vCard
+
+```
+$ cardamum card update default 62196d36-65cb-4a6b-b107-f3d8dc8d8b62
+```
+
+You text editor opens with the content of your vCard:
+
+```
+BEGIN:VCARD
+VERSION:3.0
+N:Gump;Forrest
+FN:Forrest Gump
+ORG:Bubba Gump Shrimp Co.
+TITLE:Shrimp Man
+PHOTO;VALUE=URL;TYPE=GIF:http://www.example.com/dir_photos/my_photo.gif
+TEL;TYPE=WORK;VOICE:(111) 555-1212
+TEL;TYPE=HOME;VOICE:(404) 555-1212
+ADR;TYPE=WORK:;;100 Waters Edge;Baytown;LA;30314;United States of America
+LABEL;TYPE=WORK:100 Waters Edge\nBaytown, LA 30314\nUnited States of America
+ADR;TYPE=HOME:;;42 Plantation St.;Baytown;LA;30314;United States of America
+LABEL;TYPE=HOME:42 Plantation St.\nBaytown, LA 30314\nUnited States of America
+EMAIL;TYPE=PREF,INTERNET:forrestgump@example.com
+REV:20080424T195243Z
+END:VCARD
+```
+
+Once edition done, you should see the following message:
+
+```
+Card successfully updated
+```
+
+## Installation
+
+The project is still experimental, it has not been released yet.
+
+### Pre-built binary
+
+Cardamum CLI can be installed with a pre-built binary. Find the latest [releases](https://github.com/pimalaya/cardamum/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. You should find a pre-built binary matching your OS.
+
+*MacOS aarch64 and Windows i686 builds are broken, please use the next installation method until the first release.*
+
+### Cargo (git)
+
+Cardamum CLI can also be installed with [cargo](https://doc.rust-lang.org/cargo/):
+
+```
+cargo install --locked --git https://github.com/pimalaya/cardamum.git
+```
+
+## Configuration
+
+The wizard is not yet available (it should come soon), so the only way to configure Cardamum CLI is to copy the [sample config file](https://github.com/pimalaya/cardamum/blob/master/config.sample.toml), to store it either at `~/.config/cardamum.toml` or `~/.cardamumrc` then to customize it by commenting or uncommenting the options you need.
+
+### Google
+
+Google Contacts requires OAuth 2.0. The first step is to configure an OAuth 2.0 token manager like [Ortie](https://github.com/pimalaya/ortie#google):
+
+```toml
+carddav.auth.bearer.command = ["ortie", "token", "show"]
+carddav.discover.host = "www.googleapis.com"
+carddav.discover.method = "PROPFIND"
+```
+
+Discovery is the recommended way to go, but it is slow. If you want faster calls you can "hardcode" the server URI and/or the home URI, at your own risk:
+
+```toml
+carddav.server-uri = "https://www.googleapis.com/carddav/v1/principals"
+carddav.home-uri = "https://www.googleapis.com/carddav/v1/principals/your.email@gmail.com/lists"
+```
+
+### Apple
+
+Apple Contacts does not propose discovery service, the only way is to use their server URI combined with basic authentication:
+
+```toml
+carddav.server-uri = "https://contacts.icloud.com"
+carddav.auth.basic.username = "your.email@example.com"
+carddav.auth.basic.password.raw = "p@$$w0rd"
+```
+
+If you check attentively the `--trace` logs, you should see the home URI. It is not recommended to use it directly, but it can make the CLI definitely faster. It should look like this:
+
+```toml
+carddav.home-uri = "https://p156-contacts.icloud.com:443/17170244959/carddavhome/"
+```
+
+### Microsoft
+
+Microsoft only proposes a proprietary, non-standard API.
+
+### Posteo
+
+Posteo proposes a discovery service, combined with basic authentication:
+
+```toml
+carddav.discover.host = "posteo.de"
+carddav.auth.basic.username = "your.email"
+carddav.auth.basic.password.raw = "p@$$w0rd"
+```
+
+Discovery is the recommended way to go, but it is slow. If you want faster calls you can "hardcode" the server URI and/or the home URI, at your own risk:
+
+```toml
+carddav.server-uri = "https://posteo.de:8843"
+carddav.home-uri = "https://posteo.de:8843/addressbooks/your.email/"
+```
+
+## FAQ
 
 ## Sponsoring
 
@@ -8,7 +170,7 @@
 
 Special thanks to the [NLnet foundation](https://nlnet.nl/) and the [European Commission](https://www.ngi.eu/) that helped the project to receive financial support from various programs:
 
-- [NGI Assure](https://nlnet.nl/project/Cardamum/) in 2022
+- [NGI Assure](https://nlnet.nl/project/Himalaya/) in 2022
 - [NGI Zero Entrust](https://nlnet.nl/project/Pimalaya/) in 2023
 - [NGI Zero Core](https://nlnet.nl/project/Pimalaya-PIM/) in 2024 *(still ongoing)*
 

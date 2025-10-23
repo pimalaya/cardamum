@@ -1,13 +1,14 @@
 use anyhow::Result;
 use clap::Parser;
-use io_addressbook::Addressbook;
+use io_addressbook::addressbook::Addressbook;
 use pimalaya_toolbox::terminal::printer::{Message, Printer};
 
 use crate::{account::Account, client::Client};
 
-/// Create all folders.
+/// Create a new addressbook.
 ///
-/// This command allows you to create all exsting folders.
+/// This command allows you to create a new addressbook from the given
+/// name, description and color.
 #[derive(Debug, Parser)]
 pub struct CreateAddressbookCommand {
     pub name: Option<String>,

@@ -3,7 +3,7 @@
 
 pub mod account;
 pub mod addressbook;
-// pub mod card;
+pub mod card;
 #[cfg(feature = "carddav")]
 pub mod carddav;
 pub mod cli;

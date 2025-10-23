@@ -2,7 +2,7 @@ use std::{borrow::Cow, collections::HashSet, fmt};
 
 use comfy_table::{presets, Cell, ContentArrangement, Row, Table};
 use crossterm::style::Color;
-use io_addressbook::Addressbook;
+use io_addressbook::addressbook::Addressbook;
 use serde::{
     de::{value::CowStrDeserializer, IntoDeserializer},
     Deserialize, Serialize, Serializer,

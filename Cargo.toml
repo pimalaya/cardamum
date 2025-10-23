@@ -15,11 +15,11 @@ repository = "https://github.com/pimalaya/cardamum"
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["carddav", "command", "keyring", "rustls-ring"]
+default = ["carddav", "command", "rustls-ring"]
 
 # CardDAV support without TLS (blocking)
 #
-carddav = ["dep:io-stream", "dep:http", "dep:secrecy", "io-addressbook/carddav"]
+carddav = ["dep:io-stream", "dep:http", "dep:secrecy", "io-addressbook/carddav", "vdir"]
 
 # TLS
 #
@@ -45,7 +45,7 @@ keyring = ["pimalaya-toolbox/keyring"]
 vendored = ["pimalaya-toolbox/vendored"]
 
 [build-dependencies]
-pimalaya-toolbox = { version = "0.0.1", default-features = false, features = ["build"] }
+pimalaya-toolbox = { version = "0.0.2", default-features = false, features = ["build"] }
 
 [dependencies]
 anyhow = "1"
@@ -53,14 +53,14 @@ clap = { version = "4.4", features = ["derive", "wrap_help"] }
 clap_complete = "4.4"
 clap_mangen = "0.2"
 comfy-table = "7.1"
-crossterm = { version = "0.27", features = ["serde"] }
+crossterm = { version = "0.29", features = ["serde"] }
 env_logger = "0.11"
 http = { version = "1", optional = true }
 io-addressbook = { version = "0.0.1", default-features = false }
 io-fs = { version = "0.0.1", default-features = false, features = ["std"], optional = true }
-io-stream = { version = "0.0.1", default-features = false, features = ["std"], optional = true }
+io-stream = { version = "0.0.2", default-features = false, features = ["std"], optional = true }
 log = "0.4"
-pimalaya-toolbox = { version = "0.0.1", default-features = false, features = ["config", "prompt", "secret", "stream", "terminal"] }
+pimalaya-toolbox = { version = "0.0.2", default-features = false, features = ["config", "prompt", "secret", "stream", "terminal"] }
 secrecy = { version = "0.10", features = ["serde"], optional = true }
 serde = { version = "1", features = ["derive"] }
 
@@ -68,6 +68,8 @@ serde = { version = "1", features = ["derive"] }
 io-addressbook.path = "../addressbook"
 io-fs.path = "../fs"
 io-http.path = "../http"
+io-keyring.path = "../keyring"
+io-process.path = "../process"
 io-stream.path = "../stream"
 io-vdir.path = "../vdir"
 pimalaya-toolbox.path = "../toolbox"

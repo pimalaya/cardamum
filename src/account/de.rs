@@ -1,8 +1,11 @@
 #[allow(unused)]
 use pimalaya_toolbox::feat;
-use serde::{de::Error, Deserialize, Deserializer};
+use serde::Deserialize;
 
+#[cfg(feature = "carddav")]
 use crate::carddav::config::CarddavConfig;
+#[cfg(feature = "vdir")]
+use crate::vdir::config::VdirConfig;
 
 #[cfg(not(feature = "carddav"))]
 pub type CarddavConfig = ();
@@ -59,11 +62,11 @@ impl From<Account> for super::Account {
 // }
 
 #[cfg(not(feature = "carddav"))]
-pub fn carddav<'de, T, D: Deserializer<'de>>(_: D) -> Result<T, D::Error> {
-    Err(Error::custom(feat!("carddav")))
+pub fn carddav<'de, T, D: serde::Deserializer<'de>>(_: D) -> Result<T, D::Error> {
+    Err(serde::de::Error::custom(feat!("carddav")))
 }
 
 #[cfg(not(feature = "vdir"))]
-pub fn vdir<'de, T, D: Deserializer<'de>>(_: D) -> Result<T, D::Error> {
-    Err(Error::custom(feat!("vdir")))
+pub fn vdir<'de, T, D: serde::Deserializer<'de>>(_: D) -> Result<T, D::Error> {
+    Err(serde::de::Error::custom(feat!("vdir")))
 }

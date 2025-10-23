@@ -15,11 +15,11 @@ repository = "https://github.com/pimalaya/cardamum"
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["carddav", "command", "rustls-ring"]
+default = ["carddav", "vdir", "command", "rustls-ring"]
 
 # CardDAV support without TLS (blocking)
 #
-carddav = ["dep:io-stream", "dep:http", "dep:secrecy", "io-addressbook/carddav", "vdir"]
+carddav = ["dep:io-stream", "dep:http", "dep:secrecy", "io-addressbook/carddav"]
 
 # TLS
 #
@@ -65,11 +65,20 @@ secrecy = { version = "0.10", features = ["serde"], optional = true }
 serde = { version = "1", features = ["derive"] }
 
 [patch.crates-io]
-io-addressbook.path = "../addressbook"
-io-fs.path = "../fs"
-io-http.path = "../http"
-io-keyring.path = "../keyring"
-io-process.path = "../process"
-io-stream.path = "../stream"
-io-vdir.path = "../vdir"
-pimalaya-toolbox.path = "../toolbox"
+# io-addressbook.path = "../addressbook"
+# io-fs.path = "../fs"
+# io-http.path = "../http"
+# io-keyring.path = "../keyring"
+# io-process.path = "../process"
+# io-stream.path = "../stream"
+# io-vdir.path = "../vdir"
+# pimalaya-toolbox.path = "../toolbox"
+
+io-addressbook = { git = "https://github.com/pimalaya/io-addressbook", branch = "wip" }
+io-fs.git = "https://github.com/pimalaya/io-fs"
+io-http.git = "https://github.com/pimalaya/io-http"
+io-keyring.git = "https://github.com/pimalaya/io-keyring"
+io-process.git = "https://github.com/pimalaya/io-process"
+io-stream.git = "https://github.com/pimalaya/io-stream"
+io-vdir.git = "https://github.com/pimalaya/io-vdir"
+pimalaya-toolbox.git = "https://github.com/pimalaya/toolbox"

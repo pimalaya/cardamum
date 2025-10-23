@@ -13,3 +13,4 @@ jobs:
     secrets: inherit
     with:
       project: cardamum
+      nixpkgs: staging-next

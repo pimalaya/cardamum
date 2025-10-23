@@ -1,6 +1,6 @@
 use std::{fmt, path::Path};
 
-use color_eyre::Result;
+use anyhow::Result;
 use pimalaya_tui::terminal::{print, prompt};
 
 use crate::{
@@ -57,19 +57,19 @@ pub fn edit(
     // let backend = prompt::item("Backend:", &BackendKind::ALL, None)?;
 
     // match backend {
-    //     #[cfg(feature = "_carddav")]
+    //     #[cfg(feature = "carddav")]
     //     BackendKind::CardDav => {
     //         account_config.backend = Backend::CardDav(config);
     //     }
-    //     #[cfg(not(feature = "_carddav"))]
+    //     #[cfg(not(feature = "carddav"))]
     //     BackendKind::CardDav => {
     //         bail!("Missing cargo feature `carddav`, `carddav-native-tls` or `carddav-rustls`");
     //     }
-    //     #[cfg(feature = "_vdir")]
+    //     #[cfg(feature = "vdir")]
     //     BackendKind::Vdir => {
     //         account_config.backend = Backend::Vdir(config);
     //     }
-    //     #[cfg(not(feature = "_vdir"))]
+    //     #[cfg(not(feature = "vdir"))]
     //     BackendKind::Vdir => {
     //         bail!("Missing cargo feature `vdir`");
     //     }

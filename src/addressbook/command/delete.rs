@@ -1,39 +1,39 @@
-use std::process;
+use std::process::exit;
 
+use anyhow::Result;
 use clap::Parser;
-use color_eyre::Result;
-use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _, prompt};
+use pimalaya_toolbox::terminal::{
+    printer::{Message, Printer},
+    prompt,
+};
 
-use crate::{account::arg::name::AccountNameFlag, config::TomlConfig, Client};
+use crate::{account::Account, client::Client};
 
-/// Delete all folders.
+/// Delete an addressbook.
 ///
-/// This command allows you to delete all exsting folders.
+/// This command allows you to delete an existing addressbook, by its
+/// ID.
 #[derive(Debug, Parser)]
 pub struct DeleteAddressbookCommand {
-    #[command(flatten)]
-    pub account: AccountNameFlag,
-    #[arg(name = "ID")]
     pub id: String,
     #[arg(long, short)]
     pub yes: bool,
 }
 
 impl DeleteAddressbookCommand {
-    pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
         if !self.yes {
             let confirm = "Do you really want to delete this addressbook";
             let confirm = format!("{confirm}? All contacts will be definitely deleted.");
 
             if !prompt::bool(confirm, false)? {
-                process::exit(0);
+                exit(0);
             };
         };
 
-        let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
-        let client = Client::new(config.backend)?;
+        let mut client = Client::new(&account)?;
 
         client.delete_addressbook(self.id)?;
-        printer.out("Addressbook successfully deleted")
+        printer.out(Message::new("Addressbook successfully deleted"))
     }
 }

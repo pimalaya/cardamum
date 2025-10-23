@@ -1,25 +1,18 @@
+use anyhow::Result;
 use clap::Parser;
-use color_eyre::Result;
-use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
+use pimalaya_toolbox::terminal::printer::Printer;
 
-use crate::{
-    account::arg::name::AccountNameFlag, addressbook::table::AddressbooksTable, config::TomlConfig,
-    Client,
-};
+use crate::{account::Account, addressbook::table::AddressbooksTable, client::Client};
 
-/// List all folders.
+/// List all addressbooks.
 ///
-/// This command allows you to list all exsting folders.
+/// This command allows you to list all exsting addressbooks.
 #[derive(Debug, Parser)]
-pub struct ListAddressbooksCommand {
-    #[command(flatten)]
-    pub account: AccountNameFlag,
-}
+pub struct ListAddressbooksCommand;
 
 impl ListAddressbooksCommand {
-    pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
-        let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
-        let client = Client::new(config.backend)?;
+    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
+        let mut client = Client::new(&account)?;
 
         let addressbooks = client.list_addressbooks()?;
         let table = AddressbooksTable::from(addressbooks);

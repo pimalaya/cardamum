@@ -1,8 +1,8 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
-use addressbook::Cards;
 use comfy_table::{presets, Cell, ContentArrangement, Row, Table};
 use crossterm::style::Color;
+use io_addressbook::card::{Card, VCardValue};
 use serde::{ser::Serializer, Deserialize, Serialize};
 
 use crate::table::map_color;
@@ -39,7 +39,7 @@ impl ListCardsTableConfig {
 }
 
 pub struct CardsTable {
-    cards: Cards,
+    cards: HashSet<Card>,
     width: Option<u16>,
     config: ListCardsTableConfig,
 }
@@ -66,16 +66,6 @@ impl CardsTable {
     }
 }
 
-impl From<Cards> for CardsTable {
-    fn from(cards: Cards) -> Self {
-        Self {
-            cards,
-            width: None,
-            config: Default::default(),
-        }
-    }
-}
-
 impl fmt::Display for CardsTable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
@@ -95,12 +85,27 @@ impl fmt::Display for CardsTable {
                 row.max_height(1);
 
                 row.add_cell(Cell::new(&card.id).fg(self.config.id_color()));
-                row.add_cell(Cell::new(&card.version).fg(self.config.version_color()));
+
+                row.add_cell(match card.vcard.version() {
+                    Some(version) => Cell::new(version).fg(self.config.version_color()),
+                    None => Cell::new(""),
+                });
 
                 for prop in &props {
-                    if let Some(prop) = card.properties.get(prop) {
-                        row.add_cell(Cell::new(prop));
+                    let mut value = "";
+
+                    if let Ok(prop) = prop.as_bytes().try_into() {
+                        if let Some(prop) = card.vcard.property(&prop) {
+                            if let Some(prop) = prop.values.first() {
+                                value = match prop {
+                                    VCardValue::Text(text) => text.as_str(),
+                                    _ => "",
+                                }
+                            }
+                        }
                     }
+
+                    row.add_cell(Cell::new(value));
                 }
 
                 row
@@ -123,5 +128,15 @@ impl Serialize for CardsTable {
         S: Serializer,
     {
         self.cards.serialize(serializer)
+    }
+}
+
+impl From<HashSet<Card>> for CardsTable {
+    fn from(cards: HashSet<Card>) -> Self {
+        Self {
+            cards,
+            width: Default::default(),
+            config: Default::default(),
+        }
     }
 }

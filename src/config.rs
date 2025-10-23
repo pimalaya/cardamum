@@ -1,73 +1,65 @@
-use std::{collections::HashMap, fmt, path::PathBuf};
+use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
+use pimalaya_toolbox::config::TomlConfig;
+use serde::Deserialize;
 
-use crate::account::config::TomlAccountConfig;
+use crate::account::Account;
 
 /// The main configuration.
-#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct TomlConfig {
+pub struct Config {
     /// The configuration of all the accounts.
-    pub accounts: HashMap<String, TomlAccountConfig>,
+    pub accounts: HashMap<String, Account>,
 }
 
-#[cfg(feature = "wizard")]
-impl TomlConfig {
-    pub fn from_wizard(path: &std::path::Path) -> color_eyre::Result<Self> {
-        crate::wizard::edit(path, Self::default(), None, Default::default())
-    }
-}
+// #[cfg(feature = "wizard")]
+// impl TomlConfig {
+//     pub fn from_wizard(path: &std::path::Path) -> anyhow::Result<Self> {
+//         crate::wizard::edit(path, Self::default(), None, Default::default())
+//     }
+// }
 
-impl pimalaya_tui::terminal::config::TomlConfig for TomlConfig {
-    type TomlAccountConfig = TomlAccountConfig;
+impl TomlConfig for Config {
+    type Account = Account;
 
     fn project_name() -> &'static str {
         env!("CARGO_PKG_NAME")
     }
 
-    fn get_default_account_config(&self) -> Option<(String, Self::TomlAccountConfig)> {
-        for (name, account) in &self.accounts {
-            if account.default {
-                return Some((name.clone(), account.clone()));
-            }
-        }
-
-        None
+    fn find_default_account(&self) -> Option<(String, Self::Account)> {
+        self.accounts
+            .iter()
+            .find(|(_, account)| account.default)
+            .map(|(name, account)| (name.to_owned(), account.clone()))
     }
 
-    fn get_account_config(&self, name: &str) -> Option<(String, Self::TomlAccountConfig)> {
+    fn find_account(&self, name: &str) -> Option<(String, Self::Account)> {
         self.accounts
             .get(name)
             .map(|account| (name.to_owned(), account.clone()))
     }
 
-    fn from_paths_or_default(paths: &[PathBuf]) -> pimalaya_tui::Result<Self> {
-        match paths.len() {
-            0 => Self::from_default_paths(),
-            _ if paths[0].exists() => Self::from_paths(paths),
-            #[cfg(feature = "wizard")]
-            _ => {
-                use pimalaya_tui::terminal::{print, prompt};
+    // fn from_paths_or_default(paths: &[PathBuf]) -> pimalaya_tui::Result<Self> {
+    //     match paths.len() {
+    //         0 => Self::from_default_paths(),
+    //         _ if paths[0].exists() => Self::from_paths(paths),
+    //         #[cfg(feature = "wizard")]
+    //         _ => {
+    //             use pimalaya_tui::terminal::{print, prompt};
 
-                let path = &paths[0];
-                print::warn(format!("Cannot find configuration at {}.", path.display()));
+    //             let path = &paths[0];
+    //             print::warn(format!("Cannot find configuration at {}.", path.display()));
 
-                if !prompt::bool("Would you like to create one with the wizard?", true)? {
-                    std::process::exit(0);
-                }
+    //             if !prompt::bool("Would you like to create one with the wizard?", true)? {
+    //                 std::process::exit(0);
+    //             }
 
-                Self::from_wizard(&paths[0])
-                    .map_err(pimalaya_tui::Error::CreateTomlConfigFromWizardError)
-            }
-            #[cfg(not(feature = "wizard"))]
-            _ => Err(pimalaya_tui::Error::CreateTomlConfigFromInvalidPathsError),
-        }
-    }
-}
-
-impl fmt::Display for TomlConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{self:#?}")
-    }
+    //             Self::from_wizard(&paths[0])
+    //                 .map_err(pimalaya_tui::Error::CreateTomlConfigFromWizardError)
+    //         }
+    //         #[cfg(not(feature = "wizard"))]
+    //         _ => Err(pimalaya_tui::Error::CreateTomlConfigFromInvalidPathsError),
+    //     }
+    // }
 }

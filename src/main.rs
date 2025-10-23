@@ -1,26 +1,19 @@
-use cardamum::{cli::Cli, config::TomlConfig};
+use cardamum::cli::Cli;
 use clap::Parser;
-use color_eyre::Result;
-use pimalaya_tui::terminal::{
-    cli::{
-        printer::{Printer, StdoutPrinter},
-        tracing,
-    },
-    config::TomlConfig as _,
-};
+use pimalaya_toolbox::terminal::{error::ErrorReport, log::Logger, printer::StdoutPrinter};
 
-fn main() -> Result<()> {
-    let tracing = tracing::install()?;
-
+fn main() {
     let cli = Cli::parse();
-    let mut printer = StdoutPrinter::new(cli.output);
-    let res = match cli.command {
-        Some(cmd) => cmd.execute(&mut printer, cli.config_paths.as_ref()),
-        None => {
-            let config = TomlConfig::from_paths_or_default(cli.config_paths.as_ref())?;
-            printer.out(config)
-        }
-    };
 
-    tracing.with_debug_and_trace_notes(res)
+    Logger::init(&cli.log);
+
+    let mut printer = StdoutPrinter::new(&cli.json);
+    let config_paths = cli.config.paths.as_ref();
+    let account_name = cli.account.name.as_deref();
+
+    let result = cli
+        .command
+        .execute(&mut printer, config_paths, account_name);
+
+    ErrorReport::eval(&mut printer, result)
 }

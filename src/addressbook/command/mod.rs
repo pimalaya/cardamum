@@ -3,22 +3,25 @@ mod delete;
 mod list;
 mod update;
 
+use anyhow::Result;
 use clap::Subcommand;
-use color_eyre::Result;
-use pimalaya_tui::terminal::cli::printer::Printer;
+use pimalaya_toolbox::terminal::printer::Printer;
 
-use crate::config::TomlConfig;
+use crate::account::Account;
 
 use self::{
     create::CreateAddressbookCommand, delete::DeleteAddressbookCommand,
     list::ListAddressbooksCommand, update::UpdateAddressbookCommand,
 };
 
+/// Create, list, update and delete addressbooks.
+///
+/// This subcommand allows you to create, list, update and delete
+/// addressbooks.
 #[derive(Debug, Subcommand)]
 pub enum AddressbookSubcommand {
     #[command(alias = "new", alias = "add")]
     Create(CreateAddressbookCommand),
-    #[command()]
     List(ListAddressbooksCommand),
     #[command(alias = "set")]
     Update(UpdateAddressbookCommand),
@@ -27,12 +30,12 @@ pub enum AddressbookSubcommand {
 }
 
 impl AddressbookSubcommand {
-    pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
         match self {
-            Self::Create(cmd) => cmd.execute(printer, config),
-            Self::List(cmd) => cmd.execute(printer, config),
-            Self::Update(cmd) => cmd.execute(printer, config),
-            Self::Delete(cmd) => cmd.execute(printer, config),
+            Self::Create(cmd) => cmd.execute(printer, account),
+            Self::List(cmd) => cmd.execute(printer, account),
+            Self::Update(cmd) => cmd.execute(printer, account),
+            Self::Delete(cmd) => cmd.execute(printer, account),
         }
     }
 }

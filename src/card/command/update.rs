@@ -4,24 +4,18 @@ use std::{
     process::{Command, Stdio},
 };
 
-use addressbook::Card;
+use anyhow::{bail, Context, Result};
 use clap::Parser;
-use color_eyre::{
-    eyre::{bail, eyre},
-    Result,
-};
-use pimalaya_tui::terminal::{cli::printer::Printer, config::TomlConfig as _};
+use io_addressbook::card::Card;
+use pimalaya_toolbox::terminal::printer::Printer;
 
-use crate::{account::arg::name::AccountNameFlag, config::TomlConfig, Client};
+use crate::{account::Account, client::Client};
 
-/// Update all folders.
+/// Update a card.
 ///
-/// This command allows you to update all exsting folders.
+/// This command allows you to update a vCard from an addressbook.
 #[derive(Debug, Parser)]
 pub struct UpdateCardCommand {
-    #[command(flatten)]
-    pub account: AccountNameFlag,
-
     /// The identifier of the addressbook where the vCard should be
     /// updated from.
     #[arg(name = "ADDRESSBOOK-ID")]
@@ -33,9 +27,8 @@ pub struct UpdateCardCommand {
 }
 
 impl UpdateCardCommand {
-    pub fn execute(self, printer: &mut impl Printer, config: TomlConfig) -> Result<()> {
-        let (_, config) = config.to_toml_account_config(self.account.name.as_deref())?;
-        let client = Client::new(config.backend)?;
+    pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
+        let mut client = Client::new(&account)?;
 
         let card = client.read_card(&self.addressbook_id, &self.card_id)?;
 
@@ -60,9 +53,15 @@ impl UpdateCardCommand {
         let content = fs::read_to_string(&path)?
             .replace('\r', "")
             .replace('\n', "\r\n");
-        let card = Card::parse(self.card_id, content).ok_or(eyre!("cannot parse vCard"))?;
 
-        client.update_card(&self.addressbook_id, card)?;
+        let card = Card {
+            id: self.card_id,
+            addressbook_id: self.addressbook_id,
+            vcard: Card::parse(content).context("cannot parse vCard")?,
+        };
+
+        println!("pre update");
+        client.update_card(card)?;
 
         printer.out("Card successfully updated")
     }

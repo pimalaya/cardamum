@@ -774,9 +774,9 @@ dependencies = [
 
 [[package]]
 name = "document-features"
-version = "0.2.11"
+version = "0.2.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95249b50c6c185bee49034bcb378a49dc2b5dff0be90ff6616d31d64febab05d"
+checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
 ]
@@ -1327,7 +1327,8 @@ dependencies = [
 [[package]]
 name = "io-addressbook"
 version = "0.0.1"
-source = "git+https://github.com/pimalaya/io-addressbook?branch=wip#4f5bb28519ea99a0787b879209157bae19345a5f"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "326a2779f9a73fb9c2fdf2baebfe9024a5bfa17c2428298fa3ae02b23d38d132"
 dependencies = [
  "base64",
  "calcard",
@@ -1348,7 +1349,8 @@ dependencies = [
 [[package]]
 name = "io-fs"
 version = "0.0.1"
-source = "git+https://github.com/pimalaya/io-fs#195f30900f78e73ca4bb376d755949fff05e6ebd"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "076606c4290e17c83def6029cbbf9547066936528d389f2eb0290123554582fa"
 dependencies = [
  "log",
  "thiserror 2.0.17",
@@ -1356,8 +1358,9 @@ dependencies = [
 
 [[package]]
 name = "io-http"
-version = "0.0.2"
-source = "git+https://github.com/pimalaya/io-http#4e365b3c7bc0c4b62b7a89e919a10c48711ceec3"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9f3017243d5fabf47fddb13be88acfeaaaf8d872670aca223344cf987eea96ad"
 dependencies = [
  "http",
  "httparse",
@@ -1370,7 +1373,8 @@ dependencies = [
 [[package]]
 name = "io-keyring"
 version = "0.0.2"
-source = "git+https://github.com/pimalaya/io-keyring#1aa4b8804a03ac4d65181d0eb269bfeb5d91b052"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3e1feea114b3f8b1249b50db70e6fb880c92360a0eedd1351bc1ad696ae29bb"
 dependencies = [
  "keyring",
  "log",
@@ -1382,7 +1386,8 @@ dependencies = [
 [[package]]
 name = "io-process"
 version = "0.0.2"
-source = "git+https://github.com/pimalaya/io-process#763ebff10a7178d3fe0598b41a60bb847e828877"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "54362e497536be1b10ad35a790838e89ce30d5095a66f12f5315154cf5041d03"
 dependencies = [
  "dirs",
  "log",
@@ -1394,7 +1399,8 @@ dependencies = [
 [[package]]
 name = "io-stream"
 version = "0.0.2"
-source = "git+https://github.com/pimalaya/io-stream#4b3c614814d1b5943dec1239cee918a59e351dd7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28001902240f3f1c95cd165933ec130068e82c1b0118157bbf20f8be0054041f"
 dependencies = [
  "log",
  "thiserror 2.0.17",
@@ -1403,7 +1409,8 @@ dependencies = [
 [[package]]
 name = "io-vdir"
 version = "0.0.1"
-source = "git+https://github.com/pimalaya/io-vdir#4724556bef12d12c97cd53dd95a492ba97c89b79"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6476dcff7efda6c6896473354c10e4b1654f9b9ae611bb9095b1c024ce983e5b"
 dependencies = [
  "calcard",
  "io-fs",
@@ -1602,9 +1609,9 @@ checksum = "241eaef5fd12c88705a01fc1066c48c4b36e0dd4377dcdc7ec3942cea7a69956"
 
 [[package]]
 name = "litrs"
-version = "0.4.2"
+version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f5e54036fe321fd421e10d732f155734c4e4afd610dd556d9a82833ab3ee0bed"
+checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
 name = "lock_api"
@@ -1945,7 +1952,8 @@ dependencies = [
 [[package]]
 name = "pimalaya-toolbox"
 version = "0.0.2"
-source = "git+https://github.com/pimalaya/toolbox#a3e743b6b5777d66a667986200e70068523a4577"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50e587c04d1fb9bff14df5d6fc414f21ffe59a3988e177e402448392ac8fe841"
 dependencies = [
  "anyhow",
  "clap",

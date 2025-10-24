@@ -7,8 +7,8 @@ CLI to manage contacts
 - [Features](#features)
 - [Usage](#usage)
   - [List addressbooks](#list-addressbooks)
-  - [List vCards](#list-vcards)
-  - [Edit vCard](#edit-vcard)
+  - [List cards](#list-cards)
+  - [Edit card](#edit-card)
 - [Installation](#installation)
 - [Configuration](#configuration)
   - [Google](#google)
@@ -20,7 +20,7 @@ CLI to manage contacts
 
 ## Features
 
-- **CardDAV** et **Vdir** support
+- **CardDAV** and **Vdir** support
 - Native TLS support via [native-tls](https://crates.io/crates/native-tls) crate (requires `native-tls` feature)
 - Rust TLS support via [rustls](https://crates.io/crates/rustls) crate with:
   - AWS crypto support (requires `rustls-aws` feature)
@@ -42,7 +42,7 @@ $ cardamum addressbooks list
 | default | default addressbook |      |       |
 ```
 
-### List vCards
+### List cards
 
 ```
 $ cardamum card list default
@@ -53,7 +53,7 @@ $ cardamum card list default
 | 62196d36-65cb-4a6b-b107-f3d8dc8d8b62            | 3.0       | Jean Dupont  | jean.dupont@example.com | +1234 56789     |
 ```
 
-### Edit vCard
+### Edit card
 
 ```
 $ cardamum card update default 62196d36-65cb-4a6b-b107-f3d8dc8d8b62
@@ -88,25 +88,87 @@ Card successfully updated
 
 ## Installation
 
-The project is still experimental, it has not been released yet.
-
 ### Pre-built binary
 
-Cardamum CLI can be installed with a pre-built binary. Find the latest [releases](https://github.com/pimalaya/cardamum/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. You should find a pre-built binary matching your OS.
+Cardamum CLI can be installed with the installer:
 
-*MacOS aarch64 and Windows i686 builds are broken, please use the next installation method until the first release.*
+*As root:*
 
-### Cargo (git)
+```
+curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | sudo sh
+```
 
-Cardamum CLI can also be installed with [cargo](https://doc.rust-lang.org/cargo/):
+*As a regular user:*
+
+```
+curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | PREFIX=~/.local sh
+```
+
+These commands install the latest binary from the GitHub [releases](https://github.com/pimalaya/cardamum/releases) section.
+
+If you want a more up-to-date version than the latest release, check out the [releases](https://github.com/pimalaya/cardamum/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. You should find a pre-built binary matching your OS. These pre-built binaries are built from the `master` branch, using default features.
+
+### Cargo
+
+Cardamum CLI can be installed with [cargo](https://doc.rust-lang.org/cargo/):
+
+```
+cargo install cardamum
+```
+
+*With only Vdir support:*
+
+```
+cargo install cardamum --no-default-features --features vdir
+```
+
+You can also use the git repository for a more up-to-date (but less stable) version:
 
 ```
 cargo install --locked --git https://github.com/pimalaya/cardamum.git
 ```
 
+### Nix
+
+Cardamum CLI can be installed with [Nix](https://serokell.io/blog/what-is-nix):
+
+```
+nix-env -i cardamum
+```
+
+You can also use the git repository for a more up-to-date (but less stable) version:
+
+```
+nix-env -if https://github.com/pimalaya/cardamum/archive/master.tar.gz
+```
+
+*Or, from within the source tree checkout:*
+
+```
+nix-env -if .
+```
+
+If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
+
+```
+nix profile install cardamum
+```
+
+*Or, from within the source tree checkout:*
+
+```
+nix profile install
+```
+
+*You can also run Cardamum directly without installing it:*
+
+```
+nix run cardamum
+```
+
 ## Configuration
 
-The wizard is not yet available (it should come soon), so the only way to configure Cardamum CLI is to copy the [sample config file](https://github.com/pimalaya/cardamum/blob/master/config.sample.toml), to store it either at `~/.config/cardamum.toml` or `~/.cardamumrc` then to customize it by commenting or uncommenting the options you need.
+The wizard is not yet available (it should come soon, see [#7](https://github.com/pimalaya/cardamum/issues/7)), so the only way to configure Cardamum CLI is to copy the [sample config file](https://github.com/pimalaya/cardamum/blob/master/config.sample.toml), to store it either at `~/.config/cardamum.toml` or `~/.cardamumrc` then to customize it by commenting or uncommenting the options you need.
 
 ### Google
 

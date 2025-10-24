@@ -4,5 +4,5 @@
 }:
 
 pimalaya.mkShell {
-  extraBuildInputs = "nixd,nixfmt-rfc-style";
+  extraBuildInputs = "nixd,nixfmt-rfc-style,dbus,openssl";
 }

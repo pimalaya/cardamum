@@ -18,7 +18,7 @@
 
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Context,Result};
 use clap::{CommandFactory, Parser, Subcommand};
 use pimalaya_toolbox::{
     config::TomlConfig,
@@ -35,6 +35,12 @@ use pimalaya_toolbox::{
 use crate::{
     addressbook::command::AddressbookSubcommand, card::command::CardSubcommand, config::Config,
 };
+
+const CONFIG_NOT_FOUND: &str = r"Could not open config file. Tried:
+
+- `$XDG_CONFIG_DIR/<project>/config.toml`
+- `$HOME/.config/<project>/config.toml`
+- `$HOME/.<project>rc`";
 
 #[derive(Parser, Debug)]
 #[command(name = env!("CARGO_PKG_NAME"))]
@@ -75,12 +81,14 @@ impl Cardamum {
     ) -> Result<()> {
         match self {
             Self::Addressbooks(cmd) => {
-                let config = Config::from_paths_or_default(config_paths)?;
+                let config = Config::from_paths_or_default(config_paths)
+                    .context(CONFIG_NOT_FOUND.replace("<project>", Config::project_name()))?;
                 let (_, account) = config.get_account(account_name)?;
                 cmd.execute(printer, account)
             }
             Self::Cards(cmd) => {
-                let config = Config::from_paths_or_default(config_paths)?;
+                let config = Config::from_paths_or_default(config_paths)
+                    .context(CONFIG_NOT_FOUND.replace("<project>", Config::project_name()))?;
                 let (_, account) = config.get_account(account_name)?;
                 cmd.execute(printer, account)
             }

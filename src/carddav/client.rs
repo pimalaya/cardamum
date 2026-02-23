@@ -220,7 +220,7 @@ impl<'a> CarddavClient<'a> {
         loop {
             match create.resume(arg.take()) {
                 SendResult::Ok(_) => break Ok(()),
-                SendResult::Err(err) => return Err(anyhow!(err).context("Creat addressbook error")),
+                SendResult::Err(err) => return Err(anyhow!(err).context("Create addressbook error")),
                 SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
             }
         }
@@ -277,7 +277,7 @@ impl<'a> CarddavClient<'a> {
             match create.resume(arg.take()) {
                 SendResult::Ok(_) => break Ok(()),
                 SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Delete addressbook error"))
+                    return Err(anyhow!(err).context("Create card error"))
                 }
                 SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
             }
@@ -292,7 +292,7 @@ impl<'a> CarddavClient<'a> {
             match list.resume(arg.take()) {
                 SendResult::Ok(ok) => break Ok(ok.body),
                 SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Delete addressbook error"))
+                    return Err(anyhow!(err).context("List cards error"))
                 }
                 SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
             }
@@ -311,7 +311,7 @@ impl<'a> CarddavClient<'a> {
             match read.resume(arg.take()) {
                 SendResult::Ok(ok) => break Ok(ok.body),
                 SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Delete addressbook error"))
+                    return Err(anyhow!(err).context("Read card error"))
                 }
                 SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
             }
@@ -326,7 +326,7 @@ impl<'a> CarddavClient<'a> {
             match update.resume(arg.take()) {
                 SendResult::Ok(_) => break Ok(()),
                 SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Delete addressbook error"))
+                    return Err(anyhow!(err).context("Update card error"))
                 }
                 SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
             }
@@ -345,7 +345,7 @@ impl<'a> CarddavClient<'a> {
             match delete.resume(arg.take()) {
                 SendResult::Ok(_) => break Ok(()),
                 SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Delete addressbook error"))
+                    return Err(anyhow!(err).context("Delete card error"))
                 }
                 SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
             }

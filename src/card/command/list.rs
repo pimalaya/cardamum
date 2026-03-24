@@ -20,7 +20,11 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_toolbox::terminal::printer::Printer;
 
-use crate::{account::Account, card::table::CardsTable, client::Client};
+use crate::{
+    account::Account,
+    card::table::{CardsTable, CardsTableMode},
+    client::Client,
+};
 
 /// List all cards.
 ///
@@ -30,6 +34,10 @@ pub struct ListCardsCommand {
     /// The identifier of the CardDAV addressbook to list vCards from.
     #[arg(name = "ADDRESSBOOK-ID")]
     pub addressbook_id: String,
+
+    /// List contact groups instead of contacts.
+    #[arg(long)]
+    pub groups: bool,
 }
 
 impl ListCardsCommand {
@@ -37,7 +45,12 @@ impl ListCardsCommand {
         let mut client = Client::new(&account)?;
 
         let cards = client.list_cards(self.addressbook_id)?;
-        let table = CardsTable::from(cards);
+        let mode = if self.groups {
+            CardsTableMode::Groups
+        } else {
+            CardsTableMode::Contacts
+        };
+        let table = CardsTable::from(cards).with_mode(mode);
         printer.out(table)
     }
 }

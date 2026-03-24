@@ -16,11 +16,19 @@
 // License along with this program. If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::fmt;
+
 use anyhow::Result;
 use clap::Parser;
+use io_addressbook::card::Card;
 use pimalaya_toolbox::terminal::printer::Printer;
+use serde::Serialize;
 
-use crate::{account::Account, client::Client};
+use crate::{
+    account::Account,
+    card::utils::{build_group_names_by_cid, contact_group_names},
+    client::Client,
+};
 
 /// Read the content of a card.
 ///
@@ -36,12 +44,60 @@ pub struct ReadCardCommand {
     /// The identifier of the card that should be read.
     #[arg(name = "CARD-ID")]
     pub id: String,
+
+    /// Print the raw vCard only.
+    #[arg(long)]
+    pub raw: bool,
 }
 
 impl ReadCardCommand {
     pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
         let mut client = Client::new(&account)?;
-        let card = client.read_card(self.addressbook_id, self.id)?;
-        printer.out(card.to_string().trim_end())
+        let card = client.read_card(&self.addressbook_id, &self.id)?;
+
+        if self.raw {
+            return printer.out(card.to_string().trim_end());
+        }
+
+        let cards = client.list_cards(&self.addressbook_id)?;
+        let group_names_by_cid = build_group_names_by_cid(&cards);
+        let output = ReadCardOutput {
+            id: card.id.clone(),
+            addressbook_id: card.addressbook_id.clone(),
+            groups: contact_group_names(&card, &group_names_by_cid),
+            vcard: card,
+        };
+
+        printer.out(output)
     }
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ReadCardOutput {
+    id: String,
+    addressbook_id: String,
+    groups: Vec<String>,
+    #[serde(serialize_with = "serialize_card")]
+    vcard: Card,
+}
+
+impl fmt::Display for ReadCardOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let groups = if self.groups.is_empty() {
+            String::from("(none)")
+        } else {
+            self.groups.join(", ")
+        };
+
+        writeln!(f, "Groups: {groups}")?;
+        writeln!(f)?;
+        write!(f, "{}", self.vcard.to_string().trim_end())
+    }
+}
+
+fn serialize_card<S>(card: &Card, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_str(card.to_string().trim_end())
 }

@@ -370,6 +370,7 @@ dependencies = [
  "http",
  "io-addressbook",
  "io-fs",
+ "io-http",
  "io-stream",
  "log",
  "pimalaya-toolbox",

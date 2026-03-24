@@ -78,7 +78,6 @@ impl UpdateCardCommand {
             vcard: Card::parse(content).context("cannot parse vCard")?,
         };
 
-        println!("pre update");
         client.update_card(card)?;
 
         printer.out("Card successfully updated")

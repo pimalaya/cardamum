@@ -18,3 +18,4 @@
 
 pub mod command;
 pub mod table;
+pub(crate) mod utils;

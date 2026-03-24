@@ -45,7 +45,7 @@ impl CreateCardCommand {
     pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
         let mut client = Client::new(&account)?;
 
-        let uid = Card::new_uuid();
+        let uid = Card::new_uuid().to_string();
         let path = temp_dir().join(format!("{uid}.vcf"));
         let tpl = format!(include_str!("./create.vcf"), uid);
         fs::write(&path, tpl)?;
@@ -70,7 +70,7 @@ impl CreateCardCommand {
             .replace('\n', "\r\n");
 
         let card = Card {
-            id: Card::new_uuid().to_string(),
+            id: uid,
             addressbook_id: self.addressbook_id,
             vcard: Card::parse(content).context("cannot parse vCard")?,
         };

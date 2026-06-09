@@ -16,9 +16,13 @@
 // License along with this program. If not, see
 // <https://www.gnu.org/licenses/>.
 
+use std::fmt;
+
 use anyhow::Result;
 use clap::Parser;
+use io_addressbook::card::Card;
 use pimalaya_toolbox::terminal::printer::Printer;
+use serde::Serialize;
 
 use crate::{account::Account, client::Client};
 
@@ -42,6 +46,15 @@ impl ReadCardCommand {
     pub fn execute(self, printer: &mut impl Printer, account: Account) -> Result<()> {
         let mut client = Client::new(&account)?;
         let card = client.read_card(self.addressbook_id, self.id)?;
-        printer.out(card.to_string().trim_end())
+        printer.out(ReadCard(card))
+    }
+}
+
+#[derive(Serialize)]
+struct ReadCard(Card);
+
+impl fmt::Display for ReadCard {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0.to_string().trim_end())
     }
 }

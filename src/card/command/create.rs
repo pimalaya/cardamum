@@ -25,7 +25,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use clap::Parser;
 use io_addressbook::card::Card;
-use pimalaya_toolbox::terminal::printer::Printer;
+use pimalaya_toolbox::terminal::printer::{Message, Printer};
 
 use crate::{account::Account, client::Client};
 
@@ -77,6 +77,6 @@ impl CreateCardCommand {
 
         client.create_card(card)?;
 
-        printer.out("Card successfully created")
+        printer.out(Message::new("Card successfully created"))
     }
 }

@@ -1,8 +1,13 @@
-{
-  pimalaya ? import (fetchTarball "https://github.com/pimalaya/nix/archive/master.tar.gz"),
-  ...
-}:
+{ pkgs ? import <nixpkgs> {} }:
 
-pimalaya.mkShell {
-  extraBuildInputs = "nixd,nixfmt-rfc-style,dbus,openssl";
+pkgs.mkShell {
+  nativeBuildInputs = [
+    pkgs.pkg-config
+  ];
+  buildInputs = [
+    pkgs.cargo
+    pkgs.rustc
+    pkgs.dbus
+    pkgs.openssl
+  ];
 }

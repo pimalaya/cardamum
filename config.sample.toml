@@ -1,78 +1,118 @@
-################################################################
-# Documented configuration sample                              #
-################################################################
+# ================================================================================
+# `cardamum` configuration file.
+#
+# Loaded from the first valid path among:
+#   - $XDG_CONFIG_HOME/cardamum/config.toml
+#   - $HOME/.config/cardamum/config.toml
+#   - $HOME/.cardamumrc
+#
+# Override with `cardamum -c <PATH>` or `CARDAMUM_CONFIG=<PATH>`. Multiple paths
+# can be passed at once, separated by `:`; the first one is the base and the
+# rest are deep-merged on top of it.
+#
+# Run `cardamum` once with no config file to launch the wizard, which prompts
+# for an account name, an email address, then walks you through the vdir or
+# CardDAV setup. `cardamum account configure <name>` can be used afterwards to
+# edit (or add) an account through the same wizard.
+# ================================================================================
+
+# --------------------------------------------------------------------------------
+# Global config
+# --------------------------------------------------------------------------------
+
+# https://docs.rs/comfy-table/latest/comfy_table/presets/index.html
+#table.preset = "││──╞═╪╡┆    ┬┴┌┐└┘"
+
+# https://docs.rs/comfy-table/latest/comfy_table/enum.ContentArrangement.html
+#table.arrangement = "dynamic"
+#table.arrangement = "dynamic-full-width"
+#table.arrangement = "disabled"
+
+# Default page size for `cards list`. The `-s/--page-size` CLI flag wins
+# when passed; otherwise the merged account/global value wins; otherwise
+# the hard fallback is 25.
+#card.list.page-size = 50
+
+# Addressbook id used by `card` commands when their `-k/--addressbook` flag
+# is omitted.
+#addressbook.default = "Contacts"
+
+# --------------------------------------------------------------------------------
+# Table rendering — addressbooks list
+# --------------------------------------------------------------------------------
+
+#addressbook.list.table.id-color = "red"
+#addressbook.list.table.name-color = "green"
+#addressbook.list.table.description-color = "reset"
+#addressbook.list.table.color-color = "reset"
+
+# --------------------------------------------------------------------------------
+# Table rendering — cards list
+# --------------------------------------------------------------------------------
+
+#card.list.table.id-color = "red"
+#card.list.table.fn-color = "green"
+#card.list.table.email-color = "blue"
+#card.list.table.tel-color = "dark-yellow"
+
+# --------------------------------------------------------------------------------
+# Table rendering — account list
+# --------------------------------------------------------------------------------
+
+#account.list.table.name-color = "green"
+#account.list.table.backends-color = "blue"
+#account.list.table.default-color = "reset"
+
+# --------------------------------------------------------------------------------
+# Accounts
+# --------------------------------------------------------------------------------
 
 [accounts.example]
 
-# When the `--account` argument is missing, use this account as the
-# default one.
-#
+# When `--account` is missing, use this account as the default one.
 default = true
 
-################################################################
-# Vdir section                                                 #
-################################################################
+# --------------------------------------------------------------------------------
+# Vdir backend
 #
-# The Vdir addressbook home directory, which should contain all your
-# addressbooks.
-#
-vdir.home-dir = "/tmp/posteo"
+# Local addressbook collections stored on disk; see
+# <https://vdirsyncer.pimutils.org/en/stable/vdir.html>. Each immediate
+# subdirectory of `home-dir` is one addressbook.
+# --------------------------------------------------------------------------------
 
-################################################################
-# CardDAV section                                              #
-################################################################
-#
-# Configuration of addressbooks relying on the CardDAV protocol, as
-# defined in [RFC6352].
-#
-# [RFC6352]: https://datatracker.ietf.org/doc/html/rfc6352
+vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
 
-# There is 3 ways to find a CardDAV addressbook home URI:
+# --------------------------------------------------------------------------------
+# CardDAV backend
 #
-# 1. By using HTTP discovery, as defined in the Well Known RFC8615
-# 2. By using the root CardDAV server URI
-# 3. By using directy the CardDAV addressbook home set URI
+# Three mutually exclusive routes resolve the addressbook home set:
 #
-# The first method is the slowest because it requires a couple of HTTP
-# requests to get the addressbook home URI, but it the safest because
-# the URI should never change.
+# 1. `carddav.discover`: a bare domain resolved to a server URL by pimconf
+#    (RFC 6764 SRV + `.well-known`), then principal + home-set discovery.
+#    Safest, but adds DNS + HTTP round-trips on every run.
+# 2. `carddav.server`: principal + home-set discovery start from the given
+#    context root. Skips RFC 6764 resolution. Accepts a full URL, a bare
+#    domain, or `domain:port`; bare authorities default to `https://`.
+# 3. `carddav.home`: pre-resolved addressbook home set URL; every discovery
+#    step is skipped. Fastest, least safe.
 #
-# The third method is the fastest because it requires only one single
-# HTTP request, but it is the least safe because URI can change
-# anytime.
-#
-# The second method can be a good compromise between speed and safety.
+# Exactly one of the three should be set.
+# --------------------------------------------------------------------------------
 
-# To discover the CardDAV addressbook home URI, only the host name is
-# required.
-#
-carddav.discover.host = "example.org" 
-#carddav.discover.port = 443
-#carddav.discover.scheme = "https"
+carddav.discover = "example.org"
+#carddav.server = "https://carddav.example.org/dav/addressbooks"
+#carddav.home = "https://carddav.example.org/dav/addressbooks/user/me/default"
 
-# The root CardDAV server URI, which should contain all the users'
-# addressbooks.
-#
-#carddav.server-uri = "https://carddav.example.org"
-
-# The CardDAV addressbook home URI, which should contain all your
-# addressbooks.
-#
-#carddav.home-uri = "https://carddav.example.org/principals"
-
-# The plain authentication method (not safe).
-#
-#carddav.auth = "plain"
-
-# The Basic access authentication method.
-#
+# Basic authentication (RFC 7617).
 carddav.auth.basic.username = "username"
-carddav.auth.basic.password.command = ["pass", "show", "example"]
-#carddav.auth.basic.password.keyring = "example-basic"
-#carddav.auth.basic.password.raw = "password"
+carddav.auth.basic.password.raw = "password"
+#carddav.auth.basic.password.command = ["pass", "show", "example"]
 
-# The Bearer token authorization method, mainly for OAuth 2.0 usage.
-#
-#carddav.auth.bearer.command = ["ortie", "token", "show"]
-#carddav.auth.bearer.keyring = "example-bearer" 
-#carddav.auth.bearer.raw = "oauth2-token" 
+# Bearer authentication (RFC 6750), mainly for OAuth 2.0.
+#carddav.auth.bearer.token.command = ["ortie", "token", "show"]
+#carddav.auth.bearer.token.raw = "oauth2-token"
+
+# TLS configuration.
+#carddav.tls.provider = "rustls"
+#carddav.tls.rustls.crypto = "ring"
+#carddav.tls.cert = "/etc/ssl/certs/ca-certificates.crt"

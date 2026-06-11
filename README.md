@@ -1,104 +1,53 @@
-# 📇 Cardamum [![Matrix](https://img.shields.io/matrix/pimalaya:matrix.org?color=success&label=chat)](https://matrix.to/#/#pimalaya:matrix.org)
+# 📇 Cardamum [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya) [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-orange)](./LICENSE-MIT) [![crates.io](https://img.shields.io/crates/v/cardamum.svg)](https://crates.io/crates/cardamum)
 
-CLI to manage contacts
+CLI to manage contacts.
+
+> [!IMPORTANT]
+> This README documents Cardamum v0.2.0. If you are running v0.1.0, refer to the [v0.1.0 README](https://github.com/pimalaya/cardamum/blob/v0.1.0/README.md). The [MIGRATION.md](./MIGRATION.md) guide walks v0.1 users through the breaking changes.
 
 ## Table of contents
 
 - [Features](#features)
-- [Usage](#usage)
-  - [List addressbooks](#list-addressbooks)
-  - [List cards](#list-cards)
-  - [Edit card](#edit-card)
 - [Installation](#installation)
 - [Configuration](#configuration)
-  - [Google](#google)
-  - [Apple](#apple)
-  - [Microsoft](#microsoft)
-  - [Posteo](#posteo)
+- [Usage](#usage)
+- [Interfaces](#interfaces)
 - [FAQ](#faq)
+- [License](#license)
+- [AI disclosure](#ai-disclosure)
+- [Social](#social)
 - [Sponsoring](#sponsoring)
 
 ## Features
 
-- **CardDAV** and **Vdir** support
-- Native TLS support via [native-tls](https://crates.io/crates/native-tls) crate (requires `native-tls` feature)
-- Rust TLS support via [rustls](https://crates.io/crates/rustls) crate with:
-  - AWS crypto support (requires `rustls-aws` feature)
-  - Ring crypto support (requires `rustls-ring` feature)
-- Shell command and keyring **storages** (requires `command` and `keyring` features)
-- **JSON** support with `--json`
-
-*Cardamum CLI is written in [Rust](https://www.rust-lang.org/), and relies on [cargo features](https://doc.rust-lang.org/cargo/reference/features.html) to enable or disable functionalities. Default features can be found in the `features` section of the [`Cargo.toml`](https://github.com/pimalaya/cardamum/blob/master/Cargo.toml#L18), or on [docs.rs](https://docs.rs/crate/cardamum/latest/features).*
-
-## Usage
-
-### List addressbooks
-
-```
-$ cardamum addressbooks list
-
-| ID      | NAME                | DESC | COLOR |
-|---------|---------------------|------|-------|
-| default | default addressbook |      |       |
-```
-
-### List cards
-
-```
-$ cardamum card list default
-
-| ID                                              | VERSION   | FN           | EMAIL                   | TEL             |
-|-------------------------------------------------|-----------|--------------|-------------------------|-----------------|
-| pimp_X3Xwu-58rVRwlbUeiptAUMyVK3HkJ45jJt3PjZaE7g | 3.0       | Forrest Gump | forrestgump@example.com | (404) 555-1212  |
-| 62196d36-65cb-4a6b-b107-f3d8dc8d8b62            | 3.0       | Jean Dupont  | jean.dupont@example.com | +1234 56789     |
-```
-
-### Edit card
-
-```
-$ cardamum card update default 62196d36-65cb-4a6b-b107-f3d8dc8d8b62
-```
-
-You text editor opens with the content of your vCard:
-
-```
-BEGIN:VCARD
-VERSION:3.0
-N:Gump;Forrest
-FN:Forrest Gump
-ORG:Bubba Gump Shrimp Co.
-TITLE:Shrimp Man
-PHOTO;VALUE=URL;TYPE=GIF:http://www.example.com/dir_photos/my_photo.gif
-TEL;TYPE=WORK;VOICE:(111) 555-1212
-TEL;TYPE=HOME;VOICE:(404) 555-1212
-ADR;TYPE=WORK:;;100 Waters Edge;Baytown;LA;30314;United States of America
-LABEL;TYPE=WORK:100 Waters Edge\nBaytown, LA 30314\nUnited States of America
-ADR;TYPE=HOME:;;42 Plantation St.;Baytown;LA;30314;United States of America
-LABEL;TYPE=HOME:42 Plantation St.\nBaytown, LA 30314\nUnited States of America
-EMAIL;TYPE=PREF,INTERNET:forrestgump@example.com
-REV:20080424T195243Z
-END:VCARD
-```
-
-Once edition done, you should see the following message:
-
-```
-Card successfully updated
-```
+- Shared API mapping `addressbooks` and `cards` to the active backend
+- Protocol-specific APIs exposing each backend's full surface (`cardamum vdir/carddav`)
+- Remote backend: **CardDAV** (RFC 6352)
+- Local (filesystem) backend: **vdir** [specs](https://vdirsyncer.pimutils.org/en/stable/vdir.html)
+- HTTP auth support: basic, bearer
+- TLS support:
+  - [Rustls](https://crates.io/crates/rustls) with ring crypto
+  - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)
+  - [Native TLS](https://crates.io/crates/native-tls) (requires `native-tls` feature)
+- Discovery support:
+  - `.well-known/carddav` [rfc6764](https://datatracker.ietf.org/doc/html/rfc6764)
+  - Current-user-principal [rfc5397](https://datatracker.ietf.org/doc/html/rfc5397)
+  - Addressbook-home-set [rfc6352](https://datatracker.ietf.org/doc/html/rfc6352)
+- TOML configuration with multi-account support
+- Interactive wizard on first run
+- JSON output via `--json`
 
 ## Installation
 
 ### Pre-built binary
 
-Cardamum CLI can be installed with the installer:
-
-*As root:*
+As root:
 
 ```
 curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | sudo sh
 ```
 
-*As a regular user:*
+As a regular user:
 
 ```
 curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | PREFIX=~/.local sh
@@ -106,135 +55,122 @@ curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh 
 
 These commands install the latest binary from the GitHub [releases](https://github.com/pimalaya/cardamum/releases) section.
 
-If you want a more up-to-date version than the latest release, check out the [releases](https://github.com/pimalaya/cardamum/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. You should find a pre-built binary matching your OS. These pre-built binaries are built from the `master` branch, using default features.
+For a more up-to-date version than the latest release, check out the [releases](https://github.com/pimalaya/cardamum/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section. These pre-built binaries are built from the `master` branch.
+
+> [!NOTE]
+> Such binaries are built with the default cargo features. If you need specific features, please use another installation method.
 
 ### Cargo
-
-Cardamum CLI can be installed with [cargo](https://doc.rust-lang.org/cargo/):
-
-```
-cargo install cardamum
-```
-
-*With only Vdir support:*
-
-```
-cargo install cardamum --no-default-features --features vdir
-```
-
-You can also use the git repository for a more up-to-date (but less stable) version:
 
 ```
 cargo install --locked --git https://github.com/pimalaya/cardamum.git
 ```
 
+With only vdir support:
+
+```
+cargo install --locked --git https://github.com/pimalaya/cardamum.git \
+  --no-default-features \
+  --features vdir,rustls-ring
+```
+
 ### Nix
 
-Cardamum CLI can be installed with [Nix](https://serokell.io/blog/what-is-nix):
-
 ```
-nix-env -i cardamum
-```
-
-You can also use the git repository for a more up-to-date (but less stable) version:
-
-```
-nix-env -if https://github.com/pimalaya/cardamum/archive/master.tar.gz
-```
-
-*Or, from within the source tree checkout:*
-
-```
-nix-env -if .
-```
-
-If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
-
-```
-nix profile install cardamum
-```
-
-*Or, from within the source tree checkout:*
-
-```
-nix profile install
-```
-
-*You can also run Cardamum directly without installing it:*
-
-```
-nix run cardamum
+nix profile install github:pimalaya/cardamum
 ```
 
 ## Configuration
 
-The wizard is not yet available (it should come soon, see [#7](https://github.com/pimalaya/cardamum/issues/7)), so the only way to configure Cardamum CLI is to copy the [sample config file](https://github.com/pimalaya/cardamum/blob/master/config.sample.toml), to store it either at `~/.config/cardamum.toml` or `~/.cardamumrc` then to customize it by commenting or uncommenting the options you need.
+The configuration is loaded from the first existing path among:
 
-### Google
+- `$XDG_CONFIG_HOME/cardamum/config.toml`
+- `$HOME/.config/cardamum/config.toml`
+- `$HOME/.cardamumrc`
 
-Google Contacts requires OAuth 2.0. The first step is to configure an OAuth 2.0 token manager like [Ortie](https://github.com/pimalaya/ortie#google):
+Override with `cardamum -c <PATH>` or the `CARDAMUM_CONFIG` environment variable. Multiple paths can be passed at once, separated by `:`; the first is the base and the rest are deep-merged on top.
 
-```toml
-carddav.auth.bearer.command = ["ortie", "token", "show"]
-carddav.discover.host = "www.googleapis.com"
-carddav.discover.method = "PROPFIND"
+Run `cardamum` once with no config file to launch the wizard. The wizard prompts for an account name, an email address, then walks you through the vdir or CardDAV setup. To edit (or add) an account later, use `cardamum account configure <name>`.
+
+A documented sample lives at [config.sample.toml](./config.sample.toml).
+
+## Usage
+
+### Shared API
+
+```
+cardamum addressbook list
+cardamum addressbook create work --description "Work contacts"
+cardamum card list -k <addressbook-id>
+cardamum card read -k <addressbook-id> <card-id>
+cardamum card create -k <addressbook-id> contact.vcf
+cardamum card update -k <addressbook-id> <card-id> contact.vcf --if-match <etag>
+cardamum card delete -k <addressbook-id> <card-id>
 ```
 
-Discovery is the recommended way to go, but it is slow. If you want faster calls you can "hardcode" the server URI and/or the home URI, at your own risk:
+`--backend auto` (default) picks the first configured backend; pass `--backend vdir` or `--backend carddav` to pin it.
 
-```toml
-carddav.server-uri = "https://www.googleapis.com/carddav/v1/principals"
-carddav.home-uri = "https://www.googleapis.com/carddav/v1/principals/your.email@gmail.com/lists"
+### Protocol-specific APIs
+
+```
+cardamum vdir list
+cardamum vdir create personal --color "#3399ff"
+cardamum carddav discover
+cardamum carddav list
+cardamum carddav report <addressbook-id>
 ```
 
-### Apple
+### Account management
 
-Apple Contacts does not propose discovery service, the only way is to use their server URI combined with basic authentication:
-
-```toml
-carddav.server-uri = "https://contacts.icloud.com"
-carddav.auth.basic.username = "your.email@example.com"
-carddav.auth.basic.password.raw = "p@$$w0rd"
+```
+cardamum account list
+cardamum account check
+cardamum account configure <name>
 ```
 
-If you check attentively the `--trace` logs, you should see the home URI. It is not recommended to use it directly, but it can make the CLI definitely faster. It should look like this:
+## Interfaces
 
-```toml
-carddav.home-uri = "https://p156-contacts.icloud.com:443/17170244959/carddavhome/"
-```
-
-### Microsoft
-
-Microsoft only proposes a proprietary, non-standard API.
-
-### Posteo
-
-Posteo proposes a discovery service, combined with basic authentication:
-
-```toml
-carddav.discover.host = "posteo.de"
-carddav.auth.basic.username = "your.email"
-carddav.auth.basic.password.raw = "p@$$w0rd"
-```
-
-Discovery is the recommended way to go, but it is slow. If you want faster calls you can "hardcode" the server URI and/or the home URI, at your own risk:
-
-```toml
-carddav.server-uri = "https://posteo.de:8843"
-carddav.home-uri = "https://posteo.de:8843/addressbooks/your.email/"
-```
+- CLI: this repository
+- TUI: planned
 
 ## FAQ
+
+## License
+
+This project is licensed under either of:
+
+- [MIT license](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+
+at your option.
+
+## AI disclosure
+
+This project is developed with AI assistance. This section documents how, so users and downstream packagers can make informed decisions.
+
+- **Tools**: Claude Code (Anthropic), Opus 4.7, invoked locally with a persistent project-scoped memory and a small set of repo-specific rules.
+- **Used for**: Refactors, mechanical multi-file edits, boilerplate (feature gates, error enums, derive macros, trait impls), test scaffolding, doc polish, exploratory design conversations.
+- **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
+- **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit (`nix develop --command cargo check / cargo test / cargo fmt`). Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
+- **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong: off-by-one errors, missed edge cases, plausible but nonexistent APIs, stale RFC references. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
+- **Last reviewed**: 31/05/2026
+
+## Social
+
+- Chat on [Matrix](https://matrix.to/#/#pimalaya:matrix.org)
+- News on [Mastodon](https://fosstodon.org/@pimalaya) or [RSS](https://fosstodon.org/@pimalaya.rss)
+- Mail at [pimalaya.org@posteo.net](mailto:pimalaya.org@posteo.net)
 
 ## Sponsoring
 
 [![nlnet](https://nlnet.nl/logo/banner-160x60.png)](https://nlnet.nl/)
 
-Special thanks to the [NLnet foundation](https://nlnet.nl/) and the [European Commission](https://www.ngi.eu/) that helped the project to receive financial support from various programs:
+Special thanks to the [NLnet foundation](https://nlnet.nl/) and the [European Commission](https://www.ngi.eu/) that have been financially supporting the project for years:
 
-- [NGI Assure](https://nlnet.nl/project/Himalaya/) in 2022
-- [NGI Zero Entrust](https://nlnet.nl/project/Pimalaya/) in 2023
-- [NGI Zero Core](https://nlnet.nl/project/Pimalaya-PIM/) in 2024 *(still ongoing)*
+- 2022 → 2023: [NGI Assure](https://nlnet.nl/project/Himalaya/)
+- 2023 → 2024: [NGI Zero Entrust](https://nlnet.nl/project/Pimalaya/)
+- 2024 → 2026: [NGI Zero Core](https://nlnet.nl/project/Pimalaya-PIM/)
+- *2027 in preparation…*
 
 If you appreciate the project, feel free to donate using one of the following providers:
 

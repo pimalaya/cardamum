@@ -1,354 +1,157 @@
-// This file is part of Cardamum, a CLI to manage contacts.
-//
-// Copyright (C) 2025 soywod <clement.douin@posteo.net>
-//
-// This program is free software: you can redistribute it and/or
-// modify it under the terms of the GNU Affero General Public License
-// as published by the Free Software Foundation, either version 3 of
-// the License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-// Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public
-// License along with this program. If not, see
-// <https://www.gnu.org/licenses/>.
+//! Cardamum wrapper around [`io_webdav::client::WebdavClientStd`].
+//!
+//! Builds the CardDAV client from the account's `[carddav]` block via
+//! one of three routes: `home` short-circuits every discovery step,
+//! `server` runs only the principal + addressbook-home-set walk, and
+//! `discover` resolves a bare domain to a server URL through pimconf
+//! (RFC 6764 SRV + `.well-known`) before that walk.
 
-use std::{borrow::Cow, collections::HashSet};
-
-use anyhow::{anyhow, Result};
-use http::Uri;
-
-use io_addressbook::{
-    addressbook::Addressbook,
-    card::Card,
-    carddav::{
-        coroutines::{
-            addressbook_home_set::AddressbookHomeSet,
-            create_addressbook::CreateAddressbook,
-            create_card::CreateCard,
-            current_user_principal::CurrentUserPrincipal,
-            delete_addressbook::DeleteAddressbook,
-            delete_card::DeleteCard,
-            follow_redirects::FollowRedirectsResult,
-            list_addressbooks::ListAddressbooks,
-            list_cards::ListCards,
-            read_card::ReadCard,
-            send::SendResult,
-            update_addressbook::UpdateAddressbook,
-            update_card::UpdateCard,
-            well_known::{WellKnown, WellKnownResult},
-        },
-        request::set_uri_path,
-    },
+use std::{
+    ops::{Deref, DerefMut},
+    path::PathBuf,
 };
-use io_stream::runtimes::std::handle;
-use pimalaya_toolbox::stream::Stream;
 
-use super::config::CarddavConfig;
+use anyhow::{Result, anyhow};
+use io_http::{rfc6750::bearer::HttpAuthBearer, rfc7617::basic::HttpAuthBasic};
+use io_webdav::{client::WebdavClientStd as Inner, rfc4918::WebdavAuth};
+use pimalaya_config::toml::TomlConfig;
+use pimalaya_stream::tls::Tls;
+use secrecy::ExposeSecret;
+use url::Url;
 
-#[derive(Debug)]
-pub struct CarddavClient<'a> {
-    config: io_addressbook::carddav::config::CarddavConfig<'a>,
-    stream: Stream,
+use pimconf::rfc6764::{client::DiscoveryRfc6764ClientStd, types::DavService};
+
+use crate::{
+    account::context::Account,
+    cli::load_or_wizard,
+    config::{CarddavAuthConfig, CarddavConfig, TlsConfig},
+};
+
+const DEFAULT_RESOLVER: &str = "tcp://1.1.1.1:53";
+
+pub struct CarddavClient {
+    inner: Inner,
+    pub account: Account,
 }
 
-impl<'a> CarddavClient<'a> {
-    pub fn new(config: &'a CarddavConfig) -> Result<Self> {
-        let tls = &config.tls;
-
-        if let Some(uri) = &config.home_uri {
-            let stream = Stream::connect(uri, tls)?;
-            return Self::from_home_uri(config, stream, Cow::Borrowed(uri));
-        };
-
-        if let Some(uri) = &config.server_uri {
-            let stream = Stream::connect(&uri, tls)?;
-            return Self::from_server_uri(config, stream, uri.clone());
-        }
-
-        if let Some(discover) = &config.discover {
-            let hostname = if let Some(port) = discover.port {
-                Cow::from(format!("{}:{port}", discover.host))
-            } else {
-                Cow::from(&discover.host)
-            };
-
-            let scheme = match &discover.scheme {
-                Some(scheme) => Cow::from(scheme),
-                None => Cow::from("https"),
-            };
-
-            let uri: Uri = format!("{scheme}://{hostname}/.well-known/carddav")
-                .parse()
-                .unwrap();
-
-            let mut stream = Stream::connect(&uri, tls)?;
-
-            let remote_config = io_addressbook::carddav::config::CarddavConfig {
-                uri: Cow::Borrowed(&uri),
-                auth: TryFrom::try_from(&config.auth)?,
-            };
-
-            let mut well_known = WellKnown::new(&remote_config, discover.method.clone());
-            let mut arg = None;
-
-            let ok = loop {
-                match well_known.resume(arg.take()) {
-                    WellKnownResult::Ok(ok) => break ok,
-                    WellKnownResult::Err(err) => {
-                        return Err(anyhow!(err).context("Discover CardDAV server error"));
-                    }
-                    WellKnownResult::Io(io) => arg = Some(handle(&mut stream, io)?),
-                }
-            };
-
-            if !ok.keep_alive {
-                stream = Stream::connect(&ok.uri, tls)?;
-            }
-
-            return Self::from_server_uri(config, stream, ok.uri);
-        }
-
-        let ctx = "Cannot discover CardDAV home URI";
-        let err = "Missing one of `discover`, `server-uri` or `home-uri` config option";
-        Err(anyhow!(err).context(ctx))
+impl CarddavClient {
+    pub fn new(inner: Inner, account: Account) -> Self {
+        Self { inner, account }
     }
+}
 
-    fn from_home_uri(config: &'a CarddavConfig, stream: Stream, uri: Cow<'a, Uri>) -> Result<Self> {
-        let auth = TryFrom::try_from(&config.auth)?;
-        let config = io_addressbook::carddav::config::CarddavConfig { uri, auth };
-        let client = Self { config, stream };
+impl Deref for CarddavClient {
+    type Target = Inner;
 
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl DerefMut for CarddavClient {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
+/// Loads the configuration, picks the active account, builds the
+/// merged [`Account`] then opens the CardDAV client.
+pub fn build_carddav_client(
+    config_paths: &[PathBuf],
+    account_name: Option<&str>,
+) -> Result<CarddavClient> {
+    let mut config = load_or_wizard(config_paths)?;
+    let (name, mut ac) = config
+        .take_account(account_name)?
+        .ok_or_else(|| anyhow!("Cannot find account"))?;
+    let carddav_config = ac
+        .carddav
+        .take()
+        .ok_or_else(|| anyhow!("CardDAV config is missing for account `{name}`"))?;
+    let account = Account::from(config).merge(Account::from(ac));
+    let inner = open_carddav_client(carddav_config)?;
+    Ok(CarddavClient::new(inner, account))
+}
+
+/// Opens a [`WebdavClientStd`] from a [`CarddavConfig`].
+///
+/// `home` skips every discovery step; `server` resolves principal +
+/// addressbook-home-set from the given context root; `discover`
+/// resolves a bare domain to that context root through pimconf first.
+pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
+    let CarddavConfig {
+        discover,
+        server,
+        home,
+        tls,
+        auth,
+    } = config;
+
+    let tls = tls_with_http_alpn(tls);
+    let auth = build_auth(auth)?;
+
+    if let Some(home) = home {
+        let mut client = Inner::connect(&home, &tls, auth)?;
+        client.addressbook_home_set = Some(home);
         return Ok(client);
     }
 
-    fn from_server_uri(
-        config: &'a CarddavConfig,
-        mut stream: Stream,
-        mut uri: Uri,
-    ) -> Result<Self> {
-        let tls = &config.tls;
-
-        let remote_config = io_addressbook::carddav::config::CarddavConfig {
-            uri: Cow::Borrowed(&uri),
-            auth: TryFrom::try_from(&config.auth)?,
-        };
-
-        let mut principal = CurrentUserPrincipal::new(&remote_config);
-        let mut arg = None;
-
-        let ok = loop {
-            match principal.resume(arg.take()) {
-                FollowRedirectsResult::Ok(ok) => break ok,
-                FollowRedirectsResult::Err(err) => {
-                    return Err(anyhow!(err).context("Get current user principal error"))
-                }
-                FollowRedirectsResult::Io(io) => arg = Some(handle(&mut stream, io)?),
-                FollowRedirectsResult::Reset(new_uri) => {
-                    uri = new_uri;
-                    stream = Stream::connect(&uri, tls)?;
-                }
-            }
-        };
-
-        let mut same_scheme = true;
-        let mut same_authority = true;
-
-        if let Some(discovered_uri) = ok.body {
-            uri = if let Some(auth) = discovered_uri.authority() {
-                same_authority = uri.authority() == Some(auth);
-                same_scheme = uri.scheme() == discovered_uri.scheme();
-                discovered_uri
-            } else {
-                set_uri_path(uri, discovered_uri.path())
-            };
+    let server = match server {
+        Some(server) => parse_carddav_server(&server)?,
+        None => {
+            let domain = discover
+                .ok_or_else(|| anyhow!("CardDAV config needs `server`, `home`, or `discover`"))?;
+            resolve_server(&domain, &tls)?
         }
+    };
 
-        if !ok.keep_alive || !same_scheme || !same_authority {
-            stream = Stream::connect(&uri, tls)?;
+    let mut client = Inner::connect(&server, &tls, auth)?;
+    client.current_user_principal()?;
+    client.addressbook_home_set()?;
+
+    Ok(client)
+}
+
+/// Resolves a bare domain to a CardDAV context root via pimconf
+/// (RFC 6764 SRV + `.well-known`), using the same TLS profile for the
+/// `.well-known` probe.
+fn resolve_server(domain: &str, tls: &Tls) -> Result<Url> {
+    let resolver = Url::parse(DEFAULT_RESOLVER).expect("DEFAULT_RESOLVER must be a valid URL");
+    let mut client = DiscoveryRfc6764ClientStd::new(resolver).with_tls(tls.clone());
+    let server = client.resolve(domain, DavService::Carddav)?;
+    Ok(server)
+}
+
+/// Parses a `server` config string into a [`Url`].
+///
+/// Accepts a full URL, a bare domain, or `domain:port`; anything
+/// without an explicit `http`/`https` scheme defaults to `https://`,
+/// since `url` would otherwise read the leading label of `domain:port`
+/// as the scheme.
+pub fn parse_carddav_server(server: &str) -> Result<Url> {
+    let url = match Url::parse(server) {
+        Ok(url) if matches!(url.scheme(), "http" | "https") => url,
+        _ => Url::parse(&format!("https://{server}"))?,
+    };
+
+    Ok(url)
+}
+
+fn tls_with_http_alpn(config: TlsConfig) -> Tls {
+    let mut tls: Tls = config.into();
+    tls.rustls.alpn = vec!["http/1.1".into()];
+    tls
+}
+
+fn build_auth(auth: CarddavAuthConfig) -> Result<WebdavAuth> {
+    Ok(match auth {
+        CarddavAuthConfig::Basic { username, password } => {
+            let password = password.get()?;
+            WebdavAuth::Basic(HttpAuthBasic::new(username, password.expose_secret()))
         }
-
-        let remote_config = io_addressbook::carddav::config::CarddavConfig {
-            uri: Cow::Borrowed(&uri),
-            auth: TryFrom::try_from(&config.auth)?,
-        };
-
-        let mut home = AddressbookHomeSet::new(&remote_config);
-        let mut arg = None;
-
-        let ok = loop {
-            match home.resume(arg.take()) {
-                FollowRedirectsResult::Ok(ok) => break ok,
-                FollowRedirectsResult::Err(err) => {
-                    return Err(anyhow!(err).context("Get addressbook home set error"));
-                }
-                FollowRedirectsResult::Io(io) => arg = Some(handle(&mut stream, io)?),
-                FollowRedirectsResult::Reset(new_uri) => {
-                    uri = new_uri;
-                    stream = Stream::connect(&uri, tls)?;
-                }
-            }
-        };
-
-        let mut same_scheme = true;
-        let mut same_authority = true;
-
-        if let Some(discovered_uri) = ok.body {
-            uri = if let Some(auth) = discovered_uri.authority() {
-                same_authority = uri.authority() == Some(auth);
-                same_scheme = uri.scheme() == discovered_uri.scheme();
-                discovered_uri
-            } else {
-                set_uri_path(uri, discovered_uri.path())
-            };
+        CarddavAuthConfig::Bearer { token } => {
+            let token = token.get()?;
+            WebdavAuth::Bearer(HttpAuthBearer::new(token.expose_secret()))
         }
-
-        if !ok.keep_alive || !same_scheme || !same_authority {
-            stream = Stream::connect(&uri, tls)?;
-        }
-
-        Self::from_home_uri(config, stream, Cow::Owned(uri))
-    }
-
-    pub fn create_addressbook(&mut self, addressbook: Addressbook) -> Result<()> {
-        let mut create = CreateAddressbook::new(&self.config, addressbook);
-        let mut arg = None;
-
-        loop {
-            match create.resume(arg.take()) {
-                SendResult::Ok(_) => break Ok(()),
-                SendResult::Err(err) => return Err(anyhow!(err).context("Create addressbook error")),
-                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
-            }
-        }
-    }
-
-    pub fn list_addressbooks(&mut self) -> Result<HashSet<Addressbook>> {
-        let mut list = ListAddressbooks::new(&self.config);
-        let mut arg = None;
-
-        loop {
-            match list.resume(arg.take()) {
-                SendResult::Ok(ok) => break Ok(ok.body),
-                SendResult::Err(err) => return Err(anyhow!(err).context("List addressbooks error")),
-                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
-            }
-        }
-    }
-
-    pub fn update_addressbook(&mut self, addressbook: Addressbook) -> Result<()> {
-        let mut update = UpdateAddressbook::new(&self.config, addressbook);
-        let mut arg = None;
-
-        loop {
-            match update.resume(arg.take()) {
-                SendResult::Ok(ok) => break Ok(ok.body),
-                SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Update addressbook error"))
-                }
-                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
-            }
-        }
-    }
-
-    pub fn delete_addressbook(&mut self, id: impl AsRef<str>) -> Result<()> {
-        let mut delete = DeleteAddressbook::new(&self.config, id);
-        let mut arg = None;
-
-        loop {
-            match delete.resume(arg.take()) {
-                SendResult::Ok(_) => break Ok(()),
-                SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Delete addressbook error"))
-                }
-                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
-            }
-        }
-    }
-
-    pub fn create_card(&mut self, card: Card) -> Result<()> {
-        let mut create = CreateCard::new(&self.config, card);
-        let mut arg = None;
-
-        loop {
-            match create.resume(arg.take()) {
-                SendResult::Ok(_) => break Ok(()),
-                SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Create card error"))
-                }
-                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
-            }
-        }
-    }
-
-    pub fn list_cards(&mut self, addressbook_id: impl AsRef<str>) -> Result<HashSet<Card>> {
-        let mut list = ListCards::new(&self.config, addressbook_id);
-        let mut arg = None;
-
-        loop {
-            match list.resume(arg.take()) {
-                SendResult::Ok(ok) => break Ok(ok.body),
-                SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("List cards error"))
-                }
-                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
-            }
-        }
-    }
-
-    pub fn read_card(
-        &mut self,
-        addressbook_id: impl AsRef<str>,
-        card_id: impl AsRef<str>,
-    ) -> Result<Card> {
-        let mut read = ReadCard::new(&self.config, addressbook_id, card_id);
-        let mut arg = None;
-
-        loop {
-            match read.resume(arg.take()) {
-                SendResult::Ok(ok) => break Ok(ok.body),
-                SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Read card error"))
-                }
-                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
-            }
-        }
-    }
-
-    pub fn update_card(&mut self, card: Card) -> Result<()> {
-        let mut update = UpdateCard::new(&self.config, card);
-        let mut arg = None;
-
-        loop {
-            match update.resume(arg.take()) {
-                SendResult::Ok(_) => break Ok(()),
-                SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Update card error"))
-                }
-                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
-            }
-        }
-    }
-
-    pub fn delete_card(
-        &mut self,
-        addressbook_id: impl AsRef<str>,
-        card_id: impl AsRef<str>,
-    ) -> Result<()> {
-        let mut delete = DeleteCard::new(&self.config, addressbook_id, card_id);
-        let mut arg = None;
-
-        loop {
-            match delete.resume(arg.take()) {
-                SendResult::Ok(_) => break Ok(()),
-                SendResult::Err(err) => {
-                    return Err(anyhow!(err).context("Delete card error"))
-                }
-                SendResult::Io(io) => arg = Some(handle(&mut self.stream, io)?),
-            }
-        }
-    }
+    })
 }

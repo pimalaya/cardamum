@@ -1,39 +1,30 @@
-// This file is part of Cardamum, a CLI to manage contacts.
-//
-// Copyright (C) 2025 soywod <clement.douin@posteo.net>
-//
-// This program is free software: you can redistribute it and/or
-// modify it under the terms of the GNU Affero General Public License
-// as published by the Free Software Foundation, either version 3 of
-// the License, or (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful, but
-// WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-// Affero General Public License for more details.
-//
-// You should have received a copy of the GNU Affero General Public
-// License along with this program. If not, see
-// <https://www.gnu.org/licenses/>.
-
 use std::path::PathBuf;
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
-use pimalaya_toolbox::{
-    config::TomlConfig,
-    long_version,
-    terminal::{
-        clap::{
-            args::{AccountArg, ConfigPathsArg, JsonFlag, LogFlags},
-            commands::{CompletionCommand, ManualCommand},
-        },
-        printer::Printer,
+use pimalaya_cli::{
+    clap::{
+        args::{AccountFlag, JsonFlag, LogFlags},
+        commands::{CompletionCommand, ManualCommand},
+        parsers::path_parser,
     },
+    long_version,
+    printer::Printer,
 };
+use pimalaya_config::toml::TomlConfig;
 
+#[cfg(feature = "carddav")]
+use crate::carddav::{cli::CarddavCommand, client::build_carddav_client};
+#[cfg(feature = "vdir")]
+use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
 use crate::{
-    addressbook::command::AddressbookSubcommand, card::command::CardSubcommand, config::Config,
+    account::cli::AccountCommand,
+    backend::Backend,
+    config::Config,
+    shared::{
+        addressbook::cli::AddressbookCommand, card::cli::CardCommand, client::AddressbookClient,
+    },
+    wizard,
 };
 
 #[derive(Parser, Debug)]
@@ -43,49 +34,126 @@ use crate::{
 #[command(propagate_version = true, infer_subcommands = true)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Cardamum,
+    pub cmd: Command,
+
+    /// Override the default configuration file path.
+    ///
+    /// The given paths are shell-expanded then canonicalized (if
+    /// applicable). If the first path does not point to a valid file,
+    /// the wizard will propose to assist you in the creation of the
+    /// configuration file. Other paths are merged with the first one,
+    /// which allows you to separate your public config from your
+    /// private(s) one(s). Multiple paths can also be provided by
+    /// delimiting them with `:` (like `$PATH` in a POSIX shell).
+    #[arg(short, long = "config", global = true, env = "CARDAMUM_CONFIG")]
+    #[arg(value_name = "PATH", value_parser = path_parser, value_delimiter = ':')]
+    pub config_paths: Vec<PathBuf>,
     #[command(flatten)]
-    pub config: ConfigPathsArg,
-    #[command(flatten)]
-    pub account: AccountArg,
+    pub account: AccountFlag,
+    /// Force a specific backend for cross-protocol commands.
+    ///
+    /// Only consumed by the shared commands (addressbook, card); the
+    /// protocol-specific subcommands (vdir, carddav) ignore it and
+    /// always use their own backend.
+    ///
+    /// Possible values: auto (default), vdir, carddav. With auto, the
+    /// shared command picks the first configured backend it supports;
+    /// with an explicit value, it uses only that backend (and bails if
+    /// the account has no matching config block, or if the operation
+    /// has no implementation for it).
+    #[arg(short, long, global = true, default_value_t)]
+    pub backend: Backend,
     #[command(flatten)]
     pub json: JsonFlag,
     #[command(flatten)]
     pub log: LogFlags,
 }
 
-#[derive(Subcommand, Debug)]
-pub enum Cardamum {
-    #[command(arg_required_else_help = true, subcommand)]
-    Addressbooks(AddressbookSubcommand),
-    #[command(arg_required_else_help = true, subcommand)]
-    Cards(CardSubcommand),
-    #[command(arg_required_else_help = true, alias = "mans")]
-    Manuals(ManualCommand),
-    #[command(arg_required_else_help = true)]
+#[derive(Debug, Subcommand)]
+pub enum Command {
+    // --- Shared API
+    //
+    #[command(subcommand, alias = "addressbooks", visible_alias = "abook")]
+    Addressbook(AddressbookCommand),
+    #[command(subcommand, alias = "cards")]
+    Card(CardCommand),
+
+    // --- Protocol-specific APIs
+    //
+    #[cfg(feature = "carddav")]
+    #[command(subcommand)]
+    Carddav(CarddavCommand),
+    #[cfg(feature = "vdir")]
+    #[command(subcommand)]
+    Vdir(VdirCommand),
+
+    // --- Meta
+    //
+    #[command(subcommand)]
+    Account(AccountCommand),
     Completions(CompletionCommand),
+    Manuals(ManualCommand),
 }
 
-impl Cardamum {
+/// Loads `Config` from the merged `config_paths` or, when no file
+/// exists, runs the wizard to bootstrap one at the target path.
+pub fn load_or_wizard(config_paths: &[PathBuf]) -> Result<Config> {
+    match Config::from_paths_or_default(config_paths)? {
+        Some(config) => Ok(config),
+        None => wizard::discover::run_or_exit(&Config::target_path(config_paths)?),
+    }
+}
+
+impl Command {
     pub fn execute(
         self,
         printer: &mut impl Printer,
         config_paths: &[PathBuf],
         account_name: Option<&str>,
+        backend: Backend,
     ) -> Result<()> {
+        let configs = || {
+            let mut config = load_or_wizard(config_paths)?;
+
+            let Some((_, account_config)) = config.take_account(account_name)? else {
+                bail!("Cannot find account")
+            };
+
+            Ok((config, account_config))
+        };
+
         match self {
-            Self::Addressbooks(cmd) => {
-                let config = Config::from_paths_or_default(config_paths)?;
-                let (_, account) = config.get_account(account_name)?;
-                cmd.execute(printer, account)
+            // --- Shared API
+            //
+            Self::Addressbook(cmd) => {
+                let (config, account_config) = configs()?;
+                let client = AddressbookClient::new(config, account_config, backend)?;
+                cmd.execute(printer, client)
             }
-            Self::Cards(cmd) => {
-                let config = Config::from_paths_or_default(config_paths)?;
-                let (_, account) = config.get_account(account_name)?;
-                cmd.execute(printer, account)
+            Self::Card(cmd) => {
+                let (config, account_config) = configs()?;
+                let client = AddressbookClient::new(config, account_config, backend)?;
+                cmd.execute(printer, client)
             }
-            Self::Manuals(cmd) => cmd.execute(printer, Cli::command()),
+
+            // --- Protocol-specific APIs
+            //
+            #[cfg(feature = "carddav")]
+            Self::Carddav(cmd) => {
+                let client = build_carddav_client(config_paths, account_name)?;
+                cmd.execute(printer, client)
+            }
+            #[cfg(feature = "vdir")]
+            Self::Vdir(cmd) => {
+                let client = build_vdir_client(config_paths, account_name)?;
+                cmd.execute(printer, client)
+            }
+
+            // --- Meta
+            //
+            Self::Account(cmd) => cmd.execute(printer, config_paths, account_name, backend),
             Self::Completions(cmd) => cmd.execute(printer, Cli::command()),
+            Self::Manuals(cmd) => cmd.execute(printer, Cli::command()),
         }
     }
 }

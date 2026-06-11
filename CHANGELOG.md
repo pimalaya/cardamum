@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Made the parent addressbook of every `card` command an optional `-k/--addressbook ADDRESSBOOK-ID` flag instead of a positional argument; when omitted it falls back to the new `addressbook.default` config, otherwise the command bails.
+- Changed `card create` and `card update` to take their vCard as a trailing positional `VCARD` argument (a path, raw vCard contents, or `-` for stdin) instead of the `--file` flag, matching `tcard edit`.
+- Accepted a bare domain or `domain:port` in addition to a full URL for `carddav.server`, defaulting bare authorities to `https://` (matching Himalaya's server-string handling).
+- Migrated to the new pimalaya-cli / pimalaya-config / pimalaya-stream stack and adopted the Himalaya v2 CLI structure (shared/ + vdir/ + carddav/).
+- Renamed the shared subcommands to the singular `addressbook` and `card` to match Himalaya; the plural `addressbooks` / `cards` forms stay as hidden aliases.
+- Renamed the remote backend from `webdav` to `carddav` across the public surface: the `carddav` cargo feature, the `cardamum carddav` subcommand, and the `[carddav]` config block. Only the underlying io-webdav dependency keeps the WebDAV name.
+- Relicensed from AGPL-3.0-only to dual MIT OR Apache-2.0, matching Himalaya.
+
 ## [0.1.0] - 2025-10-24
 
 ### Added

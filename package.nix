@@ -73,7 +73,7 @@ rustPlatform.buildRustPackage rec {
     mainProgram = "cardamum";
     homepage = "https://github.com/pimalaya/cardamum";
     changelog = "https://github.com/pimalaya/cardamum/blob/v${version}/CHANGELOG.md";
-    license = lib.licenses.agpl3Plus;
+    license = with lib.licenses; [ mit asl20 ];
     maintainers = with lib.maintainers; [
       soywod
     ];

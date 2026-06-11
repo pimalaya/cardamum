@@ -1,65 +1,69 @@
 [package]
 name = "cardamum"
 description = "CLI to manage contacts"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["soywod <clement.douin@posteo.net>"]
-edition = "2021"
-license = "AGPL-3.0-or-later"
+edition = "2024"
+rust-version = "1.87"
+license = "MIT OR Apache-2.0"
 categories = ["command-line-utilities"]
-keywords = ["cli", "contact", "addressbook", "carddav", "webdav"]
+keywords = ["cli", "contact", "addressbook", "carddav", "vdir"]
 homepage = "https://pimalaya.org"
 documentation = "https://github.com/pimalaya/cardamum"
 repository = "https://github.com/pimalaya/cardamum"
 
 [package.metadata.docs.rs]
+all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["carddav", "vdir", "command", "rustls-ring"]
+default = ["rustls-ring", "carddav", "vdir"]
+carddav = ["io-addressbook/webdav"]
+vdir = ["io-addressbook/vdir"]
+native-tls = ["pimalaya-stream/native-tls", "pimconf/native-tls", "io-webdav/native-tls", "io-addressbook/native-tls"]
+rustls-aws = ["pimalaya-stream/rustls-aws", "pimconf/rustls-aws", "io-webdav/rustls-aws", "io-addressbook/rustls-aws"]
+rustls-ring = ["pimalaya-stream/rustls-ring", "pimconf/rustls-ring", "io-webdav/rustls-ring", "io-addressbook/rustls-ring"]
+vendored = ["pimalaya-stream/vendored", "io-webdav/vendored"]
 
-# CardDAV support without TLS (blocking)
-#
-carddav = ["dep:io-stream", "dep:http", "dep:secrecy", "io-addressbook/carddav"]
-
-# TLS
-#
-native-tls = ["pimalaya-toolbox/native-tls"]
-rustls-aws = ["pimalaya-toolbox/rustls-aws"]
-rustls-ring = ["pimalaya-toolbox/rustls-ring"]
-
-# Vdir support (blocking)
-# See <https://vdirsyncer.pimutils.org/en/stable/vdir.html>
-#
-vdir = ["dep:io-fs", "io-addressbook/vdir"]
-
-command = ["pimalaya-toolbox/command"]
-keyring = ["pimalaya-toolbox/keyring"]
-
-# Wizard to help you configure accounts interactively
-# WIP: not ready, do not use!
-#
-# wizard = []
-
-# Bring external libs to the build
-#
-vendored = ["pimalaya-toolbox/vendored"]
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
 
 [build-dependencies]
-pimalaya-toolbox = { version = "0.0.2", default-features = false, features = ["build"] }
+pimalaya-cli = { version = "0.0.1", default-features = false, features = ["build"] }
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4.4", features = ["derive", "wrap_help"] }
+clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4.4"
-clap_mangen = "0.2"
-comfy-table = "7.1"
-crossterm = { version = "0.29", features = ["serde"] }
+clap_mangen = "0.3"
+comfy-table = "7"
+crossterm = { version = "0.29", default-features = false, features = ["serde"] }
+dirs = "6"
 env_logger = "0.11"
-http = { version = "1", optional = true }
-io-addressbook = { version = "0.0.1", default-features = false }
-io-fs = { version = "0.0.1", default-features = false, features = ["std"], optional = true }
-io-stream = { version = "0.0.2", default-features = false, features = ["std"], optional = true }
+io-addressbook = { version = "0.0.2", default-features = false, features = ["client", "serde"] }
+io-http = { version = "0.1", default-features = false }
+io-vdir = { version = "0.0.3", default-features = false, features = ["client", "parser", "serde"] }
+io-webdav = { version = "0.0.1", default-features = false, features = ["client"] }
 log = "0.4"
-pimalaya-toolbox = { version = "0.0.2", default-features = false, features = ["config", "prompt", "secret", "stream", "terminal"] }
-secrecy = { version = "0.10", features = ["serde"], optional = true }
+percent-encoding = "2"
+pimalaya-cli = { version = "0.0.1", default-features = false, features = ["terminal", "table", "prompt", "wizard", "spinner", "carddav"] }
+pimalaya-config = { version = "0.0.1", default-features = false, features = ["toml", "secret"] }
+pimalaya-stream = { version = "0.0.1", default-features = false, features = ["std"] }
+pimconf = { version = "0.1.0", default-features = false, features = ["pacc", "autoconfig", "rfc6186", "rfc6764", "client"] }
+secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
+shellexpand = "3.1"
+toml = "0.8"
+url = { version = "2.5", features = ["serde"] }
+
+[patch.crates-io]
+domain = { git = "https://github.com/nlnetlabs/domain", rev = "b30087125c13e71010d9783a1bcdd9eb9fa3f336" }
+io-addressbook.git = "https://github.com/pimalaya/io-addressbook"
+io-http.git = "https://github.com/pimalaya/io-http"
+io-vdir.git = "https://github.com/pimalaya/io-vdir"
+io-webdav.git = "https://github.com/pimalaya/io-webdav"
+pimalaya-cli.git = "https://github.com/pimalaya/cli"
+pimconf.git = "https://github.com/pimalaya/pimconf"

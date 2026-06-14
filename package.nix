@@ -1,81 +1,78 @@
-# TODO: move this to nixpkgs
-# This file aims to be a replacement for the nixpkgs derivation.
-
 {
+  buildFeatures ? [ ],
+  buildNoDefaultFeatures ? false,
+  buildPackages,
+  fetchFromGitHub,
+  installManPages ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
+  installShellCompletions ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
+  installShellFiles,
   lib,
+  openssl,
   pkg-config,
   rustPlatform,
-  fetchFromGitHub,
   stdenv,
-  apple-sdk,
-  installShellFiles,
-  installShellCompletions ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
-  installManPages ? stdenv.buildPlatform.canExecute stdenv.hostPlatform,
-  withNoDefaultFeatures ? false,
-  withFeatures ? [ ],
 }:
 
 let
   version = "0.1.0";
-  hash = "";
-  cargoHash = "";
-in
+  emul = stdenv.hostPlatform.emulator buildPackages;
+  exe = stdenv.hostPlatform.extensions.executable;
 
-rustPlatform.buildRustPackage rec {
-  inherit cargoHash version;
+in
+rustPlatform.buildRustPackage {
+  inherit version buildNoDefaultFeatures buildFeatures;
 
   pname = "cardamum";
+  cargoHash = "";
 
   src = fetchFromGitHub {
-    inherit hash;
+    hash = "";
     owner = "pimalaya";
     repo = "cardamum";
     rev = "v${version}";
   };
 
-  buildNoDefaultFeatures = withNoDefaultFeatures;
-  buildFeatures = withFeatures;
+  env.OPENSSL_NO_VENDOR = true;
 
   nativeBuildInputs = [
     pkg-config
-  ]
-  ++ lib.optional (installManPages || installShellCompletions) installShellFiles;
+    installShellFiles
+  ];
 
-  buildInputs = lib.optional stdenv.hostPlatform.isDarwin apple-sdk;
+  buildInputs = lib.optional (builtins.elem "native-tls" buildFeatures) openssl;
 
-  # unit tests only
-  cargoTestFlags = [ "--lib" ];
+  # most of the tests are lib side
   doCheck = false;
-  auditable = false;
 
-  postInstall = ''
-    mkdir -p $out/share/{completions,man}
-  ''
-  + lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
-    "$out"/bin/cardamum man "$out"/share/man
-  ''
-  + lib.optionalString installManPages ''
-    installManPage "$out"/share/man/*
-  ''
-  + lib.optionalString (stdenv.buildPlatform.canExecute stdenv.hostPlatform) ''
-    "$out"/bin/cardamum completion bash > "$out"/share/completions/cardamum.bash
-    "$out"/bin/cardamum completion elvish > "$out"/share/completions/cardamum.elvish
-    "$out"/bin/cardamum completion fish > "$out"/share/completions/cardamum.fish
-    "$out"/bin/cardamum completion powershell > "$out"/share/completions/cardamum.powershell
-    "$out"/bin/cardamum completion zsh > "$out"/share/completions/cardamum.zsh
-  ''
-  + lib.optionalString installShellCompletions ''
-    installShellCompletion "$out"/share/completions/cardamum.{bash,fish,zsh}
-  '';
+  postInstall =
+    lib.optionalString (lib.hasInfix "wine" emul) ''
+      export WINEPREFIX="''${WINEPREFIX:-$(mktemp -d)}"
+      mkdir -p $WINEPREFIX
+    ''
+    + ''
+      mkdir -p $out/share/{applications,completions,man}
+      ${emul} "$out"/bin/cardamum${exe} manuals "$out"/share/man
+      ${emul} "$out"/bin/cardamum${exe} completions -d "$out"/share/completions bash elvish fish powershell zsh
+    ''
+    + lib.optionalString installManPages ''
+      installManPage "$out"/share/man/*
+    ''
+    + lib.optionalString installShellCompletions ''
+      installShellCompletion --cmd cardamum \
+        --bash "$out"/share/completions/cardamum.bash \
+        --fish "$out"/share/completions/cardamum.fish \
+        --zsh "$out"/share/completions/_cardamum
+    '';
 
   meta = {
     description = "CLI to manage contacts";
     mainProgram = "cardamum";
     homepage = "https://github.com/pimalaya/cardamum";
-    changelog = "https://github.com/pimalaya/cardamum/blob/v${version}/CHANGELOG.md";
-    license = with lib.licenses; [ mit asl20 ];
-    maintainers = with lib.maintainers; [
-      soywod
+    changelog = "https://github.com/pimalaya/cardamum/blob/master/CHANGELOG.md";
+    license = with lib.licenses; [
+      mit
+      asl20
     ];
+    maintainers = with lib.maintainers; [ soywod ];
   };
 }

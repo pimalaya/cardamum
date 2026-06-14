@@ -116,7 +116,7 @@ impl Command {
             let mut config = load_or_wizard(config_paths)?;
 
             let Some((_, account_config)) = config.take_account(account_name)? else {
-                bail!("Cannot find account")
+                bail!("Cannot find default account; use --account or set account.default = true")
             };
 
             Ok((config, account_config))

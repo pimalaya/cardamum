@@ -9,10 +9,12 @@ CLI to manage contacts.
 
 - [Features](#features)
 - [Installation](#installation)
+  - [Pre-built binary](#pre-built-binary)
+  - [Cargo](#cargo)
+  - [Nix](#nix)
+  - [Sources](#sources)
 - [Configuration](#configuration)
 - [Usage](#usage)
-- [Interfaces](#interfaces)
-- [FAQ](#faq)
 - [License](#license)
 - [AI disclosure](#ai-disclosure)
 - [Contributing](CONTRIBUTING.md)
@@ -44,13 +46,13 @@ CLI to manage contacts.
 
 As root:
 
-```
+```shell
 curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | sudo sh
 ```
 
 As a regular user:
 
-```
+```shell
 curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | PREFIX=~/.local sh
 ```
 
@@ -63,13 +65,13 @@ For a more up-to-date version than the latest release, check out the [releases](
 
 ### Cargo
 
-```
+```shell
 cargo install --locked --git https://github.com/pimalaya/cardamum.git
 ```
 
 With only vdir support:
 
-```
+```shell
 cargo install --locked --git https://github.com/pimalaya/cardamum.git \
   --no-default-features \
   --features vdir,rustls-ring
@@ -77,8 +79,24 @@ cargo install --locked --git https://github.com/pimalaya/cardamum.git \
 
 ### Nix
 
+If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
+
+```shell
+nix profile install github:pimalaya/tcal
 ```
-nix profile install github:pimalaya/cardamum
+
+Or run without installing:
+
+```shell
+nix run github:pimalaya/tcal
+```
+
+### Sources
+
+```shell
+git clone https://github.com/pimalaya/tcal
+cd tcal
+nix run
 ```
 
 ## Configuration
@@ -89,7 +107,7 @@ The configuration is loaded from the first existing path among:
 - `$HOME/.config/cardamum/config.toml`
 - `$HOME/.cardamumrc`
 
-Override with `cardamum -c <PATH>` or the `CARDAMUM_CONFIG` environment variable. Multiple paths can be passed at once, separated by `:`; the first is the base and the rest are deep-merged on top.
+Override with `cardamum -c <PATH>`. Multiple paths can be passed at once, separated by `:`; the first is the base and the rest are deep-merged on top.
 
 Run `cardamum` once with no config file to launch the wizard. The wizard prompts for an account name, an email address, then walks you through the vdir or CardDAV setup. To edit (or add) an account later, use `cardamum account configure <name>`.
 
@@ -99,7 +117,7 @@ A documented sample lives at [config.sample.toml](./config.sample.toml).
 
 ### Shared API
 
-```
+```shell
 cardamum addressbook list
 cardamum addressbook create work --description "Work contacts"
 cardamum card list -k <addressbook-id>
@@ -113,7 +131,7 @@ cardamum card delete -k <addressbook-id> <card-id>
 
 ### Protocol-specific APIs
 
-```
+```shell
 cardamum vdir list
 cardamum vdir create personal --color "#3399ff"
 cardamum carddav discover
@@ -123,18 +141,11 @@ cardamum carddav report <addressbook-id>
 
 ### Account management
 
-```
+```shell
 cardamum account list
 cardamum account check
 cardamum account configure <name>
 ```
-
-## Interfaces
-
-- CLI: this repository
-- TUI: planned
-
-## FAQ
 
 ## License
 

@@ -21,10 +21,9 @@ use pimalaya_cli::prompt;
 #[cfg(feature = "carddav")]
 use pimalaya_config::secret::Secret;
 
-use crate::config::{AccountConfig, Config};
-
 #[cfg(feature = "vdir")]
 use crate::config::VdirConfig;
+use crate::config::{AccountConfig, Config};
 #[cfg(feature = "carddav")]
 use crate::config::{CarddavAuthConfig, CarddavConfig};
 

@@ -90,10 +90,8 @@ pub struct AccountConfig {
     pub card: CardConfig,
 
     #[cfg(feature = "vdir")]
-    #[serde(default)]
     pub vdir: Option<VdirConfig>,
     #[cfg(feature = "carddav")]
-    #[serde(default)]
     pub carddav: Option<CarddavConfig>,
 }
 
@@ -117,13 +115,11 @@ pub struct CarddavConfig {
     /// `.well-known`) by pimconf. Convenient but adds DNS + HTTP
     /// round-trips on every run; prefer `server` once it is known.
     pub discover: Option<String>,
-
     /// DAV context root. Principal + addressbook-home-set discovery
     /// start from this URL; the `.well-known` step is skipped. Accepts
     /// a full URL, a bare domain, or `domain:port`; bare authorities
     /// default to `https://`.
     pub server: Option<String>,
-
     /// Pre-resolved addressbook home-set URL. Skips every discovery
     /// step; the client lists addressbooks at this URL.
     pub home: Option<Url>,
@@ -131,7 +127,6 @@ pub struct CarddavConfig {
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
-
     /// Authentication configuration.
     pub auth: CarddavAuthConfig,
 }
@@ -158,7 +153,6 @@ pub struct AddressbookConfig {
     /// Addressbook id used by `card` commands when their
     /// `-k/--addressbook` flag is omitted.
     pub default: Option<String>,
-
     #[serde(default)]
     pub list: AddressbookListConfig,
 }
@@ -194,7 +188,6 @@ pub struct CardListConfig {
     /// wins when passed; otherwise the merged account/global value
     /// wins; otherwise the hard fallback (25) is used.
     pub page_size: Option<u32>,
-
     #[serde(default)]
     pub table: CardListTableConfig,
 }

@@ -5,6 +5,8 @@ use pimalaya_cli::printer::{Message, Printer};
 use crate::shared::client::AddressbookClient;
 
 /// Create a new addressbook.
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct AddressbookCreateCommand {
     /// Human-readable name of the addressbook to create.

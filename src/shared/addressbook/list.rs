@@ -10,6 +10,9 @@ use serde::Serialize;
 use crate::shared::client::AddressbookClient;
 
 /// List every addressbook available to the active account.
+///
+/// JSON output: `{"addressbooks": [{"id", "name", "description",
+/// "color"}]}`.
 #[derive(Debug, Parser)]
 pub struct AddressbookListCommand;
 

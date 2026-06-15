@@ -5,6 +5,8 @@ use pimalaya_cli::printer::{Message, Printer};
 use crate::shared::{arg::AddressbookIdArg, card::vcard::VcardArg, client::AddressbookClient};
 
 /// Append a vCard to the given addressbook.
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct CardCreateCommand {
     #[command(flatten)]

@@ -10,6 +10,9 @@ use serde::Serialize;
 use crate::vdir::client::VdirClient;
 
 /// List every collection under the configured vdir root.
+///
+/// JSON output: `{"collections": [{"id", "display_name", "description",
+/// "color", "path"}]}`.
 #[derive(Debug, Parser)]
 pub struct VdirCollectionListCommand;
 

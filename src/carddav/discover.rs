@@ -12,6 +12,8 @@ use crate::carddav::client::CarddavClient;
 /// The client resolves its server URL (RFC 6764), `current-user-principal`
 /// (RFC 5397) and `addressbook-home-set` (RFC 6352) at connection time;
 /// this command prints the cached results.
+///
+/// JSON output: `{"server", "principal", "addressbook_home_set"}`.
 #[derive(Debug, Parser)]
 pub struct CarddavDiscoverCommand;
 

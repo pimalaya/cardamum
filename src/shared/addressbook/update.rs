@@ -10,6 +10,8 @@ use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
 /// Each `--*` flag is optional and only updates the corresponding field; unset
 /// fields are left untouched. To clear an optional field, pass an empty value
 /// (e.g. `--description ""`).
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct AddressbookUpdateCommand {
     #[command(flatten)]

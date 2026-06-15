@@ -16,6 +16,8 @@ use crate::{
 /// Loads the TOML configuration, picks the active account (via the
 /// global `--account` flag or the default), and checks each backend
 /// allowed by `--backend`.
+///
+/// JSON output: `{"account", "backends": [{"backend", "ok", "error"}]}`.
 #[derive(Debug, Parser)]
 pub struct AccountCheckCommand;
 

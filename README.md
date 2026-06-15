@@ -191,45 +191,7 @@ addressbook.default = "default"
 
 ## Usage
 
-### Shared API
-
-```sh
-cardamum addressbook list
-cardamum addressbook create work --description "Work contacts"
-cardamum card list -k <addressbook-id>
-cardamum card read -k <addressbook-id> <card-id>
-cardamum card create -k <addressbook-id> contact.vcf
-cardamum card update -k <addressbook-id> <card-id> contact.vcf --if-match <etag>
-cardamum card delete -k <addressbook-id> <card-id>
-```
-
-`--backend auto` (default) picks the first configured backend; pass `--backend vdir` or `--backend carddav` to pin it.
-
-### Protocol-specific APIs
-
-```sh
-cardamum vdir list
-cardamum vdir create personal --color "#3399ff"
-cardamum carddav discover
-cardamum carddav list
-cardamum carddav report <addressbook-id>
-```
-
-### Account management
-
-```sh
-cardamum account list
-cardamum account check
-cardamum account configure --account <name>
-```
-
-### JSON output
-
-Every command accepts the global `--json` flag, which writes a machine-readable JSON document to stdout while logs and the interactive wizard stay on stderr, so the JSON stays clean for piping. List commands wrap their rows under a single key: `addressbook list` emits `{"addressbooks": [...]}`, `card list` emits `{"cards": [...]}`, and `account list` emits `{"accounts": [...]}`. `card read --json` returns the card as `{"id", "etag", "contents"}` (raw vCard in `contents`), and mutating commands return `{"message": "..."}`.
-
-```sh
-cardamum card list -k <addressbook-id> --json | jq '.cards[].id'
-```
+Run `cardamum --help` for the full command tree, and `cardamum <command> --help` for any subcommand's arguments and its JSON output shape (printed when the global `--json` flag is set).
 
 ## License
 

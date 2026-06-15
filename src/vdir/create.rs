@@ -6,6 +6,8 @@ use pimalaya_cli::printer::{Message, Printer};
 use crate::vdir::client::VdirClient;
 
 /// Create a new vdir collection under the configured root.
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct VdirCollectionCreateCommand {
     /// Name of the collection. Used both as on-disk directory name and

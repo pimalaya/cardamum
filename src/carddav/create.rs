@@ -6,6 +6,8 @@ use pimalaya_cli::printer::{Message, Printer};
 use crate::carddav::client::CarddavClient;
 
 /// Create an addressbook collection on the server.
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct CarddavAddressbookCreateCommand {
     /// Identifier (last URL segment) of the addressbook to create.

@@ -13,6 +13,8 @@ use crate::carddav::client::CarddavClient;
 ///
 /// Lists every card UID + ETag advertised by the server, without
 /// fetching the bodies. Wraps RFC 6352 §8.6.
+///
+/// JSON output: `{"entries": [{"id", "etag"}]}`.
 #[derive(Debug, Parser)]
 pub struct CarddavReportCommand {
     /// Identifier of the addressbook to query.

@@ -17,6 +17,8 @@ use crate::{
 ///
 /// Each row shows the account name, the backends with a config block,
 /// and whether it is the default account.
+///
+/// JSON output: `{"accounts": [{"name", "default", "backends"}]}`.
 #[derive(Debug, Parser)]
 pub struct AccountListCommand;
 

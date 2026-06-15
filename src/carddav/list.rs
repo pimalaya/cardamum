@@ -10,6 +10,9 @@ use serde::Serialize;
 use crate::carddav::client::CarddavClient;
 
 /// List every addressbook under the discovered home-set.
+///
+/// JSON output: `{"addressbooks": [{"id", "display_name", "description",
+/// "color"}]}`.
 #[derive(Debug, Parser)]
 pub struct CarddavAddressbookListCommand;
 

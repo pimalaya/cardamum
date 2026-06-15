@@ -10,6 +10,9 @@ use serde::Serialize;
 use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
 
 /// List vCards inside the given addressbook.
+///
+/// JSON output: `{"cards": [{"id", "addressbook_id", "etag", "fn_value",
+/// "email", "tel"}]}`.
 #[derive(Debug, Parser)]
 pub struct CardListCommand {
     #[command(flatten)]

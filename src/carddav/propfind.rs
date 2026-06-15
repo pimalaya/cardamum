@@ -8,6 +8,9 @@ use crate::carddav::client::CarddavClient;
 ///
 /// Helper around RFC 6352 `GET`: reads the raw vCard bytes and prints
 /// the ETag, leaving the body on stdout when `--raw` is set.
+///
+/// JSON output: `{"message": "..."}`, carrying the ETag (or the raw
+/// vCard body with `--raw`).
 #[derive(Debug, Parser)]
 pub struct CarddavPropfindCommand {
     /// Identifier of the parent addressbook.

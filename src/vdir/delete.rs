@@ -5,6 +5,8 @@ use pimalaya_cli::printer::{Message, Printer};
 use crate::vdir::client::VdirClient;
 
 /// Delete the given vdir collection.
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct VdirCollectionDeleteCommand {
     /// Name of the collection (final path segment under the vdir root).

@@ -5,6 +5,8 @@ use pimalaya_cli::printer::{Message, Printer};
 use crate::shared::client::AddressbookClient;
 
 /// Delete the given addressbook and every card it contains.
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct AddressbookDeleteCommand {
     /// Addressbook to delete. Mandatory: unlike the other shared-API

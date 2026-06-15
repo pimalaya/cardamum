@@ -41,6 +41,8 @@ Each subcommand is a clap-derived struct carrying its own arguments, with an `ex
 
 Output follows the Pimalaya stdout/stderr rule: all data and errors go to stdout through `pimalaya_cli::printer` (with `--json` switching every command to JSON), and stderr carries logs only. A command returns a `Serialize + Display` type to the printer rather than printing inline.
 
+Each command's doc comment is its `--help` text: the first paragraph is the short summary shown by `-h`, and the full text (shown by `--help`) ends with the command's JSON output shape. So `cardamum <command> --help` is the canonical usage reference for both humans and AI agents; the README intentionally documents no per-command usage.
+
 ## Configuration and the wizard
 
 Config is loaded by pimalaya-config from the first existing path among the three canonical locations (or the `-c` / `CARDAMUM_CONFIG` override), with later paths deep-merged on top of the first. The schema is multi-account: a top-level block plus named `[accounts.<name>]` blocks, each carrying an optional `[carddav]` and/or `[vdir]` sub-block. `Account::from(config).merge(Account::from(account_config))` flattens the global defaults under the selected account.

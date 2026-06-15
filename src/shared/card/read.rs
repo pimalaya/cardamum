@@ -8,6 +8,9 @@ use serde::Serialize;
 use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
 
 /// Read the raw vCard bytes of the given card.
+///
+/// JSON output: `{"id", "etag", "contents"}`, with the raw vCard in
+/// `contents`.
 #[derive(Debug, Parser)]
 pub struct CardReadCommand {
     #[command(flatten)]

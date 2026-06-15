@@ -5,6 +5,8 @@ use pimalaya_cli::printer::{Message, Printer};
 use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
 
 /// Permanently delete the given card.
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct CardDeleteCommand {
     #[command(flatten)]

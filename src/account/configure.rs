@@ -13,6 +13,8 @@ use crate::{config::Config, wizard};
 /// is created when no account with that name exists); without it, the
 /// default account is edited. Runs the CardDAV / vdir wizard with the
 /// account's current values as defaults.
+///
+/// JSON output: none; the command is an interactive wizard only.
 #[derive(Debug, Parser)]
 pub struct AccountConfigureCommand;
 

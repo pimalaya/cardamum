@@ -5,6 +5,8 @@ use pimalaya_cli::printer::{Message, Printer};
 use crate::shared::{arg::AddressbookIdArg, card::vcard::VcardArg, client::AddressbookClient};
 
 /// Replace the bytes of an existing vCard.
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct CardUpdateCommand {
     #[command(flatten)]

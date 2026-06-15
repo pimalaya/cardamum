@@ -7,15 +7,13 @@ use io_addressbook::card::Card;
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::shared::client::AddressbookClient;
+use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
 
 /// List vCards inside the given addressbook.
 #[derive(Debug, Parser)]
 pub struct CardListCommand {
-    /// Identifier of the parent addressbook. Falls back to the
-    /// `addressbook.default` config when omitted.
-    #[arg(short = 'k', long = "addressbook", value_name = "ADDRESSBOOK-ID")]
-    pub addressbook_id: Option<String>,
+    #[command(flatten)]
+    pub addressbook: AddressbookIdArg,
     /// 1-indexed page number to fetch.
     #[arg(short, long, value_name = "N", default_value_t = 1)]
     pub page: u32,
@@ -26,7 +24,7 @@ pub struct CardListCommand {
 
 impl CardListCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
-        let addressbook_id = client.account.addressbook_id(self.addressbook_id)?;
+        let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         let page_size = self
             .page_size
             .unwrap_or(client.account.cards_list_page_size());

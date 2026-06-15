@@ -1,4 +1,4 @@
-# 📇 Cardamum [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya) [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-orange)](./LICENSE-MIT) [![crates.io](https://img.shields.io/crates/v/cardamum.svg)](https://crates.io/crates/cardamum)
+# 📇 Cardamum [![crates.io](https://img.shields.io/crates/v/cardamum.svg)](https://crates.io/crates/cardamum) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya)
 
 CLI to manage contacts.
 
@@ -14,6 +14,12 @@ CLI to manage contacts.
   - [Nix](#nix)
   - [Sources](#sources)
 - [Configuration](#configuration)
+  - [Apple](#apple)
+  - [Google](#google)
+  - [Microsoft](#microsoft)
+  - [Fastmail](#fastmail)
+  - [Proton](#proton)
+  - [Posteo](#posteo)
 - [Usage](#usage)
 - [License](#license)
 - [AI disclosure](#ai-disclosure)
@@ -46,13 +52,13 @@ CLI to manage contacts.
 
 As root:
 
-```shell
+```sh
 curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | sudo sh
 ```
 
 As a regular user:
 
-```shell
+```sh
 curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | PREFIX=~/.local sh
 ```
 
@@ -65,13 +71,13 @@ For a more up-to-date version than the latest release, check out the [releases](
 
 ### Cargo
 
-```shell
+```sh
 cargo install --locked --git https://github.com/pimalaya/cardamum.git
 ```
 
 With only vdir support:
 
-```shell
+```sh
 cargo install --locked --git https://github.com/pimalaya/cardamum.git \
   --no-default-features \
   --features vdir,rustls-ring
@@ -81,19 +87,19 @@ cargo install --locked --git https://github.com/pimalaya/cardamum.git \
 
 If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
 
-```shell
+```sh
 nix profile install github:pimalaya/tcal
 ```
 
 Or run without installing:
 
-```shell
+```sh
 nix run github:pimalaya/tcal
 ```
 
 ### Sources
 
-```shell
+```sh
 git clone https://github.com/pimalaya/tcal
 cd tcal
 nix run
@@ -109,15 +115,85 @@ The configuration is loaded from the first existing path among:
 
 Override with `cardamum -c <PATH>`. Multiple paths can be passed at once, separated by `:`; the first is the base and the rest are deep-merged on top.
 
-Run `cardamum` once with no config file to launch the wizard. The wizard prompts for an account name, an email address, then walks you through the vdir or CardDAV setup. To edit (or add) an account later, use `cardamum account configure <name>`.
+Run `cardamum` once with no config file to launch the wizard. The wizard prompts for an account name, lets you pick a backend, then walks you through the vdir or CardDAV setup (CardDAV also asks for an email and tests the connection before saving). To edit (or add) an account later, use `cardamum account configure --account <name>`.
 
 A documented sample lives at [config.sample.toml](./config.sample.toml).
+
+### Apple
+
+Apple exposes contacts via CardDAV, but you cannot use your regular password. You need to generate an [app-specific password](https://support.apple.com/en-us/HT204397) (required once two-factor authentication is on):
+
+```toml
+[accounts.example]
+carddav.discover = "icloud.com"
+carddav.server = "https://contacts.icloud.com/"
+# The home URL is usually of this shape:
+#carddav.home = "https://contacts.icloud.com/<id>/principal/"
+
+carddav.auth.basic.username = "example@icloud.com"
+carddav.auth.basic.password.raw = "***"
+
+addressbook.default = "card"
+```
+
+### Google
+
+Google exposes contacts via CardDAV, but only behind [OAuth 2.0](https://developers.google.com/people/carddav). Once set up, you can use any tool to manage token refreshing (for example using [Ortie](https://github.com/pimalaya/ortie)):
+
+```toml
+[accounts.example]
+carddav.home = "https://www.googleapis.com/carddav/v1/principals/<email>/lists"
+carddav.auth.bearer.token.command = ["ortie", "token", "show"]
+addressbook.default = "default"
+```
+
+### Microsoft
+
+Not supported *yet*: Microsoft offers no CardDAV for contacts, only the [Graph API](https://learn.microsoft.com/en-us/graph/api/resources/contact). Native Graph support is planned.
+
+### Proton
+
+Not supported: Proton exposes no contacts API, neither CardDAV nor through [Proton Bridge](https://proton.me/mail/bridge) (which proxies mail only). Contacts are reachable only from Proton's own web and mobile apps.
+
+### Fastmail
+
+Standard CardDAV with the mailbox address and its app password.
+
+```toml
+[accounts.example]
+carddav.discover = "fastmail.com"
+carddav.server = "https://carddav.fastmail.com/dav/"
+# The home URL is usually of this shape:
+#carddav.home = "https://carddav.fastmail.com/dav/addressbooks/user/<email>/"
+
+carddav.auth.basic.username = "example@fastmail.com"
+carddav.auth.basic.password.raw = "***"
+
+addressbook.default = "Default"
+```
+
+### Posteo
+
+Standard CardDAV with the mailbox address and its password.
+
+```toml
+[accounts.posteo]
+carddav.discover = "posteo.de"
+carddav.server = "https://posteo.de:8843/"
+# The home URL is usually of this shape:
+#carddav.home = "https://posteo.de:8843/addressbooks/<username>/"
+
+carddav.auth.basic.username = "example@posteo.net"
+carddav.auth.basic.password.raw = "***"
+
+addressbook.default = "default"
+```
 
 ## Usage
 
 ### Shared API
 
-```shell
+```sh
 cardamum addressbook list
 cardamum addressbook create work --description "Work contacts"
 cardamum card list -k <addressbook-id>
@@ -131,7 +207,7 @@ cardamum card delete -k <addressbook-id> <card-id>
 
 ### Protocol-specific APIs
 
-```shell
+```sh
 cardamum vdir list
 cardamum vdir create personal --color "#3399ff"
 cardamum carddav discover
@@ -141,10 +217,18 @@ cardamum carddav report <addressbook-id>
 
 ### Account management
 
-```shell
+```sh
 cardamum account list
 cardamum account check
-cardamum account configure <name>
+cardamum account configure --account <name>
+```
+
+### JSON output
+
+Every command accepts the global `--json` flag, which writes a machine-readable JSON document to stdout while logs and the interactive wizard stay on stderr, so the JSON stays clean for piping. List commands wrap their rows under a single key: `addressbook list` emits `{"addressbooks": [...]}`, `card list` emits `{"cards": [...]}`, and `account list` emits `{"accounts": [...]}`. `card read --json` returns the card as `{"id", "etag", "contents"}` (raw vCard in `contents`), and mutating commands return `{"message": "..."}`.
+
+```sh
+cardamum card list -k <addressbook-id> --json | jq '.cards[].id'
 ```
 
 ## License

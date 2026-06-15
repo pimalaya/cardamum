@@ -7,8 +7,10 @@ use crate::shared::client::AddressbookClient;
 /// Delete the given addressbook and every card it contains.
 #[derive(Debug, Parser)]
 pub struct AddressbookDeleteCommand {
-    /// Backend-assigned identifier of the addressbook to delete.
-    #[arg(value_name = "ADDRESSBOOK-ID")]
+    /// Addressbook to delete. Mandatory: unlike the other shared-API
+    /// commands, deletion never falls back to the `addressbook.default`
+    /// config.
+    #[arg(short = 'k', long = "addressbook", value_name = "ADDRESSBOOK-ID")]
     pub id: String,
 }
 

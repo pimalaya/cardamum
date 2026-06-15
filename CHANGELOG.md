@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Extracted the `-k/--addressbook ADDRESSBOOK-ID` flag into a shared argument reused across the whole shared API; `card` commands and `addressbook update` now take it as a non-positional flag (replacing positional ids) with the usual fallback: the flag wins, otherwise `addressbook.default`, otherwise the command bails.
+- Switched `account configure` from a positional account name to the global `-a/--account` flag, for consistency with the rest of the CLI; without it, the default account is edited.
+- Replaced `addressbook delete`'s positional id with a `-k/--addressbook` flag (consistent name with the rest of the API) that stays mandatory: deletion never falls back to `addressbook.default`, so it always targets an explicit addressbook.
+- Reused an existing account's secret when editing: a stored shell-command secret now prefills the command prompt (and defaults the secret strategy) instead of showing the generic one.
+- Documented per-provider CardDAV setup in the README (iCloud, Gmail via OAuth 2.0 / ortie, Posteo) plus unsupported-provider notes (Proton, Microsoft).
+- Reworked the first-run wizard: defaulted the account name to `personal` instead of the reserved `default`, replaced the per-backend yes/no questions with a single backend picker, and asked for the email only on the CardDAV path.
+- Reused the shared pimalaya-cli CardDAV wizard in both the first-run wizard and `account configure`, and wrapped it with a connection test that re-runs the wizard (prefilled) on failure instead of leaving the program.
+- Unified `account configure` with the first-run wizard onto a single shared flow (same backend picker and prompts); the only difference is that editing seeds every default from the current account and skips CardDAV discovery (to discover a new server, create a new account).
+- Reworked CardDAV discovery to run PACC, then `.well-known`, then RFC 6764 SRV (last), combined in the CLI rather than the lib; the wizard probes them behind the scenes with one spinner per mechanism and prefills a single `CardDAV server:` prompt with the result.
+- Replaced the wizard's hostname/encryption/port/home prompts with the single `server` prompt, defaulted the CardDAV username to the account email, recorded both `discover` and `server` in the written config (server wins), and printed the config path once everything succeeds.
+- Deferred writing the configuration file until the wizard fully succeeds, so a failed run no longer leaves a half-written file that blocks a restart.
+- Pruned empty tables, rendered account backend blocks as dotted keys, and wrote shell-command secrets as plain strings when saving the configuration, so generated files match the shape of config.sample.toml.
 - Made the parent addressbook of every `card` command an optional `-k/--addressbook ADDRESSBOOK-ID` flag instead of a positional argument; when omitted it falls back to the new `addressbook.default` config, otherwise the command bails.
 - Changed `card create` and `card update` to take their vCard as a trailing positional `VCARD` argument (a path, raw vCard contents, or `-` for stdin) instead of the `--file` flag, matching `tcard edit`.
 - Accepted a bare domain or `domain:port` in addition to a full URL for `carddav.server`, defaulting bare authorities to `https://` (matching Himalaya's server-string handling).

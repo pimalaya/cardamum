@@ -31,7 +31,7 @@ impl AccountCheckCommand {
             Some(config) => config,
             None => bail!(
                 "No configuration found. Run `cardamum` once to launch the wizard, \
-                 or `cardamum account configure <name>` to create one."
+                 or `cardamum account configure --account <name>` to create one."
             ),
         };
 

@@ -11,8 +11,9 @@
 # rest are deep-merged on top of it.
 #
 # Run `cardamum` once with no config file to launch the wizard, which prompts
-# for an account name, an email address, then walks you through the vdir or
-# CardDAV setup. `cardamum account configure <name>` can be used afterwards to
+# for an account name, lets you pick a backend, then walks you through the vdir
+# or CardDAV setup (CardDAV also asks for an email and tests the connection
+# before saving). `cardamum account configure --account <name>` can be used afterwards to
 # edit (or add) an account through the same wizard.
 # ================================================================================
 
@@ -85,31 +86,36 @@ vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
 # --------------------------------------------------------------------------------
 # CardDAV backend
 #
-# Three mutually exclusive routes resolve the addressbook home set:
+# The addressbook home set is resolved from the first of these that is set, in
+# order of precedence:
 #
-# 1. `carddav.discover`: a bare domain resolved to a server URL by pimconf
-#    (RFC 6764 SRV + `.well-known`), then principal + home-set discovery.
-#    Safest, but adds DNS + HTTP round-trips on every run.
-# 2. `carddav.server`: principal + home-set discovery start from the given
-#    context root. Skips RFC 6764 resolution. Accepts a full URL, a bare
-#    domain, or `domain:port`; bare authorities default to `https://`.
-# 3. `carddav.home`: pre-resolved addressbook home set URL; every discovery
+# 1. `carddav.home`: pre-resolved addressbook home set URL; every discovery
 #    step is skipped. Fastest, least safe.
+# 2. `carddav.server`: principal + home-set discovery start from the given
+#    context root. Skips domain resolution. Accepts a full URL, a bare domain,
+#    or `domain:port`; bare authorities default to `https://`.
+# 3. `carddav.discover`: a bare domain resolved to a server URL at runtime
+#    (PACC, then `.well-known`, then RFC 6764 SRV last), then principal +
+#    home-set discovery. Convenient but adds DNS + HTTP round-trips on every run.
 #
-# Exactly one of the three should be set.
+# The wizard records both `discover` and `server`: `server` wins, and `discover`
+# stays as a fallback to re-resolve from.
 # --------------------------------------------------------------------------------
 
 carddav.discover = "example.org"
-#carddav.server = "https://carddav.example.org/dav/addressbooks"
+carddav.server = "https://carddav.example.org/dav/addressbooks"
 #carddav.home = "https://carddav.example.org/dav/addressbooks/user/me/default"
 
-# Basic authentication (RFC 7617).
+# Basic authentication (RFC 7617). A `command` secret is a shell command line
+# (string, run through the platform shell) or a program + args list; a `raw`
+# secret is stored in plaintext.
 carddav.auth.basic.username = "username"
-carddav.auth.basic.password.raw = "password"
+carddav.auth.basic.password.command = "pass show example"
 #carddav.auth.basic.password.command = ["pass", "show", "example"]
+#carddav.auth.basic.password.raw = "password"
 
 # Bearer authentication (RFC 6750), mainly for OAuth 2.0.
-#carddav.auth.bearer.token.command = ["ortie", "token", "show"]
+#carddav.auth.bearer.token.command = "ortie token show"
 #carddav.auth.bearer.token.raw = "oauth2-token"
 
 # TLS configuration.

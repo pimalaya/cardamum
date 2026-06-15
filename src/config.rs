@@ -10,6 +10,8 @@ use pimalaya_config::toml::TomlConfig;
 use pimalaya_config::toml::shell_expanded_string;
 use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsProvider};
 use serde::{Deserialize, Serialize};
+use toml_edit::{DocumentMut, Item, Table};
+#[cfg(feature = "carddav")]
 use url::Url;
 
 /// Global configuration.
@@ -59,8 +61,24 @@ impl Config {
     /// Serializes `self` to TOML and writes it to `path`, creating any
     /// missing parent directories. Used by the wizard to persist a
     /// freshly-built configuration.
+    ///
+    /// Empty sub-tables left by untouched defaults are pruned, and each
+    /// account's backend blocks are rendered as dotted keys, so the file
+    /// matches the shape of config.sample.toml instead of carrying bare
+    /// `[table]` / `[card.list.table]` headers.
     pub fn write(&self, path: &Path) -> Result<()> {
-        let toml = toml::to_string_pretty(self).context("Serialize TOML config error")?;
+        let raw = toml::to_string(self).context("Serialize TOML config error")?;
+        let mut doc: DocumentMut = raw.parse().context("Parse serialized TOML config error")?;
+
+        prune_empty_tables(doc.as_table_mut());
+
+        if let Some(accounts) = doc.get_mut("accounts").and_then(Item::as_table_mut) {
+            for (_, account) in accounts.iter_mut() {
+                if let Some(account) = account.as_table_mut() {
+                    set_dotted(account);
+                }
+            }
+        }
 
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).with_context(|| {
@@ -68,7 +86,7 @@ impl Config {
             })?;
         }
 
-        fs::write(path, toml)
+        fs::write(path, doc.to_string())
             .with_context(|| format!("Write TOML config `{}` error", path.display()))?;
 
         Ok(())
@@ -111,9 +129,11 @@ pub struct VdirConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CarddavConfig {
-    /// Bare domain resolved to a server URL via RFC 6764 (SRV +
-    /// `.well-known`) by pimconf. Convenient but adds DNS + HTTP
-    /// round-trips on every run; prefer `server` once it is known.
+    /// Bare domain resolved to a server URL at runtime: PACC first,
+    /// then RFC 6764 (SRV record, its TXT `path`, then `.well-known`);
+    /// Google domains use an authenticated `.well-known` probe.
+    /// Convenient but adds DNS + HTTP round-trips on every run; `server`
+    /// or `home` win when set and skip this.
     pub discover: Option<String>,
     /// DAV context root. Principal + addressbook-home-set discovery
     /// start from this URL; the `.well-known` step is skipped. Accepts
@@ -303,6 +323,35 @@ impl From<TlsConfig> for Tls {
                 alpn: Vec::new(),
             },
             cert: config.cert,
+        }
+    }
+}
+
+/// Recursively removes empty sub-tables so the writer never emits bare
+/// `[table]` / `[card.list.table]` headers for untouched defaults.
+fn prune_empty_tables(table: &mut Table) {
+    let keys: Vec<String> = table.iter().map(|(key, _)| key.to_owned()).collect();
+
+    for key in keys {
+        if let Some(child) = table.get_mut(&key).and_then(Item::as_table_mut) {
+            prune_empty_tables(child);
+
+            if child.is_empty() {
+                table.remove(&key);
+            }
+        }
+    }
+}
+
+/// Recursively flags every sub-table as dotted, turning nested
+/// `[a.b.c]` headers into compact `a.b.c = ...` keys.
+fn set_dotted(table: &mut Table) {
+    let keys: Vec<String> = table.iter().map(|(key, _)| key.to_owned()).collect();
+
+    for key in keys {
+        if let Some(child) = table.get_mut(&key).and_then(Item::as_table_mut) {
+            child.set_dotted(true);
+            set_dotted(child);
         }
     }
 }

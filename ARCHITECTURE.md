@@ -11,7 +11,7 @@ cardamum is an **application**, the top layer of the Pimalaya stack: it has no l
 - [io-addressbook](https://github.com/pimalaya/io-addressbook): the cross-protocol addressbook/card domain API;
 - [io-webdav](https://github.com/pimalaya/io-webdav): the CardDAV (WebDAV) protocol coroutines;
 - [io-vdir](https://github.com/pimalaya/io-vdir): the local vdir filesystem coroutines;
-- [pimconf](https://github.com/pimalaya/pimconf): CardDAV server discovery (RFC 6764 SRV + `.well-known`);
+- [pimconf](https://github.com/pimalaya/pimconf): CardDAV server discovery (PACC, and RFC 6764 SRV + TXT + `.well-known`);
 - [pimalaya-cli](https://github.com/pimalaya/cli), [pimalaya-config](https://github.com/pimalaya/config), [pimalaya-stream](https://github.com/pimalaya/stream): shared CLI plumbing (clap args, printer, logger), TOML config loading, and the blocking I/O runtime.
 
 The sans-I/O coroutines live in those libraries; cardamum never implements one. It consumes their blocking `*Std` clients (`AddressbookClientStd`, `WebdavClientStd`, `VdirClient`), which run pimalaya-stream under the hood. So all real I/O (network, filesystem, clock, DNS) is concentrated in the libraries; cardamum only orchestrates them and renders results.
@@ -53,7 +53,7 @@ The `[carddav]` block resolves the addressbook home set through one of three rou
 
 - `home`: short-circuits all discovery; the configured URL is used as the addressbook home set directly;
 - `server`: connects to the given context root, then walks current-user-principal (RFC 5397) and addressbook-home-set (RFC 6352);
-- `discover`: resolves a bare domain to a context root through pimconf (RFC 6764 SRV + `.well-known`) before running that same walk.
+- `discover`: resolves a bare domain to a context root before running that same walk: PACC first, then RFC 6764 (SRV record, its TXT `path`, then `.well-known`) through pimconf; Google domains use an authenticated `.well-known` probe.
 
 ## Module layout
 

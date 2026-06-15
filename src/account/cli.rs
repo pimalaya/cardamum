@@ -36,7 +36,7 @@ impl AccountCommand {
         match self {
             Self::List(cmd) => cmd.execute(printer, config_paths),
             Self::Check(cmd) => cmd.execute(printer, config_paths, account_name, backend),
-            Self::Configure(cmd) => cmd.execute(printer, config_paths),
+            Self::Configure(cmd) => cmd.execute(printer, config_paths, account_name),
         }
     }
 }

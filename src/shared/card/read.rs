@@ -5,15 +5,13 @@ use clap::Parser;
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::shared::client::AddressbookClient;
+use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
 
 /// Read the raw vCard bytes of the given card.
 #[derive(Debug, Parser)]
 pub struct CardReadCommand {
-    /// Identifier of the parent addressbook. Falls back to the
-    /// `addressbook.default` config when omitted.
-    #[arg(long = "addressbook", short = 'k', value_name = "ADDRESSBOOK-ID")]
-    pub addressbook_id: Option<String>,
+    #[command(flatten)]
+    pub addressbook: AddressbookIdArg,
     /// Card UID.
     #[arg(value_name = "CARD-ID")]
     pub card_id: String,
@@ -21,7 +19,7 @@ pub struct CardReadCommand {
 
 impl CardReadCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
-        let addressbook_id = client.account.addressbook_id(self.addressbook_id)?;
+        let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         let card = client.get_card(&addressbook_id, &self.card_id)?;
         let card = Card {
             id: card.id,

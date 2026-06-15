@@ -57,6 +57,7 @@ secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
 shellexpand = "3.1"
 toml = "0.8"
+toml_edit = "0.22"
 url = { version = "2.5", features = ["serde"] }
 
 [patch.crates-io]
@@ -66,4 +67,5 @@ io-http.git = "https://github.com/pimalaya/io-http"
 io-vdir.git = "https://github.com/pimalaya/io-vdir"
 io-webdav.git = "https://github.com/pimalaya/io-webdav"
 pimalaya-cli.git = "https://github.com/pimalaya/cli"
+pimalaya-config.git = "https://github.com/pimalaya/config"
 pimconf.git = "https://github.com/pimalaya/pimconf"

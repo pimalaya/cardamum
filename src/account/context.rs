@@ -78,7 +78,7 @@ impl Account {
             .unwrap_or(DEFAULT_CARDS_LIST_PAGE_SIZE)
     }
 
-    /// Resolves the addressbook id a `card` command operates on: the
+    /// Resolves the addressbook id a shared-API command operates on: the
     /// `-k/--addressbook` flag wins; otherwise the `addressbook.default`
     /// config is used; otherwise the command bails.
     pub fn addressbook_id(&self, flag: Option<String>) -> Result<String> {

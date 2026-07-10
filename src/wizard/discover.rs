@@ -3,9 +3,9 @@
 //! Triggered by `cli::load_or_wizard` when no config file is found
 //! (TomlConfig::from_paths_or_default returned `Ok(None)`).
 //!
-//! Confirms with the user, asks for an account name, then runs the
-//! shared account flow (see [`crate::wizard::account`]) with no
-//! existing defaults, and writes the result.
+//! Confirms with the user, then runs the shared account flow (see
+//! [`crate::wizard::account`]) with no existing defaults, and writes the
+//! result.
 
 use std::{collections::HashMap, path::Path, process::exit};
 
@@ -25,8 +25,7 @@ pub fn run_or_exit(target: &Path) -> Result<Config> {
         exit(0);
     }
 
-    let account_name = prompt::text("Account name:", Some("personal"))?;
-    let account = account::configure(&account_name, true, None)?;
+    let (account_name, account) = account::configure_new()?;
 
     let config = Config {
         accounts: HashMap::from([(account_name, account)]),

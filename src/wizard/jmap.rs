@@ -19,7 +19,7 @@ use crate::{
 };
 
 const BASIC: &str = "Basic (username + password)";
-const BEARER: &str = "Bearer (API or OAuth 2.0 access token)";
+const BEARER: &str = "Bearer (token)";
 const AUTHS: [&str; 2] = [BASIC, BEARER];
 
 /// Runs the JMAP wizard until the session opens: the discovered entry
@@ -52,7 +52,7 @@ pub fn configure(
 
         let strategy = match discovered.map(|d| d.auth) {
             Some(DiscoveredAuth::Password) => BASIC,
-            Some(DiscoveredAuth::Bearer | DiscoveredAuth::Oauth) => BEARER,
+            Some(DiscoveredAuth::Token) => BEARER,
             None => {
                 let default = match existing.map(|c| &c.auth) {
                     Some(JmapAuthConfig::Basic { .. }) => Some(BASIC),

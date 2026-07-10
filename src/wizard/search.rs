@@ -45,21 +45,20 @@ pub enum DiscoveredKind {
 }
 
 /// The discovered authentication method, reduced to what the CLI can
-/// configure: a password, or a bearer token (OAuth tokens are issued
-/// and refreshed by an external tool like ortie).
+/// configure: a password, or a bearer token. OAuth 2.0 grants collapse
+/// to a token; the CLI never runs a grant itself, it reads a token an
+/// external manager (ortie) issues and refreshes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DiscoveredAuth {
     Password,
-    Bearer,
-    Oauth,
+    Token,
 }
 
 impl core::fmt::Display for Discovered {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let auth = match self.auth {
             DiscoveredAuth::Password => "password",
-            DiscoveredAuth::Bearer => "bearer token",
-            DiscoveredAuth::Oauth => "OAuth 2.0, via ortie",
+            DiscoveredAuth::Token => "token",
         };
 
         match &self.kind {
@@ -118,8 +117,9 @@ pub fn search(email: &str) -> Result<Vec<Discovered>> {
         for auth in &config.auth {
             let auth = match auth {
                 AuthMethod::Password => DiscoveredAuth::Password,
-                AuthMethod::Bearer => DiscoveredAuth::Bearer,
-                _ => DiscoveredAuth::Oauth,
+                // Bearer and every OAuth 2.0 grant reduce to pasting a
+                // token; the CLI does not run grants (see [`DiscoveredAuth`]).
+                _ => DiscoveredAuth::Token,
             };
 
             let entry = Discovered {
@@ -137,12 +137,12 @@ pub fn search(email: &str) -> Result<Vec<Discovered>> {
         Some(Provider::Google) => found.push(Discovered {
             kind: DiscoveredKind::Google,
             username: Some(email.to_string()),
-            auth: DiscoveredAuth::Oauth,
+            auth: DiscoveredAuth::Token,
         }),
         Some(Provider::Microsoft) => found.push(Discovered {
             kind: DiscoveredKind::Msgraph,
             username: Some(email.to_string()),
-            auth: DiscoveredAuth::Oauth,
+            auth: DiscoveredAuth::Token,
         }),
         None => (),
     }

@@ -7,11 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed a 404 when connecting to a CardDAV server whose discovery (PACC or RFC 6764) hands back a bare origin rather than the context root (fastmail serves contacts under `/dav/` and 404s everything else). The client now probes `.well-known/carddav` and follows its redirect before the principal walk whenever the resolved server path is `/`, mirroring the cardamum-android behaviour.
+
+### Changed
+
+- Collapsed the wizard onto a single opening prompt that takes an email address, a server URL, or a local vdir path (asked before the account name), matching the Cardamum Android onboarding: an email runs provider detection and discovery, a `scheme://` URL is a CardDAV server, and a filesystem path is a local vdir (validated for existence). Dropped the manual per-backend picker; JMAP, Microsoft Graph and Google People are reached through discovery.
+- Dropped OAuth 2.0 from the wizard's authentication choices: since the CLI never runs a grant nor refreshes tokens, it offers only a password or a token, and OAuth-only services surface as a token (issued and refreshed by an external manager such as Ortie).
+
 ### Added
 
 - Added three remote backends alongside CardDAV: JMAP contacts (RFC 8620 + RFC 9610, via io-jmap), the Microsoft Graph contacts API (via io-msgraph), and the Google People API (via io-google-people), each behind its own cargo feature (`jmap`, `msgraph`, `google`). The `--backend` flag and the `account list` / `account check` reports gained the matching variants.
 - Synthesized a vCard document of record for the backends with no native vCard representation: JMAP ContactCards convert through calcard's JSContact codec, while Graph and People contacts project field-by-field with a provider-side stash for the properties that have no first-class slot. The projection modules are ported from cardamum-android so both products treat provider quirks identically.
-- Reworked the wizard around email-driven discovery: a new first pick feeds the address to pimconf's parallel search (fixed provider rules, PACC, RFC 6764 DAV, RFC 8620 JMAP, refined by a `WWW-Authenticate` probe) and lists every discovered service and authentication method as a selectable entry, matching the cardamum-android configuration screen. Manual per-backend entries stay available for CardDAV, JMAP, Microsoft Graph, Google People and vdir.
+- Reworked the wizard around email-driven discovery: a new first pick feeds the address to pimconf's parallel search (fixed provider rules, PACC, RFC 6764 DAV, RFC 8620 JMAP, refined by a `WWW-Authenticate` probe) and lists every discovered service and authentication method as a selectable entry, matching the cardamum-android configuration screen.
 
 ### Changed
 

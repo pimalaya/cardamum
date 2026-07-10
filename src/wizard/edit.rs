@@ -20,7 +20,7 @@ pub fn edit_account(target: &Path, mut config: Config, account_name: &str) -> Re
         .map(|a| a.default)
         .unwrap_or(is_first_account);
 
-    let account = account::configure(account_name, default, existing)?;
+    let account = account::configure_existing(account_name, default, existing)?;
 
     config.accounts.insert(account_name.to_owned(), account);
     account::write(&config, target)?;

@@ -1,13 +1,14 @@
 //! Shared CardDAV wizard.
 //!
-//! A single discovery flow: collects authentication, then opens the
-//! client through the `discover` route (which resolves the server via
-//! PACC/RFC 6764, or Google's authenticated `.well-known`), and on
-//! success persists the resolved `home` so later runs skip discovery. A
-//! failed connection re-runs the prompts. Used both to create an
-//! account and to re-configure an existing one.
+//! Two entry points, one per way the endpoint is known. The user typed a
+//! server URL: [`configure_server`] prompts the authentication, then
+//! opens the client through the `server` route. Discovery pinned the
+//! endpoint and the authentication method: [`configure_discovered`]
+//! prompts only the credentials. Both persist the resolved `home` on
+//! success so later runs skip discovery, and re-run the prompts on a
+//! failed connection.
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use pimalaya_cli::{
     prompt,
     spinner::Spinner,
@@ -17,7 +18,7 @@ use pimalaya_config::{command::shell, secret::Secret};
 use url::Url;
 
 use crate::{
-    carddav::client::{is_google, open_carddav_client},
+    carddav::client::open_carddav_client,
     config::{CarddavAuthConfig, CarddavConfig},
     wizard::{
         search::{Discovered, DiscoveredAuth},
@@ -25,21 +26,15 @@ use crate::{
     },
 };
 
-/// Runs the CardDAV wizard for `account_name` until the connection
-/// succeeds, then returns a [`CarddavConfig`] holding the resolved
-/// `home`. Discovery always runs (the connection test resolves the
-/// server from `discover`), so this one flow both creates and
-/// re-configures accounts; `existing` only seeds the auth defaults.
-pub fn configure(
+/// Runs the CardDAV wizard against a known `server` URL until the
+/// connection succeeds, then returns a [`CarddavConfig`] holding the
+/// resolved `home`. `existing` seeds the auth defaults when editing.
+pub fn configure_server(
     project_name: &str,
     account_name: &str,
-    email: &str,
+    server: &Url,
     existing: Option<&CarddavConfig>,
 ) -> Result<CarddavConfig> {
-    let (_local_part, domain) = email
-        .rsplit_once('@')
-        .ok_or_else(|| anyhow!("Invalid email address `{email}`: missing `@`"))?;
-
     let tls_config = existing.map(|e| e.tls.clone()).unwrap_or_default();
 
     let auth = match existing.map(|e| &e.auth) {
@@ -50,31 +45,23 @@ pub fn configure(
         Some(CarddavAuthConfig::Bearer { token }) => CarddavAuth::Bearer {
             secret: secret_to_wizard(token),
         },
-        // Google only accepts OAuth 2.0, so default a fresh account to
-        // Bearer (the strategy prompt drops Basic via `bearer_only`).
-        None if is_google(domain) => CarddavAuth::Bearer {
-            secret: CarddavSecret::default(),
-        },
         None => CarddavAuth::default(),
     };
 
     let mut defaults = WizardCarddavConfig {
         account_name: account_name.to_owned(),
         project_name: project_name.to_owned(),
-        email: Some(email.to_owned()),
+        email: None,
         auth,
-        bearer_only: is_google(domain),
+        bearer_only: false,
     };
 
     loop {
         let cfg = carddav_wizard::run(&defaults)?;
 
-        // Single flow: always take the `discover` route. It resolves the
-        // server (PACC/RFC 6764, or Google's authenticated
-        // `.well-known`) using the just-collected auth.
         let config = CarddavConfig {
-            discover: Some(domain.to_owned()),
-            server: None,
+            discover: None,
+            server: Some(server.to_string()),
             home: None,
             tls: tls_config.clone(),
             auth: carddav_auth_to_config(cfg.auth.clone()),
@@ -126,7 +113,7 @@ pub fn configure_discovered(
                 let password = secret::configure("CardDAV password", None)?;
                 CarddavAuthConfig::Basic { username, password }
             }
-            DiscoveredAuth::Bearer | DiscoveredAuth::Oauth => {
+            DiscoveredAuth::Token => {
                 let token = secret::configure("CardDAV bearer token", Some("ortie token show"))?;
                 CarddavAuthConfig::Bearer { token }
             }

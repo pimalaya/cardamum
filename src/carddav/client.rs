@@ -19,7 +19,8 @@ use io_http::{
     coroutine::{HttpCoroutine, HttpCoroutineState, HttpYield},
     rfc6750::bearer::HttpAuthBearer,
     rfc7617::basic::HttpAuthBasic,
-    rfc8615::well_known::Http11WellKnown,
+    rfc8615::well_known::{Http11WellKnown, Http11WellKnownOutput},
+    rfc9110::request::HttpRequest,
 };
 use io_webdav::{client::WebdavClientStd as Inner, rfc4918::WebdavAuth};
 use pimalaya_config::toml::TomlConfig;
@@ -127,11 +128,62 @@ pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
         }
     };
 
+    // A bare origin (path `/`) is not necessarily the DAV context root:
+    // PACC and RFC 6764 both hand back e.g. `https://carddav.fastmail.com/`,
+    // yet fastmail 404s every request outside `/dav/*`. Probe
+    // `.well-known/carddav` and follow its redirect first, mirroring the
+    // cardamum-android connect-time probe. No redirect keeps the origin,
+    // which plenty of servers serve the walk from directly.
+    let server = match server.path() {
+        "" | "/" => probe_carddav_context_root(&server, &tls).unwrap_or(server),
+        _ => server,
+    };
+
     let mut client = Inner::connect(&server, &tls, auth)?;
     client.current_user_principal()?;
     client.addressbook_home_set()?;
 
     Ok(client)
+}
+
+/// Probes `.well-known/carddav` on a bare-origin `server` with an
+/// unauthenticated GET, returning the context-root redirect target when
+/// the server publishes one. Silent: a failed probe or a plain response
+/// (no redirect) yields `None`, leaving the origin as-is.
+fn probe_carddav_context_root(server: &Url, tls: &Tls) -> Option<Url> {
+    let host = server.host_str()?;
+    let port = server.port_or_known_default()?;
+    let request = Http11WellKnown::prepare_request(server.as_str(), "carddav").ok()?;
+    let output = run_well_known(host, port, request, tls).ok()?;
+    output.redirect_url
+}
+
+/// Runs a prepared `.well-known` request to completion over a fresh TLS
+/// stream to `host:port`, returning the coroutine output.
+fn run_well_known(
+    host: &str,
+    port: u16,
+    request: HttpRequest,
+    tls: &Tls,
+) -> Result<Http11WellKnownOutput> {
+    let mut stream = StreamStd::connect_tls(host, port, tls)?;
+    let mut coroutine = Http11WellKnown::new(request);
+    let mut buf = [0u8; 8 * 1024];
+    let mut arg: Option<&[u8]> = None;
+
+    loop {
+        match coroutine.resume(arg.take()) {
+            HttpCoroutineState::Complete(Ok(output)) => return Ok(output),
+            HttpCoroutineState::Complete(Err(err)) => return Err(err.into()),
+            HttpCoroutineState::Yielded(HttpYield::WantsWrite(bytes)) => {
+                stream.write_all(&bytes)?;
+            }
+            HttpCoroutineState::Yielded(HttpYield::WantsRead) => {
+                let n = stream.read(&mut buf)?;
+                arg = Some(&buf[..n]);
+            }
+        }
+    }
 }
 
 /// Discovers a CardDAV server URL for `domain`, trying each mechanism
@@ -192,24 +244,7 @@ fn google_carddav_server(auth: &WebdavAuth, tls: &Tls) -> Result<Url> {
         .header("Authorization", bearer.to_authorization())
         .header("Depth", "0");
 
-    let mut stream = StreamStd::connect_tls(GOOGLE_API_HOST, 443, tls)?;
-    let mut coroutine = Http11WellKnown::new(request);
-    let mut buf = [0u8; 8 * 1024];
-    let mut arg: Option<&[u8]> = None;
-
-    let output = loop {
-        match coroutine.resume(arg.take()) {
-            HttpCoroutineState::Complete(Ok(output)) => break output,
-            HttpCoroutineState::Complete(Err(err)) => return Err(err.into()),
-            HttpCoroutineState::Yielded(HttpYield::WantsWrite(bytes)) => {
-                stream.write_all(&bytes)?;
-            }
-            HttpCoroutineState::Yielded(HttpYield::WantsRead) => {
-                let n = stream.read(&mut buf)?;
-                arg = Some(&buf[..n]);
-            }
-        }
-    };
+    let output = run_well_known(GOOGLE_API_HOST, 443, request, tls)?;
 
     if let Some(url) = output.redirect_url {
         return Ok(url);

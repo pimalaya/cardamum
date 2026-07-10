@@ -4,7 +4,7 @@ description = "CLI to manage contacts"
 version = "0.2.0"
 authors = ["soywod <clement.douin@posteo.net>"]
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 categories = ["command-line-utilities"]
 keywords = ["cli", "contact", "carddav", "jmap", "vdir"]
@@ -71,14 +71,13 @@ url = { version = "2.5", features = ["serde"] }
 vcard-rs = { version = "0.0.1", default-features = false, features = ["parser"], optional = true }
 
 [patch.crates-io]
-domain = { git = "https://github.com/nlnetlabs/domain", rev = "b30087125c13e71010d9783a1bcdd9eb9fa3f336" }
-io-google-people.path = "../io-google-people"
-io-http.path = "../io-http"
-io-jmap.path = "../io-jmap"
-io-msgraph.path = "../io-msgraph"
-io-vdir.path = "../io-vdir"
-io-webdav.path = "../io-webdav"
+io-google-people.git = "https://github.com/pimalaya/io-google-people"
+io-http.git = "https://github.com/pimalaya/io-http"
+io-jmap.git = "https://github.com/pimalaya/io-jmap"
+io-msgraph.git = "https://github.com/pimalaya/io-msgraph"
+io-vdir.git = "https://github.com/pimalaya/io-vdir"
+io-webdav.git = "https://github.com/pimalaya/io-webdav"
 pimalaya-cli.git = "https://github.com/pimalaya/cli"
 pimalaya-config.git = "https://github.com/pimalaya/config"
-pimconf.path = "../pimconf"
-vcard-rs.path = "../vcard-rs"
+pimconf.git = "https://github.com/pimalaya/pimconf"
+vcard-rs.git = "https://github.com/pimalaya/vcard"

@@ -1,22 +1,28 @@
 //! Shared account configuration flow.
 //!
-//! Both the first-run wizard and `account configure` walk the exact
-//! same prompts: a backend picker (email discovery first, then one
-//! entry per backend), then the chosen backend's setup. Discovery
-//! mirrors the cardamum-android configuration screen: the email feeds
-//! pimconf's parallel search and every discovered service and
-//! authentication method combination becomes one selectable entry
-//! (see [`crate::wizard::search`]). Editing an existing account seeds
-//! the defaults of its backend flow.
+//! Both the first-run wizard and `account configure` start from one
+//! endpoint prompt, mirroring the cardamum-android onboarding screen: a
+//! single field takes an email address, a server URL, or a local vdir
+//! path, and its shape orients the rest of the setup. An email (or bare
+//! domain) feeds pimconf's parallel search (fixed provider rules, PACC,
+//! RFC 6764 DAV resolve, RFC 8620 JMAP resolve), and every discovered
+//! service and authentication method becomes one selectable entry (see
+//! [`crate::wizard::search`]). A `scheme://` URL is a CardDAV server to
+//! configure by hand. A filesystem path is a local vdir; unlike Android,
+//! it is validated for existence. Editing an existing account seeds the
+//! endpoint prompt with its current value.
 
-use core::fmt;
 use std::path::Path;
 
 use anyhow::{Result, bail};
 use pimalaya_cli::{prompt, spinner::Spinner};
 #[cfg(feature = "carddav")]
 use pimalaya_config::toml::TomlConfig;
+#[cfg(feature = "carddav")]
+use url::Url;
 
+#[cfg(feature = "carddav")]
+use crate::carddav::client::parse_carddav_server;
 #[cfg(feature = "vdir")]
 use crate::config::VdirConfig;
 use crate::config::{AccountConfig, Config};
@@ -32,43 +38,20 @@ use crate::wizard::jmap;
 use crate::wizard::msgraph;
 use crate::wizard::search::{self, DiscoveredKind};
 
-/// Backend offered by the wizard. The config allows several backends
-/// per account for naming convenience; the wizard proposes one.
-#[derive(Clone, Copy, Eq, PartialEq)]
-enum Backend {
-    Discover,
-    #[cfg(feature = "carddav")]
-    Carddav,
-    #[cfg(feature = "jmap")]
-    Jmap,
-    #[cfg(feature = "msgraph")]
-    Msgraph,
-    #[cfg(feature = "google")]
-    Google,
+/// The endpoint prompt label, shared by the create and edit flows.
+const ENDPOINT_PROMPT: &str = "Email address, server URL, or vdir path:";
+
+/// What the endpoint input resolved to, which orients the backend setup.
+enum Target {
     #[cfg(feature = "vdir")]
-    Vdir,
+    Vdir(String),
+    #[cfg(feature = "carddav")]
+    Server(Url),
+    Discover(String),
 }
 
-impl fmt::Display for Backend {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Discover => f.write_str("Automatic discovery (from email address)"),
-            #[cfg(feature = "carddav")]
-            Self::Carddav => f.write_str("Remote CardDAV"),
-            #[cfg(feature = "jmap")]
-            Self::Jmap => f.write_str("Remote JMAP"),
-            #[cfg(feature = "msgraph")]
-            Self::Msgraph => f.write_str("Microsoft Graph API"),
-            #[cfg(feature = "google")]
-            Self::Google => f.write_str("Google People API"),
-            #[cfg(feature = "vdir")]
-            Self::Vdir => f.write_str("Local vdir"),
-        }
-    }
-}
-
-/// The backend config produced by the chosen wizard flow, folded into
-/// the [`AccountConfig`] afterwards.
+/// The backend config produced by the chosen flow, folded into the
+/// [`AccountConfig`] afterwards.
 enum Chosen {
     #[cfg(feature = "vdir")]
     Vdir(VdirConfig),
@@ -82,63 +65,118 @@ enum Chosen {
     Google(crate::config::GoogleConfig),
 }
 
-/// Builds an account through the backend picker and the chosen
-/// backend's prompts. `existing` supplies the defaults when editing;
-/// `None` starts a fresh account.
-#[cfg_attr(not(feature = "carddav"), allow(unused_variables))]
-pub fn configure(
+/// Creates a fresh account: endpoint first, then the account name, then
+/// the oriented backend setup. Returns the chosen name alongside its
+/// config so the caller can key it in the file.
+pub fn configure_new() -> Result<(String, AccountConfig)> {
+    let target = prompt_endpoint(None)?;
+    let account_name = prompt::text("Account name:", Some("personal"))?;
+    let config = configure_target(&account_name, true, None, target)?;
+
+    Ok((account_name, config))
+}
+
+/// Re-configures the already-named `account_name`: the endpoint prompt is
+/// seeded from `existing`, then the oriented backend setup runs with its
+/// current values as defaults.
+pub fn configure_existing(
     account_name: &str,
     default: bool,
     existing: Option<AccountConfig>,
 ) -> Result<AccountConfig> {
-    let backends = vec![
-        Backend::Discover,
-        #[cfg(feature = "carddav")]
-        Backend::Carddav,
-        #[cfg(feature = "jmap")]
-        Backend::Jmap,
-        #[cfg(feature = "msgraph")]
-        Backend::Msgraph,
-        #[cfg(feature = "google")]
-        Backend::Google,
+    let hint = existing.as_ref().and_then(endpoint_hint);
+    let target = prompt_endpoint(hint.as_deref())?;
+
+    configure_target(account_name, default, existing, target)
+}
+
+/// Prompts the endpoint until it resolves to a valid [`Target`],
+/// re-asking on a malformed input or a vdir path that does not exist.
+fn prompt_endpoint(default: Option<&str>) -> Result<Target> {
+    loop {
+        let input = prompt::text(ENDPOINT_PROMPT, default)?;
+
+        match classify(input.trim()) {
+            #[cfg(feature = "vdir")]
+            Ok(Target::Vdir(path)) => {
+                let expanded = shellexpand::tilde(&path);
+                if Path::new(expanded.as_ref()).is_dir() {
+                    return Ok(Target::Vdir(path));
+                }
+                eprintln!("No such vdir directory `{path}`");
+            }
+            Ok(target) => return Ok(target),
+            Err(err) => eprintln!("{err}"),
+        }
+    }
+}
+
+/// Reads the shape of the endpoint input: a filesystem path is a local
+/// vdir, a `scheme://` URL is a CardDAV server, anything else is an
+/// email (or bare domain) to feed discovery.
+fn classify(input: &str) -> Result<Target> {
+    if input.is_empty() {
+        bail!("Empty endpoint; enter an email address, a server URL, or a vdir path");
+    }
+
+    if is_path(input) {
         #[cfg(feature = "vdir")]
-        Backend::Vdir,
-    ];
+        return Ok(Target::Vdir(vdir_path(input)));
+        #[cfg(not(feature = "vdir"))]
+        bail!("`{input}` looks like a vdir path, but vdir support is not compiled in");
+    }
 
-    let backend = prompt::item("Backend:", backends, default_backend(existing.as_ref()))?;
-
-    let chosen = match backend {
-        Backend::Discover => configure_discovery()?,
+    if input.contains("://") {
         #[cfg(feature = "carddav")]
-        Backend::Carddav => {
+        return Ok(Target::Server(parse_carddav_server(input)?));
+        #[cfg(not(feature = "carddav"))]
+        bail!("`{input}` looks like a server URL, but CardDAV support is not compiled in");
+    }
+
+    Ok(Target::Discover(input.to_owned()))
+}
+
+/// Whether the input names a filesystem path (absolute, home-relative,
+/// explicitly relative, or a `file://` URL) rather than a network
+/// endpoint.
+fn is_path(input: &str) -> bool {
+    input.starts_with("file://")
+        || input.starts_with('/')
+        || input.starts_with('~')
+        || input.starts_with("./")
+        || input.starts_with("../")
+}
+
+/// Strips the `file://` scheme from a path input, leaving a bare path.
+#[cfg(feature = "vdir")]
+fn vdir_path(input: &str) -> String {
+    input.strip_prefix("file://").unwrap_or(input).to_owned()
+}
+
+/// Orients the backend setup from the resolved endpoint, then folds the
+/// chosen backend into a fresh [`AccountConfig`] (reusing `existing`'s
+/// rendering options when editing).
+#[cfg_attr(not(feature = "carddav"), allow(unused_variables))]
+fn configure_target(
+    account_name: &str,
+    default: bool,
+    existing: Option<AccountConfig>,
+    target: Target,
+) -> Result<AccountConfig> {
+    let chosen = match target {
+        #[cfg(feature = "vdir")]
+        Target::Vdir(home_dir) => Chosen::Vdir(VdirConfig { home_dir }),
+        #[cfg(feature = "carddav")]
+        Target::Server(url) => {
             let existing = existing.as_ref().and_then(|a| a.carddav.as_ref());
-            Chosen::Carddav(configure_carddav(account_name, existing)?)
+            Chosen::Carddav(carddav::configure_server(
+                Config::project_name(),
+                account_name,
+                &url,
+                existing,
+            )?)
         }
-        #[cfg(feature = "jmap")]
-        Backend::Jmap => {
-            let existing = existing.as_ref().and_then(|a| a.jmap.as_ref());
-            let email = prompt::text("Email address:", None)?;
-            Chosen::Jmap(jmap::configure(&email, existing, None)?)
-        }
-        #[cfg(feature = "msgraph")]
-        Backend::Msgraph => {
-            let existing = existing.as_ref().and_then(|a| a.msgraph.as_ref());
-            Chosen::Msgraph(msgraph::configure(existing)?)
-        }
-        #[cfg(feature = "google")]
-        Backend::Google => {
-            let existing = existing.as_ref().and_then(|a| a.google.as_ref());
-            Chosen::Google(google::configure(existing)?)
-        }
-        #[cfg(feature = "vdir")]
-        Backend::Vdir => {
-            let default_home = existing
-                .as_ref()
-                .and_then(|a| a.vdir.as_ref())
-                .map(|v| v.home_dir.clone());
-            let home_dir = prompt::text("Vdir home directory:", default_home.as_deref())?;
-            Chosen::Vdir(VdirConfig { home_dir })
-        }
+        Target::Discover(email) => configure_discovery(&email)?,
     };
 
     let mut config = AccountConfig {
@@ -176,16 +214,14 @@ pub fn configure(
 
 /// Runs the email-driven discovery flow: search the services reachable
 /// from the address, let the user pick one, and configure its backend.
-fn configure_discovery() -> Result<Chosen> {
-    let email = prompt::text("Email address:", None)?;
-
+fn configure_discovery(email: &str) -> Result<Chosen> {
     let spinner = Spinner::start("Searching services");
-    let mut found = search::search(&email)?;
+    let mut found = search::search(email)?;
     retain_supported(&mut found);
     spinner.success(format!("Found {} service(s)", found.len()));
 
     if found.is_empty() {
-        bail!("No contacts service discovered for `{email}`; configure one manually");
+        bail!("No contacts service discovered for `{email}`; enter a server URL instead");
     }
 
     let choice = prompt::item("Service:", found, None)?;
@@ -193,10 +229,10 @@ fn configure_discovery() -> Result<Chosen> {
     match &choice.kind {
         #[cfg(feature = "carddav")]
         DiscoveredKind::Carddav(url) => Ok(Chosen::Carddav(carddav::configure_discovered(
-            &email, url, &choice,
+            email, url, &choice,
         )?)),
         #[cfg(feature = "jmap")]
-        DiscoveredKind::Jmap(_) => Ok(Chosen::Jmap(jmap::configure(&email, None, Some(&choice))?)),
+        DiscoveredKind::Jmap(_) => Ok(Chosen::Jmap(jmap::configure(email, None, Some(&choice))?)),
         #[cfg(feature = "msgraph")]
         DiscoveredKind::Msgraph => Ok(Chosen::Msgraph(msgraph::configure(None)?)),
         #[cfg(feature = "google")]
@@ -234,57 +270,35 @@ fn retain_supported(found: &mut Vec<search::Discovered>) {
     });
 }
 
-/// Picks the backend an existing account already uses, so the picker
-/// lands on it by default when editing.
-fn default_backend(existing: Option<&AccountConfig>) -> Option<Backend> {
-    let existing = existing?;
+/// Best-effort endpoint to seed the edit prompt from an existing
+/// account: the vdir path, the CardDAV email or URL, or the JMAP server.
+fn endpoint_hint(existing: &AccountConfig) -> Option<String> {
+    #[cfg(feature = "vdir")]
+    if let Some(vdir) = &existing.vdir {
+        return Some(vdir.home_dir.clone());
+    }
 
     #[cfg(feature = "carddav")]
-    if existing.carddav.is_some() {
-        return Some(Backend::Carddav);
+    if let Some(carddav) = &existing.carddav {
+        // Prefer the email, which re-runs discovery; otherwise a URL the
+        // server route can reuse verbatim.
+        return carddav_email(carddav)
+            .or_else(|| carddav.server.clone())
+            .or_else(|| carddav.home.as_ref().map(Url::to_string))
+            .or_else(|| carddav.discover.clone());
     }
 
     #[cfg(feature = "jmap")]
-    if existing.jmap.is_some() {
-        return Some(Backend::Jmap);
-    }
-
-    #[cfg(feature = "msgraph")]
-    if existing.msgraph.is_some() {
-        return Some(Backend::Msgraph);
-    }
-
-    #[cfg(feature = "google")]
-    if existing.google.is_some() {
-        return Some(Backend::Google);
-    }
-
-    #[cfg(feature = "vdir")]
-    if existing.vdir.is_some() {
-        return Some(Backend::Vdir);
+    if let Some(jmap) = &existing.jmap {
+        return Some(jmap.server.clone());
     }
 
     None
 }
 
-#[cfg(feature = "carddav")]
-fn configure_carddav(
-    account_name: &str,
-    existing: Option<&CarddavConfig>,
-) -> Result<CarddavConfig> {
-    // The email seeds discovery. When editing, recover it from the
-    // existing account instead of re-prompting; only a new account asks.
-    let email = match existing.and_then(carddav_email) {
-        Some(email) => email,
-        None => prompt::text("Email address:", None)?,
-    };
-
-    carddav::configure(Config::project_name(), account_name, &email, existing)
-}
-
-/// Recovers the account's email from its existing config: a Basic
-/// username that looks like an address, or the address Google embeds in
-/// the home-set path (`.../principals/<email>/...`).
+/// Recovers the account's email from its existing CardDAV config: a
+/// Basic username that looks like an address, or the address Google
+/// embeds in the home-set path (`.../principals/<email>/...`).
 #[cfg(feature = "carddav")]
 fn carddav_email(existing: &CarddavConfig) -> Option<String> {
     if let CarddavAuthConfig::Basic { username, .. } = &existing.auth

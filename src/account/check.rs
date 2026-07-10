@@ -6,10 +6,7 @@ use pimalaya_cli::printer::Printer;
 use pimalaya_config::toml::TomlConfig;
 use serde::Serialize;
 
-use crate::{
-    backend::Backend,
-    config::{AccountConfig, Config},
-};
+use crate::{backend::Backend, config::Config};
 
 /// Validate the account configuration.
 ///
@@ -49,18 +46,35 @@ impl AccountCheckCommand {
         #[cfg(feature = "vdir")]
         if backend.allows_vdir() {
             if let Some(vdir_config) = account_config.vdir.clone() {
-                report
-                    .backends
-                    .push(check_vdir(&config, &account_config, vdir_config));
+                report.backends.push(check_vdir(vdir_config));
             }
         }
 
         #[cfg(feature = "carddav")]
         if backend.allows_carddav() {
             if let Some(carddav_config) = account_config.carddav.clone() {
-                report
-                    .backends
-                    .push(check_carddav(&config, &account_config, carddav_config));
+                report.backends.push(check_carddav(carddav_config));
+            }
+        }
+
+        #[cfg(feature = "jmap")]
+        if backend.allows_jmap() {
+            if let Some(jmap_config) = account_config.jmap.clone() {
+                report.backends.push(check_jmap(jmap_config));
+            }
+        }
+
+        #[cfg(feature = "msgraph")]
+        if backend.allows_msgraph() {
+            if let Some(msgraph_config) = account_config.msgraph.clone() {
+                report.backends.push(check_msgraph(msgraph_config));
+            }
+        }
+
+        #[cfg(feature = "google")]
+        if backend.allows_google() {
+            if let Some(google_config) = account_config.google.clone() {
+                report.backends.push(check_google(google_config));
             }
         }
 
@@ -73,11 +87,7 @@ impl AccountCheckCommand {
 }
 
 #[cfg(feature = "vdir")]
-fn check_vdir(
-    _config: &Config,
-    _account_config: &AccountConfig,
-    vdir_config: crate::config::VdirConfig,
-) -> BackendCheck {
+fn check_vdir(vdir_config: crate::config::VdirConfig) -> BackendCheck {
     use std::path::Path;
 
     let result = (|| -> Result<()> {
@@ -95,11 +105,7 @@ fn check_vdir(
 }
 
 #[cfg(feature = "carddav")]
-fn check_carddav(
-    _config: &Config,
-    _account_config: &AccountConfig,
-    carddav_config: crate::config::CarddavConfig,
-) -> BackendCheck {
+fn check_carddav(carddav_config: crate::config::CarddavConfig) -> BackendCheck {
     use crate::carddav::client::open_carddav_client;
 
     let result = (|| -> Result<()> {
@@ -108,6 +114,50 @@ fn check_carddav(
     })();
 
     BackendCheck::from("carddav", result)
+}
+
+/// Establishes the JMAP session, proving the server address, TLS and
+/// authentication all work.
+#[cfg(feature = "jmap")]
+fn check_jmap(jmap_config: crate::config::JmapConfig) -> BackendCheck {
+    use crate::jmap::backend::JmapBackend;
+
+    let result = (|| -> Result<()> {
+        let _client = JmapBackend::new(jmap_config)?;
+        Ok(())
+    })();
+
+    BackendCheck::from("jmap", result)
+}
+
+/// Lists the Graph contact folders, proving the token grants access to
+/// the contacts API.
+#[cfg(feature = "msgraph")]
+fn check_msgraph(msgraph_config: crate::config::MsgraphConfig) -> BackendCheck {
+    use crate::msgraph::backend::MsgraphBackend;
+
+    let result = (|| -> Result<()> {
+        let mut client = MsgraphBackend::new(msgraph_config)?;
+        client.list_addressbooks()?;
+        Ok(())
+    })();
+
+    BackendCheck::from("msgraph", result)
+}
+
+/// Lists the People contact groups, proving the token grants access to
+/// the contacts API.
+#[cfg(feature = "google")]
+fn check_google(google_config: crate::config::GoogleConfig) -> BackendCheck {
+    use crate::google::backend::GoogleBackend;
+
+    let result = (|| -> Result<()> {
+        let mut client = GoogleBackend::new(google_config)?;
+        client.list_addressbooks()?;
+        Ok(())
+    })();
+
+    BackendCheck::from("google", result)
 }
 
 #[derive(Clone, Debug, Serialize)]

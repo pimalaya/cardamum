@@ -1,6 +1,6 @@
 # Migrating Cardamum v0.1 → v2
 
-Cardamum v2 lands on the Himalaya v2 stack (pimalaya-cli, pimalaya-config, pimalaya-stream, io-vdir 0.0.3, io-webdav 0.0.1, io-addressbook 0.0.2). The CLI structure changes accordingly.
+Cardamum v2 lands on the Himalaya v2 stack (pimalaya-cli, pimalaya-config, pimalaya-stream, io-vdir 0.0.3, io-webdav 0.0.1, and the JMAP / Microsoft Graph / Google People protocol crates). The CLI structure changes accordingly.
 
 ## Command tree
 

@@ -3,11 +3,10 @@ use std::fmt;
 use anyhow::Result;
 use clap::Parser;
 use comfy_table::{Cell, Color, Row, Table};
-use io_addressbook::card::Card;
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
+use crate::shared::{arg::AddressbookIdArg, card::Card, client::AddressbookClient};
 
 /// List vCards inside the given addressbook.
 ///
@@ -117,8 +116,7 @@ impl fmt::Display for CardsTable {
 
 /// Quick-and-dirty vCard preview: pulls the first `FN`, `EMAIL` and
 /// `TEL` line out of the raw bytes for the cards listing. Avoids
-/// pulling calcard at the CLI layer; the io-addressbook `parser`
-/// feature stays opt-in for downstream consumers.
+/// parsing the whole vCard just to render three columns.
 fn vcard_preview(bytes: &[u8]) -> (Option<String>, Option<String>, Option<String>) {
     let text = match std::str::from_utf8(bytes) {
         Ok(s) => s,

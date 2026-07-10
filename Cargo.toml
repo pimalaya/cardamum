@@ -7,7 +7,7 @@ edition = "2024"
 rust-version = "1.87"
 license = "MIT OR Apache-2.0"
 categories = ["command-line-utilities"]
-keywords = ["cli", "contact", "addressbook", "carddav", "vdir"]
+keywords = ["cli", "contact", "carddav", "jmap", "vdir"]
 homepage = "https://pimalaya.org"
 documentation = "https://github.com/pimalaya/cardamum"
 repository = "https://github.com/pimalaya/cardamum"
@@ -17,13 +17,16 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls-ring", "carddav", "vdir"]
-carddav = ["io-addressbook/webdav"]
-vdir = ["io-addressbook/vdir"]
-native-tls = ["pimalaya-stream/native-tls", "pimconf/native-tls", "io-webdav/native-tls", "io-addressbook/native-tls"]
-rustls-aws = ["pimalaya-stream/rustls-aws", "pimconf/rustls-aws", "io-webdav/rustls-aws", "io-addressbook/rustls-aws"]
-rustls-ring = ["pimalaya-stream/rustls-ring", "pimconf/rustls-ring", "io-webdav/rustls-ring", "io-addressbook/rustls-ring"]
-vendored = ["pimalaya-stream/vendored", "io-webdav/vendored"]
+default = ["rustls-ring", "carddav", "jmap", "msgraph", "google", "vdir"]
+carddav = ["dep:io-webdav", "dep:getrandom"]
+jmap = ["dep:io-jmap", "dep:calcard", "dep:base64"]
+msgraph = ["dep:io-msgraph", "dep:vcard-rs"]
+google = ["dep:io-google-people", "dep:vcard-rs"]
+vdir = ["dep:io-vdir"]
+native-tls = ["pimalaya-stream/native-tls", "pimconf/native-tls", "io-webdav?/native-tls", "io-jmap?/native-tls", "io-msgraph?/native-tls", "io-google-people?/native-tls"]
+rustls-aws = ["pimalaya-stream/rustls-aws", "pimconf/rustls-aws", "io-webdav?/rustls-aws", "io-jmap?/rustls-aws", "io-msgraph?/rustls-aws", "io-google-people?/rustls-aws"]
+rustls-ring = ["pimalaya-stream/rustls-ring", "pimconf/rustls-ring", "io-webdav?/rustls-ring", "io-jmap?/rustls-ring", "io-msgraph?/rustls-ring", "io-google-people?/rustls-ring"]
+vendored = ["pimalaya-stream/vendored", "io-webdav?/vendored", "io-jmap?/vendored", "io-msgraph?/vendored", "io-google-people?/vendored"]
 
 [profile.release]
 lto = "fat"
@@ -36,6 +39,8 @@ pimalaya-cli = { version = "0.0.1", default-features = false, features = ["build
 
 [dependencies]
 anyhow = "1"
+base64 = { version = "0.22", optional = true }
+calcard = { version = "0.3", optional = true }
 clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4.4"
 clap_mangen = "0.3"
@@ -43,29 +48,37 @@ comfy-table = "7"
 crossterm = { version = "0.29", default-features = false, features = ["serde"] }
 dirs = "6"
 env_logger = "0.11"
-io-addressbook = { version = "0.0.2", default-features = false, features = ["client", "serde"] }
+getrandom = { version = "0.4", optional = true }
+io-google-people = { version = "0.0.1", default-features = false, features = ["client"], optional = true }
 io-http = { version = "0.1", default-features = false }
-io-vdir = { version = "0.0.3", default-features = false, features = ["client", "parser", "serde"] }
-io-webdav = { version = "0.0.1", default-features = false, features = ["client"] }
+io-jmap = { version = "0.1", default-features = false, features = ["client"], optional = true }
+io-msgraph = { version = "0.0.1", default-features = false, features = ["client"], optional = true }
+io-vdir = { version = "0.0.3", default-features = false, features = ["client", "parser", "serde"], optional = true }
+io-webdav = { version = "0.0.1", default-features = false, features = ["client"], optional = true }
 log = "0.4"
 percent-encoding = "2"
 pimalaya-cli = { version = "0.0.1", default-features = false, features = ["terminal", "table", "prompt", "wizard", "spinner", "carddav"] }
 pimalaya-config = { version = "0.0.1", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.0.1", default-features = false, features = ["std"] }
-pimconf = { version = "0.1.0", default-features = false, features = ["pacc", "autoconfig", "rfc6186", "rfc6764", "client"] }
+pimconf = { version = "0.1.0", default-features = false, features = ["search", "client"] }
 secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 shellexpand = "3.1"
 toml = "0.8"
 toml_edit = "0.22"
 url = { version = "2.5", features = ["serde"] }
+vcard-rs = { version = "0.0.1", default-features = false, features = ["parser"], optional = true }
 
 [patch.crates-io]
 domain = { git = "https://github.com/nlnetlabs/domain", rev = "b30087125c13e71010d9783a1bcdd9eb9fa3f336" }
-io-addressbook.git = "https://github.com/pimalaya/io-addressbook"
-io-http.git = "https://github.com/pimalaya/io-http"
-io-vdir.git = "https://github.com/pimalaya/io-vdir"
-io-webdav.git = "https://github.com/pimalaya/io-webdav"
+io-google-people.path = "../io-google-people"
+io-http.path = "../io-http"
+io-jmap.path = "../io-jmap"
+io-msgraph.path = "../io-msgraph"
+io-vdir.path = "../io-vdir"
+io-webdav.path = "../io-webdav"
 pimalaya-cli.git = "https://github.com/pimalaya/cli"
 pimalaya-config.git = "https://github.com/pimalaya/config"
-pimconf.git = "https://github.com/pimalaya/pimconf"
+pimconf.path = "../pimconf"
+vcard-rs.path = "../vcard-rs"

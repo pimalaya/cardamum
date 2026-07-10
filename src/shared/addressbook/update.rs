@@ -1,9 +1,10 @@
 use anyhow::Result;
 use clap::Parser;
-use io_addressbook::addressbook::AddressbookDiff;
 use pimalaya_cli::printer::{Message, Printer};
 
-use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
+use crate::shared::{
+    addressbook::AddressbookDiff, arg::AddressbookIdArg, client::AddressbookClient,
+};
 
 /// Update an existing addressbook.
 ///

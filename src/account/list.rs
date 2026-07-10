@@ -90,13 +90,25 @@ pub struct AccountRow {
 impl AccountRow {
     fn from_account(name: &str, account: &AccountConfig) -> Self {
         let mut backends = Vec::new();
-        #[cfg(feature = "vdir")]
-        if account.vdir.is_some() {
-            backends.push("vdir");
-        }
         #[cfg(feature = "carddav")]
         if account.carddav.is_some() {
             backends.push("carddav");
+        }
+        #[cfg(feature = "jmap")]
+        if account.jmap.is_some() {
+            backends.push("jmap");
+        }
+        #[cfg(feature = "msgraph")]
+        if account.msgraph.is_some() {
+            backends.push("msgraph");
+        }
+        #[cfg(feature = "google")]
+        if account.google.is_some() {
+            backends.push("google");
+        }
+        #[cfg(feature = "vdir")]
+        if account.vdir.is_some() {
+            backends.push("vdir");
         }
 
         Self {

@@ -9,14 +9,20 @@
 
 use anyhow::{Result, anyhow};
 use pimalaya_cli::{
+    prompt,
     spinner::Spinner,
     wizard::carddav::{self as carddav_wizard, CarddavAuth, CarddavSecret, WizardCarddavConfig},
 };
 use pimalaya_config::{command::shell, secret::Secret};
+use url::Url;
 
 use crate::{
     carddav::client::{is_google, open_carddav_client},
     config::{CarddavAuthConfig, CarddavConfig},
+    wizard::{
+        search::{Discovered, DiscoveredAuth},
+        secret,
+    },
 };
 
 /// Runs the CardDAV wizard for `account_name` until the connection
@@ -96,6 +102,60 @@ pub fn configure(
                 spinner.failure(format!("Connection failed: {err}"));
                 defaults = cfg;
             }
+        }
+    }
+}
+
+/// Runs the CardDAV wizard for one discovered entry: the endpoint and
+/// the authentication method are pinned by the discovery, so only the
+/// credentials are prompted. On success the resolved home-set is
+/// persisted, like the manual flow.
+pub fn configure_discovered(
+    email: &str,
+    url: &Url,
+    discovered: &Discovered,
+) -> Result<CarddavConfig> {
+    loop {
+        let auth = match discovered.auth {
+            DiscoveredAuth::Password => {
+                let default_username = discovered
+                    .username
+                    .clone()
+                    .unwrap_or_else(|| email.to_string());
+                let username = prompt::text("CardDAV username:", Some(default_username.as_str()))?;
+                let password = secret::configure("CardDAV password", None)?;
+                CarddavAuthConfig::Basic { username, password }
+            }
+            DiscoveredAuth::Bearer | DiscoveredAuth::Oauth => {
+                let token = secret::configure("CardDAV bearer token", Some("ortie token show"))?;
+                CarddavAuthConfig::Bearer { token }
+            }
+        };
+
+        let config = CarddavConfig {
+            discover: None,
+            server: Some(url.to_string()),
+            home: None,
+            tls: Default::default(),
+            auth,
+        };
+
+        let spinner = Spinner::start("Testing connection");
+
+        match open_carddav_client(config.clone()) {
+            Ok(client) => {
+                spinner.success("Connection successful");
+
+                return Ok(match client.addressbook_home_set.clone() {
+                    Some(home) => CarddavConfig {
+                        server: None,
+                        home: Some(home),
+                        ..config
+                    },
+                    None => config,
+                });
+            }
+            Err(err) => spinner.failure(format!("Connection failed: {err}")),
         }
     }
 }

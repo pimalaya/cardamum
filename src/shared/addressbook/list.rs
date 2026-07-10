@@ -3,11 +3,10 @@ use std::fmt;
 use anyhow::Result;
 use clap::Parser;
 use comfy_table::{Cell, Color, Row, Table};
-use io_addressbook::addressbook::Addressbook;
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::shared::client::AddressbookClient;
+use crate::shared::{addressbook::Addressbook, client::AddressbookClient};
 
 /// List every addressbook available to the active account.
 ///

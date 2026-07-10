@@ -4,6 +4,14 @@ mod backend;
 mod carddav;
 mod cli;
 mod config;
+#[cfg(feature = "google")]
+mod google;
+#[cfg(feature = "jmap")]
+mod jmap;
+#[cfg(feature = "msgraph")]
+mod msgraph;
+#[cfg(any(feature = "msgraph", feature = "google"))]
+mod project;
 mod shared;
 #[cfg(feature = "vdir")]
 mod vdir;

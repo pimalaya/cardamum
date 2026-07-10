@@ -245,9 +245,7 @@ pub fn parse_carddav_server(server: &str) -> Result<Url> {
 }
 
 pub fn tls_with_http_alpn(config: TlsConfig) -> Tls {
-    let mut tls: Tls = config.into();
-    tls.rustls.alpn = vec!["http/1.1".into()];
-    tls
+    config.into_tls(vec!["http/1.1".into()])
 }
 
 fn build_auth(auth: CarddavAuthConfig) -> Result<WebdavAuth> {

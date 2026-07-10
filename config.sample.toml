@@ -11,10 +11,14 @@
 # rest are deep-merged on top of it.
 #
 # Run `cardamum` once with no config file to launch the wizard, which prompts
-# for an account name, lets you pick a backend, then walks you through the vdir
-# or CardDAV setup (CardDAV also asks for an email and tests the connection
-# before saving). `cardamum account configure --account <name>` can be used afterwards to
-# edit (or add) an account through the same wizard.
+# for an account name, then lets you pick a backend. The recommended path is
+# automatic discovery: enter your email address and the wizard searches every
+# reachable contacts service (CardDAV, JMAP, plus the Google People and
+# Microsoft Graph APIs for those providers) and lets you pick one. You can also
+# configure a backend by hand (CardDAV, JMAP, Microsoft Graph, Google People, or
+# local vdir). Every remote backend tests the connection before saving.
+# `cardamum account configure --account <name>` can be used afterwards to edit
+# (or add) an account through the same wizard.
 # ================================================================================
 
 # --------------------------------------------------------------------------------
@@ -66,12 +70,13 @@
 
 # --------------------------------------------------------------------------------
 # Accounts
+#
+# Each account speaks exactly one backend. The blocks below show every
+# supported backend as its own account; keep the ones you need. Secrets accept
+# either a `command` (a shell command line string run through the platform
+# shell, or a program + args list) or a `raw` plaintext value. OAuth 2.0 access
+# tokens are typically issued and refreshed by an external tool such as `ortie`.
 # --------------------------------------------------------------------------------
-
-[accounts.example]
-
-# When `--account` is missing, use this account as the default one.
-default = true
 
 # --------------------------------------------------------------------------------
 # Vdir backend
@@ -81,6 +86,9 @@ default = true
 # subdirectory of `home-dir` is one addressbook.
 # --------------------------------------------------------------------------------
 
+[accounts.vdir-example]
+# When `--account` is missing, use this account as the default one.
+default = true
 vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
 
 # --------------------------------------------------------------------------------
@@ -102,13 +110,12 @@ vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
 # stays as a fallback to re-resolve from.
 # --------------------------------------------------------------------------------
 
+[accounts.carddav-example]
 carddav.discover = "example.org"
 carddav.server = "https://carddav.example.org/dav/addressbooks"
 #carddav.home = "https://carddav.example.org/dav/addressbooks/user/me/default"
 
-# Basic authentication (RFC 7617). A `command` secret is a shell command line
-# (string, run through the platform shell) or a program + args list; a `raw`
-# secret is stored in plaintext.
+# Basic authentication (RFC 7617).
 carddav.auth.basic.username = "username"
 carddav.auth.basic.password.command = "pass show example"
 #carddav.auth.basic.password.command = ["pass", "show", "example"]
@@ -122,3 +129,45 @@ carddav.auth.basic.password.command = "pass show example"
 #carddav.tls.provider = "rustls"
 #carddav.tls.rustls.crypto = "ring"
 #carddav.tls.cert = "/etc/ssl/certs/ca-certificates.crt"
+
+# --------------------------------------------------------------------------------
+# JMAP backend (RFC 8620 + RFC 9610)
+#
+# `server` accepts a bare authority (discovered via `GET /.well-known/jmap`) or
+# a full session URL. Authentication is one of `header` (raw Authorization
+# value), `bearer` (token) or `basic` (username + password).
+# --------------------------------------------------------------------------------
+
+[accounts.jmap-example]
+jmap.server = "fastmail.com"
+#jmap.server = "https://api.fastmail.com/jmap/session"
+
+jmap.auth.bearer.token.command = "ortie token show"
+#jmap.auth.header.raw = "Bearer oauth2-token"
+#jmap.auth.basic.username = "username"
+#jmap.auth.basic.password.command = "pass show example"
+
+#jmap.tls.provider = "rustls"
+#jmap.tls.rustls.crypto = "ring"
+
+# --------------------------------------------------------------------------------
+# Microsoft Graph backend
+#
+# The Graph API is OAuth 2.0 bearer-token only. `user-id` defaults to `me` (the
+# authenticated user).
+# --------------------------------------------------------------------------------
+
+[accounts.msgraph-example]
+#msgraph.user-id = "me"
+msgraph.auth.token.command = "ortie token show"
+#msgraph.auth.token.raw = "oauth2-token"
+
+# --------------------------------------------------------------------------------
+# Google People backend
+#
+# The People API is OAuth 2.0 bearer-token only.
+# --------------------------------------------------------------------------------
+
+[accounts.google-example]
+google.auth.token.command = "ortie token show"
+#google.auth.token.raw = "oauth2-token"

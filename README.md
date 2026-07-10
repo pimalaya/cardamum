@@ -31,17 +31,24 @@ CLI to manage contacts.
 
 - Shared API mapping `addressbooks` and `cards` to the active backend
 - Protocol-specific APIs exposing each backend's full surface (`cardamum vdir/carddav`)
-- Remote backend: **CardDAV** (RFC 6352)
+- Remote backends:
+  - **CardDAV** (RFC 6352)
+  - **JMAP** contacts (RFC 8620 + RFC 9610)
+  - **Microsoft Graph** contacts API
+  - **Google People** API
 - Local (filesystem) backend: **vdir** [specs](https://vdirsyncer.pimutils.org/en/stable/vdir.html)
-- HTTP auth support: basic, bearer
+- vCard document of record synthesized for the backends with no native vCard (JMAP via JSContact, Graph, People)
+- HTTP auth support: basic, bearer (OAuth 2.0 access tokens issued by an external tool such as [Ortie](https://github.com/pimalaya/ortie))
 - TLS support:
   - [Rustls](https://crates.io/crates/rustls) with ring crypto
   - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)
   - [Native TLS](https://crates.io/crates/native-tls) (requires `native-tls` feature)
-- Discovery support:
+- Email-driven service discovery (fixed provider rules, PACC, RFC 6764 DAV, RFC 8620 JMAP, with a `WWW-Authenticate` probe), plus per-backend discovery:
   - `.well-known/carddav` [rfc6764](https://datatracker.ietf.org/doc/html/rfc6764)
   - Current-user-principal [rfc5397](https://datatracker.ietf.org/doc/html/rfc5397)
   - Addressbook-home-set [rfc6352](https://datatracker.ietf.org/doc/html/rfc6352)
+  - JMAP session `.well-known/jmap` [rfc8620](https://datatracker.ietf.org/doc/html/rfc8620)
+- Per-backend Cargo features: `carddav`, `jmap`, `msgraph`, `google`, `vdir` (all on by default)
 - TOML configuration with multi-account support
 - Interactive wizard on first run
 - JSON output via `--json`
@@ -75,12 +82,12 @@ For a more up-to-date version than the latest release, check out the [releases](
 cargo install --locked --git https://github.com/pimalaya/cardamum.git
 ```
 
-With only vdir support:
+With only a subset of backends (each backend is a Cargo feature: `carddav`, `jmap`, `msgraph`, `google`, `vdir`):
 
 ```sh
 cargo install --locked --git https://github.com/pimalaya/cardamum.git \
   --no-default-features \
-  --features vdir,rustls-ring
+  --features carddav,vdir,rustls-ring
 ```
 
 ### Nix
@@ -88,20 +95,20 @@ cargo install --locked --git https://github.com/pimalaya/cardamum.git \
 If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
 
 ```sh
-nix profile install github:pimalaya/tcal
+nix profile install github:pimalaya/cardamum
 ```
 
 Or run without installing:
 
 ```sh
-nix run github:pimalaya/tcal
+nix run github:pimalaya/cardamum
 ```
 
 ### Sources
 
 ```sh
-git clone https://github.com/pimalaya/tcal
-cd tcal
+git clone https://github.com/pimalaya/cardamum
+cd cardamum
 nix run
 ```
 
@@ -115,7 +122,7 @@ The configuration is loaded from the first existing path among:
 
 Override with `cardamum -c <PATH>`. Multiple paths can be passed at once, separated by `:`; the first is the base and the rest are deep-merged on top.
 
-Run `cardamum` once with no config file to launch the wizard. The wizard prompts for an account name, lets you pick a backend, then walks you through the vdir or CardDAV setup (CardDAV also asks for an email and tests the connection before saving). To edit (or add) an account later, use `cardamum account configure --account <name>`.
+Run `cardamum` once with no config file to launch the wizard. The wizard prompts for an account name, then lets you pick a backend. The recommended path is automatic discovery: enter your email address and the wizard searches every reachable contacts service (CardDAV, JMAP, plus the Google People and Microsoft Graph APIs for those providers) and lets you pick one. You can also configure a backend by hand (CardDAV, JMAP, Microsoft Graph, Google People, or local vdir). Every remote backend tests the connection before saving. To edit (or add) an account later, use `cardamum account configure --account <name>`.
 
 A documented sample lives at [config.sample.toml](./config.sample.toml).
 
@@ -138,18 +145,34 @@ addressbook.default = "card"
 
 ### Google
 
-Google exposes contacts via CardDAV, but only behind [OAuth 2.0](https://developers.google.com/people/carddav). Once set up, you can use any tool to manage token refreshing (for example using [Ortie](https://github.com/pimalaya/ortie)):
+Google exposes contacts via CardDAV and via the richer [People API](https://developers.google.com/people); both require [OAuth 2.0](https://developers.google.com/identity/protocols/oauth2). Manage the access token with any tool that refreshes it (for example [Ortie](https://github.com/pimalaya/ortie)).
+
+CardDAV:
 
 ```toml
-[accounts.example]
+[accounts.google-carddav]
 carddav.home = "https://www.googleapis.com/carddav/v1/principals/<email>/lists"
 carddav.auth.bearer.token.command = ["ortie", "token", "show"]
 addressbook.default = "default"
 ```
 
+People API (contact groups map to addressbooks; the `myContacts` group lists as `Contacts`):
+
+```toml
+[accounts.google-people]
+google.auth.token.command = ["ortie", "token", "show"]
+addressbook.default = "myContacts"
+```
+
 ### Microsoft
 
-Not supported *yet*: Microsoft offers no CardDAV for contacts, only the [Graph API](https://learn.microsoft.com/en-us/graph/api/resources/contact). Native Graph support is planned.
+Microsoft exposes contacts through the [Graph API](https://learn.microsoft.com/en-us/graph/api/resources/contact) (OAuth 2.0 bearer only; no CardDAV). Contact folders map to addressbooks, with the default Contacts folder listed under the `contacts` id.
+
+```toml
+[accounts.microsoft]
+msgraph.auth.token.command = ["ortie", "token", "show"]
+addressbook.default = "contacts"
+```
 
 ### Proton
 
@@ -157,10 +180,10 @@ Not supported: Proton exposes no contacts API, neither CardDAV nor through [Prot
 
 ### Fastmail
 
-Standard CardDAV with the mailbox address and its app password.
+Standard CardDAV with the mailbox address and its app password:
 
 ```toml
-[accounts.example]
+[accounts.fastmail-carddav]
 carddav.discover = "fastmail.com"
 carddav.server = "https://carddav.fastmail.com/dav/"
 # The home URL is usually of this shape:
@@ -170,6 +193,14 @@ carddav.auth.basic.username = "example@fastmail.com"
 carddav.auth.basic.password.raw = "***"
 
 addressbook.default = "Default"
+```
+
+Or JMAP, which Fastmail serves bearer-token only (an API token from the [Fastmail settings](https://www.fastmail.com/settings/security/tokens)):
+
+```toml
+[accounts.fastmail-jmap]
+jmap.server = "fastmail.com"
+jmap.auth.bearer.token.raw = "***"
 ```
 
 ### Posteo
@@ -211,7 +242,7 @@ This project is developed with AI assistance. This section documents how, so use
 - **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
 - **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit (`nix develop --command cargo check / cargo test / cargo fmt`). Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
 - **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong: off-by-one errors, missed edge cases, plausible but nonexistent APIs, stale RFC references. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
-- **Last reviewed**: 14/06/2026
+- **Last reviewed**: 09/07/2026
 
 ## Social
 

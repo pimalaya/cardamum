@@ -16,7 +16,7 @@ pub struct AddressbookCreateCommand {
     #[arg(short, long, value_name = "TEXT")]
     pub description: Option<String>,
     /// Optional ASCII `#RRGGBB` color marker.
-    #[arg(short, long, value_name = "HEX")]
+    #[arg(short = 'C', long, value_name = "HEX")]
     pub color: Option<String>,
 }
 

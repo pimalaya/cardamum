@@ -56,11 +56,12 @@ pub struct Cli {
     /// protocol-specific subcommands (vdir, carddav) ignore it and
     /// always use their own backend.
     ///
-    /// Possible values: auto (default), vdir, carddav. With auto, the
-    /// shared command picks the first configured backend it supports;
-    /// with an explicit value, it uses only that backend (and bails if
-    /// the account has no matching config block, or if the operation
-    /// has no implementation for it).
+    /// Possible values: auto (default), carddav, jmap, msgraph,
+    /// google, vdir. With auto, the shared command picks the first
+    /// configured backend it supports; with an explicit value, it uses
+    /// only that backend (and bails if the account has no matching
+    /// config block, or if the operation has no implementation for
+    /// it).
     #[arg(short, long, global = true, default_value_t)]
     pub backend: Backend,
     #[command(flatten)]

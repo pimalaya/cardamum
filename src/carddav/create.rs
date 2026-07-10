@@ -20,7 +20,7 @@ pub struct CarddavAddressbookCreateCommand {
     #[arg(short, long, value_name = "TEXT")]
     pub description: Option<String>,
     /// Optional ASCII `#RRGGBB` color marker.
-    #[arg(short, long, value_name = "HEX")]
+    #[arg(short = 'C', long, value_name = "HEX")]
     pub color: Option<String>,
 }
 
@@ -31,6 +31,8 @@ impl CarddavAddressbookCreateCommand {
             display_name: self.name,
             description: self.description,
             color: self.color,
+            ctag: None,
+            sync_token: None,
         };
 
         client.create_addressbook(&wire)?;

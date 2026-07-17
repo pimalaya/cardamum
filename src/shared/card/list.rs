@@ -135,10 +135,10 @@ fn vcard_preview(bytes: &[u8]) -> (Option<String>, Option<String>, Option<String
             if let Some(rest) = pick_property(line, "EMAIL") {
                 email = Some(rest);
             }
-        } else if tel.is_none() {
-            if let Some(rest) = pick_property(line, "TEL") {
-                tel = Some(rest);
-            }
+        } else if tel.is_none()
+            && let Some(rest) = pick_property(line, "TEL")
+        {
+            tel = Some(rest);
         }
     }
 

@@ -11,7 +11,6 @@
 use std::{
     io::{Read, Write},
     ops::{Deref, DerefMut},
-    path::PathBuf,
 };
 
 use anyhow::{Result, anyhow, bail};
@@ -22,21 +21,18 @@ use io_http::{
     rfc8615::well_known::{Http11WellKnown, Http11WellKnownOutput},
     rfc9110::request::HttpRequest,
 };
+use io_pim_discovery::{
+    pacc::client::DiscoveryPaccClientStd,
+    rfc6764::{client::DiscoveryWebdavClientStd, service::DiscoveryDavService},
+};
 use io_webdav::{client::WebdavClientStd as Inner, rfc4918::WebdavAuth};
-use pimalaya_config::toml::TomlConfig;
 use pimalaya_stream::{std::stream::StreamStd, tls::Tls};
 use secrecy::ExposeSecret;
 use url::Url;
 
-use pimconf::{
-    pacc::client::DiscoveryPaccClientStd,
-    rfc6764::{client::DiscoveryWebdavClientStd, types::DavService},
-};
-
 use crate::{
     account::context::Account,
-    cli::load_or_wizard,
-    config::{CarddavAuthConfig, CarddavConfig, TlsConfig},
+    config::{AccountConfig, CarddavAuthConfig, CarddavConfig, Config, TlsConfig},
 };
 
 const DEFAULT_RESOLVER: &str = "tcp://1.1.1.1:53";
@@ -71,21 +67,19 @@ impl DerefMut for CarddavClient {
     }
 }
 
-/// Loads the configuration, picks the active account, builds the
-/// merged [`Account`] then opens the CardDAV client.
+/// Builds the merged [`Account`] from the already-resolved config and
+/// account, then opens the CardDAV client. Bails when the account has
+/// no `[carddav]` block.
 pub fn build_carddav_client(
-    config_paths: &[PathBuf],
-    account_name: Option<&str>,
+    config: Config,
+    name: String,
+    mut account_config: AccountConfig,
 ) -> Result<CarddavClient> {
-    let mut config = load_or_wizard(config_paths)?;
-    let (name, mut ac) = config
-        .take_account(account_name)?
-        .ok_or_else(|| anyhow!("Cannot find account"))?;
-    let carddav_config = ac
+    let carddav_config = account_config
         .carddav
         .take()
         .ok_or_else(|| anyhow!("CardDAV config is missing for account `{name}`"))?;
-    let account = Account::from(config).merge(Account::from(ac));
+    let account = Account::from(config).merge(Account::from(account_config));
     let inner = open_carddav_client(carddav_config)?;
     Ok(CarddavClient::new(inner, account))
 }
@@ -95,7 +89,8 @@ pub fn build_carddav_client(
 ///
 /// `home` skips every discovery step; `server` resolves principal +
 /// addressbook-home-set from the given context root; `discover`
-/// resolves a bare domain to that context root through pimconf first.
+/// resolves a bare domain to that context root through io-pim-discovery
+/// first.
 pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
     let CarddavConfig {
         discover,
@@ -207,11 +202,12 @@ pub fn discover_via_pacc(domain: &str, tls: &Tls) -> Option<Url> {
 /// RFC 6764 §6 discovery: resolves the SRV record (secure first), its
 /// TXT `path` context, then `.well-known` on the resolved host, falling
 /// back to `https://<domain>` when the domain publishes nothing. Wraps
-/// pimconf's `resolve`, which performs the steps in the RFC's order.
+/// io-pim-discovery's `resolve`, which performs the steps in the RFC's
+/// order.
 pub fn discover_via_rfc6764(domain: &str, tls: &Tls) -> Option<Url> {
     let resolver = Url::parse(DEFAULT_RESOLVER).expect("DEFAULT_RESOLVER must be a valid URL");
     let mut client = DiscoveryWebdavClientStd::new(resolver).with_tls(tls.clone());
-    client.resolve(domain, DavService::Carddav).ok()
+    client.resolve(domain, DiscoveryDavService::Carddav).ok()
 }
 
 /// Whether `domain` is a Google consumer mail domain, which serves

@@ -41,10 +41,15 @@ pub fn full_date(raw: &str) -> Option<String> {
     let digits = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
 
     let dashed: Vec<&str> = date.split('-').collect();
-    if let [y, m, d] = dashed[..] {
-        if y.len() == 4 && m.len() == 2 && d.len() == 2 && digits(y) && digits(m) && digits(d) {
-            return Some(format!("{y}-{m}-{d}"));
-        }
+    if let [y, m, d] = dashed[..]
+        && y.len() == 4
+        && m.len() == 2
+        && d.len() == 2
+        && digits(y)
+        && digits(m)
+        && digits(d)
+    {
+        return Some(format!("{y}-{m}-{d}"));
     }
 
     if date.len() == 8 && digits(date) {

@@ -1,16 +1,15 @@
 //! Cardamum wrapper around [`io_vdir::client::VdirClient`] that
 //! bundles the merged [`Account`] alongside the vdir client.
 
-use std::{
-    ops::{Deref, DerefMut},
-    path::PathBuf,
-};
+use std::ops::{Deref, DerefMut};
 
 use anyhow::{Result, anyhow};
 use io_vdir::client::VdirClient as Inner;
-use pimalaya_config::toml::TomlConfig;
 
-use crate::{account::context::Account, cli::load_or_wizard, config::VdirConfig};
+use crate::{
+    account::context::Account,
+    config::{AccountConfig, Config, VdirConfig},
+};
 
 pub struct VdirClient {
     inner: Inner,
@@ -38,21 +37,18 @@ impl DerefMut for VdirClient {
     }
 }
 
-/// Loads the configuration, picks the active account, builds the
-/// merged [`Account`] then opens the vdir client. Bails when the
-/// account has no `[vdir]` block.
+/// Builds the merged [`Account`] from the already-resolved config and
+/// account, then opens the vdir client. Bails when the account has no
+/// `[vdir]` block.
 pub fn build_vdir_client(
-    config_paths: &[PathBuf],
-    account_name: Option<&str>,
+    config: Config,
+    name: String,
+    mut account_config: AccountConfig,
 ) -> Result<VdirClient> {
-    let mut config = load_or_wizard(config_paths)?;
-    let (name, mut ac) = config
-        .take_account(account_name)?
-        .ok_or_else(|| anyhow!("Cannot find account"))?;
-    let vdir_config = ac
+    let vdir_config = account_config
         .vdir
         .take()
         .ok_or_else(|| anyhow!("Vdir config is missing for account `{name}`"))?;
-    let account = Account::from(config).merge(Account::from(ac));
+    let account = Account::from(config).merge(Account::from(account_config));
     Ok(VdirClient::new(vdir_config, account))
 }

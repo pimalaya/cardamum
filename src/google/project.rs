@@ -3,19 +3,19 @@
 //! The People API exposes no vCard representation of a contact (the
 //! people endpoints only speak the JSON person resource), so the Google
 //! spoke synthesizes the vCard document of record itself: [`to_vcard`]
-//! projects an io-google-people person onto a fresh vCard 4.0 document,
+//! projects an io-people person onto a fresh vCard 4.0 document,
 //! and [`to_person`] projects a vCard back onto a person. Per the
 //! custom property policy of docs/contacts-mapping.md only fields with
 //! a well-defined vCard slot are projected; People-only fields
-//! (fileAses, memberships, events, photos, ...) stay out of
-//! [`MANAGED_FIELDS`], out of every update mask, and survive updates
+//! (fileAses, memberships, events, photos, ...) stay out of the managed
+//! set ([`READ_FIELDS`]), out of every update mask, and survive updates
 //! untouched. Unlike Graph's fixed slots, People fields are true
 //! lists, so every vCard property projects without truncation.
 
 use core::str::FromStr;
 use std::borrow::Cow;
 
-use io_google_people::v1::rest::people::{
+use io_people::v1::rest::people::{
     PeopleAddress, PeopleBiography, PeopleBirthday, PeopleClientData, PeopleContentType,
     PeopleDate, PeopleEmailAddress, PeopleImClient, PeopleName, PeopleNickname, PeopleOccupation,
     PeopleOrganization, PeoplePerson, PeoplePersonField, PeoplePhoneNumber, PeopleRelation,
@@ -93,7 +93,7 @@ pub fn person_id(resource_name: &str) -> &str {
         .unwrap_or(resource_name)
 }
 
-/// Projects an io-google-people person onto a fresh vCard 4.0 document.
+/// Projects an io-people person onto a fresh vCard 4.0 document.
 ///
 /// The person id (resource name minus the `people/` prefix) becomes the
 /// UID, typed fields carry their home/work TYPE (phones also mobile as
@@ -259,7 +259,7 @@ pub fn to_vcard(person: &PeoplePerson) -> String {
     splice_props(vcard, &extra)
 }
 
-/// Projects a vCard onto an io-google-people person, the full-state
+/// Projects a vCard onto an io-people person, the full-state
 /// projection: every managed field carries the vCard's values (empty
 /// when the vCard drops the property, which clears the masked field on
 /// update), while unmanaged People fields stay out of the body. Every
@@ -1107,7 +1107,7 @@ mod tests {
 
     #[test]
     fn minted_props_project_and_consume() {
-        use io_google_people::v1::rest::people::{
+        use io_people::v1::rest::people::{
             PeopleContactGroupMembership, PeopleExternalId, PeopleMembership,
         };
 

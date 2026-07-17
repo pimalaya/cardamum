@@ -19,7 +19,7 @@ use core::str::FromStr;
 use std::borrow::Cow;
 
 use io_msgraph::v1::{
-    MsgraphField,
+    field::MsgraphField,
     rest::users::{
         contacts::{MsgraphContact, MsgraphPhysicalAddress, MsgraphSingleValueExtendedProperty},
         messages::MsgraphEmailAddress,

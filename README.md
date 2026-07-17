@@ -122,7 +122,11 @@ The configuration is loaded from the first existing path among:
 
 Override with `cardamum -c <PATH>`. Multiple paths can be passed at once, separated by `:`; the first is the base and the rest are deep-merged on top.
 
-Run `cardamum` once with no config file to launch the wizard. It opens with a single prompt that takes an email address, a server URL, or a local vdir path, and its shape orients the rest of the setup, exactly like the Cardamum Android onboarding. An email address (or bare domain) runs discovery: the wizard detects the provider then searches every reachable contacts service (CardDAV, JMAP, plus the Google People and Microsoft Graph APIs for those providers) and lets you pick one. A `scheme://` URL is a CardDAV server to set up by hand. A filesystem path is a local vdir (it must already exist). The wizard then asks for the account name, prompts for credentials, and tests the connection before saving. To edit (or add) an account later, use `cardamum account configure --account <name>`.
+Run bare `cardamum` (no subcommand) to launch the wizard; it is also proposed when a command finds no config file. It opens with a single prompt that takes an email address, a server URL, or a local vdir path, and its shape orients the rest of the setup, exactly like the Cardamum Android onboarding. An email address (or bare domain) runs discovery: the wizard detects the provider then searches every reachable contacts service (CardDAV, JMAP, plus the Google People and Microsoft Graph APIs for those providers) and lets you pick one. A `scheme://` URL is a CardDAV server to set up by hand. A filesystem path is a local vdir (it must already exist). The wizard then asks for the account name, prompts for credentials, and tests the connection. It writes nothing to disk: the resulting account is printed as a ready-to-save TOML document on stdout while the prompts render on stderr, so redirecting saves it, exactly like Ortie:
+
+```
+cardamum > ~/.config/cardamum/config.toml
+```
 
 Authentication offers two strategies: a password (HTTP Basic) or a token (HTTP Bearer). Cardamum does not run OAuth 2.0 grants and does not refresh tokens itself: for providers that require OAuth (Google, Microsoft, and any CardDAV/JMAP server behind it), pick the token strategy and point it at an external token manager such as [Ortie](https://github.com/pimalaya/ortie), which issues and refreshes the access token. The wizard defaults the token command to `ortie token show`; see the [Google](#google) example below.
 

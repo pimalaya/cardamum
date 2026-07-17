@@ -1,44 +1,30 @@
-//! Google People wizard.
+//! Google People API wizard (Google accounts).
 //!
 //! The People API is bearer-token-only: the wizard collects the token
-//! secret (typically an ortie shell command, since tokens expire and
-//! need refreshing), then tests the connection by listing the contact
-//! groups; a failure re-runs the prompts.
+//! secret, typically an Ortie shell command since tokens expire and
+//! need refreshing. It does not connect; the wizard validates the whole
+//! account once at the end (see [`crate::account::check`]).
 
 use anyhow::Result;
-use pimalaya_cli::spinner::Spinner;
 
 use crate::{
     config::{GoogleAuthConfig, GoogleConfig},
-    google::backend::GoogleBackend,
     wizard::secret,
 };
 
-/// Runs the Google People wizard until the connection succeeds;
-/// `existing` seeds the defaults when editing.
-pub fn configure(existing: Option<&GoogleConfig>) -> Result<GoogleConfig> {
-    let tls_config = existing.map(|c| c.tls.clone()).unwrap_or_default();
+/// Runs the Google People wizard, returning a ready [`GoogleConfig`].
+pub fn configure() -> Result<GoogleConfig> {
+    // The note is guidance, not config, so it goes to stderr: only the
+    // generated TOML must land on stdout for `cardamum > <config>`.
+    eprintln!(
+        "Google People uses OAuth 2.0 tokens; issue and refresh them with an external manager such as Ortie"
+    );
 
-    loop {
-        let token = secret::configure("People access token", Some("ortie token show"))?;
+    let token = secret::configure("Google People access token", Some("ortie token show"))?;
 
-        let config = GoogleConfig {
-            tls: tls_config.clone(),
-            alpn: vec!["http/1.1".into()],
-            auth: GoogleAuthConfig { token },
-        };
-
-        let spinner = Spinner::start("Testing connection");
-
-        let test =
-            GoogleBackend::new(config.clone()).and_then(|mut client| client.list_addressbooks());
-
-        match test {
-            Ok(_) => {
-                spinner.success("Connection successful");
-                return Ok(config);
-            }
-            Err(err) => spinner.failure(format!("Connection failed: {err}")),
-        }
-    }
+    Ok(GoogleConfig {
+        tls: Default::default(),
+        alpn: vec!["http/1.1".to_string()],
+        auth: GoogleAuthConfig { token },
+    })
 }

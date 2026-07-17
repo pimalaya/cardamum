@@ -6,13 +6,18 @@ use pimalaya_cli::printer::Printer;
 use pimalaya_config::toml::TomlConfig;
 use serde::Serialize;
 
-use crate::{backend::Backend, config::Config};
+use crate::{
+    backend::Backend,
+    config::{AccountConfig, Config},
+};
 
 /// Validate the account configuration.
 ///
 /// Loads the TOML configuration, picks the active account (via the
 /// global `--account` flag or the default), and checks each backend
-/// allowed by `--backend`.
+/// allowed by `--backend`. The check tries to reach each backend, which
+/// exercises the same handshake / authentication paths the other
+/// commands would take.
 ///
 /// JSON output: `{"account", "backends": [{"backend", "ok", "error"}]}`.
 #[derive(Debug, Parser)]
@@ -29,8 +34,8 @@ impl AccountCheckCommand {
         let mut config = match Config::from_paths_or_default(config_paths)? {
             Some(config) => config,
             None => bail!(
-                "No configuration found. Run `cardamum` once to launch the wizard, \
-                 or `cardamum account configure --account <name>` to create one."
+                "No configuration found. Run bare `cardamum` to launch the wizard \
+                 and generate one."
             ),
         };
 
@@ -44,38 +49,50 @@ impl AccountCheckCommand {
         };
 
         #[cfg(feature = "vdir")]
-        if backend.allows_vdir() {
-            if let Some(vdir_config) = account_config.vdir.clone() {
-                report.backends.push(check_vdir(vdir_config));
-            }
+        if backend.allows_vdir()
+            && let Some(vdir_config) = &account_config.vdir
+        {
+            report
+                .backends
+                .push(BackendCheck::from("vdir", connect_vdir(vdir_config)));
         }
 
         #[cfg(feature = "carddav")]
-        if backend.allows_carddav() {
-            if let Some(carddav_config) = account_config.carddav.clone() {
-                report.backends.push(check_carddav(carddav_config));
-            }
+        if backend.allows_carddav()
+            && let Some(carddav_config) = &account_config.carddav
+        {
+            report.backends.push(BackendCheck::from(
+                "carddav",
+                connect_carddav(carddav_config),
+            ));
         }
 
         #[cfg(feature = "jmap")]
-        if backend.allows_jmap() {
-            if let Some(jmap_config) = account_config.jmap.clone() {
-                report.backends.push(check_jmap(jmap_config));
-            }
+        if backend.allows_jmap()
+            && let Some(jmap_config) = &account_config.jmap
+        {
+            report
+                .backends
+                .push(BackendCheck::from("jmap", connect_jmap(jmap_config)));
         }
 
         #[cfg(feature = "msgraph")]
-        if backend.allows_msgraph() {
-            if let Some(msgraph_config) = account_config.msgraph.clone() {
-                report.backends.push(check_msgraph(msgraph_config));
-            }
+        if backend.allows_msgraph()
+            && let Some(msgraph_config) = &account_config.msgraph
+        {
+            report.backends.push(BackendCheck::from(
+                "msgraph",
+                connect_msgraph(msgraph_config),
+            ));
         }
 
         #[cfg(feature = "google")]
-        if backend.allows_google() {
-            if let Some(google_config) = account_config.google.clone() {
-                report.backends.push(check_google(google_config));
-            }
+        if backend.allows_google()
+            && let Some(google_config) = &account_config.google
+        {
+            report
+                .backends
+                .push(BackendCheck::from("google", connect_google(google_config)));
         }
 
         if report.backends.is_empty() {
@@ -86,86 +103,109 @@ impl AccountCheckCommand {
     }
 }
 
-#[cfg(feature = "vdir")]
-fn check_vdir(vdir_config: crate::config::VdirConfig) -> BackendCheck {
-    use std::path::Path;
+/// Tests every backend the account has configured, failing on the first
+/// error. Used by the wizard to validate a freshly-built account before
+/// printing it, so a bad credential or endpoint stops the process
+/// instead of yielding a config that cannot connect.
+pub fn test_account(account_config: &AccountConfig) -> Result<()> {
+    #[cfg(feature = "vdir")]
+    if let Some(vdir_config) = &account_config.vdir {
+        connect_vdir(vdir_config)?;
+    }
 
-    let result = (|| -> Result<()> {
-        let home = Path::new(&vdir_config.home_dir);
-        if !home.is_dir() {
-            bail!(
-                "Vdir home `{}` does not exist or is not a directory",
-                home.display()
-            );
-        }
-        Ok(())
-    })();
+    #[cfg(feature = "carddav")]
+    if let Some(carddav_config) = &account_config.carddav {
+        connect_carddav(carddav_config)?;
+    }
 
-    BackendCheck::from("vdir", result)
+    #[cfg(feature = "jmap")]
+    if let Some(jmap_config) = &account_config.jmap {
+        connect_jmap(jmap_config)?;
+    }
+
+    #[cfg(feature = "msgraph")]
+    if let Some(msgraph_config) = &account_config.msgraph {
+        connect_msgraph(msgraph_config)?;
+    }
+
+    #[cfg(feature = "google")]
+    if let Some(google_config) = &account_config.google {
+        connect_google(google_config)?;
+    }
+
+    Ok(())
 }
 
+#[cfg(feature = "vdir")]
+fn connect_vdir(vdir_config: &crate::config::VdirConfig) -> Result<()> {
+    use std::path::Path;
+
+    let home = Path::new(&vdir_config.home_dir);
+    if !home.is_dir() {
+        bail!(
+            "Vdir home `{}` does not exist or is not a directory",
+            home.display()
+        );
+    }
+
+    Ok(())
+}
+
+/// Resolves the CardDAV context root and walks the principal +
+/// addressbook-home-set, proving the server address, TLS and
+/// authentication all work.
 #[cfg(feature = "carddav")]
-fn check_carddav(carddav_config: crate::config::CarddavConfig) -> BackendCheck {
+fn connect_carddav(carddav_config: &crate::config::CarddavConfig) -> Result<()> {
     use crate::carddav::client::open_carddav_client;
 
-    let result = (|| -> Result<()> {
-        let _client = open_carddav_client(carddav_config)?;
-        Ok(())
-    })();
+    open_carddav_client(carddav_config.clone())?;
 
-    BackendCheck::from("carddav", result)
+    Ok(())
 }
 
 /// Establishes the JMAP session, proving the server address, TLS and
 /// authentication all work.
 #[cfg(feature = "jmap")]
-fn check_jmap(jmap_config: crate::config::JmapConfig) -> BackendCheck {
+fn connect_jmap(jmap_config: &crate::config::JmapConfig) -> Result<()> {
     use crate::jmap::backend::JmapBackend;
 
-    let result = (|| -> Result<()> {
-        let _client = JmapBackend::new(jmap_config)?;
-        Ok(())
-    })();
+    JmapBackend::new(jmap_config.clone())?;
 
-    BackendCheck::from("jmap", result)
+    Ok(())
 }
 
 /// Lists the Graph contact folders, proving the token grants access to
 /// the contacts API.
 #[cfg(feature = "msgraph")]
-fn check_msgraph(msgraph_config: crate::config::MsgraphConfig) -> BackendCheck {
+fn connect_msgraph(msgraph_config: &crate::config::MsgraphConfig) -> Result<()> {
     use crate::msgraph::backend::MsgraphBackend;
 
-    let result = (|| -> Result<()> {
-        let mut client = MsgraphBackend::new(msgraph_config)?;
-        client.list_addressbooks()?;
-        Ok(())
-    })();
+    let mut client = MsgraphBackend::new(msgraph_config.clone())?;
+    client.list_addressbooks()?;
 
-    BackendCheck::from("msgraph", result)
+    Ok(())
 }
 
 /// Lists the People contact groups, proving the token grants access to
 /// the contacts API.
 #[cfg(feature = "google")]
-fn check_google(google_config: crate::config::GoogleConfig) -> BackendCheck {
+fn connect_google(google_config: &crate::config::GoogleConfig) -> Result<()> {
     use crate::google::backend::GoogleBackend;
 
-    let result = (|| -> Result<()> {
-        let mut client = GoogleBackend::new(google_config)?;
-        client.list_addressbooks()?;
-        Ok(())
-    })();
+    let mut client = GoogleBackend::new(google_config.clone())?;
+    client.list_addressbooks()?;
 
-    BackendCheck::from("google", result)
+    Ok(())
 }
 
+/// Aggregated account check result: one outcome per backend.
 #[derive(Clone, Debug, Serialize)]
 pub struct CheckReport {
     pub account: String,
     pub backends: Vec<BackendCheck>,
 }
 
+/// Outcome of checking a single backend's connection.
 #[derive(Clone, Debug, Serialize)]
 pub struct BackendCheck {
     pub backend: &'static str,

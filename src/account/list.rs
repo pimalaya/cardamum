@@ -74,8 +74,8 @@ fn load_config(paths: &[PathBuf]) -> Result<Config> {
     match Config::from_paths_or_default(paths)? {
         Some(config) => Ok(config),
         None => anyhow::bail!(
-            "No configuration found. Run `cardamum` once to launch the wizard, \
-             or `cardamum account configure --account <name>` to create one."
+            "No configuration found. Run bare `cardamum` to launch the wizard \
+             and generate one."
         ),
     }
 }

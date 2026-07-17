@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -5,7 +6,6 @@
     feature = "google"
 ))]
 use std::path::PathBuf;
-use std::{collections::HashMap, fs, path::Path};
 
 #[cfg(feature = "jmap")]
 use anyhow::bail;
@@ -78,15 +78,14 @@ impl TomlConfig for Config {
 }
 
 impl Config {
-    /// Serializes `self` to TOML and writes it to `path`, creating any
-    /// missing parent directories. Used by the wizard to persist a
-    /// freshly-built configuration.
+    /// Serializes `self` to a compact TOML document. Used by the wizard
+    /// to print a ready-to-save configuration on stdout.
     ///
     /// Empty sub-tables left by untouched defaults are pruned, and each
-    /// account's backend blocks are rendered as dotted keys, so the file
-    /// matches the shape of config.sample.toml instead of carrying bare
-    /// `[table]` / `[card.list.table]` headers.
-    pub fn write(&self, path: &Path) -> Result<()> {
+    /// account's backend blocks are rendered as dotted keys, so the
+    /// output matches the shape of config.sample.toml instead of
+    /// carrying bare `[table]` / `[card.list.table]` headers.
+    pub fn to_toml_string(&self) -> Result<String> {
         let raw = toml::to_string(self).context("Serialize TOML config error")?;
         let mut doc: DocumentMut = raw.parse().context("Parse serialized TOML config error")?;
 
@@ -100,16 +99,7 @@ impl Config {
             }
         }
 
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).with_context(|| {
-                format!("Create TOML config parent `{}` error", parent.display())
-            })?;
-        }
-
-        fs::write(path, doc.to_string())
-            .with_context(|| format!("Write TOML config `{}` error", path.display()))?;
-
-        Ok(())
+        Ok(doc.to_string())
     }
 }
 
@@ -215,7 +205,7 @@ pub struct JmapConfig {
     /// Defaults to `["http/1.1"]` (JMAP rides on HTTP/1.1). Set to
     /// `[]` to skip ALPN negotiation entirely. Only relevant for the
     /// rustls provider; `native-tls` ignores ALPN.
-    #[serde(default = "io_jmap::client::default_alpn")]
+    #[serde(default = "io_jmap::client::JmapClientStd::default_alpn")]
     pub alpn: Vec<String>,
 
     /// Authentication configuration.

@@ -3,7 +3,7 @@
 //! calls against the configured home directory.
 
 use anyhow::{Result, bail};
-use io_vdir::{client::VdirClient, collection::Collection, item::ItemKind, path::VdirPath};
+use io_vdir::{client::VdirClient, collection::VdirCollection, item::VdirItemKind, path::VdirPath};
 
 use crate::{
     config::VdirConfig,
@@ -45,7 +45,7 @@ impl VdirBackend {
             bail!("Addressbook name cannot be empty");
         }
 
-        let collection = Collection {
+        let collection = VdirCollection {
             path: self.inner.root().join(name),
             display_name: Some(name.to_string()),
             description: description.map(str::to_string),
@@ -65,7 +65,7 @@ impl VdirBackend {
             .find(|collection| collection.id() == id)
             .ok_or_else(|| anyhow::anyhow!("Addressbook `{id}` not found"))?;
 
-        let next = Collection {
+        let next = VdirCollection {
             path: self.addressbook_path(id)?,
             display_name: match patch.name {
                 Some(name) => Some(name),
@@ -105,7 +105,7 @@ impl VdirBackend {
 
         let cards = items
             .into_iter()
-            .filter(|item| item.kind == ItemKind::Vcard)
+            .filter(|item| item.kind == VdirItemKind::Vcard)
             .filter_map(|item| {
                 let id = item.id()?.to_string();
                 Some(Card {
@@ -139,7 +139,7 @@ impl VdirBackend {
         let path = self.addressbook_path(addressbook_id)?;
         let (id, _) = self
             .inner
-            .store_item(path, None, ItemKind::Vcard, contents)?;
+            .store_item(path, None, VdirItemKind::Vcard, contents)?;
         Ok(id)
     }
 
@@ -153,8 +153,12 @@ impl VdirBackend {
         _if_match: Option<&str>,
     ) -> Result<()> {
         let path = self.addressbook_path(addressbook_id)?;
-        self.inner
-            .store_item(path, Some(card_id.to_string()), ItemKind::Vcard, contents)?;
+        self.inner.store_item(
+            path,
+            Some(card_id.to_string()),
+            VdirItemKind::Vcard,
+            contents,
+        )?;
         Ok(())
     }
 
@@ -175,9 +179,9 @@ impl VdirBackend {
     }
 }
 
-/// Maps a vdir [`Collection`] to a shared [`Addressbook`]: the final
+/// Maps a vdir [`VdirCollection`] to a shared [`Addressbook`]: the final
 /// path segment is the id and the display name falls back to it.
-fn into_addressbook(collection: Collection) -> Addressbook {
+fn into_addressbook(collection: VdirCollection) -> Addressbook {
     let id = collection.id().to_string();
     let name = collection.display_name.unwrap_or_else(|| id.clone());
 

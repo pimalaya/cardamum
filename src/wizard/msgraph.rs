@@ -1,47 +1,34 @@
-//! Microsoft Graph wizard.
+//! Microsoft Graph API wizard (Microsoft accounts).
 //!
-//! The Graph API is bearer-token-only: the wizard collects the token
-//! secret (typically an ortie shell command, since tokens expire and
-//! need refreshing) and the user id, then tests the connection by
-//! listing the contact folders; a failure re-runs the prompts.
+//! The Graph API is bearer-token-only: the wizard collects the user id
+//! and the token secret, typically an Ortie shell command since tokens
+//! expire and need refreshing. It does not connect; the wizard
+//! validates the whole account once at the end (see
+//! [`crate::account::check`]).
 
 use anyhow::Result;
-use pimalaya_cli::{prompt, spinner::Spinner};
+use pimalaya_cli::prompt;
 
 use crate::{
     config::{MsgraphAuthConfig, MsgraphConfig},
-    msgraph::backend::MsgraphBackend,
     wizard::secret,
 };
 
-/// Runs the Microsoft Graph wizard until the connection succeeds;
-/// `existing` seeds the defaults when editing.
-pub fn configure(existing: Option<&MsgraphConfig>) -> Result<MsgraphConfig> {
-    let tls_config = existing.map(|c| c.tls.clone()).unwrap_or_default();
+/// Runs the Microsoft Graph wizard, returning a ready [`MsgraphConfig`].
+pub fn configure() -> Result<MsgraphConfig> {
+    // The note is guidance, not config, so it goes to stderr: only the
+    // generated TOML must land on stdout for `cardamum > <config>`.
+    eprintln!(
+        "Microsoft Graph uses OAuth 2.0 tokens; issue and refresh them with an external manager such as Ortie"
+    );
 
-    loop {
-        let default_user_id = existing.map(|c| c.user_id.as_str()).unwrap_or("me");
-        let user_id = prompt::text("Graph user id:", Some(default_user_id))?;
-        let token = secret::configure("Graph access token", Some("ortie token show"))?;
+    let user_id = prompt::text("Microsoft Graph user id:", Some("me"))?;
+    let token = secret::configure("Microsoft Graph access token", Some("ortie token show"))?;
 
-        let config = MsgraphConfig {
-            user_id,
-            tls: tls_config.clone(),
-            alpn: vec!["http/1.1".into()],
-            auth: MsgraphAuthConfig { token },
-        };
-
-        let spinner = Spinner::start("Testing connection");
-
-        let test =
-            MsgraphBackend::new(config.clone()).and_then(|mut client| client.list_addressbooks());
-
-        match test {
-            Ok(_) => {
-                spinner.success("Connection successful");
-                return Ok(config);
-            }
-            Err(err) => spinner.failure(format!("Connection failed: {err}")),
-        }
-    }
+    Ok(MsgraphConfig {
+        user_id,
+        tls: Default::default(),
+        alpn: vec!["http/1.1".to_string()],
+        auth: MsgraphAuthConfig { token },
+    })
 }

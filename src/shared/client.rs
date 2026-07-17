@@ -53,47 +53,52 @@ impl AddressbookClient {
         let mut inner: Option<BackendClient> = None;
 
         #[cfg(feature = "vdir")]
-        if inner.is_none() && backend.allows_vdir() {
-            if let Some(vdir_config) = account_config.vdir.take() {
-                use crate::vdir::backend::VdirBackend;
-                inner = Some(BackendClient::Vdir(VdirBackend::new(vdir_config)));
-            }
+        if inner.is_none()
+            && backend.allows_vdir()
+            && let Some(vdir_config) = account_config.vdir.take()
+        {
+            use crate::vdir::backend::VdirBackend;
+            inner = Some(BackendClient::Vdir(VdirBackend::new(vdir_config)));
         }
 
         #[cfg(feature = "carddav")]
-        if inner.is_none() && backend.allows_carddav() {
-            if let Some(carddav_config) = account_config.carddav.take() {
-                use crate::carddav::backend::CarddavBackend;
-                let client = CarddavBackend::new(carddav_config)?;
-                inner = Some(BackendClient::Carddav(Box::new(client)));
-            }
+        if inner.is_none()
+            && backend.allows_carddav()
+            && let Some(carddav_config) = account_config.carddav.take()
+        {
+            use crate::carddav::backend::CarddavBackend;
+            let client = CarddavBackend::new(carddav_config)?;
+            inner = Some(BackendClient::Carddav(Box::new(client)));
         }
 
         #[cfg(feature = "jmap")]
-        if inner.is_none() && backend.allows_jmap() {
-            if let Some(jmap_config) = account_config.jmap.take() {
-                use crate::jmap::backend::JmapBackend;
-                let client = JmapBackend::new(jmap_config)?;
-                inner = Some(BackendClient::Jmap(Box::new(client)));
-            }
+        if inner.is_none()
+            && backend.allows_jmap()
+            && let Some(jmap_config) = account_config.jmap.take()
+        {
+            use crate::jmap::backend::JmapBackend;
+            let client = JmapBackend::new(jmap_config)?;
+            inner = Some(BackendClient::Jmap(Box::new(client)));
         }
 
         #[cfg(feature = "msgraph")]
-        if inner.is_none() && backend.allows_msgraph() {
-            if let Some(msgraph_config) = account_config.msgraph.take() {
-                use crate::msgraph::backend::MsgraphBackend;
-                let client = MsgraphBackend::new(msgraph_config)?;
-                inner = Some(BackendClient::Msgraph(Box::new(client)));
-            }
+        if inner.is_none()
+            && backend.allows_msgraph()
+            && let Some(msgraph_config) = account_config.msgraph.take()
+        {
+            use crate::msgraph::backend::MsgraphBackend;
+            let client = MsgraphBackend::new(msgraph_config)?;
+            inner = Some(BackendClient::Msgraph(Box::new(client)));
         }
 
         #[cfg(feature = "google")]
-        if inner.is_none() && backend.allows_google() {
-            if let Some(google_config) = account_config.google.take() {
-                use crate::google::backend::GoogleBackend;
-                let client = GoogleBackend::new(google_config)?;
-                inner = Some(BackendClient::Google(Box::new(client)));
-            }
+        if inner.is_none()
+            && backend.allows_google()
+            && let Some(google_config) = account_config.google.take()
+        {
+            use crate::google::backend::GoogleBackend;
+            let client = GoogleBackend::new(google_config)?;
+            inner = Some(BackendClient::Google(Box::new(client)));
         }
 
         let Some(inner) = inner else {

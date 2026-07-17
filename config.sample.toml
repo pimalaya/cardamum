@@ -10,15 +10,15 @@
 # can be passed at once, separated by `:`; the first one is the base and the
 # rest are deep-merged on top of it.
 #
-# Run `cardamum` once with no config file to launch the wizard, which prompts
-# for an account name, then lets you pick a backend. The recommended path is
-# automatic discovery: enter your email address and the wizard searches every
-# reachable contacts service (CardDAV, JMAP, plus the Google People and
-# Microsoft Graph APIs for those providers) and lets you pick one. You can also
-# configure a backend by hand (CardDAV, JMAP, Microsoft Graph, Google People, or
-# local vdir). Every remote backend tests the connection before saving.
-# `cardamum account configure --account <name>` can be used afterwards to edit
-# (or add) an account through the same wizard.
+# Run bare `cardamum` (no subcommand) to launch the wizard. It opens with a
+# single prompt that takes an email address, a server URL, or a local vdir path.
+# The recommended path is automatic discovery: enter your email address and the
+# wizard searches every reachable contacts service (CardDAV, JMAP, plus the
+# Google People and Microsoft Graph APIs for those providers) and lets you pick
+# one. A `scheme://` URL is a CardDAV server to configure by hand; a filesystem
+# path is a local vdir. The wizard tests the account, then prints a ready-to-save
+# configuration on stdout without touching disk (redirect it to save, e.g.
+# `cardamum > config.toml`), exactly like Ortie.
 # ================================================================================
 
 # --------------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 //! Google People arm of the shared-API client: thin glue mapping the
 //! shared addressbook and card operations onto
-//! [`io_google_people::v1::client::PeopleClientStd`] calls, projecting
+//! [`io_people::v1::client::PeopleClientStd`] calls, projecting
 //! People persons onto vCard documents (see [`crate::google::project`]).
 //!
 //! Contact groups are the addressbooks: the myContacts system group
@@ -10,7 +10,7 @@
 //! to the requested group.
 
 use anyhow::{Error, Result, bail};
-use io_google_people::v1::{
+use io_people::v1::{
     client::{PeopleClientStd, PeopleClientStdConnectOptions},
     rest::{
         contact_groups::{
@@ -340,7 +340,7 @@ fn in_group(person: &PeoplePerson, id: &str) -> bool {
         .any(|group| group == id)
 }
 
-/// io-google-people person to the shared card shape: the projected
+/// io-people person to the shared card shape: the projected
 /// vCard document as contents, the person id as id and the person etag
 /// as ETag.
 fn into_card(addressbook_id: &str, person: PeoplePerson) -> Card {

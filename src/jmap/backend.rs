@@ -17,13 +17,15 @@ use io_jmap::{
     client::JmapClientStd,
     rfc9610::{
         address_book::{
-            JmapAddressBook, JmapAddressBookCreate, JmapAddressBookUpdate,
-            get::JmapAddressBookGetOptions, set::JmapAddressBookSetArgs,
+            JmapAddressBook,
+            get::JmapAddressBookGetOptions,
+            set::{JmapAddressBookCreate, JmapAddressBookSetArgs, JmapAddressBookUpdate},
         },
         contact_card::{
-            JmapContactCard, JmapContactCardFilter, JmapContactCardPatch,
-            get::JmapContactCardGetOptions, query::JmapContactCardQueryOptions,
-            set::JmapContactCardSetArgs,
+            JmapContactCard,
+            get::JmapContactCardGetOptions,
+            query::{JmapContactCardFilter, JmapContactCardQueryOptions},
+            set::{JmapContactCardPatch, JmapContactCardSetArgs},
         },
     },
 };

@@ -3,7 +3,7 @@ use std::fmt;
 use anyhow::Result;
 use clap::Parser;
 use comfy_table::{Cell, Color, Row, Table};
-use io_vdir::collection::Collection;
+use io_vdir::collection::VdirCollection;
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
@@ -49,8 +49,8 @@ pub struct CollectionRow {
     pub path: String,
 }
 
-impl From<Collection> for CollectionRow {
-    fn from(collection: Collection) -> Self {
+impl From<VdirCollection> for CollectionRow {
+    fn from(collection: VdirCollection) -> Self {
         Self {
             id: collection.id().to_string(),
             display_name: collection.display_name.clone(),

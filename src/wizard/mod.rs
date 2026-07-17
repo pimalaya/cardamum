@@ -1,8 +1,6 @@
-pub mod account;
 #[cfg(feature = "carddav")]
 pub mod carddav;
 pub mod discover;
-pub mod edit;
 #[cfg(feature = "google")]
 pub mod google;
 #[cfg(feature = "jmap")]

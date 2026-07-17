@@ -1,39 +1,318 @@
-//! Interactive configuration wizard for first-run setup.
+//! Configuration wizard.
 //!
-//! Triggered by `cli::load_or_wizard` when no config file is found
-//! (TomlConfig::from_paths_or_default returned `Ok(None)`).
+//! Run on bare `cardamum` (no subcommand), and proposed by
+//! `cli::resolve_account` when no config file is found. It writes
+//! nothing to disk: the resulting account is printed as a ready-to-save
+//! TOML document on stdout (prompts render on stderr), so
+//! `cardamum > <config>` is the write-back, exactly like ortie.
 //!
-//! Confirms with the user, asks for an account name, then runs the
-//! shared account flow (see [`crate::wizard::account`]) with no
-//! existing defaults, and writes the result.
+//! One prompt takes an email address, a server URL, or a local vdir
+//! path, and its shape orients the setup, mirroring the cardamum-android
+//! onboarding:
+//!
+//! - an email (or bare domain) runs io-pim-discovery's parallel
+//!   discovery (see [`super::search`]) and every reachable service and
+//!   authentication method becomes one selectable configuration; a
+//!   detected Google or Microsoft account collapses to its dedicated
+//!   contacts API;
+//! - a `scheme://` URL is a CardDAV server to configure by hand;
+//! - an existing directory is a local vdir.
 
-use std::{collections::HashMap, path::Path, process::exit};
+use std::{collections::HashMap, fmt, path::Path};
 
-use anyhow::Result;
-use pimalaya_cli::prompt;
+use anyhow::{Result, bail};
+use pimalaya_cli::{printer::Printer, prompt, spinner::Spinner};
+use serde::{Serialize, Serializer};
+use url::Url;
 
-use crate::config::Config;
-use crate::wizard::account;
+#[cfg(feature = "carddav")]
+use crate::config::CarddavConfig;
+#[cfg(feature = "google")]
+use crate::config::GoogleConfig;
+#[cfg(feature = "jmap")]
+use crate::config::JmapConfig;
+#[cfg(feature = "msgraph")]
+use crate::config::MsgraphConfig;
+#[cfg(feature = "vdir")]
+use crate::config::VdirConfig;
+#[cfg(feature = "google")]
+use crate::wizard::google;
+#[cfg(feature = "jmap")]
+use crate::wizard::jmap;
+#[cfg(feature = "msgraph")]
+use crate::wizard::msgraph;
+use crate::{
+    account::check,
+    config::{AccountConfig, Config},
+    wizard::search::{self, Discovered, DiscoveredKind},
+};
+#[cfg(feature = "carddav")]
+use crate::{carddav::client::parse_carddav_server, wizard::carddav};
 
-pub fn run_or_exit(target: &Path) -> Result<Config> {
-    let prompt_msg = format!(
-        "No configuration found. Create one at {}?",
-        target.display()
-    );
+/// The endpoint prompt label, shared by the create flow.
+const ENDPOINT_PROMPT: &str = "Email, server or vdir path:";
 
-    if !prompt::bool(&prompt_msg, true)? {
-        exit(0);
+/// The backend config produced by the chosen flow, folded into a fresh
+/// [`AccountConfig`] afterwards.
+enum Chosen {
+    #[cfg(feature = "vdir")]
+    Vdir(VdirConfig),
+    #[cfg(feature = "carddav")]
+    Carddav(Box<CarddavConfig>),
+    #[cfg(feature = "jmap")]
+    Jmap(Box<JmapConfig>),
+    #[cfg(feature = "msgraph")]
+    Msgraph(MsgraphConfig),
+    #[cfg(feature = "google")]
+    Google(GoogleConfig),
+}
+
+/// Runs the wizard and prints the resulting [`Config`] as a
+/// ready-to-save TOML document, writing nothing to disk. Run on bare
+/// `cardamum`, and proposed by `cli::resolve_account` on first run.
+pub fn run(printer: &mut impl Printer) -> Result<()> {
+    let input = prompt::text::<&str>(ENDPOINT_PROMPT, None)?;
+    let input = input.trim();
+    if input.is_empty() {
+        bail!("Empty input: enter an email address, a server URL, or a vdir path");
     }
 
-    let account_name = prompt::text("Account name:", Some("personal"))?;
-    let account = account::configure(&account_name, true, None)?;
+    let account_name = prompt::text("Account name:", Some(&default_account_name(input)))?;
+    let account = build_account(input)?;
+
+    // Test the account before printing it: a bad credential or endpoint
+    // fails here and stops the process, like any other error, rather
+    // than emitting a config that cannot connect.
+    let spinner = Spinner::start("Testing account configuration");
+    if let Err(err) = check::test_account(&account) {
+        spinner.failure("Account configuration test failed");
+        return Err(err);
+    }
+    spinner.success("Account configuration is valid");
 
     let config = Config {
         accounts: HashMap::from([(account_name, account)]),
         ..Default::default()
     };
 
-    account::write(&config, target)?;
+    printer.out(GeneratedConfig(config))
+}
 
-    Ok(config)
+/// The account produced by the wizard, printed as a ready-to-save TOML
+/// document on stdout with its guidance embedded as comments, or the
+/// same config serialized as an object in JSON mode. The wizard writes
+/// nothing itself: the user redirects the output into their config file
+/// (e.g. `cardamum > <config>`), so prompts go to stderr and only this
+/// lands on stdout.
+struct GeneratedConfig(Config);
+
+impl fmt::Display for GeneratedConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let toml = self.0.to_toml_string().map_err(|_| fmt::Error)?;
+
+        writeln!(f, "# Configuration generated by the cardamum wizard.")?;
+        writeln!(f, "#")?;
+        writeln!(
+            f,
+            "# Nothing was written to disk: save this into your config"
+        )?;
+        writeln!(f, "# file, one of:")?;
+        writeln!(f, "#   $XDG_CONFIG_HOME/cardamum/config.toml")?;
+        writeln!(f, "#   $HOME/.config/cardamum/config.toml")?;
+        writeln!(f, "#   $HOME/.cardamumrc")?;
+        writeln!(f, "#")?;
+        writeln!(
+            f,
+            "# Prompts render on stderr, so redirecting works directly:"
+        )?;
+        writeln!(f, "#   cardamum > ~/.config/cardamum/config.toml")?;
+        writeln!(f, "#")?;
+        writeln!(f, "# Every field is documented in the sample config:")?;
+        writeln!(
+            f,
+            "# https://github.com/pimalaya/cardamum/blob/master/config.sample.toml"
+        )?;
+        writeln!(f)?;
+        write!(f, "{toml}")
+    }
+}
+
+impl Serialize for GeneratedConfig {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.0.serialize(serializer)
+    }
+}
+
+/// Orients the setup from the input shape, then folds the chosen
+/// backend into a fresh default [`AccountConfig`].
+fn build_account(input: &str) -> Result<AccountConfig> {
+    let chosen = if is_path(input) {
+        configure_local(input)?
+    } else if input.contains("://") {
+        configure_server(input)?
+    } else {
+        configure_email(input)?
+    };
+
+    let mut account = AccountConfig {
+        default: true,
+        ..Default::default()
+    };
+
+    match chosen {
+        #[cfg(feature = "vdir")]
+        Chosen::Vdir(vdir) => account.vdir = Some(vdir),
+        #[cfg(feature = "carddav")]
+        Chosen::Carddav(carddav) => account.carddav = Some(*carddav),
+        #[cfg(feature = "jmap")]
+        Chosen::Jmap(jmap) => account.jmap = Some(*jmap),
+        #[cfg(feature = "msgraph")]
+        Chosen::Msgraph(msgraph) => account.msgraph = Some(msgraph),
+        #[cfg(feature = "google")]
+        Chosen::Google(google) => account.google = Some(google),
+    }
+
+    Ok(account)
+}
+
+/// Runs the email-driven discovery flow: search the services reachable
+/// from the address, let the user pick one, and configure its backend.
+fn configure_email(input: &str) -> Result<Chosen> {
+    let email = if input.contains('@') {
+        input.to_string()
+    } else {
+        format!("@{input}")
+    };
+
+    let spinner = Spinner::start("Searching for contacts services");
+    let mut found = search::search(&email)?;
+    retain_supported(&mut found);
+
+    if found.is_empty() {
+        spinner.failure("No configuration found");
+        bail!(
+            "No contacts service discovered for `{email}`; enter a server URL or vdir path instead"
+        );
+    }
+    spinner.success(format!("Found {} configuration(s)", found.len()));
+
+    let default = found.first().cloned();
+    let choice = prompt::item("Choose a configuration:", found, default)?;
+
+    dispatch(&email, choice)
+}
+
+/// Configures the backend behind a discovered entry.
+#[cfg_attr(
+    all(
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "google"
+    ),
+    allow(unreachable_patterns)
+)]
+#[cfg_attr(
+    not(any(feature = "carddav", feature = "jmap")),
+    allow(unused_variables)
+)]
+fn dispatch(email: &str, choice: Discovered) -> Result<Chosen> {
+    match &choice.kind {
+        #[cfg(feature = "carddav")]
+        DiscoveredKind::Carddav(url) => Ok(Chosen::Carddav(Box::new(
+            carddav::configure_discovered(email, url, &choice)?,
+        ))),
+        #[cfg(feature = "jmap")]
+        DiscoveredKind::Jmap(_) => Ok(Chosen::Jmap(Box::new(jmap::configure_discovered(
+            email, &choice,
+        )?))),
+        #[cfg(feature = "msgraph")]
+        DiscoveredKind::Msgraph => Ok(Chosen::Msgraph(msgraph::configure()?)),
+        #[cfg(feature = "google")]
+        DiscoveredKind::Google => Ok(Chosen::Google(google::configure()?)),
+        kind => bail!("Configuration `{kind:?}` is not supported by this build"),
+    }
+}
+
+/// Configures a CardDAV server the user typed as a `scheme://` URL.
+#[cfg(feature = "carddav")]
+fn configure_server(input: &str) -> Result<Chosen> {
+    let url = parse_carddav_server(input)?;
+    Ok(Chosen::Carddav(Box::new(carddav::configure_manual(&url)?)))
+}
+
+#[cfg(not(feature = "carddav"))]
+fn configure_server(input: &str) -> Result<Chosen> {
+    bail!("`{input}` looks like a server URL, but CardDAV support is not compiled in")
+}
+
+/// Configures a local vdir from a typed directory path.
+#[cfg(feature = "vdir")]
+fn configure_local(input: &str) -> Result<Chosen> {
+    let raw = input.strip_prefix("file://").unwrap_or(input);
+    let expanded = shellexpand::tilde(raw);
+    if !Path::new(expanded.as_ref()).is_dir() {
+        bail!("No such vdir directory `{raw}`");
+    }
+
+    Ok(Chosen::Vdir(VdirConfig {
+        home_dir: raw.to_string(),
+    }))
+}
+
+#[cfg(not(feature = "vdir"))]
+fn configure_local(input: &str) -> Result<Chosen> {
+    bail!("`{input}` looks like a vdir path, but vdir support is not compiled in")
+}
+
+/// Drops the discovered entries whose backend is not compiled in.
+fn retain_supported(found: &mut Vec<Discovered>) {
+    found.retain(|entry| match entry.kind {
+        DiscoveredKind::Carddav(_) => cfg!(feature = "carddav"),
+        DiscoveredKind::Jmap(_) => cfg!(feature = "jmap"),
+        DiscoveredKind::Msgraph => cfg!(feature = "msgraph"),
+        DiscoveredKind::Google => cfg!(feature = "google"),
+    });
+}
+
+/// Proposes a default account name from the input shape: the local part
+/// of an email, the first label of a domain or host, or the folder name
+/// of a local path.
+fn default_account_name(input: &str) -> String {
+    if is_path(input) {
+        let raw = input.strip_prefix("file://").unwrap_or(input);
+        return Path::new(raw)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("personal")
+            .to_string();
+    }
+
+    if let Ok(url) = Url::parse(input)
+        && let Some(host) = url.host_str()
+    {
+        return first_label(host);
+    }
+
+    match input.rsplit_once('@') {
+        Some((local, _)) if !local.is_empty() => local.to_string(),
+        Some((_, domain)) => first_label(domain),
+        None => first_label(input),
+    }
+}
+
+/// The first dot-separated label of a host or domain.
+fn first_label(host: &str) -> String {
+    host.split('.').next().unwrap_or(host).to_string()
+}
+
+/// Whether the input names a filesystem path (absolute, home-relative,
+/// explicitly relative, or a `file://` URL) rather than a network
+/// endpoint.
+fn is_path(input: &str) -> bool {
+    input.starts_with("file://")
+        || input.starts_with('/')
+        || input.starts_with('~')
+        || input.starts_with("./")
+        || input.starts_with("../")
 }

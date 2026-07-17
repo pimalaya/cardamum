@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use io_vdir::collection::Collection;
+use io_vdir::collection::VdirCollection;
 use pimalaya_cli::printer::{Message, Printer};
 
 use crate::vdir::client::VdirClient;
@@ -18,14 +18,14 @@ pub struct VdirCollectionCreateCommand {
     #[arg(short, long, value_name = "TEXT")]
     pub description: Option<String>,
     /// Optional ASCII `#RRGGBB` color (`color` metadata file).
-    #[arg(short, long, value_name = "HEX")]
+    #[arg(short = 'C', long, value_name = "HEX")]
     pub color: Option<String>,
 }
 
 impl VdirCollectionCreateCommand {
     pub fn execute(self, printer: &mut impl Printer, client: VdirClient) -> Result<()> {
         let path = client.root().join(&self.name);
-        let collection = Collection {
+        let collection = VdirCollection {
             path,
             display_name: Some(self.name.clone()),
             description: self.description,

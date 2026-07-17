@@ -7,9 +7,9 @@ Whether you are a human or an AI agent, read these in order before touching the 
 1. the [Pimalaya README](https://github.com/pimalaya) for what the project is and how its repositories stack;
 2. the [Pimalaya ARCHITECTURE](https://github.com/pimalaya/.github/blob/master/ARCHITECTURE.md) for the conventions every repository shares (layering, `no_std`, modules, errors, code style, licensing, notes for AI agents);
 3. this guide, for how to build, test and submit changes here;
-4. the repo [ARCHITECTURE](./ARCHITECTURE.md) for how Cardamum CLI in particular is designed.
+4. the [`main.rs`](./src/main.rs) crate header for how Cardamum CLI in particular is designed, and [docs/](./docs) for the reference detail and development log.
 
-This document stays operational; the design lives in [ARCHITECTURE.md](./ARCHITECTURE.md).
+This document stays operational; the design lives in the `main.rs` header and [docs/](./docs).
 
 ## Development environment
 

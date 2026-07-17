@@ -11,7 +11,6 @@
 use std::{
     io::{Read, Write},
     ops::{Deref, DerefMut},
-    path::PathBuf,
 };
 
 use anyhow::{Result, anyhow, bail};
@@ -19,23 +18,21 @@ use io_http::{
     coroutine::{HttpCoroutine, HttpCoroutineState, HttpYield},
     rfc6750::bearer::HttpAuthBearer,
     rfc7617::basic::HttpAuthBasic,
-    rfc8615::well_known::Http11WellKnown,
+    rfc8615::well_known::{Http11WellKnown, Http11WellKnownOutput},
+    rfc9110::request::HttpRequest,
+};
+use io_pim_discovery::{
+    pacc::client::DiscoveryPaccClientStd,
+    rfc6764::{client::DiscoveryWebdavClientStd, service::DiscoveryDavService},
 };
 use io_webdav::{client::WebdavClientStd as Inner, rfc4918::WebdavAuth};
-use pimalaya_config::toml::TomlConfig;
 use pimalaya_stream::{std::stream::StreamStd, tls::Tls};
 use secrecy::ExposeSecret;
 use url::Url;
 
-use pimconf::{
-    pacc::client::DiscoveryPaccClientStd,
-    rfc6764::{client::DiscoveryWebdavClientStd, types::DavService},
-};
-
 use crate::{
     account::context::Account,
-    cli::load_or_wizard,
-    config::{CarddavAuthConfig, CarddavConfig, TlsConfig},
+    config::{AccountConfig, CarddavAuthConfig, CarddavConfig, Config, TlsConfig},
 };
 
 const DEFAULT_RESOLVER: &str = "tcp://1.1.1.1:53";
@@ -70,21 +67,19 @@ impl DerefMut for CarddavClient {
     }
 }
 
-/// Loads the configuration, picks the active account, builds the
-/// merged [`Account`] then opens the CardDAV client.
+/// Builds the merged [`Account`] from the already-resolved config and
+/// account, then opens the CardDAV client. Bails when the account has
+/// no `[carddav]` block.
 pub fn build_carddav_client(
-    config_paths: &[PathBuf],
-    account_name: Option<&str>,
+    config: Config,
+    name: String,
+    mut account_config: AccountConfig,
 ) -> Result<CarddavClient> {
-    let mut config = load_or_wizard(config_paths)?;
-    let (name, mut ac) = config
-        .take_account(account_name)?
-        .ok_or_else(|| anyhow!("Cannot find account"))?;
-    let carddav_config = ac
+    let carddav_config = account_config
         .carddav
         .take()
         .ok_or_else(|| anyhow!("CardDAV config is missing for account `{name}`"))?;
-    let account = Account::from(config).merge(Account::from(ac));
+    let account = Account::from(config).merge(Account::from(account_config));
     let inner = open_carddav_client(carddav_config)?;
     Ok(CarddavClient::new(inner, account))
 }
@@ -94,7 +89,8 @@ pub fn build_carddav_client(
 ///
 /// `home` skips every discovery step; `server` resolves principal +
 /// addressbook-home-set from the given context root; `discover`
-/// resolves a bare domain to that context root through pimconf first.
+/// resolves a bare domain to that context root through io-pim-discovery
+/// first.
 pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
     let CarddavConfig {
         discover,
@@ -127,11 +123,62 @@ pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
         }
     };
 
+    // A bare origin (path `/`) is not necessarily the DAV context root:
+    // PACC and RFC 6764 both hand back e.g. `https://carddav.fastmail.com/`,
+    // yet fastmail 404s every request outside `/dav/*`. Probe
+    // `.well-known/carddav` and follow its redirect first, mirroring the
+    // cardamum-android connect-time probe. No redirect keeps the origin,
+    // which plenty of servers serve the walk from directly.
+    let server = match server.path() {
+        "" | "/" => probe_carddav_context_root(&server, &tls).unwrap_or(server),
+        _ => server,
+    };
+
     let mut client = Inner::connect(&server, &tls, auth)?;
     client.current_user_principal()?;
     client.addressbook_home_set()?;
 
     Ok(client)
+}
+
+/// Probes `.well-known/carddav` on a bare-origin `server` with an
+/// unauthenticated GET, returning the context-root redirect target when
+/// the server publishes one. Silent: a failed probe or a plain response
+/// (no redirect) yields `None`, leaving the origin as-is.
+fn probe_carddav_context_root(server: &Url, tls: &Tls) -> Option<Url> {
+    let host = server.host_str()?;
+    let port = server.port_or_known_default()?;
+    let request = Http11WellKnown::prepare_request(server.as_str(), "carddav").ok()?;
+    let output = run_well_known(host, port, request, tls).ok()?;
+    output.redirect_url
+}
+
+/// Runs a prepared `.well-known` request to completion over a fresh TLS
+/// stream to `host:port`, returning the coroutine output.
+fn run_well_known(
+    host: &str,
+    port: u16,
+    request: HttpRequest,
+    tls: &Tls,
+) -> Result<Http11WellKnownOutput> {
+    let mut stream = StreamStd::connect_tls(host, port, tls)?;
+    let mut coroutine = Http11WellKnown::new(request);
+    let mut buf = [0u8; 8 * 1024];
+    let mut arg: Option<&[u8]> = None;
+
+    loop {
+        match coroutine.resume(arg.take()) {
+            HttpCoroutineState::Complete(Ok(output)) => return Ok(output),
+            HttpCoroutineState::Complete(Err(err)) => return Err(err.into()),
+            HttpCoroutineState::Yielded(HttpYield::WantsWrite(bytes)) => {
+                stream.write_all(&bytes)?;
+            }
+            HttpCoroutineState::Yielded(HttpYield::WantsRead) => {
+                let n = stream.read(&mut buf)?;
+                arg = Some(&buf[..n]);
+            }
+        }
+    }
 }
 
 /// Discovers a CardDAV server URL for `domain`, trying each mechanism
@@ -155,11 +202,12 @@ pub fn discover_via_pacc(domain: &str, tls: &Tls) -> Option<Url> {
 /// RFC 6764 §6 discovery: resolves the SRV record (secure first), its
 /// TXT `path` context, then `.well-known` on the resolved host, falling
 /// back to `https://<domain>` when the domain publishes nothing. Wraps
-/// pimconf's `resolve`, which performs the steps in the RFC's order.
+/// io-pim-discovery's `resolve`, which performs the steps in the RFC's
+/// order.
 pub fn discover_via_rfc6764(domain: &str, tls: &Tls) -> Option<Url> {
     let resolver = Url::parse(DEFAULT_RESOLVER).expect("DEFAULT_RESOLVER must be a valid URL");
     let mut client = DiscoveryWebdavClientStd::new(resolver).with_tls(tls.clone());
-    client.resolve(domain, DavService::Carddav).ok()
+    client.resolve(domain, DiscoveryDavService::Carddav).ok()
 }
 
 /// Whether `domain` is a Google consumer mail domain, which serves
@@ -192,24 +240,7 @@ fn google_carddav_server(auth: &WebdavAuth, tls: &Tls) -> Result<Url> {
         .header("Authorization", bearer.to_authorization())
         .header("Depth", "0");
 
-    let mut stream = StreamStd::connect_tls(GOOGLE_API_HOST, 443, tls)?;
-    let mut coroutine = Http11WellKnown::new(request);
-    let mut buf = [0u8; 8 * 1024];
-    let mut arg: Option<&[u8]> = None;
-
-    let output = loop {
-        match coroutine.resume(arg.take()) {
-            HttpCoroutineState::Complete(Ok(output)) => break output,
-            HttpCoroutineState::Complete(Err(err)) => return Err(err.into()),
-            HttpCoroutineState::Yielded(HttpYield::WantsWrite(bytes)) => {
-                stream.write_all(&bytes)?;
-            }
-            HttpCoroutineState::Yielded(HttpYield::WantsRead) => {
-                let n = stream.read(&mut buf)?;
-                arg = Some(&buf[..n]);
-            }
-        }
-    };
+    let output = run_well_known(GOOGLE_API_HOST, 443, request, tls)?;
 
     if let Some(url) = output.redirect_url {
         return Ok(url);
@@ -245,9 +276,7 @@ pub fn parse_carddav_server(server: &str) -> Result<Url> {
 }
 
 pub fn tls_with_http_alpn(config: TlsConfig) -> Tls {
-    let mut tls: Tls = config.into();
-    tls.rustls.alpn = vec!["http/1.1".into()];
-    tls
+    config.into_tls(vec!["http/1.1".into()])
 }
 
 fn build_auth(auth: CarddavAuthConfig) -> Result<WebdavAuth> {

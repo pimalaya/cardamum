@@ -1,164 +1,80 @@
-//! Shared CardDAV wizard.
+//! CardDAV wizard.
 //!
-//! A single discovery flow: collects authentication, then opens the
-//! client through the `discover` route (which resolves the server via
-//! PACC/RFC 6764, or Google's authenticated `.well-known`), and on
-//! success persists the resolved `home` so later runs skip discovery. A
-//! failed connection re-runs the prompts. Used both to create an
-//! account and to re-configure an existing one.
+//! Two entry points, one per way the endpoint is known. A discovery
+//! entry pins the context root and the authentication method, so
+//! [`configure_discovered`] prompts only the credentials.
+//! [`configure_manual`] handles a typed server URL: it prompts the
+//! authentication strategy too. Neither connects; the wizard validates
+//! the whole account once at the end (see [`crate::account::check`]),
+//! and the runtime walks the principal + addressbook-home-set from the
+//! stored `server`.
 
-use anyhow::{Result, anyhow};
-use pimalaya_cli::{
-    spinner::Spinner,
-    wizard::carddav::{self as carddav_wizard, CarddavAuth, CarddavSecret, WizardCarddavConfig},
-};
-use pimalaya_config::{command::shell, secret::Secret};
+use anyhow::Result;
+use pimalaya_cli::prompt;
+use url::Url;
 
 use crate::{
-    carddav::client::{is_google, open_carddav_client},
     config::{CarddavAuthConfig, CarddavConfig},
+    wizard::{
+        search::{Discovered, DiscoveredAuth},
+        secret,
+    },
 };
 
-/// Runs the CardDAV wizard for `account_name` until the connection
-/// succeeds, then returns a [`CarddavConfig`] holding the resolved
-/// `home`. Discovery always runs (the connection test resolves the
-/// server from `discover`), so this one flow both creates and
-/// re-configures accounts; `existing` only seeds the auth defaults.
-pub fn configure(
-    project_name: &str,
-    account_name: &str,
+const BASIC: &str = "Basic (username + password)";
+const BEARER: &str = "Bearer (API token)";
+const AUTHS: [&str; 2] = [BASIC, BEARER];
+
+/// Configures CardDAV from a discovered entry: the context root and the
+/// authentication method are pinned, only the credentials are prompted.
+pub fn configure_discovered(
     email: &str,
-    existing: Option<&CarddavConfig>,
+    url: &Url,
+    discovered: &Discovered,
 ) -> Result<CarddavConfig> {
-    let (_local_part, domain) = email
-        .rsplit_once('@')
-        .ok_or_else(|| anyhow!("Invalid email address `{email}`: missing `@`"))?;
-
-    let tls_config = existing.map(|e| e.tls.clone()).unwrap_or_default();
-
-    let auth = match existing.map(|e| &e.auth) {
-        Some(CarddavAuthConfig::Basic { username, password }) => CarddavAuth::Basic {
-            username: username.clone(),
-            secret: secret_to_wizard(password),
-        },
-        Some(CarddavAuthConfig::Bearer { token }) => CarddavAuth::Bearer {
-            secret: secret_to_wizard(token),
-        },
-        // Google only accepts OAuth 2.0, so default a fresh account to
-        // Bearer (the strategy prompt drops Basic via `bearer_only`).
-        None if is_google(domain) => CarddavAuth::Bearer {
-            secret: CarddavSecret::default(),
-        },
-        None => CarddavAuth::default(),
+    let auth = match discovered.auth {
+        DiscoveredAuth::Password => {
+            let default_login = discovered.login_default(email);
+            let username = prompt::text("CardDAV username:", default_login.as_deref())?;
+            let password = secret::configure("CardDAV password", None)?;
+            CarddavAuthConfig::Basic { username, password }
+        }
+        DiscoveredAuth::Token => {
+            let token = secret::configure("CardDAV API token", Some("ortie token show"))?;
+            CarddavAuthConfig::Bearer { token }
+        }
     };
 
-    let mut defaults = WizardCarddavConfig {
-        account_name: account_name.to_owned(),
-        project_name: project_name.to_owned(),
-        email: Some(email.to_owned()),
+    Ok(carddav_config(url, auth))
+}
+
+/// Configures CardDAV against a typed `server` URL, prompting the
+/// authentication strategy and credentials.
+pub fn configure_manual(server: &Url) -> Result<CarddavConfig> {
+    let strategy = prompt::item("CardDAV authentication:", AUTHS, None)?;
+
+    let auth = match strategy {
+        BASIC => {
+            let username = prompt::text::<&str>("CardDAV username:", None)?;
+            let password = secret::configure("CardDAV password", None)?;
+            CarddavAuthConfig::Basic { username, password }
+        }
+        BEARER => {
+            let token = secret::configure("CardDAV API token", Some("ortie token show"))?;
+            CarddavAuthConfig::Bearer { token }
+        }
+        _ => unreachable!(),
+    };
+
+    Ok(carddav_config(server, auth))
+}
+
+fn carddav_config(server: &Url, auth: CarddavAuthConfig) -> CarddavConfig {
+    CarddavConfig {
+        discover: None,
+        server: Some(server.to_string()),
+        home: None,
+        tls: Default::default(),
         auth,
-        bearer_only: is_google(domain),
-    };
-
-    loop {
-        let cfg = carddav_wizard::run(&defaults)?;
-
-        // Single flow: always take the `discover` route. It resolves the
-        // server (PACC/RFC 6764, or Google's authenticated
-        // `.well-known`) using the just-collected auth.
-        let config = CarddavConfig {
-            discover: Some(domain.to_owned()),
-            server: None,
-            home: None,
-            tls: tls_config.clone(),
-            auth: carddav_auth_to_config(cfg.auth.clone()),
-        };
-
-        let spinner = Spinner::start("Testing connection");
-
-        match open_carddav_client(config.clone()) {
-            Ok(client) => {
-                spinner.success("Connection successful");
-
-                // Persist the resolved home-set so later runs skip
-                // discovery entirely (the `home` route short-circuits it).
-                return Ok(match client.addressbook_home_set.clone() {
-                    Some(home) => CarddavConfig {
-                        discover: None,
-                        server: None,
-                        home: Some(home),
-                        ..config
-                    },
-                    None => config,
-                });
-            }
-            Err(err) => {
-                spinner.failure(format!("Connection failed: {err}"));
-                defaults = cfg;
-            }
-        }
     }
-}
-
-fn carddav_auth_to_config(auth: CarddavAuth) -> CarddavAuthConfig {
-    match auth {
-        CarddavAuth::Basic { username, secret } => CarddavAuthConfig::Basic {
-            username,
-            password: carddav_secret_to_secret(secret),
-        },
-        CarddavAuth::Bearer { secret } => CarddavAuthConfig::Bearer {
-            token: carddav_secret_to_secret(secret),
-        },
-    }
-}
-
-fn carddav_secret_to_secret(secret: CarddavSecret) -> Secret {
-    match secret {
-        CarddavSecret::Raw(s) => Secret::Raw(s),
-        CarddavSecret::Command(cmd) => Secret::Command(shell(&cmd)),
-    }
-}
-
-/// Carries an existing secret into the wizard so editing prefills it: a
-/// `Command` keeps its command line (defaulting the secret strategy to
-/// shell command), a `Raw` keeps only the strategy.
-fn secret_to_wizard(secret: &Secret) -> CarddavSecret {
-    match secret_command_line(secret) {
-        Some(line) => CarddavSecret::Command(line),
-        None => CarddavSecret::Raw(String::new().into()),
-    }
-}
-
-/// Reconstructs the command line behind a `Secret::Command`: unwraps the
-/// platform-shell form produced by `shell`, otherwise rejoins program +
-/// args. Returns `None` for a `Secret::Raw`.
-fn secret_command_line(secret: &Secret) -> Option<String> {
-    let Secret::Command(cmd) = secret else {
-        return None;
-    };
-
-    let program = cmd.get_program().to_string_lossy().into_owned();
-    let args: Vec<String> = cmd
-        .get_args()
-        .map(|arg| arg.to_string_lossy().into_owned())
-        .collect();
-
-    let (shell_program, shell_flag) = if cfg!(windows) {
-        ("cmd", "/C")
-    } else {
-        ("/bin/sh", "-c")
-    };
-
-    if program == shell_program {
-        if let [flag, line] = args.as_slice() {
-            if flag == shell_flag {
-                return Some(line.clone());
-            }
-        }
-    }
-
-    let mut parts = Vec::with_capacity(args.len() + 1);
-    parts.push(program);
-    parts.extend(args);
-    Some(parts.join(" "))
 }

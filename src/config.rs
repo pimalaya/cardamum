@@ -1,13 +1,33 @@
-use std::{collections::HashMap, fs, path::Path, path::PathBuf};
+use std::collections::HashMap;
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "google"
+))]
+use std::path::PathBuf;
 
+#[cfg(feature = "jmap")]
+use anyhow::bail;
 use anyhow::{Context, Result};
 use comfy_table::ContentArrangement;
 use crossterm::style::Color;
-#[cfg(feature = "carddav")]
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "google"
+))]
 use pimalaya_config::secret::Secret;
 use pimalaya_config::toml::TomlConfig;
-#[cfg(any(feature = "vdir", feature = "carddav"))]
+#[cfg(any(feature = "vdir", feature = "carddav", feature = "jmap"))]
 use pimalaya_config::toml::shell_expanded_string;
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "google"
+))]
 use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsProvider};
 use serde::{Deserialize, Serialize};
 use toml_edit::{DocumentMut, Item, Table};
@@ -58,15 +78,14 @@ impl TomlConfig for Config {
 }
 
 impl Config {
-    /// Serializes `self` to TOML and writes it to `path`, creating any
-    /// missing parent directories. Used by the wizard to persist a
-    /// freshly-built configuration.
+    /// Serializes `self` to a compact TOML document. Used by the wizard
+    /// to print a ready-to-save configuration on stdout.
     ///
     /// Empty sub-tables left by untouched defaults are pruned, and each
-    /// account's backend blocks are rendered as dotted keys, so the file
-    /// matches the shape of config.sample.toml instead of carrying bare
-    /// `[table]` / `[card.list.table]` headers.
-    pub fn write(&self, path: &Path) -> Result<()> {
+    /// account's backend blocks are rendered as dotted keys, so the
+    /// output matches the shape of config.sample.toml instead of
+    /// carrying bare `[table]` / `[card.list.table]` headers.
+    pub fn to_toml_string(&self) -> Result<String> {
         let raw = toml::to_string(self).context("Serialize TOML config error")?;
         let mut doc: DocumentMut = raw.parse().context("Parse serialized TOML config error")?;
 
@@ -80,16 +99,7 @@ impl Config {
             }
         }
 
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).with_context(|| {
-                format!("Create TOML config parent `{}` error", parent.display())
-            })?;
-        }
-
-        fs::write(path, doc.to_string())
-            .with_context(|| format!("Write TOML config `{}` error", path.display()))?;
-
-        Ok(())
+        Ok(doc.to_string())
     }
 }
 
@@ -111,6 +121,12 @@ pub struct AccountConfig {
     pub vdir: Option<VdirConfig>,
     #[cfg(feature = "carddav")]
     pub carddav: Option<CarddavConfig>,
+    #[cfg(feature = "jmap")]
+    pub jmap: Option<JmapConfig>,
+    #[cfg(feature = "msgraph")]
+    pub msgraph: Option<MsgraphConfig>,
+    #[cfg(feature = "google")]
+    pub google: Option<GoogleConfig>,
 }
 
 /// Vdir configuration.
@@ -164,6 +180,129 @@ pub enum CarddavAuthConfig {
     },
     /// HTTP Bearer authentication (RFC 6750).
     Bearer { token: Secret },
+}
+
+/// JMAP configuration (RFC 8620 + RFC 9610).
+#[cfg(feature = "jmap")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct JmapConfig {
+    /// The JMAP server address.
+    ///
+    /// Accepts either a bare authority (`fastmail.com`,
+    /// `mail.example.com:8080`) for automatic discovery via
+    /// `GET /.well-known/jmap`, or a full URL
+    /// (`https://api.fastmail.com/jmap/session`) to connect directly
+    /// to the session endpoint. Supported schemes: `http`, `https`,
+    /// `jmap` (mapped to http), `jmaps` (mapped to https).
+    pub server: String,
+
+    /// TLS configuration.
+    #[serde(default)]
+    pub tls: TlsConfig,
+
+    /// ALPN protocol identifiers offered during the TLS handshake.
+    /// Defaults to `["http/1.1"]` (JMAP rides on HTTP/1.1). Set to
+    /// `[]` to skip ALPN negotiation entirely. Only relevant for the
+    /// rustls provider; `native-tls` ignores ALPN.
+    #[serde(default = "io_jmap::client::JmapClientStd::default_alpn")]
+    pub alpn: Vec<String>,
+
+    /// Authentication configuration.
+    pub auth: JmapAuthConfig,
+}
+
+/// JMAP authentication configuration.
+#[cfg(feature = "jmap")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub enum JmapAuthConfig {
+    /// Full raw Authorization header value, sent verbatim.
+    Header(Secret),
+    /// Bearer token (OAuth 2.0 access token or provider API token).
+    Bearer { token: Secret },
+    /// HTTP Basic authentication (username + password).
+    Basic {
+        #[serde(deserialize_with = "shell_expanded_string")]
+        username: String,
+        password: Secret,
+    },
+}
+
+/// Microsoft Graph configuration.
+#[cfg(feature = "msgraph")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct MsgraphConfig {
+    /// Graph user id (the contacts owner). Defaults to `me`, the
+    /// authenticated user; set it to a user id or principal name to
+    /// target another mailbox.
+    #[serde(default = "default_msgraph_user_id")]
+    pub user_id: String,
+
+    /// TLS configuration.
+    #[serde(default)]
+    pub tls: TlsConfig,
+
+    /// ALPN protocol identifiers offered during the TLS handshake.
+    /// Defaults to `["http/1.1"]` (the Graph API rides on HTTP/1.1).
+    /// Set to `[]` to skip ALPN negotiation entirely. Only relevant
+    /// for the rustls provider; `native-tls` ignores ALPN.
+    #[serde(default = "default_http_alpn")]
+    pub alpn: Vec<String>,
+
+    /// Authentication configuration.
+    pub auth: MsgraphAuthConfig,
+}
+
+/// Microsoft Graph authentication configuration.
+#[cfg(feature = "msgraph")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct MsgraphAuthConfig {
+    /// OAuth 2.0 bearer access token; sent as `Bearer <token>`. It is
+    /// the only authorization the Graph API accepts.
+    pub token: Secret,
+}
+
+#[cfg(feature = "msgraph")]
+fn default_msgraph_user_id() -> String {
+    String::from("me")
+}
+
+/// Google People configuration.
+#[cfg(feature = "google")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct GoogleConfig {
+    /// TLS configuration.
+    #[serde(default)]
+    pub tls: TlsConfig,
+
+    /// ALPN protocol identifiers offered during the TLS handshake.
+    /// Defaults to `["http/1.1"]` (the People API rides on HTTP/1.1).
+    /// Set to `[]` to skip ALPN negotiation entirely. Only relevant
+    /// for the rustls provider; `native-tls` ignores ALPN.
+    #[serde(default = "default_http_alpn")]
+    pub alpn: Vec<String>,
+
+    /// Authentication configuration.
+    pub auth: GoogleAuthConfig,
+}
+
+/// Google People authentication configuration.
+#[cfg(feature = "google")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct GoogleAuthConfig {
+    /// OAuth 2.0 bearer access token; sent as `Bearer <token>`. It is
+    /// the only authorization the People API accepts.
+    pub token: Secret,
+}
+
+#[cfg(any(feature = "msgraph", feature = "google"))]
+fn default_http_alpn() -> Vec<String> {
+    vec![String::from("http/1.1")]
 }
 
 /// Addressbook-level options.
@@ -276,6 +415,12 @@ impl From<TableArrangementConfig> for ContentArrangement {
 }
 
 /// SSL/TLS configuration.
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "google"
+))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TlsConfig {
@@ -286,6 +431,12 @@ pub struct TlsConfig {
 }
 
 /// SSL/TLS provider configuration.
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "google"
+))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum TlsProviderConfig {
@@ -294,6 +445,12 @@ pub enum TlsProviderConfig {
 }
 
 /// Rustls configuration.
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "google"
+))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RustlsConfig {
@@ -301,6 +458,12 @@ pub struct RustlsConfig {
 }
 
 /// Rustls crypto provider configuration.
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "google"
+))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum RustlsCryptoConfig {
@@ -308,23 +471,51 @@ pub enum RustlsCryptoConfig {
     Ring,
 }
 
-impl From<TlsConfig> for Tls {
-    fn from(config: TlsConfig) -> Self {
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "google"
+))]
+impl TlsConfig {
+    /// Converts the config into a [`Tls`] carrying the given ALPN
+    /// protocol identifiers.
+    pub fn into_tls(self, alpn: Vec<String>) -> Tls {
         Tls {
-            provider: config.provider.map(|config| match config {
+            provider: self.provider.map(|config| match config {
                 TlsProviderConfig::Rustls => TlsProvider::Rustls,
                 TlsProviderConfig::NativeTls => TlsProvider::NativeTls,
             }),
             rustls: Rustls {
-                crypto: config.rustls.crypto.map(|config| match config {
+                crypto: self.rustls.crypto.map(|config| match config {
                     RustlsCryptoConfig::Aws => RustlsCrypto::Aws,
                     RustlsCryptoConfig::Ring => RustlsCrypto::Ring,
                 }),
-                alpn: Vec::new(),
+                alpn,
             },
-            cert: config.cert,
+            cert: self.cert,
         }
     }
+}
+
+/// Parses a `server` config string into a [`Url`]: a full URL is used
+/// verbatim, a bare `host[:port]` defaults to `default_scheme`;
+/// schemes outside `allowed` are rejected.
+#[cfg(feature = "jmap")]
+pub fn parse_server(server: &str, default_scheme: &str, allowed: &[&str]) -> Result<url::Url> {
+    let url = if server.contains("://") {
+        url::Url::parse(server)?
+    } else {
+        url::Url::parse(&format!("{default_scheme}://{server}"))?
+    };
+
+    let scheme = url.scheme();
+
+    if !allowed.contains(&scheme) {
+        bail!("Invalid server scheme `{scheme}`: expected one of {allowed:?}");
+    }
+
+    Ok(url)
 }
 
 /// Recursively removes empty sub-tables so the writer never emits bare

@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::{path::PathBuf, process::exit};
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow};
 use clap::{CommandFactory, Parser, Subcommand};
 use pimalaya_cli::{
     clap::{
@@ -10,6 +10,7 @@ use pimalaya_cli::{
     },
     long_version,
     printer::Printer,
+    prompt,
 };
 use pimalaya_config::toml::TomlConfig;
 
@@ -20,7 +21,7 @@ use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
 use crate::{
     account::cli::AccountCommand,
     backend::Backend,
-    config::Config,
+    config::{AccountConfig, Config},
     shared::{
         addressbook::cli::AddressbookCommand, card::cli::CardCommand, client::AddressbookClient,
     },
@@ -33,8 +34,11 @@ use crate::{
 #[command(long_version = long_version!())]
 #[command(propagate_version = true, infer_subcommands = true)]
 pub struct Cli {
+    /// The subcommand to run. Omitted (bare `cardamum`), it runs the
+    /// first-run wizard, which discovers an account and prints it as a
+    /// ready-to-save config on stdout, exactly like bare `ortie`.
     #[command(subcommand)]
-    pub cmd: Command,
+    pub cmd: Option<Command>,
 
     /// Override the default configuration file path.
     ///
@@ -56,11 +60,12 @@ pub struct Cli {
     /// protocol-specific subcommands (vdir, carddav) ignore it and
     /// always use their own backend.
     ///
-    /// Possible values: auto (default), vdir, carddav. With auto, the
-    /// shared command picks the first configured backend it supports;
-    /// with an explicit value, it uses only that backend (and bails if
-    /// the account has no matching config block, or if the operation
-    /// has no implementation for it).
+    /// Possible values: auto (default), carddav, jmap, msgraph,
+    /// google, vdir. With auto, the shared command picks the first
+    /// configured backend it supports; with an explicit value, it uses
+    /// only that backend (and bails if the account has no matching
+    /// config block, or if the operation has no implementation for
+    /// it).
     #[arg(short, long, global = true, default_value_t)]
     pub backend: Backend,
     #[command(flatten)]
@@ -95,13 +100,38 @@ pub enum Command {
     Manuals(ManualCommand),
 }
 
-/// Loads `Config` from the merged `config_paths` or, when no file
-/// exists, runs the wizard to bootstrap one at the target path.
-pub fn load_or_wizard(config_paths: &[PathBuf]) -> Result<Config> {
-    match Config::from_paths_or_default(config_paths)? {
-        Some(config) => Ok(config),
-        None => wizard::discover::run_or_exit(&Config::target_path(config_paths)?),
-    }
+/// Resolves the account a command runs against: loads the merged config
+/// from `config_paths`, then takes the account named by `-a` (or the one
+/// marked `default`). Returns the leftover global config, the resolved
+/// account name and its config.
+///
+/// When no config file exists, proposes the first-run wizard (which
+/// prints a ready-to-save config on stdout without touching disk) then
+/// exits. A config that exists but lacks the requested account is a hard
+/// error: `take_account` bails on a missing named account, and a missing
+/// default surfaces here.
+pub fn resolve_account(
+    printer: &mut impl Printer,
+    config_paths: &[PathBuf],
+    account_name: Option<&str>,
+) -> Result<(Config, String, AccountConfig)> {
+    let Some(mut config) = Config::from_paths_or_default(config_paths)? else {
+        if prompt::bool(
+            "No configuration found. Assist you in generating one?",
+            true,
+        )? {
+            wizard::discover::run(printer)?;
+        }
+        exit(0);
+    };
+
+    let (name, account_config) = config.take_account(account_name)?.ok_or_else(|| {
+        anyhow!(
+            "No default account found; select one with `-a <NAME>` or mark one with `default = true`"
+        )
+    })?;
+
+    Ok((config, name, account_config))
 }
 
 impl Command {
@@ -112,26 +142,18 @@ impl Command {
         account_name: Option<&str>,
         backend: Backend,
     ) -> Result<()> {
-        let configs = || {
-            let mut config = load_or_wizard(config_paths)?;
-
-            let Some((_, account_config)) = config.take_account(account_name)? else {
-                bail!("Cannot find default account; use --account or set account.default = true")
-            };
-
-            Ok((config, account_config))
-        };
-
         match self {
             // --- Shared API
             //
             Self::Addressbook(cmd) => {
-                let (config, account_config) = configs()?;
+                let (config, _name, account_config) =
+                    resolve_account(printer, config_paths, account_name)?;
                 let client = AddressbookClient::new(config, account_config, backend)?;
                 cmd.execute(printer, client)
             }
             Self::Card(cmd) => {
-                let (config, account_config) = configs()?;
+                let (config, _name, account_config) =
+                    resolve_account(printer, config_paths, account_name)?;
                 let client = AddressbookClient::new(config, account_config, backend)?;
                 cmd.execute(printer, client)
             }
@@ -140,12 +162,16 @@ impl Command {
             //
             #[cfg(feature = "carddav")]
             Self::Carddav(cmd) => {
-                let client = build_carddav_client(config_paths, account_name)?;
+                let (config, name, account_config) =
+                    resolve_account(printer, config_paths, account_name)?;
+                let client = build_carddav_client(config, name, account_config)?;
                 cmd.execute(printer, client)
             }
             #[cfg(feature = "vdir")]
             Self::Vdir(cmd) => {
-                let client = build_vdir_client(config_paths, account_name)?;
+                let (config, name, account_config) =
+                    resolve_account(printer, config_paths, account_name)?;
+                let client = build_vdir_client(config, name, account_config)?;
                 cmd.execute(printer, client)
             }
 

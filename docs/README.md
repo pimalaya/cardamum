@@ -6,3 +6,7 @@ Development memory of the cardamum CLI: architecture notes that outgrow the `mai
 - [contacts-mapping.md](contacts-mapping.md): the policy for projecting the API backends (Microsoft Graph, Google People) to and from the vCard document of record — which fields are managed, minted or left alone.
 - [custom-data.md](custom-data.md): how vCard properties with no provider slot survive a round-trip, stashed verbatim in a Graph extended property / People clientData entry.
 - [merged-view.md](merged-view.md): why group memberships are structural addressbook data rather than a card property.
+- [testing/provider-test-plan.md](testing/provider-test-plan.md): followable checklist to deeply exercise every shared command against a real provider, one report per `(backend, provider)`.
+- [testing/carddav-fastmail.md](testing/carddav-fastmail.md): CardDAV on Fastmail — first completed shared-command test report.
+- [testing/carddav-icloud.md](testing/carddav-icloud.md): CardDAV on iCloud — card CRUD validated (the id fix confirmed on a second `.vcf` server); iCloud vCard-input strictness noted.
+- [testing/carddav-google.md](testing/carddav-google.md): CardDAV on Google over OAuth Bearer — id fix confirmed on a third server; Google resource-id reassignment (delete-by-create-id gap) recorded.

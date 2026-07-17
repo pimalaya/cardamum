@@ -7,9 +7,9 @@ use std::collections::HashMap;
 ))]
 use std::path::PathBuf;
 
+use anyhow::Result;
 #[cfg(feature = "jmap")]
 use anyhow::bail;
-use anyhow::{Context, Result};
 use comfy_table::ContentArrangement;
 use crossterm::style::Color;
 #[cfg(any(
@@ -30,7 +30,6 @@ use pimalaya_config::toml::shell_expanded_string;
 ))]
 use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsProvider};
 use serde::{Deserialize, Serialize};
-use toml_edit::{DocumentMut, Item, Table};
 #[cfg(feature = "carddav")]
 use url::Url;
 
@@ -74,32 +73,6 @@ impl TomlConfig for Config {
             .find_map(|(name, account)| account.default.then(|| name.clone()))?;
 
         self.take_named_account(&name)
-    }
-}
-
-impl Config {
-    /// Serializes `self` to a compact TOML document. Used by the wizard
-    /// to print a ready-to-save configuration on stdout.
-    ///
-    /// Empty sub-tables left by untouched defaults are pruned, and each
-    /// account's backend blocks are rendered as dotted keys, so the
-    /// output matches the shape of config.sample.toml instead of
-    /// carrying bare `[table]` / `[card.list.table]` headers.
-    pub fn to_toml_string(&self) -> Result<String> {
-        let raw = toml::to_string(self).context("Serialize TOML config error")?;
-        let mut doc: DocumentMut = raw.parse().context("Parse serialized TOML config error")?;
-
-        prune_empty_tables(doc.as_table_mut());
-
-        if let Some(accounts) = doc.get_mut("accounts").and_then(Item::as_table_mut) {
-            for (_, account) in accounts.iter_mut() {
-                if let Some(account) = account.as_table_mut() {
-                    set_dotted(account);
-                }
-            }
-        }
-
-        Ok(doc.to_string())
     }
 }
 
@@ -516,33 +489,4 @@ pub fn parse_server(server: &str, default_scheme: &str, allowed: &[&str]) -> Res
     }
 
     Ok(url)
-}
-
-/// Recursively removes empty sub-tables so the writer never emits bare
-/// `[table]` / `[card.list.table]` headers for untouched defaults.
-fn prune_empty_tables(table: &mut Table) {
-    let keys: Vec<String> = table.iter().map(|(key, _)| key.to_owned()).collect();
-
-    for key in keys {
-        if let Some(child) = table.get_mut(&key).and_then(Item::as_table_mut) {
-            prune_empty_tables(child);
-
-            if child.is_empty() {
-                table.remove(&key);
-            }
-        }
-    }
-}
-
-/// Recursively flags every sub-table as dotted, turning nested
-/// `[a.b.c]` headers into compact `a.b.c = ...` keys.
-fn set_dotted(table: &mut Table) {
-    let keys: Vec<String> = table.iter().map(|(key, _)| key.to_owned()).collect();
-
-    for key in keys {
-        if let Some(child) = table.get_mut(&key).and_then(Item::as_table_mut) {
-            child.set_dotted(true);
-            set_dotted(child);
-        }
-    }
 }

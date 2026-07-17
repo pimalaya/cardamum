@@ -2,9 +2,10 @@
 //! addressbook and card operations onto
 //! [`io_webdav::client::WebdavClientStd`] calls (RFC 6352).
 
-use anyhow::{Result, bail};
+use anyhow::{Result, anyhow, bail};
 use io_webdav::{
-    client::WebdavClientStd,
+    client::{WebdavClientStd, WebdavClientStdError},
+    rfc4918::send::SendError,
     rfc6352::{addressbook::Addressbook as WireAddressbook, card::CardEntry},
 };
 
@@ -132,7 +133,10 @@ impl CarddavBackend {
     /// resource name. Returns the assigned id.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let id = fresh_card_id()?;
-        let created = self.inner.create_card(addressbook_id, &id, contents)?;
+        let created = self
+            .inner
+            .create_card(addressbook_id, &id, contents)
+            .map_err(card_write_error)?;
         Ok(created.id)
     }
 
@@ -146,7 +150,8 @@ impl CarddavBackend {
         if_match: Option<&str>,
     ) -> Result<()> {
         self.inner
-            .update_card(addressbook_id, card_id, contents, if_match)?;
+            .update_card(addressbook_id, card_id, contents, if_match)
+            .map_err(card_write_error)?;
         Ok(())
     }
 
@@ -180,8 +185,54 @@ fn into_card(addressbook_id: &str, entry: CardEntry) -> Card {
     }
 }
 
-/// Generates a fresh CardDAV card id (a random UUIDv4) from the system
-/// entropy source; CardDAV requires the caller to name the resource.
+/// Adds an actionable hint when a card write is rejected because the
+/// server considers the vCard invalid (the CardDAV `valid-address-data`
+/// precondition, RFC 6352 §6.3.2.1). cardamum forwards the vCard
+/// unchanged and never inspects it; this only surfaces the server's own
+/// rejection, since providers disagree on what they accept — most
+/// require a `UID`, and some (e.g. iCloud) require vCard 3.0 with an `N`
+/// property. Every other error passes through untouched.
+fn card_write_error(err: WebdavClientStdError) -> anyhow::Error {
+    let WebdavClientStdError::Send(SendError::HttpStatus(403, body)) = &err else {
+        return err.into();
+    };
+
+    let lower = body.to_ascii_lowercase();
+    if !(lower.contains("valid-address-data") || lower.contains("vcard")) {
+        return err.into();
+    }
+
+    anyhow!(
+        "The server rejected the vCard as invalid. cardamum sends the vCard \
+         you provide unchanged, and providers disagree on what they accept: \
+         most require a UID property, and some (e.g. iCloud) require vCard 3.0 \
+         with an N property. Server response: {}",
+        server_detail(body)
+    )
+}
+
+/// Extracts the human-readable text of a DAV `<responsedescription>`
+/// from a server error body, falling back to the trimmed body. This
+/// reads the server's own error response, not the vCard.
+fn server_detail(body: &str) -> String {
+    if let Some(open) = body.find("responsedescription>") {
+        let rest = &body[open + "responsedescription>".len()..];
+        if let Some(close) = rest.find("</") {
+            let text = rest[..close].trim();
+            if !text.is_empty() {
+                return text.to_string();
+            }
+        }
+    }
+
+    body.trim().to_string()
+}
+
+/// Generates a fresh CardDAV card resource name (a random UUIDv4 plus
+/// the conventional `.vcf` extension) from the system entropy source.
+/// CardDAV requires the caller to name the resource, and io-webdav uses
+/// the name verbatim (it never adds nor strips an extension), so the
+/// caller owns the whole name.
 fn fresh_card_id() -> Result<String> {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).map_err(|err| anyhow::anyhow!("Gather randomness error: {err}"))?;
@@ -203,5 +254,6 @@ fn fresh_card_id() -> Result<String> {
         cursor += 2;
     }
 
-    Ok(String::from_utf8(out.to_vec()).expect("ASCII hex is always valid UTF-8"))
+    let uuid = String::from_utf8(out.to_vec()).expect("ASCII hex is always valid UTF-8");
+    Ok(format!("{uuid}.vcf"))
 }

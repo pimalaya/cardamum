@@ -1,8 +1,8 @@
 //! JMAP ContactCard (RFC 9610) to vCard projection and back, via
-//! calcard's JSContact conversion (RFC 9555). The ContactCard's
-//! JSContact payload (RFC 9553) converts losslessly enough for the
-//! app's purposes: unmapped vCard properties ride in vCardProps, so
-//! the vCard document of record round-trips.
+//! vcard-rs's JSContact conversion (RFC 9555). The ContactCard's
+//! JSContact payload (RFC 9553) converts losslessly: vCard properties
+//! with no JSContact counterpart ride the standard `vCardProps` escape
+//! hatch both ways, so the vCard document of record round-trips.
 //!
 //! JMAP has no per-card ETag; the revision surfaced by [`to_card`] is
 //! a hash of the card's JSON, which only drives display and manual
@@ -14,8 +14,9 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
 };
 
-use calcard::{jscontact::JSContact, vcard::VCard};
 use io_jmap::rfc9610::contact_card::JmapContactCard;
+use serde_json::{Map, Value, to_string};
+use vcard::{tree::cst::VcardCst, vcard::Vcard};
 
 use crate::shared::card::Card;
 
@@ -38,27 +39,21 @@ pub fn to_card(addressbook_id: &str, card: JmapContactCard) -> Result<Card, Stri
 }
 
 /// Projects the JSContact Card properties onto a vCard document.
-pub fn to_vcard(card: &serde_json::Map<String, serde_json::Value>) -> Result<String, String> {
-    let json = serde_json::Value::Object(card.clone()).to_string();
-    let jscontact: JSContact<String, String> =
-        JSContact::parse(&json).map_err(|err| format!("Invalid JSContact card: {err}"))?;
-    let vcard = jscontact
-        .into_vcard()
-        .ok_or_else(|| "JSContact card does not convert to a vCard".to_string())?;
+pub fn to_vcard(card: &Map<String, Value>) -> Result<String, String> {
+    let json = Value::Object(card.clone());
+    let vcard =
+        Vcard::from_jscontact(&json).map_err(|err| format!("Invalid JSContact card: {err}"))?;
 
     Ok(vcard.to_string())
 }
 
 /// Projects a vCard document onto JSContact Card properties, the
 /// create payload of `ContactCard/set`.
-pub fn to_jscontact(vcard: &str) -> Result<serde_json::Map<String, serde_json::Value>, String> {
-    let vcard = VCard::parse(vcard).map_err(|_| "Invalid vCard".to_string())?;
-    let jscontact: JSContact<String, String> = vcard.into_jscontact();
-    let value = serde_json::to_value(&jscontact.0)
-        .map_err(|err| format!("Unserializable JSContact card: {err}"))?;
+pub fn to_jscontact(vcard: &str) -> Result<Map<String, Value>, String> {
+    let cst = VcardCst::parse(vcard).map_err(|err| format!("Invalid vCard: {err}"))?;
 
-    match value {
-        serde_json::Value::Object(map) => Ok(map),
+    match cst.decode().to_jscontact() {
+        Value::Object(map) => Ok(map),
         _ => Err("JSContact conversion did not produce a card object".to_string()),
     }
 }
@@ -68,10 +63,7 @@ pub fn to_jscontact(vcard: &str) -> Result<serde_json::Map<String, serde_json::V
 /// state last synced with the server), plus a null for every property
 /// the edit removed. Without a base the patch carries every property,
 /// which cannot clear server-side ones the vCard lost track of.
-pub fn to_patch(
-    vcard: &str,
-    base_vcard: Option<&str>,
-) -> Result<BTreeMap<String, serde_json::Value>, String> {
+pub fn to_patch(vcard: &str, base_vcard: Option<&str>) -> Result<BTreeMap<String, Value>, String> {
     let new = to_jscontact(vcard)?;
     let mut patch = BTreeMap::new();
 
@@ -89,7 +81,7 @@ pub fn to_patch(
                 // NOTE: the uid is immutable in spirit (RFC 9610 §3
                 // keys groups on it); never null it out.
                 if !new.contains_key(key) && key != "uid" {
-                    patch.insert(key.clone(), serde_json::Value::Null);
+                    patch.insert(key.clone(), Value::Null);
                 }
             }
         }
@@ -108,7 +100,7 @@ pub fn to_patch(
 /// maps are key-sorted, so the hash is independent of the property
 /// order the server picked.
 fn etag(card: &JmapContactCard) -> Option<String> {
-    let json = serde_json::to_string(card).ok()?;
+    let json = to_string(card).ok()?;
     let mut hasher = DefaultHasher::new();
     json.hash(&mut hasher);
 
@@ -117,6 +109,8 @@ fn etag(card: &JmapContactCard) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     const VCARD: &str = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:abc\r\nFN:Jane Doe\r\nEMAIL:jane@example.com\r\nTEL:+33612345678\r\nEND:VCARD\r\n";
@@ -133,6 +127,16 @@ mod tests {
         assert!(card.contains_key("name"), "{card:?}");
         assert!(card.contains_key("emails"), "{card:?}");
         assert!(card.contains_key("phones"), "{card:?}");
+    }
+
+    #[test]
+    fn to_jscontact_emits_no_non_standard_vcard_container() {
+        let card = to_jscontact(VCARD).unwrap();
+
+        // vcard-rs preserves unmapped properties under the standard
+        // `vCardProps` member; it never emits calcard's non-standard
+        // top-level `vCard` object that strict servers reject.
+        assert!(!card.contains_key("vCard"), "{card:?}");
     }
 
     #[test]
@@ -171,7 +175,53 @@ mod tests {
         let edited = VCARD.replace("TEL:+33612345678\r\n", "");
         let patch = to_patch(&edited, Some(VCARD)).unwrap();
 
-        assert_eq!(patch.get("phones"), Some(&serde_json::Value::Null));
+        assert_eq!(patch.get("phones"), Some(&Value::Null));
         assert!(!patch.contains_key("uid"), "{patch:?}");
+    }
+
+    #[test]
+    fn middle_name_rides_given2_and_round_trips() {
+        // NOTE: RFC 9553 carries the middle name as the given2
+        // component kind; folding it into given (or dropping it) would
+        // destroy N's third component through every JMAP round-trip.
+        let vcard = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:abc\r\nN:BB;Aa;g;;\r\nEND:VCARD\r\n";
+        let card = to_jscontact(vcard).unwrap();
+
+        let components = card
+            .get("name")
+            .and_then(|name| name.get("components"))
+            .and_then(|components| components.as_array())
+            .expect("name components");
+        let given2 = components.iter().any(|component| {
+            component.get("kind").and_then(|kind| kind.as_str()) == Some("given2")
+                && component.get("value").and_then(|value| value.as_str()) == Some("g")
+        });
+        assert!(given2, "{card:?}");
+
+        let round = to_vcard(&card).unwrap();
+        assert!(round.contains("N:BB;Aa;g;;"), "{round}");
+    }
+
+    #[test]
+    fn name_components_without_full_mint_no_display_name() {
+        // NOTE: a card with name components but no name.full (display
+        // name never set) must convert without an FN: the app never
+        // mints one into the record, the lists compose on the fly.
+        let card = json!({
+            "@type": "Card",
+            "version": "1.0",
+            "uid": "abc",
+            "name": {
+                "components": [
+                    { "kind": "given", "value": "Jane" },
+                    { "kind": "surname", "value": "Doe" },
+                ],
+            },
+        });
+
+        let vcard = to_vcard(card.as_object().unwrap()).unwrap();
+
+        assert!(!vcard.contains("FN"), "{vcard}");
+        assert!(vcard.contains("Jane"), "{vcard}");
     }
 }

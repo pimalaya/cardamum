@@ -19,7 +19,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["rustls-ring", "carddav", "jmap", "msgraph", "google", "vdir"]
 carddav = ["dep:io-webdav", "dep:getrandom"]
-jmap = ["dep:io-jmap", "dep:calcard", "dep:base64"]
+jmap = ["dep:io-jmap", "dep:vcard-rs", "vcard-rs/jscontact", "dep:base64"]
 msgraph = ["dep:io-msgraph", "dep:vcard-rs"]
 google = ["dep:io-people", "dep:vcard-rs"]
 vdir = ["dep:io-vdir"]
@@ -40,7 +40,6 @@ pimalaya-cli = { version = "0.1", default-features = false, features = ["build"]
 [dependencies]
 anyhow = "1"
 base64 = { version = "0.22", optional = true }
-calcard = { version = "0.3", optional = true }
 clap = { version = "4.4", features = ["derive", "env", "wrap_help"] }
 clap_complete = "4.4"
 clap_mangen = "0.3"

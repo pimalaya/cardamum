@@ -13,9 +13,9 @@
 //!
 //! The network backends are io-webdav (CardDAV, WebDAV), io-jmap (RFC
 //! 8620 + RFC 9610), io-msgraph (Microsoft Graph) and io-people (Google
-//! People); the local storage backend is io-vdir. calcard and vcard-rs
-//! parse and build vCard/JSContact for the backends with no native
-//! vCard. Account discovery comes from io-pim-discovery (fixed provider
+//! People); the local storage backend is io-vdir. vcard-rs parses and
+//! builds vCard (and converts to/from JSContact) for the backends with
+//! no native vCard. Account discovery comes from io-pim-discovery (fixed provider
 //! rules, PACC, RFC 6764 CardDAV resolve, RFC 8620 JMAP resolve, a
 //! `WWW-Authenticate` probe). The CLI plumbing (clap args, printer,
 //! logger), TOML config loading and the blocking stream runtime come
@@ -66,7 +66,7 @@
 //! a vCard document of record that cardamum *synthesizes* from the
 //! backend's own contact resource and re-projects on the way back
 //! (`{jmap,msgraph,google}/project.rs`): JMAP ContactCards convert
-//! through calcard's JSContact codec, while Graph and People contacts
+//! through vcard-rs's JSContact codec, while Graph and People contacts
 //! project field-by-field with a provider-side stash for the properties
 //! that have no first-class slot, so nothing is lost round-trip. These
 //! modules are ported verbatim from cardamum-android, so both products

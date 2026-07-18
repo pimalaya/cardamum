@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added three remote backends alongside CardDAV: JMAP contacts (RFC 8620 + RFC 9610, via io-jmap), the Microsoft Graph contacts API (via io-msgraph), and the Google People API (via io-people), each behind its own cargo feature (`jmap`, `msgraph`, `google`). The `--backend` flag and the `account list` / `account check` reports gained the matching variants.
-- Synthesized a vCard document of record for the backends with no native vCard representation: JMAP ContactCards convert through calcard's JSContact codec, while Graph and People contacts project field-by-field with a provider-side stash for the properties that have no first-class slot. The projection modules are ported from cardamum-android so both products treat provider quirks identically.
+- Synthesized a vCard document of record for the backends with no native vCard representation: JMAP ContactCards convert through vcard-rs's JSContact codec (RFC 9555), while Graph and People contacts project field-by-field with a provider-side stash for the properties that have no first-class slot. The projection modules are ported from cardamum-android so both products treat provider quirks identically.
 
 ### Changed
 

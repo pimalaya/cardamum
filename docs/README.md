@@ -10,3 +10,6 @@ Development memory of the cardamum CLI: architecture notes that outgrow the `mai
 - [testing/carddav-fastmail.md](testing/carddav-fastmail.md): CardDAV on Fastmail — first completed shared-command test report.
 - [testing/carddav-icloud.md](testing/carddav-icloud.md): CardDAV on iCloud — card CRUD validated (the id fix confirmed on a second `.vcf` server); iCloud vCard-input strictness noted.
 - [testing/carddav-google.md](testing/carddav-google.md): CardDAV on Google over OAuth Bearer — id fix confirmed on a third server; Google resource-id reassignment (delete-by-create-id gap) recorded.
+- [testing/msgraph-microsoft.md](testing/msgraph-microsoft.md): Microsoft Graph over OAuth Bearer — full addressbook + card CRUD working; no bugs; Graph-assigned UID, no folder metadata / If-Match noted.
+- [testing/google-people.md](testing/google-people.md): Google People API over OAuth Bearer (`contacts` scope) — full contact-group + card CRUD working; no bugs; groups-as-books, `myContacts` ubiquity, etag-guarded delta updates noted.
+- [testing/jmap-fastmail.md](testing/jmap-fastmail.md): JMAP on Fastmail over OAuth Bearer — card CRUD working after porting the JSContact projection from calcard to vcard-rs (calcard's non-standard `vCard` container was rejected by Fastmail); AddressBook mutations forbidden server-side.

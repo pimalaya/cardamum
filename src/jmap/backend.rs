@@ -1,7 +1,7 @@
 //! JMAP arm of the shared-API client: thin glue mapping the shared
 //! addressbook and card operations onto
 //! [`io_jmap::client::JmapClientStd`] calls (RFC 9610), converting
-//! ContactCards to vCard documents through calcard's JSContact codec
+//! ContactCards to vCard documents through vcard-rs's JSContact codec
 //! (see [`crate::jmap::project`]).
 //!
 //! JMAP AddressBooks are the addressbooks; ContactCards are

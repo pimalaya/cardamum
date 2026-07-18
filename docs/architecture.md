@@ -23,7 +23,7 @@ src/
     discover/propfind/report/list/create/delete
   jmap/                  [jmap] backend
     backend.rs           shared-API glue over io-jmap
-    project.rs           ContactCard <-> vCard (JSContact via calcard)
+    project.rs           ContactCard <-> vCard (JSContact via vcard-rs)
   msgraph/               [msgraph] backend
     backend.rs           shared-API glue over io-msgraph
     project.rs           Graph contact <-> vCard

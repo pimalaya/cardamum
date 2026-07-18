@@ -16,6 +16,8 @@ use pimalaya_config::toml::TomlConfig;
 
 #[cfg(feature = "carddav")]
 use crate::carddav::{cli::CarddavCommand, client::build_carddav_client};
+#[cfg(feature = "msgraph")]
+use crate::msgraph::{cli::MsgraphCommand, client::build_msgraph_client};
 #[cfg(feature = "vdir")]
 use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
 use crate::{
@@ -88,6 +90,9 @@ pub enum Command {
     #[cfg(feature = "carddav")]
     #[command(subcommand)]
     Carddav(CarddavCommand),
+    #[cfg(feature = "msgraph")]
+    #[command(subcommand)]
+    Msgraph(MsgraphCommand),
     #[cfg(feature = "vdir")]
     #[command(subcommand)]
     Vdir(VdirCommand),
@@ -165,6 +170,13 @@ impl Command {
                 let (config, name, account_config) =
                     resolve_account(printer, config_paths, account_name)?;
                 let client = build_carddav_client(config, name, account_config)?;
+                cmd.execute(printer, client)
+            }
+            #[cfg(feature = "msgraph")]
+            Self::Msgraph(cmd) => {
+                let (config, name, account_config) =
+                    resolve_account(printer, config_paths, account_name)?;
+                let client = build_msgraph_client(config, name, account_config)?;
                 cmd.execute(printer, client)
             }
             #[cfg(feature = "vdir")]

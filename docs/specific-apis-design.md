@@ -93,21 +93,26 @@ faithful flat WebDAV surface. Each command = one WebDAV/CardDAV method.
 
 | WebDAV / CardDAV op | Command | io-webdav | Status |
 | --- | --- | --- | --- |
-| current-user-principal + home-set (5397/6764) | `discover` | `current_user_principal`, `addressbook_home_set` | ✅ exists |
-| PROPFIND (members / props, `--depth`, raw `--xml`) | `propfind` | `list_addressbooks`, `enum_cards` | ⚠️ restructure (card-only today) |
-| PROPPATCH (displayname/description/color, raw `--xml`) | `proppatch` | `update_addressbook` | ❌ add |
-| extended MKCOL (5689) | `mkcol` | `create_addressbook` | ⚠️ rename from `create` |
-| REPORT `addressbook-query` (raw `--xml`) | `report query` | (addressbook-query) | ⚠️ from `report` |
-| REPORT `addressbook-multiget` | `report multiget` | `multiget_cards` | ❌ add |
-| REPORT `sync-collection` (6578 sync-token) | `report sync` | `sync_cards` | ❌ add (**key gap**) |
-| GET card (raw vCard + ETag) | `get` | `read_card` | ❌ add |
-| PUT card (`--if-match` / `--if-none-match`) | `put` | `create_card` / `update_card` | ❌ add (precondition control) |
-| DELETE (collection or card) | `delete` | `delete_addressbook` / `delete_card` | ⚠️ addressbook-only today |
+| current-user-principal + home-set (5397/6764) | `discover` | `current_user_principal`, `addressbook_home_set` | ✅ done |
+| PROPFIND (books + CTag/sync-token, or card id+ETag) | `propfind [addressbook]` | `list_addressbooks`, `enum_cards` | ✅ done |
+| PROPPATCH (displayname/description/color) | `proppatch` | `update_addressbook` | ✅ done |
+| extended MKCOL (5689) | `mkcol` | `create_addressbook` | ✅ done (alias `create`) |
+| REPORT `addressbook-query` | `report query` | `list_cards` | ✅ done |
+| REPORT `addressbook-multiget` | `report multiget` | `multiget_cards` | ✅ done |
+| REPORT `sync-collection` (6578 sync-token) | `report sync` | `sync_cards` | ✅ done (**headline**) |
+| GET card (raw vCard + ETag) | `get` | `read_card` | ✅ done |
+| PUT card (`--if-match` / `--if-none-match`) | `put` | `create_card` / `update_card` | ✅ done |
+| DELETE (collection or card) | `delete` | `delete_addressbook` / `delete_card` | ✅ done |
 
-**Headline gaps:** `report sync` (RFC 6578), `report multiget`, CTag/sync-token
-surfacing, ETag-aware `put` — all already in io-webdav, just unexposed.
-**Raw escape hatch (C):** `propfind` / `proppatch` / `report` accept a raw XML
-request body from stdin or `--xml <file>` alongside the structured flags.
+**Landed 2026-07-18 (iteration 2):** the full flat surface above, all backed by
+existing io-webdav typed methods (no lib change). Old `list` / `create` / the
+card-scoped `propfind` / flat `report` were replaced.
+
+**Deferred:** the raw-XML escape hatch (`propfind`/`proppatch`/`report --xml`,
+decision C) — feasible via io-webdav's `pub stream` + `auth()`, but its own
+focused sub-step; the semantic commands cover the real surface. Also **C1**:
+`carddav discover` errors on a `home`-configured account (principal never
+walked) — pre-existing, fix best-effort in a follow-up.
 
 ---
 
@@ -118,13 +123,17 @@ side. Grounded in `io_msgraph::v1::client`.
 
 | Graph resource | Command | io-msgraph |
 | --- | --- | --- |
-| **contact-folder** (aliases `folder(s)`) | `contact-folder {list, child-folders, get, create, rename, delete}` | `contact_folders_list`, `contact_child_folders_list`, `contact_folder_get/create/update/delete` |
-| **contact** (aliases `contacts`) | `contact {list, get, create, update, delete, delta}` | `contacts_list`, `contact_get/create/update/delete`, `contacts_delta` |
-| **profile** (`me`) | `profile get` | `me` |
+| **contact-folder** (aliases `folder(s)`) | `contact-folder {list, child-folders, get, create, rename, delete}` | `contact_folders_list`, `contact_child_folders_list`, `contact_folder_get/create/update/delete` | ✅ done |
+| **contact** (aliases `contacts`) | `contact {list, get, create, update, delete, delta}` | `contacts_list`, `contact_get/create/update/delete`, `contacts_delta` | ✅ done |
+| **profile** (`me`) | `profile get` | `me` | ✅ done |
 
-**Native-only surface:** `contact delta` (incremental sync). **Raw (C):**
-create/update accept a raw Graph JSON body; `--json` emits raw Graph JSON;
-optional generic `msgraph request <method> <path>` passthrough (stretch).
+**Landed 2026-07-18 (iteration 3):** the full surface above; `create`/`update`
+take raw Graph contact JSON (file / inline / stdin), `--json` emits raw Graph
+payloads, list/delta are single-page (`--top`, surfaced `@odata.nextLink` /
+`@odata.deltaLink`). **Native-only surface:** `contact delta` (incremental sync).
+**Deferred:** the optional generic `msgraph request <method> <path>` passthrough.
+Lesson: a positional arg must not be field-named after a global flag (`json`
+collides with `--json`).
 
 ---
 

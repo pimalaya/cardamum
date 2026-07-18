@@ -1,15 +1,17 @@
 use anyhow::Result;
 use clap::Parser;
-use io_webdav::rfc6352::addressbook::Addressbook as WireAddressbook;
+use io_webdav::rfc6352::addressbook::Addressbook;
 use pimalaya_cli::printer::{Message, Printer};
 
 use crate::carddav::client::CarddavClient;
 
-/// Create an addressbook collection on the server.
+/// MKCOL: create an addressbook collection on the server (RFC 5689
+/// extended MKCOL).
 ///
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
-pub struct CarddavAddressbookCreateCommand {
+#[command(visible_alias = "create")]
+pub struct CarddavMkcolCommand {
     /// Identifier (last URL segment) of the addressbook to create.
     #[arg(value_name = "ID")]
     pub id: String,
@@ -24,9 +26,9 @@ pub struct CarddavAddressbookCreateCommand {
     pub color: Option<String>,
 }
 
-impl CarddavAddressbookCreateCommand {
+impl CarddavMkcolCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
-        let wire = WireAddressbook {
+        let wire = Addressbook {
             id: self.id.clone(),
             display_name: self.name,
             description: self.description,

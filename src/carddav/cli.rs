@@ -3,26 +3,30 @@ use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
 
 use crate::carddav::{
-    client::CarddavClient, create::CarddavAddressbookCreateCommand,
-    delete::CarddavAddressbookDeleteCommand, discover::CarddavDiscoverCommand,
-    list::CarddavAddressbookListCommand, propfind::CarddavPropfindCommand,
-    report::CarddavReportCommand,
+    client::CarddavClient, delete::CarddavDeleteCommand, discover::CarddavDiscoverCommand,
+    get::CarddavGetCommand, mkcol::CarddavMkcolCommand, propfind::CarddavPropfindCommand,
+    proppatch::CarddavProppatchCommand, put::CarddavPutCommand, report::cli::CarddavReportCommand,
 };
 
 /// CardDAV-specific API.
 ///
-/// Exposes RFC 4918 / 6352 verbs directly against the active account's CardDAV
-/// endpoint, plus the discovery chain (well-known + current-user-principal +
-/// addressbook-home-set).
+/// A flat list of WebDAV / CardDAV methods (RFC 4918 / 5689 / 6352 /
+/// 6578) run directly against the active account's endpoint, plus the
+/// discovery chain. Each command is named after its protocol
+/// counterpart and surfaces the native ids, ETags, CTags and
+/// sync-tokens the shared `addressbook` / `card` API hides.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum CarddavCommand {
     Discover(CarddavDiscoverCommand),
     Propfind(CarddavPropfindCommand),
+    Proppatch(CarddavProppatchCommand),
+    Mkcol(CarddavMkcolCommand),
+    #[command(subcommand)]
     Report(CarddavReportCommand),
-    List(CarddavAddressbookListCommand),
-    Create(CarddavAddressbookCreateCommand),
-    Delete(CarddavAddressbookDeleteCommand),
+    Get(CarddavGetCommand),
+    Put(CarddavPutCommand),
+    Delete(CarddavDeleteCommand),
 }
 
 impl CarddavCommand {
@@ -30,9 +34,11 @@ impl CarddavCommand {
         match self {
             Self::Discover(cmd) => cmd.execute(printer, client),
             Self::Propfind(cmd) => cmd.execute(printer, client),
+            Self::Proppatch(cmd) => cmd.execute(printer, client),
+            Self::Mkcol(cmd) => cmd.execute(printer, client),
             Self::Report(cmd) => cmd.execute(printer, client),
-            Self::List(cmd) => cmd.execute(printer, client),
-            Self::Create(cmd) => cmd.execute(printer, client),
+            Self::Get(cmd) => cmd.execute(printer, client),
+            Self::Put(cmd) => cmd.execute(printer, client),
             Self::Delete(cmd) => cmd.execute(printer, client),
         }
     }

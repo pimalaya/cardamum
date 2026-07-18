@@ -20,13 +20,16 @@ src/
   carddav/               [carddav] backend + protocol-specific API
     client.rs            WebdavClientStd builder + discovery routes
     backend.rs           shared-API glue over io-webdav
-    discover/propfind/report/list/create/delete
+    discover/propfind/proppatch/mkcol/get/put/delete   flat WebDAV verbs
+    report/              query/multiget/sync REPORTs (RFC 6352 §8, 6578)
   jmap/                  [jmap] backend
     backend.rs           shared-API glue over io-jmap
     project.rs           ContactCard <-> vCard (JSContact via vcard-rs)
   msgraph/               [msgraph] backend
     backend.rs           shared-API glue over io-msgraph
     project.rs           Graph contact <-> vCard
+    client.rs            MsgraphClientStd builder (specific API)
+    contact_folder/ contact/ profile/   nested-by-resource specific commands
   google/                [google] backend
     backend.rs           shared-API glue over io-people
     project.rs           People person <-> vCard

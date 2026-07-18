@@ -17,7 +17,7 @@ pub struct VdirCollectionRenameCommand {
 
 impl VdirCollectionRenameCommand {
     pub fn execute(self, printer: &mut impl Printer, client: VdirClient) -> Result<()> {
-        let path = client.root().join(&self.source);
+        let path = client.collection_path(&self.source)?;
         client.rename_collection(path, &self.target)?;
 
         printer.out(Message::new(format!(

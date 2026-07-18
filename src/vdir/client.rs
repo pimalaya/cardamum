@@ -1,10 +1,13 @@
 //! Cardamum wrapper around [`io_vdir::client::VdirClient`] that
 //! bundles the merged [`Account`] alongside the vdir client.
 
-use std::ops::{Deref, DerefMut};
+use std::{
+    ops::{Deref, DerefMut},
+    path::Path,
+};
 
-use anyhow::{Result, anyhow};
-use io_vdir::client::VdirClient as Inner;
+use anyhow::{Result, anyhow, bail};
+use io_vdir::{client::VdirClient as Inner, path::VdirPath};
 
 use crate::{
     account::context::Account,
@@ -20,6 +23,17 @@ impl VdirClient {
     pub fn new(config: VdirConfig, account: Account) -> Self {
         let inner = Inner::new(config.home_dir);
         Self { inner, account }
+    }
+
+    /// Resolves a collection name to its path under the vdir root,
+    /// bailing with a friendly message when the directory is absent
+    /// (io-vdir would otherwise surface a raw OS error).
+    pub fn collection_path(&self, name: &str) -> Result<VdirPath> {
+        let path = self.root().join(name);
+        if !Path::new(path.as_str()).is_dir() {
+            bail!("Collection `{name}` not found");
+        }
+        Ok(path)
     }
 }
 

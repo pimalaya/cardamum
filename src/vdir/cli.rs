@@ -4,13 +4,15 @@ use pimalaya_cli::printer::Printer;
 
 use crate::vdir::{
     client::VdirClient, create::VdirCollectionCreateCommand, delete::VdirCollectionDeleteCommand,
-    list::VdirCollectionListCommand, rename::VdirCollectionRenameCommand,
+    item::cli::VdirItemCommand, list::VdirCollectionListCommand,
+    rename::VdirCollectionRenameCommand,
 };
 
 /// Vdir-specific API.
 ///
 /// Gives access to the raw vdir filesystem API on the active
-/// account's `vdir.home-dir` (collections + items as files on disk).
+/// account's `vdir.home-dir`. The flat verbs operate on collections
+/// (directories); `item` operates on the raw item files inside them.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum VdirCommand {
@@ -18,6 +20,8 @@ pub enum VdirCommand {
     Rename(VdirCollectionRenameCommand),
     Delete(VdirCollectionDeleteCommand),
     List(VdirCollectionListCommand),
+    #[command(subcommand, visible_alias = "items")]
+    Item(VdirItemCommand),
 }
 
 impl VdirCommand {
@@ -27,6 +31,7 @@ impl VdirCommand {
             Self::Rename(cmd) => cmd.execute(printer, client),
             Self::Delete(cmd) => cmd.execute(printer, client),
             Self::List(cmd) => cmd.execute(printer, client),
+            Self::Item(cmd) => cmd.execute(printer, client),
         }
     }
 }

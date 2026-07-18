@@ -31,9 +31,10 @@ src/
     backend.rs           shared-API glue over io-people
     project.rs           People person <-> vCard
   vdir/                  [vdir] backend + protocol-specific API
-    client.rs            VdirClient builder
+    client.rs            VdirClient builder (+ collection_path resolver)
     backend.rs           shared-API glue over io-vdir
-    list/create/rename/delete
+    list/create/rename/delete   collection verbs
+    item/                raw item files (list/get/create/update/delete, any kind)
   account/               account list/check + Account context
   wizard/                bare-cardamum interactive config generator + email discovery
 ```

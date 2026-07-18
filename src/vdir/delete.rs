@@ -16,7 +16,7 @@ pub struct VdirCollectionDeleteCommand {
 
 impl VdirCollectionDeleteCommand {
     pub fn execute(self, printer: &mut impl Printer, client: VdirClient) -> Result<()> {
-        let path = client.root().join(&self.name);
+        let path = client.collection_path(&self.name)?;
         client.delete_collection(path)?;
 
         printer.out(Message::new(format!(

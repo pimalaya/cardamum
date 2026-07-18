@@ -1,2 +1,9 @@
+pub mod address_book;
 pub mod backend;
+pub mod cli;
+pub mod client;
+pub mod contact_card;
+pub mod input;
 pub mod project;
+pub mod render;
+pub mod session;

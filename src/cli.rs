@@ -16,6 +16,10 @@ use pimalaya_config::toml::TomlConfig;
 
 #[cfg(feature = "carddav")]
 use crate::carddav::{cli::CarddavCommand, client::build_carddav_client};
+#[cfg(feature = "google")]
+use crate::google::{cli::GoogleCommand, client::build_google_client};
+#[cfg(feature = "jmap")]
+use crate::jmap::{cli::JmapCommand, client::build_jmap_client};
 #[cfg(feature = "msgraph")]
 use crate::msgraph::{cli::MsgraphCommand, client::build_msgraph_client};
 #[cfg(feature = "vdir")]
@@ -90,9 +94,15 @@ pub enum Command {
     #[cfg(feature = "carddav")]
     #[command(subcommand)]
     Carddav(CarddavCommand),
+    #[cfg(feature = "jmap")]
+    #[command(subcommand)]
+    Jmap(JmapCommand),
     #[cfg(feature = "msgraph")]
     #[command(subcommand)]
     Msgraph(MsgraphCommand),
+    #[cfg(feature = "google")]
+    #[command(subcommand)]
+    Google(GoogleCommand),
     #[cfg(feature = "vdir")]
     #[command(subcommand)]
     Vdir(VdirCommand),
@@ -172,11 +182,25 @@ impl Command {
                 let client = build_carddav_client(config, name, account_config)?;
                 cmd.execute(printer, client)
             }
+            #[cfg(feature = "jmap")]
+            Self::Jmap(cmd) => {
+                let (config, name, account_config) =
+                    resolve_account(printer, config_paths, account_name)?;
+                let client = build_jmap_client(config, name, account_config)?;
+                cmd.execute(printer, client)
+            }
             #[cfg(feature = "msgraph")]
             Self::Msgraph(cmd) => {
                 let (config, name, account_config) =
                     resolve_account(printer, config_paths, account_name)?;
                 let client = build_msgraph_client(config, name, account_config)?;
+                cmd.execute(printer, client)
+            }
+            #[cfg(feature = "google")]
+            Self::Google(cmd) => {
+                let (config, name, account_config) =
+                    resolve_account(printer, config_paths, account_name)?;
+                let client = build_google_client(config, name, account_config)?;
                 cmd.execute(printer, client)
             }
             #[cfg(feature = "vdir")]

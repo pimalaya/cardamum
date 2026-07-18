@@ -143,15 +143,20 @@ Grounded in `io_people::v1::client`.
 
 | People resource | Command | io-people |
 | --- | --- | --- |
-| **contact-group** (aliases `group(s)`) | `contact-group {list, get, create, update, delete, members}` | `contact_groups_list`, `contact_group_get/create/update/delete`, `contact_group_members_modify` |
-| **connection** (aliases `people/contacts`) | `connection {list, get, create, update, delete, search}` | `connections_list` (syncToken), `person_get`, `contact_create/update/delete`, `contacts_search` |
-| **other-contact** (aliases `other`) | `other-contact {list, search, copy}` | `other_contacts_list/search`, `other_contact_copy` |
-| **profile** (`me`) | `profile get` | `person_get` on `people/me` |
+| **contact-group** (aliases `group(s)`) | `contact-group {list, get, create, update, delete, members}` | `contact_groups_list`, `contact_group_get/create/update/delete`, `contact_group_members_modify` | ✅ done |
+| **connection** (aliases `people/contacts`) | `connection {list, get, create, update, delete, search}` | `connections_list` (syncToken), `person_get`, `contact_create/update/delete`, `contacts_search` | ✅ done |
+| **other-contact** (aliases `other`) | `other-contact {list, search, copy}` | `other_contacts_list/search`, `other_contact_copy` | ✅ done |
+| **profile** (`me`) | `profile get` | `person_get` on `people/me` | ✅ done |
 
-**Native-only surface (absent from shared):** `connection list --sync-token`
-(incremental), the entire `other-contact` source (auto-collected contacts), and
-`contact-group members` (add/remove). **Raw (C):** raw People JSON in/out;
-optional generic `people request` passthrough (stretch).
+**Landed 2026-07-18 (iteration 4):** the full surface above (top-level `google`
+command). `connection create`/`update` take raw People JSON; `update` derives the
+`updatePersonFields` mask from the JSON's top-level keys and fetches the etag to
+guard the write. `--json` emits raw People. `other-contact` uses the reduced
+field mask People allows. **Native-only surface:** `connection list --sync-token`,
+the `other-contact` source, `contact-group members`. **Deferred:** the optional
+generic `people request` passthrough. **Test caveat:** `profile get` (needs
+`profile` scope) and `other-contact *` (need `contacts.other.readonly`) are
+scope-gated by the test token — implemented, not live-verified.
 
 ---
 
@@ -162,21 +167,36 @@ Grounded in `io_jmap::client` (rfc9610).
 
 | JMAP object / method | Command | io-jmap |
 | --- | --- | --- |
-| AddressBook/get | `address-book get` | `address_book_get` |
-| AddressBook/set (create/update/destroy) | `address-book {create, update, destroy}` | `address_book_set` |
-| AddressBook/changes | `address-book changes` | `address_book_changes` |
-| ContactCard/get | `contact-card get` | `contact_card_get` |
-| ContactCard/query | `contact-card query` | `contact_card_query` |
-| ContactCard/set (create/update/destroy) | `contact-card {create, update, destroy}` | `contact_card_set` |
-| ContactCard/changes | `contact-card changes` | `contact_card_changes` |
-| ContactCard/copy | `contact-card copy` | `contact_card_copy` |
-| Session | `session get` | `session_get` |
+| AddressBook/get | `address-book get` | `address_book_get` | ✅ done |
+| AddressBook/set (create/update/destroy) | `address-book {create, update, destroy}` | `address_book_set` | ✅ done |
+| AddressBook/changes | `address-book changes` | `address_book_changes` | ✅ done |
+| ContactCard/get | `contact-card get` | `contact_card_get` | ✅ done |
+| ContactCard/query | `contact-card query` | `contact_card_query` | ✅ done |
+| ContactCard/set (create/update/destroy) | `contact-card {create, update, destroy}` | `contact_card_set` | ✅ done |
+| ContactCard/changes | `contact-card changes` | `contact_card_changes` | ✅ done |
+| ContactCard/copy | `contact-card copy` | `contact_card_copy` | ✅ done |
+| Session | `session get` | `session_get` (cached) | ✅ done |
 
 (AddressBook has no `/query` in RFC 9610 / io-jmap — omitted deliberately.)
-**Native-only surface:** `changes` (both objects), `session get` (capabilities),
-`contact-card copy` (cross-account). **Raw (C):** create/update accept raw
-JSContact JSON; `--json` emits raw JSContact; optional generic `jmap request`
-(a raw method-call array POST) passthrough (stretch).
+**Landed 2026-07-18 (iteration 5, final):** the full surface above (top-level
+`jmap` command). `contact-card create`/`update` take raw JSContact JSON (`update`
+is a JMAP patch with JSON-pointer keys like `name/full`); `--json` emits raw JMAP;
+`get`/`query` surface the state token that `changes` consumes. **Native-only
+surface:** `changes` (both objects), `session get`, `contact-card copy`
+(cross-account, needs a source account to exercise). **Deferred:** the optional
+generic `jmap request` (raw method-call POST) passthrough.
+
+---
+
+## Round complete
+
+All five backends' protocol-specific APIs are implemented and live-tested (reports
+in `docs/testing/*-specific.md`): **vdir** (item), **carddav** (flat WebDAV),
+**msgraph** (Graph resources), **google** (People resources), **jmap** (JMAP
+objects). Remaining optional follow-ups: the raw-XML/`request` escape hatches
+(CardDAV `--xml`, and the generic `request` passthrough per object backend),
+CardDAV **C1** (`discover` on home-configured accounts), and `item copy`/`move`
+for vdir.
 
 ---
 

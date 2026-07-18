@@ -22,17 +22,21 @@ src/
     backend.rs           shared-API glue over io-webdav
     discover/propfind/proppatch/mkcol/get/put/delete   flat WebDAV verbs
     report/              query/multiget/sync REPORTs (RFC 6352 §8, 6578)
-  jmap/                  [jmap] backend
+  jmap/                  [jmap] backend + protocol-specific API
     backend.rs           shared-API glue over io-jmap
     project.rs           ContactCard <-> vCard (JSContact via vcard-rs)
+    client.rs            JmapClientStd builder (specific API)
+    address_book/ contact_card/ session/   object-nested specific commands (raw JSContact)
   msgraph/               [msgraph] backend
     backend.rs           shared-API glue over io-msgraph
     project.rs           Graph contact <-> vCard
     client.rs            MsgraphClientStd builder (specific API)
     contact_folder/ contact/ profile/   nested-by-resource specific commands
-  google/                [google] backend
+  google/                [google] backend + People-API specific API
     backend.rs           shared-API glue over io-people
     project.rs           People person <-> vCard
+    client.rs            PeopleClientStd builder (specific API)
+    contact_group/ connection/ other_contact/ profile/   nested-by-resource commands
   vdir/                  [vdir] backend + protocol-specific API
     client.rs            VdirClient builder (+ collection_path resolver)
     backend.rs           shared-API glue over io-vdir

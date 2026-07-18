@@ -1,2 +1,10 @@
 pub mod backend;
+pub mod cli;
+pub mod client;
+pub mod connection;
+pub mod contact_group;
+pub mod input;
+pub mod other_contact;
+pub mod profile;
 pub mod project;
+pub mod render;

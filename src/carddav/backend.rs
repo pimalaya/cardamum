@@ -5,8 +5,8 @@
 use anyhow::{Result, anyhow, bail};
 use io_webdav::{
     client::{WebdavClientStd, WebdavClientStdError},
-    rfc4918::send::SendError,
-    rfc6352::{addressbook::Addressbook as WireAddressbook, card::CardEntry},
+    rfc4918::send::WebdavSendError,
+    rfc6352::{addressbook::CarddavAddressbook, card::CarddavCardEntry},
 };
 
 use crate::{
@@ -51,7 +51,7 @@ impl CarddavBackend {
             bail!("Addressbook name cannot be empty");
         }
 
-        let wire = WireAddressbook {
+        let wire = CarddavAddressbook {
             id: name.to_string(),
             display_name: Some(name.to_string()),
             description: description.map(str::to_string),
@@ -73,7 +73,7 @@ impl CarddavBackend {
             .find(|addressbook| addressbook.id == id)
             .ok_or_else(|| anyhow::anyhow!("Addressbook `{id}` not found"))?;
 
-        let next = WireAddressbook {
+        let next = CarddavAddressbook {
             id: id.to_string(),
             display_name: match patch.name {
                 Some(name) => Some(name),
@@ -164,7 +164,7 @@ impl CarddavBackend {
 
 /// Maps a WebDAV wire addressbook to the shared shape: the display
 /// name falls back to the id.
-fn into_addressbook(wire: WireAddressbook) -> Addressbook {
+fn into_addressbook(wire: CarddavAddressbook) -> Addressbook {
     let name = wire.display_name.unwrap_or_else(|| wire.id.clone());
 
     Addressbook {
@@ -175,8 +175,8 @@ fn into_addressbook(wire: WireAddressbook) -> Addressbook {
     }
 }
 
-/// Maps a WebDAV [`CardEntry`] to a shared [`Card`].
-fn into_card(addressbook_id: &str, entry: CardEntry) -> Card {
+/// Maps a WebDAV [`CarddavCardEntry`] to a shared [`Card`].
+fn into_card(addressbook_id: &str, entry: CarddavCardEntry) -> Card {
     Card {
         id: entry.id,
         addressbook_id: addressbook_id.to_string(),
@@ -189,11 +189,11 @@ fn into_card(addressbook_id: &str, entry: CardEntry) -> Card {
 /// server considers the vCard invalid (the CardDAV `valid-address-data`
 /// precondition, RFC 6352 §6.3.2.1). cardamum forwards the vCard
 /// unchanged and never inspects it; this only surfaces the server's own
-/// rejection, since providers disagree on what they accept — most
+/// rejection, since providers disagree on what they accept: most
 /// require a `UID`, and some (e.g. iCloud) require vCard 3.0 with an `N`
 /// property. Every other error passes through untouched.
 fn card_write_error(err: WebdavClientStdError) -> anyhow::Error {
-    let WebdavClientStdError::Send(SendError::HttpStatus(403, body)) = &err else {
+    let WebdavClientStdError::Send(WebdavSendError::HttpStatus(403, body)) = &err else {
         return err.into();
     };
 

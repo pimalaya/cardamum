@@ -3,16 +3,16 @@ use std::fmt;
 use anyhow::Result;
 use clap::Parser;
 use comfy_table::{Cell, Row, Table};
-use io_webdav::rfc6578::sync_collection::{SyncChange, SyncDelta};
+use io_webdav::rfc6578::sync_collection::{WebdavSyncChange, WebdavSyncDelta};
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::carddav::client::CarddavClient;
+use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
 
 /// `sync-collection` REPORT: the incremental changes since a sync-token
 /// (RFC 6578). Omit `--sync-token` for an initial sync; feed the
 /// returned token back to the next call. Bodies are not fetched
-/// (getetag only) — pair with `report multiget` to pull the changed
+/// (getetag only): pair with `report multiget` to pull the changed
 /// cards.
 ///
 /// JSON output: `{"changed": [{"href", "etag"}], "vanished": [...],
@@ -52,8 +52,8 @@ pub struct ChangeRow {
     pub etag: Option<String>,
 }
 
-impl From<SyncChange> for ChangeRow {
-    fn from(change: SyncChange) -> Self {
+impl From<WebdavSyncChange> for ChangeRow {
+    fn from(change: WebdavSyncChange) -> Self {
         Self {
             href: change.href,
             etag: change.etag,
@@ -62,7 +62,7 @@ impl From<SyncChange> for ChangeRow {
 }
 
 impl SyncReport {
-    fn new(preset: String, delta: SyncDelta) -> Self {
+    fn new(preset: String, delta: WebdavSyncDelta) -> Self {
         Self {
             preset,
             changed: delta.changed.into_iter().map(ChangeRow::from).collect(),
@@ -77,11 +77,13 @@ impl fmt::Display for SyncReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 
-        table.load_preset(&self.preset).set_header(Row::from([
-            Cell::new("STATUS"),
-            Cell::new("HREF"),
-            Cell::new("ETAG"),
-        ]));
+        table
+            .load_style(style_from_preset(&self.preset))
+            .set_header(Row::from([
+                Cell::new("STATUS"),
+                Cell::new("HREF"),
+                Cell::new("ETAG"),
+            ]));
         for change in &self.changed {
             table.add_row(Row::from([
                 Cell::new("changed"),

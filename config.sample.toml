@@ -11,14 +11,20 @@
 # rest are deep-merged on top of it.
 #
 # Run bare `cardamum` (no subcommand) to launch the wizard. It opens with a
-# single prompt that takes an email address, a server URL, or a local vdir path.
-# The recommended path is automatic discovery: enter your email address and the
-# wizard searches every reachable contacts service (CardDAV, JMAP, plus the
-# Google People and Microsoft Graph APIs for those providers) and lets you pick
-# one. A `scheme://` URL is a CardDAV server to configure by hand; a filesystem
-# path is a local vdir. The wizard tests the account, then prints a ready-to-save
-# configuration on stdout without touching disk (redirect it to save, e.g.
-# `cardamum > config.toml`), exactly like Ortie.
+# single prompt that takes an email address, a server URL, or a local folder
+# path. The recommended path is automatic discovery: enter your email address
+# and the wizard searches every reachable contacts service (CardDAV, JMAP, plus
+# the Google People and Microsoft Graph APIs for those providers) and lets you
+# pick one, then asks how to authenticate against it. A `scheme://` URL
+# discovers from its host, its scheme narrowing the results (`carddav(s)` to
+# CardDAV, `jmap(s)` to JMAP). A filesystem path is a local vdir or pimdir
+# store, told apart by their on-disk markers.
+#
+# The wizard only configures what it can discover automatically: it never
+# prompts for a hand-entered server field, and stops with a pointer to this
+# file when discovery finds nothing. It tests the account, then offers to save
+# the configuration for you; when stdout is redirected it prints it instead, so
+# `cardamum > config.toml` still works, exactly like Ortie.
 # ================================================================================
 
 # --------------------------------------------------------------------------------
@@ -43,7 +49,7 @@
 #addressbook.default = "Contacts"
 
 # --------------------------------------------------------------------------------
-# Table rendering — addressbooks list
+# Table rendering: addressbooks list
 # --------------------------------------------------------------------------------
 
 #addressbook.list.table.id-color = "red"
@@ -52,7 +58,7 @@
 #addressbook.list.table.color-color = "reset"
 
 # --------------------------------------------------------------------------------
-# Table rendering — cards list
+# Table rendering: cards list
 # --------------------------------------------------------------------------------
 
 #card.list.table.id-color = "red"
@@ -61,7 +67,7 @@
 #card.list.table.tel-color = "dark-yellow"
 
 # --------------------------------------------------------------------------------
-# Table rendering — account list
+# Table rendering: account list
 # --------------------------------------------------------------------------------
 
 #account.list.table.name-color = "green"
@@ -90,6 +96,28 @@
 # When `--account` is missing, use this account as the default one.
 default = true
 vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
+
+# --------------------------------------------------------------------------------
+# pimdir backend
+#
+# A local pimdir store: a SQLite index plus a content-addressed blob directory,
+# populated by a sync engine such as Neverest. It is an offline cache, not a
+# server: a card whose body has not been fetched yet still lists (from its
+# stored summary) but cannot be read until a sync hydrates it, and every write
+# is staged as a pending action the next sync pushes.
+# --------------------------------------------------------------------------------
+
+#[accounts.pimdir-example]
+# The store directory, holding `pimdir.db` and `objects/`.
+#pimdir.root = "~/.local/share/pimdir"
+# The replica source a staged write is attributed to. Leave unset: a store
+# synced as a single source is opened as that source. Set it only to
+# disambiguate a store synced from two sources, and make it match the source
+# the sync engine drives for this device, or the change reaches no server.
+#pimdir.source = "personal"
+# The account the collections are grouped under, for a store shared by several
+# accounts or domains. Unset reads every collection in the store.
+#pimdir.account = "personal"
 
 # --------------------------------------------------------------------------------
 # CardDAV backend
@@ -168,6 +196,6 @@ msgraph.auth.token.command = "ortie token show"
 # The People API is OAuth 2.0 bearer-token only.
 # --------------------------------------------------------------------------------
 
-[accounts.google-example]
-google.auth.token.command = "ortie token show"
-#google.auth.token.raw = "oauth2-token"
+[accounts.people-example]
+people.auth.token.command = "ortie token show"
+#people.auth.token.raw = "oauth2-token"

@@ -4,6 +4,8 @@ use comfy_table::{Cell, Color, Row, Table};
 use io_msgraph::v1::rest::users::contacts::MsgraphContact;
 use serde::Serialize;
 
+use crate::shared::table::style_from_preset;
+
 /// Display name of a contact, or the empty string.
 pub fn contact_name(contact: &MsgraphContact) -> &str {
     contact.display_name.as_deref().unwrap_or("")
@@ -43,7 +45,7 @@ impl fmt::Display for ContactsReport {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([
                 Cell::new("ID"),
                 Cell::new("NAME"),

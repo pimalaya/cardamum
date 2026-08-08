@@ -1,7 +1,9 @@
 pub mod cli;
+pub mod copy;
 pub mod create;
 pub mod delete;
 pub mod get;
 pub mod input;
 pub mod list;
+pub mod r#move;
 pub mod update;

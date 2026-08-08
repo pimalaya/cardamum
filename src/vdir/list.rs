@@ -7,7 +7,7 @@ use io_vdir::collection::VdirCollection;
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::vdir::client::VdirClient;
+use crate::{shared::table::style_from_preset, vdir::client::VdirClient};
 
 /// List every collection under the configured vdir root.
 ///
@@ -66,7 +66,7 @@ impl fmt::Display for CollectionsTable {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([
                 Cell::new("ID"),
                 Cell::new("NAME"),

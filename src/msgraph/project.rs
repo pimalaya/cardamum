@@ -5,7 +5,7 @@
 //! Graph spoke synthesizes the vCard document of record itself:
 //! [`to_vcard`] projects an io-msgraph contact onto a fresh vCard 4.0
 //! document, and [`to_contact`] projects a vCard back onto a contact.
-//! Per the custom property policy of docs/contacts-mapping.md only
+//! Per the custom property policy of cairn/spec/projection.md only
 //! fields with a well-defined vCard slot are projected. [`to_contact`]
 //! builds a full-state projection: every managed field is Set (or Set
 //! empty) when the vCard carries it and Null when it does not;
@@ -33,9 +33,9 @@ use vcard::{
         cst::VcardCst,
         line::VcardLine,
         prop::{
-            VcardPropLens, adr::ADR, categories::CATEGORIES, email::EMAIL, r#fn::FN, impp::IMPP,
-            n::N, nickname::NICKNAME, note::NOTE, org::ORG, related::RELATED, role::ROLE, tel::TEL,
-            title::TITLE, url::URL,
+            adr::ADR, categories::CATEGORIES, email::EMAIL, r#fn::FN, impp::IMPP,
+            lens::VcardPropLens, n::N, nickname::NICKNAME, note::NOTE, org::ORG, related::RELATED,
+            role::ROLE, tel::TEL, title::TITLE, url::URL,
         },
     },
     value::{
@@ -54,7 +54,7 @@ use crate::project::{MAX_STASH_LINE, escape_text, full_date, splice_props, text_
 /// Extended-property id under which the vCard remainder is stashed on
 /// the Graph contact (a fixed app GUID plus a name, the String MAPI
 /// form); it rides inline in create and update bodies and reads back
-/// through a filtered `$expand` (docs/custom-data.md).
+/// through a filtered `$expand` (cairn/spec/projection.md).
 pub const EXTENDED_PROP_ID: &str =
     "String {c8e5e5cf-3f6c-4f0a-9d4e-52f1e7b2a9d3} Name cardamum-vcard";
 
@@ -247,7 +247,7 @@ pub fn to_vcard(contact: &MsgraphContact) -> String {
 
     // NOTE: Graph-only fields ride the vCard as read-only X-MSGRAPH-*
     // vendor properties, and the stashed remainder restores verbatim
-    // (docs/custom-data.md).
+    // (cairn/spec/projection.md).
     let mut extra = Vec::new();
     if let Some(value) = opt(&contact.file_as) {
         extra.push(format!("X-MSGRAPH-FILE-AS:{}", escape_text(value)));
@@ -316,7 +316,7 @@ pub fn to_contact(vcard: &str) -> Result<MsgraphContact, String> {
     // addresses (Graph rejects bodies overflowing a slot set). The
     // first properties win; extras land in the stash remainder like
     // every other line that does not project, so they survive on the
-    // server and restore on read (docs/custom-data.md).
+    // server and restore on read (cairn/spec/projection.md).
     for line in &card.props {
         let consumed = match VcardPropKind::from_str(line.name.get()) {
             // NOTE: the VERSION line is structural and the minted

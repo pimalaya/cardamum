@@ -22,8 +22,10 @@ pub enum Backend {
     Jmap,
     #[cfg(feature = "msgraph")]
     Msgraph,
-    #[cfg(feature = "google")]
-    Google,
+    #[cfg(feature = "people")]
+    People,
+    #[cfg(feature = "pimdir")]
+    Pimdir,
     #[cfg(feature = "vdir")]
     Vdir,
 }
@@ -51,9 +53,15 @@ impl Backend {
 
     /// Whether the Google People arm of a shared command is allowed to
     /// run.
-    #[cfg(feature = "google")]
-    pub fn allows_google(self) -> bool {
-        matches!(self, Self::Auto | Self::Google)
+    #[cfg(feature = "people")]
+    pub fn allows_people(self) -> bool {
+        matches!(self, Self::Auto | Self::People)
+    }
+
+    /// Whether the pimdir arm of a shared command is allowed to run.
+    #[cfg(feature = "pimdir")]
+    pub fn allows_pimdir(self) -> bool {
+        matches!(self, Self::Auto | Self::Pimdir)
     }
 
     /// Whether the vdir arm of a shared command is allowed to run.
@@ -75,8 +83,10 @@ impl FromStr for Backend {
             "jmap" => Ok(Self::Jmap),
             #[cfg(feature = "msgraph")]
             "msgraph" => Ok(Self::Msgraph),
-            #[cfg(feature = "google")]
-            "google" => Ok(Self::Google),
+            #[cfg(feature = "people")]
+            "people" => Ok(Self::People),
+            #[cfg(feature = "pimdir")]
+            "pimdir" => Ok(Self::Pimdir),
             #[cfg(feature = "vdir")]
             "vdir" => Ok(Self::Vdir),
             backend => bail!("Invalid backend {backend}"),
@@ -94,8 +104,10 @@ impl fmt::Display for Backend {
             Self::Jmap => write!(f, "jmap"),
             #[cfg(feature = "msgraph")]
             Self::Msgraph => write!(f, "msgraph"),
-            #[cfg(feature = "google")]
-            Self::Google => write!(f, "google"),
+            #[cfg(feature = "people")]
+            Self::People => write!(f, "people"),
+            #[cfg(feature = "pimdir")]
+            Self::Pimdir => write!(f, "pimdir"),
             #[cfg(feature = "vdir")]
             Self::Vdir => write!(f, "vdir"),
         }

@@ -3,20 +3,20 @@ use std::collections::HashMap;
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "google"
+    feature = "people",
+    feature = "pimdir"
 ))]
 use std::path::PathBuf;
 
-use anyhow::Result;
 #[cfg(feature = "jmap")]
-use anyhow::bail;
+use anyhow::{Result, bail};
 use comfy_table::ContentArrangement;
 use crossterm::style::Color;
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "google"
+    feature = "people"
 ))]
 use pimalaya_config::secret::Secret;
 use pimalaya_config::toml::TomlConfig;
@@ -26,7 +26,7 @@ use pimalaya_config::toml::shell_expanded_string;
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "google"
+    feature = "people"
 ))]
 use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsProvider};
 use serde::{Deserialize, Serialize};
@@ -92,14 +92,16 @@ pub struct AccountConfig {
 
     #[cfg(feature = "vdir")]
     pub vdir: Option<VdirConfig>,
+    #[cfg(feature = "pimdir")]
+    pub pimdir: Option<PimdirConfig>,
     #[cfg(feature = "carddav")]
     pub carddav: Option<CarddavConfig>,
     #[cfg(feature = "jmap")]
     pub jmap: Option<JmapConfig>,
     #[cfg(feature = "msgraph")]
     pub msgraph: Option<MsgraphConfig>,
-    #[cfg(feature = "google")]
-    pub google: Option<GoogleConfig>,
+    #[cfg(feature = "people")]
+    pub people: Option<PeopleConfig>,
 }
 
 /// Vdir configuration.
@@ -111,6 +113,29 @@ pub struct VdirConfig {
     /// immediate subdirectory is one addressbook.
     #[serde(deserialize_with = "shell_expanded_string")]
     pub home_dir: String,
+}
+
+/// pimdir configuration.
+#[cfg(feature = "pimdir")]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct PimdirConfig {
+    /// The store directory (holds `pimdir.db` and `objects/`).
+    pub root: PathBuf,
+    /// The replica source name this client opens the store as. Reads are
+    /// source-independent, but a staged write (create, edit, delete) is
+    /// attributed to this source, so for the change to propagate it must
+    /// match the source name the sync engine drives for this device.
+    /// Usually left unset: it is auto-detected from the store, a store
+    /// synced as a single source being opened as that source. Set it only
+    /// to disambiguate a store synced from two sources.
+    #[serde(default)]
+    pub source: Option<String>,
+    /// The account the collections are grouped under, for a store shared
+    /// by several accounts (or by several domains, as the mobile apps do).
+    /// Unset reads every collection in the store.
+    #[serde(default)]
+    pub account: Option<String>,
 }
 
 /// CardDAV configuration.
@@ -244,10 +269,10 @@ fn default_msgraph_user_id() -> String {
 }
 
 /// Google People configuration.
-#[cfg(feature = "google")]
+#[cfg(feature = "people")]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct GoogleConfig {
+pub struct PeopleConfig {
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
@@ -260,20 +285,20 @@ pub struct GoogleConfig {
     pub alpn: Vec<String>,
 
     /// Authentication configuration.
-    pub auth: GoogleAuthConfig,
+    pub auth: PeopleAuthConfig,
 }
 
 /// Google People authentication configuration.
-#[cfg(feature = "google")]
+#[cfg(feature = "people")]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct GoogleAuthConfig {
+pub struct PeopleAuthConfig {
     /// OAuth 2.0 bearer access token; sent as `Bearer <token>`. It is
     /// the only authorization the People API accepts.
     pub token: Secret,
 }
 
-#[cfg(any(feature = "msgraph", feature = "google"))]
+#[cfg(any(feature = "msgraph", feature = "people"))]
 fn default_http_alpn() -> Vec<String> {
     vec![String::from("http/1.1")]
 }
@@ -357,7 +382,7 @@ pub struct AccountListingTableConfig {
     pub default_color: Option<Color>,
 }
 
-/// Global / per-account table rendering knobs shared across every
+/// Global / per-account table rendering options shared across every
 /// list command.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -392,7 +417,7 @@ impl From<TableArrangementConfig> for ContentArrangement {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "google"
+    feature = "people"
 ))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -408,7 +433,7 @@ pub struct TlsConfig {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "google"
+    feature = "people"
 ))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -422,7 +447,7 @@ pub enum TlsProviderConfig {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "google"
+    feature = "people"
 ))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -435,7 +460,7 @@ pub struct RustlsConfig {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "google"
+    feature = "people"
 ))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -448,7 +473,7 @@ pub enum RustlsCryptoConfig {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "google"
+    feature = "people"
 ))]
 impl TlsConfig {
     /// Converts the config into a [`Tls`] carrying the given ALPN

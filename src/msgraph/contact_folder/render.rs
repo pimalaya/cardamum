@@ -4,6 +4,8 @@ use comfy_table::{Cell, Color, Row, Table};
 use io_msgraph::v1::rest::users::contact_folders::MsgraphContactFolder;
 use serde::Serialize;
 
+use crate::shared::table::style_from_preset;
+
 /// A page of contact folders. The table shows ID / NAME / PARENT;
 /// `--json` emits the raw Graph folder objects plus any next-page link.
 #[derive(Clone, Debug, Serialize)]
@@ -23,7 +25,7 @@ impl fmt::Display for FoldersReport {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([
                 Cell::new("ID"),
                 Cell::new("NAME"),

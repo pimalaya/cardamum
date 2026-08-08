@@ -3,24 +3,24 @@ use std::fmt;
 use anyhow::Result;
 use clap::Parser;
 use comfy_table::{Cell, Color, Row, Table};
-use io_webdav::rfc6352::{addressbook::Addressbook, card::CardRef};
+use io_webdav::rfc6352::{addressbook::CarddavAddressbook, card::CarddavCardRef};
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::carddav::client::CarddavClient;
+use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
 
 /// PROPFIND the home-set or an addressbook.
 ///
 /// Without an addressbook, lists the addressbook collections with their
 /// DAV properties, including the **CTag** and **sync-token** the shared
 /// `addressbook list` hides. With one, enumerates its card resources
-/// (id + ETag, no bodies) — the lightweight `getetag` PROPFIND.
+/// (id + ETag, no bodies): the lightweight `getetag` PROPFIND.
 ///
 /// JSON output: `{"addressbooks": [...]}` (no arg) or `{"cards":
 /// [{"id", "etag"}]}` (with arg).
 #[derive(Debug, Parser)]
 pub struct CarddavPropfindCommand {
-    /// Addressbook to enumerate; omit to list the addressbook
+    /// CarddavAddressbook to enumerate; omit to list the addressbook
     /// collections under the home-set.
     #[arg(value_name = "ADDRESSBOOK")]
     pub addressbook_id: Option<String>,
@@ -77,8 +77,8 @@ pub struct AddressbookRow {
     pub sync_token: Option<String>,
 }
 
-impl From<Addressbook> for AddressbookRow {
-    fn from(book: Addressbook) -> Self {
+impl From<CarddavAddressbook> for AddressbookRow {
+    fn from(book: CarddavAddressbook) -> Self {
         Self {
             id: book.id,
             display_name: book.display_name,
@@ -95,7 +95,7 @@ impl fmt::Display for AddressbooksReport {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([
                 Cell::new("ID"),
                 Cell::new("NAME"),
@@ -139,8 +139,8 @@ pub struct CardRefRow {
     pub etag: Option<String>,
 }
 
-impl From<CardRef> for CardRefRow {
-    fn from(card: CardRef) -> Self {
+impl From<CarddavCardRef> for CardRefRow {
+    fn from(card: CarddavCardRef) -> Self {
         Self {
             id: card.id,
             etag: card.etag,
@@ -153,7 +153,7 @@ impl fmt::Display for CardRefsReport {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([Cell::new("ID"), Cell::new("ETAG")]))
             .add_rows(self.rows.iter().map(|card| {
                 let mut row = Row::new();

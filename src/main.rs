@@ -13,7 +13,9 @@
 //!
 //! The network backends are io-webdav (CardDAV, WebDAV), io-jmap (RFC
 //! 8620 + RFC 9610), io-msgraph (Microsoft Graph) and io-people (Google
-//! People); the local storage backend is io-vdir. vcard-rs parses and
+//! People); the local storage backends are io-vdir (a filesystem vdir)
+//! and io-pimdir (a pimdir store, the SQLite-indexed offline cache a
+//! sync engine populates). vcard-rs parses and
 //! builds vCard (and converts to/from JSContact) for the backends with
 //! no native vCard. Account discovery comes from io-pim-discovery (fixed provider
 //! rules, PACC, RFC 6764 CardDAV resolve, RFC 8620 JMAP resolve, a
@@ -42,7 +44,9 @@
 //! serves the active account. The protocol-specific APIs (`carddav`,
 //! `vdir`) each expose the full surface of one backend, including
 //! operations the shared API cannot model (`carddav propfind`/`report`,
-//! `vdir rename`). The meta commands (`account`, `completions`,
+//! `vdir rename`). pimdir has none by design: it is a store rather than
+//! a protocol, and its operator surface is the separate `pimdir` binary
+//! shipped by io-pimdir. The meta commands (`account`, `completions`,
 //! `manuals`) cover account inspection, shell completions and man pages.
 //!
 //! ## Shared commands and backend selection
@@ -61,11 +65,11 @@
 //!
 //! ## vCard projection
 //!
-//! CardDAV and vdir speak vCard natively; JMAP, Microsoft Graph and
-//! Google People do not. For those three, the shared `Card.contents` is
+//! CardDAV, vdir and pimdir speak vCard natively; JMAP, Microsoft Graph
+//! and Google People do not. For those three, the shared `Card.contents` is
 //! a vCard document of record that cardamum *synthesizes* from the
 //! backend's own contact resource and re-projects on the way back
-//! (`{jmap,msgraph,google}/project.rs`): JMAP ContactCards convert
+//! (`{jmap,msgraph,people}/project.rs`): JMAP ContactCards convert
 //! through vcard-rs's JSContact codec, while Graph and People contacts
 //! project field-by-field with a provider-side stash for the properties
 //! that have no first-class slot, so nothing is lost round-trip. These
@@ -81,11 +85,16 @@
 //! one backend sub-block. `cli::resolve_account` selects the account
 //! (`-a` or `default`); a config that exists but lacks it is a hard
 //! error. When no config exists, the wizard is proposed; bare `cardamum`
-//! (no subcommand) also runs it. The [`wizard`] writes nothing to disk:
-//! from a single email / server-URL / vdir-path prompt it discovers an
-//! account, tests it, and prints it as a ready-to-save TOML document on
-//! stdout (prompts on stderr), so `cardamum > <config>` is the
-//! write-back, exactly like Ortie.
+//! (no subcommand) also runs it. The [`wizard`] mirrors Himalaya's: from
+//! a single email / server-URL / folder-path prompt it discovers an
+//! account, prompts the authentication method among those the service
+//! advertised, tests the account, then offers to save it to a config
+//! file. It configures only what it can discover, stopping with a
+//! pointer to config.sample.toml rather than prompting for a
+//! hand-entered server field. When stdout is redirected or `--json` is
+//! set it prints the TOML document instead of saving (prompts stay on
+//! stderr), so `cardamum > <config>` is still the write-back, exactly
+//! like Ortie.
 //!
 //! ## Output
 //!
@@ -94,8 +103,8 @@
 //! carries logs only. Each command's doc comment is its `--help` text
 //! and ends with its JSON output shape, so `cardamum <command> --help`
 //! is the canonical per-command usage reference; the README documents no
-//! per-command usage. The module map and the deeper design notes (the
-//! CardDAV discovery routes, the wizard internals) live under docs/.
+//! per-command usage. The behavioural truth behind this header, one file
+//! per capability, lives under cairn/spec.
 
 mod account;
 mod backend;
@@ -103,13 +112,15 @@ mod backend;
 mod carddav;
 mod cli;
 mod config;
-#[cfg(feature = "google")]
-mod google;
 #[cfg(feature = "jmap")]
 mod jmap;
 #[cfg(feature = "msgraph")]
 mod msgraph;
-#[cfg(any(feature = "msgraph", feature = "google"))]
+#[cfg(feature = "people")]
+mod people;
+#[cfg(feature = "pimdir")]
+mod pimdir;
+#[cfg(any(feature = "msgraph", feature = "people"))]
 mod project;
 mod shared;
 #[cfg(feature = "vdir")]

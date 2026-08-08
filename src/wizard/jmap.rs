@@ -1,9 +1,10 @@
 //! JMAP wizard.
 //!
-//! A discovery entry pins the session endpoint and the authentication
-//! method, so [`configure_discovered`] prompts only the credentials. It
-//! does not connect; the wizard validates the whole account once at the
-//! end (see [`crate::account::check`]).
+//! A discovery entry pins the session endpoint, the HTTP authentication
+//! scheme is picked among the advertised ones (skipped when only one
+//! qualifies), then its credentials are prompted. It does not connect;
+//! the wizard validates the whole account once at the end (see
+//! [`crate::account::check`]).
 
 use anyhow::{Result, bail};
 use pimalaya_cli::prompt;
@@ -11,35 +12,73 @@ use pimalaya_cli::prompt;
 use crate::{
     config::{JmapAuthConfig, JmapConfig},
     wizard::{
-        search::{Discovered, DiscoveredAuth, DiscoveredKind},
+        search::{AuthCaps, Discovered, DiscoveredKind},
         secret,
     },
 };
 
-/// Configures JMAP from a discovered entry: the endpoint and the
-/// authentication method are pinned, only the credentials are prompted.
-pub fn configure_discovered(email: &str, discovered: &Discovered) -> Result<JmapConfig> {
+const BASIC: &str = "Basic (username + password)";
+const BEARER: &str = "Bearer (API token)";
+
+/// Configures JMAP from a discovered entry: the endpoint is pinned, the
+/// authentication scheme is picked among those advertised, and only its
+/// credentials are prompted.
+pub fn configure_discovered(
+    account_name: &str,
+    email: &str,
+    discovered: &Discovered,
+) -> Result<JmapConfig> {
     let DiscoveredKind::Jmap(server) = &discovered.kind else {
         bail!("Expected a JMAP configuration");
     };
 
-    let auth = match discovered.auth {
-        DiscoveredAuth::Password => {
-            let default_login = discovered.login_default(email);
-            let username = prompt::text("JMAP username:", default_login.as_deref())?;
-            let password = secret::configure("JMAP password", None)?;
-            JmapAuthConfig::Basic { username, password }
-        }
-        DiscoveredAuth::Token => {
-            let token = secret::configure("JMAP API token", Some("ortie token show"))?;
-            JmapAuthConfig::Bearer { token }
-        }
-    };
+    let auth = prompt_auth(
+        account_name,
+        discovered.login_default(email).as_deref(),
+        discovered.auth,
+    )?;
 
     Ok(JmapConfig {
         server: server.to_string(),
         tls: Default::default(),
         alpn: io_jmap::client::JmapClientStd::default_alpn(),
         auth,
+    })
+}
+
+/// Prompts the HTTP authentication scheme from `caps` (both offered when
+/// none was advertised), then its credentials. The Bearer token flow shows
+/// the OAuth brokers only when a grant was advertised.
+fn prompt_auth(
+    account_name: &str,
+    login_hint: Option<&str>,
+    caps: AuthCaps,
+) -> Result<JmapAuthConfig> {
+    let mut schemes = Vec::new();
+    if caps.basic || !caps.any() {
+        schemes.push(BASIC);
+    }
+    if caps.token() || !caps.any() {
+        schemes.push(BEARER);
+    }
+
+    let scheme = if schemes.len() == 1 {
+        schemes[0]
+    } else {
+        prompt::item("JMAP authentication:", schemes, None)?
+    };
+
+    let key = format!("{account_name}-jmap");
+    Ok(match scheme {
+        BASIC => {
+            let username = prompt::text("Login:", login_hint)?;
+            let password = secret::configure_password("JMAP password", &key)?;
+            JmapAuthConfig::Basic { username, password }
+        }
+        BEARER => {
+            let token = secret::configure_token("JMAP API token", &key, caps.oauth || !caps.any())?;
+            JmapAuthConfig::Bearer { token }
+        }
+        _ => unreachable!(),
     })
 }

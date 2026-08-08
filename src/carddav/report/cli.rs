@@ -6,7 +6,7 @@ use crate::carddav::{
     client::CarddavClient,
     report::{
         multiget::CarddavReportMultigetCommand, query::CarddavReportQueryCommand,
-        sync::CarddavReportSyncCommand,
+        raw::CarddavReportRawCommand, sync::CarddavReportSyncCommand,
     },
 };
 
@@ -17,6 +17,7 @@ pub enum CarddavReportCommand {
     Query(CarddavReportQueryCommand),
     Multiget(CarddavReportMultigetCommand),
     Sync(CarddavReportSyncCommand),
+    Raw(CarddavReportRawCommand),
 }
 
 impl CarddavReportCommand {
@@ -25,6 +26,7 @@ impl CarddavReportCommand {
             Self::Query(cmd) => cmd.execute(printer, client),
             Self::Multiget(cmd) => cmd.execute(printer, client),
             Self::Sync(cmd) => cmd.execute(printer, client),
+            Self::Raw(cmd) => cmd.execute(printer, client),
         }
     }
 }

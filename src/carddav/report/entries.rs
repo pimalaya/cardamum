@@ -1,8 +1,10 @@
 use std::fmt;
 
 use comfy_table::{Cell, Color, Row, Table};
-use io_webdav::rfc6352::card::CardEntry;
+use io_webdav::rfc6352::card::CarddavCardEntry;
 use serde::Serialize;
+
+use crate::shared::table::style_from_preset;
 
 /// Cards returned by a `query` / `multiget` REPORT. The table shows id +
 /// ETag; the raw vCard body rides in `contents` for `--json`.
@@ -23,8 +25,8 @@ pub struct EntryRow {
     pub contents: String,
 }
 
-impl From<CardEntry> for EntryRow {
-    fn from(entry: CardEntry) -> Self {
+impl From<CarddavCardEntry> for EntryRow {
+    fn from(entry: CarddavCardEntry) -> Self {
         Self {
             id: entry.id,
             etag: entry.etag,
@@ -38,7 +40,7 @@ impl fmt::Display for CardEntriesReport {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([Cell::new("ID"), Cell::new("ETAG")]))
             .add_rows(self.rows.iter().map(|entry| {
                 let mut row = Row::new();

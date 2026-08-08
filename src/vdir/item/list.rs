@@ -7,7 +7,10 @@ use io_vdir::item::VdirItem;
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::vdir::{client::VdirClient, item::input::kind_str};
+use crate::{
+    shared::table::style_from_preset,
+    vdir::{client::VdirClient, item::input::kind_str},
+};
 
 /// List every item in the given collection, of any kind.
 ///
@@ -71,7 +74,7 @@ impl fmt::Display for ItemsTable {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([
                 Cell::new("ID"),
                 Cell::new("KIND"),

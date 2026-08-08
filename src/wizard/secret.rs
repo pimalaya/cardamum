@@ -1,33 +1,87 @@
-//! Secret prompt shared by the backend wizards.
+//! Secret prompts shared by the discovered-backend wizards (CardDAV,
+//! JMAP, Microsoft Graph, Google People).
 //!
-//! Every remote backend needs at least one secret (password, API
-//! token, OAuth access token). The prompt offers the same two
-//! strategies everywhere: a shell command retrieving the secret at
-//! runtime (recommended; OAuth tokens typically shell out to ortie),
-//! or the raw value stored in the configuration file.
+//! Delegates to pimalaya-cli's OS-aware pickers: [`configure_password`]
+//! offers the OS keyrings, [`configure_token`] the OAuth 2.0 token
+//! brokers (Ortie, pizauth, oama). Both also allow a custom command or a
+//! raw value. A known provider or broker yields an argv command (a TOML
+//! array); a custom command is a shell string. Cardamum only *reads* the
+//! secret: the value must already be stored, and a missing one surfaces
+//! when the account is tested right after.
 
-use anyhow::Result;
-use pimalaya_cli::prompt;
+use std::process::Command;
+
+use anyhow::{Result, bail};
+use pimalaya_cli::wizard::keyring::{self, SecretChoice};
 use pimalaya_config::{command::shell, secret::Secret};
 
-const CMD: &str = "Use a shell command to retrieve my secret (recommended)";
-const RAW: &str = "Save secret in the configuration file (plaintext, NOT recommended)";
-const SECRETS: [&str; 2] = [CMD, RAW];
+/// Prompts for a password [`Secret`] through the shared keyring picker.
+///
+/// `key_default` seeds the keyring entry (typically
+/// `<account>-<protocol>`); the entry is used verbatim, so a pre-existing
+/// secret is read exactly as named.
+///
+/// Only CardDAV and JMAP offer a password; the proprietary APIs are
+/// bearer-only and go through [`configure_token`].
+#[cfg(any(feature = "carddav", feature = "jmap"))]
+pub fn configure_password(label: &str, key_default: &str) -> Result<Secret> {
+    to_secret(keyring::prompt_secret(label, key_default)?)
+}
 
-/// Prompts for a [`Secret`]: strategy picker, then either the shell
-/// command line (seeded with `default_cmd`) or the raw value.
-pub fn configure(label: &str, default_cmd: Option<&str>) -> Result<Secret> {
-    let strategy = prompt::item(format!("{label} strategy:"), SECRETS, None)?;
+/// Prompts for an API token [`Secret`] through the shared token picker,
+/// which combines the OS keyrings (for a token generated on the provider)
+/// with the OAuth 2.0 brokers when `oauth` is true (a broker refreshes and
+/// prints a fresh token on every read).
+///
+/// `key_default` seeds the keyring entry or the broker account handle
+/// (typically the cardamum account name).
+pub fn configure_token(label: &str, key_default: &str, oauth: bool) -> Result<Secret> {
+    to_secret(keyring::prompt_token(label, key_default, oauth)?)
+}
 
-    match strategy {
-        CMD => {
-            let cmd = prompt::text("Shell command:", default_cmd)?;
-            Ok(Secret::Command(shell(&cmd)))
-        }
-        RAW => {
-            let secret = prompt::password(format!("{label}:"), format!("Confirm {label}:"))?;
-            Ok(Secret::Raw(secret))
-        }
-        _ => unreachable!(),
+fn to_secret(choice: SecretChoice) -> Result<Secret> {
+    Ok(match choice {
+        SecretChoice::Command(argv) => command_secret(argv)?,
+        SecretChoice::Shell(line) => shell_secret(&line)?,
+        SecretChoice::Raw(secret) => Secret::Raw(secret),
+    })
+}
+
+/// Builds a [`Secret::Command`] from an argv (program + arguments, no
+/// shell), the form a known keyring provider or token broker yields. It
+/// serializes back as a TOML array.
+fn command_secret(argv: Vec<String>) -> Result<Secret> {
+    let Some((program, args)) = argv.split_first() else {
+        bail!("Empty command for secret");
+    };
+
+    let mut cmd = Command::new(program);
+    cmd.args(args);
+    Ok(Secret::Command(cmd))
+}
+
+/// Builds a [`Secret::Command`] from a shell command line, the fallback
+/// form a user typed by hand. It serializes back as a TOML string.
+fn shell_secret(line: &str) -> Result<Secret> {
+    let line = line.trim();
+    if line.is_empty() {
+        bail!("Empty shell command for secret");
+    }
+
+    Ok(Secret::Command(shell(line)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_command_secret_is_rejected() {
+        assert!(command_secret(Vec::new()).is_err());
+    }
+
+    #[test]
+    fn blank_shell_secret_is_rejected() {
+        assert!(shell_secret("   ").is_err());
     }
 }

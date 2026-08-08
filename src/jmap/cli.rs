@@ -4,7 +4,8 @@ use pimalaya_cli::printer::Printer;
 
 use crate::jmap::{
     address_book::cli::JmapAddressBookCommand, client::JmapClient,
-    contact_card::cli::JmapContactCardCommand, session::cli::JmapSessionCommand,
+    contact_card::cli::JmapContactCardCommand, request::JmapRequestCommand,
+    session::cli::JmapSessionCommand,
 };
 
 /// JMAP-specific API (RFC 8620 + RFC 9610).
@@ -22,6 +23,7 @@ pub enum JmapCommand {
     ContactCard(JmapContactCardCommand),
     #[command(subcommand)]
     Session(JmapSessionCommand),
+    Request(JmapRequestCommand),
 }
 
 impl JmapCommand {
@@ -30,6 +32,7 @@ impl JmapCommand {
             Self::AddressBook(cmd) => cmd.execute(printer, client),
             Self::ContactCard(cmd) => cmd.execute(printer, client),
             Self::Session(cmd) => cmd.execute(printer, client),
+            Self::Request(cmd) => cmd.execute(printer, client),
         }
     }
 }

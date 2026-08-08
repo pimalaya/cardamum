@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use io_webdav::rfc6352::addressbook::Addressbook;
+use io_webdav::rfc6352::addressbook::CarddavAddressbook;
 use pimalaya_cli::printer::{Message, Printer};
 
 use crate::carddav::client::CarddavClient;
@@ -28,7 +28,7 @@ pub struct CarddavMkcolCommand {
 
 impl CarddavMkcolCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
-        let wire = Addressbook {
+        let wire = CarddavAddressbook {
             id: self.id.clone(),
             display_name: self.name,
             description: self.description,
@@ -40,7 +40,7 @@ impl CarddavMkcolCommand {
         client.create_addressbook(&wire)?;
 
         printer.out(Message::new(format!(
-            "Addressbook `{}` successfully created",
+            "CarddavAddressbook `{}` successfully created",
             self.id
         )))
     }

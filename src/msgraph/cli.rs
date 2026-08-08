@@ -5,6 +5,7 @@ use pimalaya_cli::printer::Printer;
 use crate::msgraph::{
     client::MsgraphClient, contact::cli::MsgraphContactCommand,
     contact_folder::cli::MsgraphContactFolderCommand, profile::cli::MsgraphProfileCommand,
+    request::MsgraphRequestCommand,
 };
 
 /// Microsoft Graph-specific API.
@@ -22,6 +23,7 @@ pub enum MsgraphCommand {
     Contact(MsgraphContactCommand),
     #[command(subcommand)]
     Profile(MsgraphProfileCommand),
+    Request(MsgraphRequestCommand),
 }
 
 impl MsgraphCommand {
@@ -30,6 +32,7 @@ impl MsgraphCommand {
             Self::ContactFolder(cmd) => cmd.execute(printer, client),
             Self::Contact(cmd) => cmd.execute(printer, client),
             Self::Profile(cmd) => cmd.execute(printer, client),
+            Self::Request(cmd) => cmd.execute(printer, client),
         }
     }
 }

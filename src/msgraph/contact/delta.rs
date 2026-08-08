@@ -7,7 +7,10 @@ use io_msgraph::v1::rest::users::contacts::delta::MsgraphContactDelta;
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::msgraph::{client::MsgraphClient, contact::render::contact_name};
+use crate::{
+    msgraph::{client::MsgraphClient, contact::render::contact_name},
+    shared::table::style_from_preset,
+};
 
 /// One page of the contacts delta (Graph incremental sync): the
 /// contacts changed or removed since the last round. Feed the returned
@@ -64,7 +67,7 @@ impl fmt::Display for DeltaReport {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([
                 Cell::new("STATUS"),
                 Cell::new("ID"),

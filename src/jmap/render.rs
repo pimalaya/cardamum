@@ -4,6 +4,8 @@ use comfy_table::{Cell, Color, Row, Table};
 use io_jmap::rfc9610::{address_book::JmapAddressBook, contact_card::JmapContactCard};
 use serde::Serialize;
 
+use crate::shared::table::style_from_preset;
+
 /// JSContact `name.full` of a card, or the empty string.
 pub fn card_name(card: &JmapContactCard) -> &str {
     card.card
@@ -40,7 +42,7 @@ impl fmt::Display for BooksReport {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([
                 Cell::new("ID"),
                 Cell::new("NAME"),
@@ -101,7 +103,7 @@ impl fmt::Display for CardsReport {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([
                 Cell::new("ID"),
                 Cell::new("NAME"),
@@ -155,7 +157,7 @@ impl fmt::Display for ChangesReport {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([Cell::new("STATUS"), Cell::new("ID")]));
         for id in &self.created {
             table.add_row(Row::from([Cell::new("created"), Cell::new(id)]));

@@ -12,7 +12,7 @@ use crate::{
 /// Manage accounts defined in the TOML configuration file.
 ///
 /// An account is a named group of backend settings (vdir, carddav,
-/// jmap, msgraph, google). Use these subcommands to inspect them or
+/// jmap, msgraph, people). Use these subcommands to inspect them or
 /// validate their connection. To create a new account, run bare
 /// `cardamum`.
 #[derive(Debug, Subcommand)]

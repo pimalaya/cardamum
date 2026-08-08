@@ -31,14 +31,16 @@ pub struct AddressbookClient {
 enum BackendClient {
     #[cfg(feature = "vdir")]
     Vdir(crate::vdir::backend::VdirBackend),
+    #[cfg(feature = "pimdir")]
+    Pimdir(Box<crate::pimdir::backend::PimdirBackend>),
     #[cfg(feature = "carddav")]
     Carddav(Box<crate::carddav::backend::CarddavBackend>),
     #[cfg(feature = "jmap")]
     Jmap(Box<crate::jmap::backend::JmapBackend>),
     #[cfg(feature = "msgraph")]
     Msgraph(Box<crate::msgraph::backend::MsgraphBackend>),
-    #[cfg(feature = "google")]
-    Google(Box<crate::google::backend::GoogleBackend>),
+    #[cfg(feature = "people")]
+    People(Box<crate::people::backend::PeopleBackend>),
 }
 
 impl AddressbookClient {
@@ -59,6 +61,16 @@ impl AddressbookClient {
         {
             use crate::vdir::backend::VdirBackend;
             inner = Some(BackendClient::Vdir(VdirBackend::new(vdir_config)));
+        }
+
+        #[cfg(feature = "pimdir")]
+        if inner.is_none()
+            && backend.allows_pimdir()
+            && let Some(pimdir_config) = account_config.pimdir.take()
+        {
+            use crate::pimdir::backend::PimdirBackend;
+            let client = PimdirBackend::new(pimdir_config)?;
+            inner = Some(BackendClient::Pimdir(Box::new(client)));
         }
 
         #[cfg(feature = "carddav")]
@@ -91,14 +103,14 @@ impl AddressbookClient {
             inner = Some(BackendClient::Msgraph(Box::new(client)));
         }
 
-        #[cfg(feature = "google")]
+        #[cfg(feature = "people")]
         if inner.is_none()
-            && backend.allows_google()
-            && let Some(google_config) = account_config.google.take()
+            && backend.allows_people()
+            && let Some(people_config) = account_config.people.take()
         {
-            use crate::google::backend::GoogleBackend;
-            let client = GoogleBackend::new(google_config)?;
-            inner = Some(BackendClient::Google(Box::new(client)));
+            use crate::people::backend::PeopleBackend;
+            let client = PeopleBackend::new(people_config)?;
+            inner = Some(BackendClient::People(Box::new(client)));
         }
 
         let Some(inner) = inner else {
@@ -115,14 +127,16 @@ impl AddressbookClient {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.list_addressbooks(),
+            #[cfg(feature = "pimdir")]
+            BackendClient::Pimdir(client) => client.list_addressbooks(),
             #[cfg(feature = "carddav")]
             BackendClient::Carddav(client) => client.list_addressbooks(),
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.list_addressbooks(),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.list_addressbooks(),
-            #[cfg(feature = "google")]
-            BackendClient::Google(client) => client.list_addressbooks(),
+            #[cfg(feature = "people")]
+            BackendClient::People(client) => client.list_addressbooks(),
         }
     }
 
@@ -137,14 +151,16 @@ impl AddressbookClient {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.create_addressbook(name, description, color),
+            #[cfg(feature = "pimdir")]
+            BackendClient::Pimdir(client) => client.create_addressbook(name, description, color),
             #[cfg(feature = "carddav")]
             BackendClient::Carddav(client) => client.create_addressbook(name, description, color),
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.create_addressbook(name, description, color),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.create_addressbook(name, description, color),
-            #[cfg(feature = "google")]
-            BackendClient::Google(client) => client.create_addressbook(name, description, color),
+            #[cfg(feature = "people")]
+            BackendClient::People(client) => client.create_addressbook(name, description, color),
         }
     }
 
@@ -154,14 +170,16 @@ impl AddressbookClient {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.update_addressbook(id, patch),
+            #[cfg(feature = "pimdir")]
+            BackendClient::Pimdir(client) => client.update_addressbook(id, patch),
             #[cfg(feature = "carddav")]
             BackendClient::Carddav(client) => client.update_addressbook(id, patch),
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.update_addressbook(id, patch),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.update_addressbook(id, patch),
-            #[cfg(feature = "google")]
-            BackendClient::Google(client) => client.update_addressbook(id, patch),
+            #[cfg(feature = "people")]
+            BackendClient::People(client) => client.update_addressbook(id, patch),
         }
     }
 
@@ -171,14 +189,16 @@ impl AddressbookClient {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.delete_addressbook(id),
+            #[cfg(feature = "pimdir")]
+            BackendClient::Pimdir(client) => client.delete_addressbook(id),
             #[cfg(feature = "carddav")]
             BackendClient::Carddav(client) => client.delete_addressbook(id),
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.delete_addressbook(id),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.delete_addressbook(id),
-            #[cfg(feature = "google")]
-            BackendClient::Google(client) => client.delete_addressbook(id),
+            #[cfg(feature = "people")]
+            BackendClient::People(client) => client.delete_addressbook(id),
         }
     }
 
@@ -194,14 +214,16 @@ impl AddressbookClient {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.list_cards(addressbook_id, page, page_size),
+            #[cfg(feature = "pimdir")]
+            BackendClient::Pimdir(client) => client.list_cards(addressbook_id, page, page_size),
             #[cfg(feature = "carddav")]
             BackendClient::Carddav(client) => client.list_cards(addressbook_id, page, page_size),
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.list_cards(addressbook_id, page, page_size),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.list_cards(addressbook_id, page, page_size),
-            #[cfg(feature = "google")]
-            BackendClient::Google(client) => client.list_cards(addressbook_id, page, page_size),
+            #[cfg(feature = "people")]
+            BackendClient::People(client) => client.list_cards(addressbook_id, page, page_size),
         }
     }
 
@@ -210,14 +232,16 @@ impl AddressbookClient {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.get_card(addressbook_id, card_id),
+            #[cfg(feature = "pimdir")]
+            BackendClient::Pimdir(client) => client.get_card(addressbook_id, card_id),
             #[cfg(feature = "carddav")]
             BackendClient::Carddav(client) => client.get_card(addressbook_id, card_id),
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.get_card(addressbook_id, card_id),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.get_card(addressbook_id, card_id),
-            #[cfg(feature = "google")]
-            BackendClient::Google(client) => client.get_card(addressbook_id, card_id),
+            #[cfg(feature = "people")]
+            BackendClient::People(client) => client.get_card(addressbook_id, card_id),
         }
     }
 
@@ -227,14 +251,16 @@ impl AddressbookClient {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.create_card(addressbook_id, contents),
+            #[cfg(feature = "pimdir")]
+            BackendClient::Pimdir(client) => client.create_card(addressbook_id, contents),
             #[cfg(feature = "carddav")]
             BackendClient::Carddav(client) => client.create_card(addressbook_id, contents),
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.create_card(addressbook_id, contents),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.create_card(addressbook_id, contents),
-            #[cfg(feature = "google")]
-            BackendClient::Google(client) => client.create_card(addressbook_id, contents),
+            #[cfg(feature = "people")]
+            BackendClient::People(client) => client.create_card(addressbook_id, contents),
         }
     }
 
@@ -255,6 +281,10 @@ impl AddressbookClient {
             BackendClient::Vdir(client) => {
                 client.update_card(addressbook_id, card_id, contents, if_match)
             }
+            #[cfg(feature = "pimdir")]
+            BackendClient::Pimdir(client) => {
+                client.update_card(addressbook_id, card_id, contents, if_match)
+            }
             #[cfg(feature = "carddav")]
             BackendClient::Carddav(client) => {
                 client.update_card(addressbook_id, card_id, contents, if_match)
@@ -267,8 +297,8 @@ impl AddressbookClient {
             BackendClient::Msgraph(client) => {
                 client.update_card(addressbook_id, card_id, contents, if_match)
             }
-            #[cfg(feature = "google")]
-            BackendClient::Google(client) => {
+            #[cfg(feature = "people")]
+            BackendClient::People(client) => {
                 client.update_card(addressbook_id, card_id, contents, if_match)
             }
         }
@@ -279,14 +309,16 @@ impl AddressbookClient {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.delete_card(addressbook_id, card_id),
+            #[cfg(feature = "pimdir")]
+            BackendClient::Pimdir(client) => client.delete_card(addressbook_id, card_id),
             #[cfg(feature = "carddav")]
             BackendClient::Carddav(client) => client.delete_card(addressbook_id, card_id),
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.delete_card(addressbook_id, card_id),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.delete_card(addressbook_id, card_id),
-            #[cfg(feature = "google")]
-            BackendClient::Google(client) => client.delete_card(addressbook_id, card_id),
+            #[cfg(feature = "people")]
+            BackendClient::People(client) => client.delete_card(addressbook_id, card_id),
         }
     }
 }

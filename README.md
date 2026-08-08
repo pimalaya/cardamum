@@ -21,22 +21,24 @@ CLI to manage contacts.
   - [Proton](#proton)
   - [Posteo](#posteo)
 - [Usage](#usage)
-- [License](#license)
 - [AI disclosure](#ai-disclosure)
-- [Contributing](CONTRIBUTING.md)
+- [License](#license)
 - [Social](#social)
+- [Contributing](#contributing)
 - [Sponsoring](#sponsoring)
 
 ## Features
 
-- Shared API mapping `addressbooks` and `cards` to the active backend
-- Protocol-specific APIs exposing each backend's full surface (`cardamum vdir/carddav`)
+- Shared API mapping `addressbook` and `card` commands to the active backend
+- Protocol-specific APIs exposing each backend's full surface (`cardamum carddav/jmap/msgraph/people/vdir`)
 - Remote backends:
   - **CardDAV** (RFC 6352)
   - **JMAP** contacts (RFC 8620 + RFC 9610)
   - **Microsoft Graph** contacts API
   - **Google People** API
-- Local (filesystem) backend: **vdir** [specs](https://vdirsyncer.pimutils.org/en/stable/vdir.html)
+- Local backends:
+  - **vdir** [specs](https://vdirsyncer.pimutils.org/en/stable/vdir.html), one directory per addressbook
+  - **pimdir**, the offline store a sync engine such as [Neverest](https://github.com/pimalaya/neverest) populates: read your contacts and stage changes without a network round-trip
 - vCard document of record synthesized for the backends with no native vCard (JMAP via JSContact, Graph, People)
 - HTTP auth support: basic, bearer (OAuth 2.0 access tokens issued by an external tool such as [Ortie](https://github.com/pimalaya/ortie))
 - TLS support:
@@ -48,9 +50,9 @@ CLI to manage contacts.
   - Current-user-principal [rfc5397](https://datatracker.ietf.org/doc/html/rfc5397)
   - Addressbook-home-set [rfc6352](https://datatracker.ietf.org/doc/html/rfc6352)
   - JMAP session `.well-known/jmap` [rfc8620](https://datatracker.ietf.org/doc/html/rfc8620)
-- Per-backend Cargo features: `carddav`, `jmap`, `msgraph`, `google`, `vdir` (all on by default)
+- Per-backend Cargo features: `carddav`, `jmap`, `msgraph`, `people`, `vdir`, `pimdir` (all on by default)
 - TOML configuration with multi-account support
-- Interactive wizard on first run
+- Interactive wizard on first run: it discovers a provider from your email address, tests the connection, and saves a ready-to-use configuration
 - JSON output via `--json`
 
 ## Installation
@@ -82,7 +84,7 @@ For a more up-to-date version than the latest release, check out the [releases](
 cargo install --locked --git https://github.com/pimalaya/cardamum.git
 ```
 
-With only a subset of backends (each backend is a Cargo feature: `carddav`, `jmap`, `msgraph`, `google`, `vdir`):
+With only a subset of backends (each backend is a Cargo feature: `carddav`, `jmap`, `msgraph`, `people`, `vdir`, `pimdir`):
 
 ```sh
 cargo install --locked --git https://github.com/pimalaya/cardamum.git \
@@ -122,13 +124,17 @@ The configuration is loaded from the first existing path among:
 
 Override with `cardamum -c <PATH>`. Multiple paths can be passed at once, separated by `:`; the first is the base and the rest are deep-merged on top.
 
-Run bare `cardamum` (no subcommand) to launch the wizard; it is also proposed when a command finds no config file. It opens with a single prompt that takes an email address, a server URL, or a local vdir path, and its shape orients the rest of the setup, exactly like the Cardamum Android onboarding. An email address (or bare domain) runs discovery: the wizard detects the provider then searches every reachable contacts service (CardDAV, JMAP, plus the Google People and Microsoft Graph APIs for those providers) and lets you pick one. A `scheme://` URL is a CardDAV server to set up by hand. A filesystem path is a local vdir (it must already exist). The wizard then asks for the account name, prompts for credentials, and tests the connection. It writes nothing to disk: the resulting account is printed as a ready-to-save TOML document on stdout while the prompts render on stderr, so redirecting saves it, exactly like Ortie:
+Run bare `cardamum` (no subcommand) to launch the wizard; it is also proposed when a command finds no config file. It opens with a single prompt that takes an email address, a server URL, or a local folder path, and its shape orients the rest of the setup, exactly like the Cardamum Android onboarding. An email address (or bare domain) runs discovery: the wizard detects the provider then searches every reachable contacts service (CardDAV, JMAP, plus the Google People and Microsoft Graph APIs for those providers) and lets you pick one, then asks how to authenticate against it. A `scheme://` URL discovers from its host, its scheme narrowing the results. A filesystem path is a local vdir or pimdir store, told apart by their on-disk markers.
 
-```
+The wizard configures only what it can discover automatically. It never asks you to type a server field by hand, and when discovery finds nothing it stops and points you at the documented sample. A self-hosted server that publishes no discovery record is configured by writing the account yourself.
+
+It then tests the connection and offers to save the configuration for you. When stdout is redirected it prints the TOML document instead, so redirecting still saves it, exactly like Ortie:
+
+```sh
 cardamum > ~/.config/cardamum/config.toml
 ```
 
-Authentication offers two strategies: a password (HTTP Basic) or a token (HTTP Bearer). Cardamum does not run OAuth 2.0 grants and does not refresh tokens itself: for providers that require OAuth (Google, Microsoft, and any CardDAV/JMAP server behind it), pick the token strategy and point it at an external token manager such as [Ortie](https://github.com/pimalaya/ortie), which issues and refreshes the access token. The wizard defaults the token command to `ortie token show`; see the [Google](#google) example below.
+Credentials come from an OS keyring (`secret-tool`, `kwallet-query`, `security`, `pass`), an OAuth 2.0 token broker (`ortie`, `pizauth`, `oama`), a custom command, or a raw value in the file. Cardamum reads secrets but never issues or refreshes them: it runs no OAuth 2.0 grant, so for providers that require OAuth (Google, Microsoft, and any CardDAV or JMAP server behind it) pick a broker such as [Ortie](https://github.com/pimalaya/ortie), which refreshes and prints a fresh token on every read. See the [Google](#google) example below.
 
 A documented sample lives at [config.sample.toml](./config.sample.toml).
 
@@ -230,15 +236,6 @@ addressbook.default = "default"
 
 Run `cardamum --help` for the full command tree, and `cardamum <command> --help` for any subcommand's arguments and its JSON output shape (printed when the global `--json` flag is set).
 
-## License
-
-This project is licensed under either of:
-
-- [MIT license](LICENSE-MIT)
-- [Apache License, Version 2.0](LICENSE-APACHE)
-
-at your option.
-
 ## AI disclosure
 
 This project is developed with AI assistance. This section documents how, so users and downstream packagers can make informed decisions.
@@ -248,13 +245,26 @@ This project is developed with AI assistance. This section documents how, so use
 - **Not used for**: Engineering, critical code, git manipulation (commit, merge, rebase…), real-world tests.
 - **Verification**: Every AI-assisted change is read, compiled, tested, and formatted before commit (`nix develop --command cargo check / cargo test / cargo fmt`). Behavioural correctness is verified against the relevant RFC or upstream spec, not assumed from the model output. Tests are never adjusted to fit AI-generated code; the code is adjusted to fit correct behaviour.
 - **Limitations**: AI models occasionally produce code that compiles and passes tests but is subtly wrong: off-by-one errors, missed edge cases, plausible but nonexistent APIs, stale RFC references. The verification workflow catches most of this; it does not catch all of it. Bug reports are welcome and taken seriously.
-- **Last reviewed**: 09/07/2026
+- **Last reviewed**: 09/08/2026
+
+## License
+
+This project is licensed under either of:
+
+- [MIT license](LICENSE-MIT)
+- [Apache License, Version 2.0](LICENSE-APACHE)
+
+at your option.
 
 ## Social
 
 - Chat on [Matrix](https://matrix.to/#/#pimalaya:matrix.org)
 - News on [Mastodon](https://fosstodon.org/@pimalaya) or [RSS](https://fosstodon.org/@pimalaya.rss)
 - Mail at [pimalaya.org@posteo.net](mailto:pimalaya.org@posteo.net)
+
+## Contributing
+
+Contributions are welcome: start with [CONTRIBUTING.md](./CONTRIBUTING.md), which opens with the Pimalaya-wide guides to read first.
 
 ## Sponsoring
 

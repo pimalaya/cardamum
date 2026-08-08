@@ -57,6 +57,15 @@ impl AccountCheckCommand {
                 .push(BackendCheck::from("vdir", connect_vdir(vdir_config)));
         }
 
+        #[cfg(feature = "pimdir")]
+        if backend.allows_pimdir()
+            && let Some(pimdir_config) = &account_config.pimdir
+        {
+            report
+                .backends
+                .push(BackendCheck::from("pimdir", connect_pimdir(pimdir_config)));
+        }
+
         #[cfg(feature = "carddav")]
         if backend.allows_carddav()
             && let Some(carddav_config) = &account_config.carddav
@@ -86,13 +95,13 @@ impl AccountCheckCommand {
             ));
         }
 
-        #[cfg(feature = "google")]
-        if backend.allows_google()
-            && let Some(google_config) = &account_config.google
+        #[cfg(feature = "people")]
+        if backend.allows_people()
+            && let Some(people_config) = &account_config.people
         {
             report
                 .backends
-                .push(BackendCheck::from("google", connect_google(google_config)));
+                .push(BackendCheck::from("people", connect_people(people_config)));
         }
 
         if report.backends.is_empty() {
@@ -113,6 +122,11 @@ pub fn test_account(account_config: &AccountConfig) -> Result<()> {
         connect_vdir(vdir_config)?;
     }
 
+    #[cfg(feature = "pimdir")]
+    if let Some(pimdir_config) = &account_config.pimdir {
+        connect_pimdir(pimdir_config)?;
+    }
+
     #[cfg(feature = "carddav")]
     if let Some(carddav_config) = &account_config.carddav {
         connect_carddav(carddav_config)?;
@@ -128,9 +142,9 @@ pub fn test_account(account_config: &AccountConfig) -> Result<()> {
         connect_msgraph(msgraph_config)?;
     }
 
-    #[cfg(feature = "google")]
-    if let Some(google_config) = &account_config.google {
-        connect_google(google_config)?;
+    #[cfg(feature = "people")]
+    if let Some(people_config) = &account_config.people {
+        connect_people(people_config)?;
     }
 
     Ok(())
@@ -148,6 +162,17 @@ fn connect_vdir(vdir_config: &crate::config::VdirConfig) -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+/// Opens the pimdir store and reads its collection list, which exercises
+/// the SQLite index the shared commands read through. It is a local store,
+/// so there is no handshake nor authentication to check.
+#[cfg(feature = "pimdir")]
+fn connect_pimdir(pimdir_config: &crate::config::PimdirConfig) -> Result<()> {
+    use crate::pimdir::backend::PimdirBackend;
+
+    PimdirBackend::new(pimdir_config.clone())?.list_addressbooks()?;
     Ok(())
 }
 
@@ -188,11 +213,11 @@ fn connect_msgraph(msgraph_config: &crate::config::MsgraphConfig) -> Result<()> 
 
 /// Lists the People contact groups, proving the token grants access to
 /// the contacts API.
-#[cfg(feature = "google")]
-fn connect_google(google_config: &crate::config::GoogleConfig) -> Result<()> {
-    use crate::google::backend::GoogleBackend;
+#[cfg(feature = "people")]
+fn connect_people(people_config: &crate::config::PeopleConfig) -> Result<()> {
+    use crate::people::backend::PeopleBackend;
 
-    let mut client = GoogleBackend::new(google_config.clone())?;
+    let mut client = PeopleBackend::new(people_config.clone())?;
     client.list_addressbooks()?;
 
     Ok(())

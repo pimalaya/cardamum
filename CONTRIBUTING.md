@@ -5,11 +5,11 @@ Thank you for investing your time in contributing to Cardamum CLI.
 Whether you are a human or an AI agent, read these in order before touching the code:
 
 1. the [Pimalaya README](https://github.com/pimalaya) for what the project is and how its repositories stack;
-2. the [Pimalaya ARCHITECTURE](https://github.com/pimalaya/.github/blob/master/ARCHITECTURE.md) for the conventions every repository shares (layering, `no_std`, modules, errors, code style, licensing, notes for AI agents);
-3. this guide, for how to build, test and submit changes here;
-4. the [`main.rs`](./src/main.rs) crate header for how Cardamum CLI in particular is designed, and [docs/](./docs) for the reference detail and development log.
+2. the [Pimalaya CONTRIBUTING](https://github.com/pimalaya/.github/blob/master/CONTRIBUTING.md) guide, which chains to the shared architecture and guidelines;
+3. the inline header documentation in [src/main.rs](./src/main.rs): it is the architecture document of this crate;
+4. the [cairn/](./cairn) folder for the living spec, the in-flight proposals and the dated history (the Cairn convention: spec/, changes/, log/), activated by [AGENTS.md](./AGENTS.md).
 
-This document stays operational; the design lives in the `main.rs` header and [docs/](./docs).
+This document stays operational; the design lives in the src/main.rs header and the behavioural truth in [cairn/spec](./cairn/spec).
 
 ## Development environment
 

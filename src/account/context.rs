@@ -8,11 +8,15 @@
 //!    with `Account::from(account_config)`.
 
 use anyhow::{Result, bail};
-use comfy_table::{Color as TableColor, ContentArrangement, presets};
+use comfy_table::{Color as TableColor, ContentArrangement};
 use crossterm::style::Color;
 
-use crate::config::{
-    AccountConfig, AddressbookListTableConfig, CardListTableConfig, Config, TableArrangementConfig,
+use crate::{
+    config::{
+        AccountConfig, AddressbookListTableConfig, CardListTableConfig, Config,
+        TableArrangementConfig,
+    },
+    shared::table::DEFAULT_PRESET,
 };
 
 const DEFAULT_CARDS_LIST_PAGE_SIZE: u32 = 25;
@@ -56,9 +60,7 @@ impl Account {
     /// Effective `comfy_table` preset string. Defaults to
     /// `UTF8_FULL_CONDENSED`.
     pub fn table_preset(&self) -> &str {
-        self.table_preset
-            .as_deref()
-            .unwrap_or(presets::UTF8_FULL_CONDENSED)
+        self.table_preset.as_deref().unwrap_or(DEFAULT_PRESET)
     }
 
     /// Effective `comfy_table` content arrangement. Defaults to
@@ -88,31 +90,47 @@ impl Account {
 
         bail!("Missing addressbook id; pass -k/--addressbook or set addressbook.default")
     }
+}
 
-    // ── addressbooks list — column colors ───────────────────────────
+/// Effective column colors of the `addressbook list` table, each falling
+/// back to its built-in default when the configuration leaves it unset.
+impl Account {
+    /// Color of the addressbook id column. Defaults to red.
     pub fn addressbooks_list_table_id_color(&self) -> TableColor {
         map_color_or(self.addressbooks_list_table.id_color, Color::Red)
     }
+    /// Color of the addressbook name column. Defaults to green.
     pub fn addressbooks_list_table_name_color(&self) -> TableColor {
         map_color_or(self.addressbooks_list_table.name_color, Color::Green)
     }
+    /// Color of the addressbook description column. Defaults to the
+    /// terminal default.
     pub fn addressbooks_list_table_description_color(&self) -> TableColor {
         map_color_or(self.addressbooks_list_table.description_color, Color::Reset)
     }
+    /// Color of the addressbook color-marker column. Defaults to the
+    /// terminal default.
     pub fn addressbooks_list_table_color_color(&self) -> TableColor {
         map_color_or(self.addressbooks_list_table.color_color, Color::Reset)
     }
+}
 
-    // ── cards list — column colors ──────────────────────────────────
+/// Effective column colors of the `card list` table, each falling back to
+/// its built-in default when the configuration leaves it unset.
+impl Account {
+    /// Color of the card id column. Defaults to red.
     pub fn cards_list_table_id_color(&self) -> TableColor {
         map_color_or(self.cards_list_table.id_color, Color::Red)
     }
+    /// Color of the card display-name (`FN`) column. Defaults to green.
     pub fn cards_list_table_fn_color(&self) -> TableColor {
         map_color_or(self.cards_list_table.fn_color, Color::Green)
     }
+    /// Color of the card email column. Defaults to blue.
     pub fn cards_list_table_email_color(&self) -> TableColor {
         map_color_or(self.cards_list_table.email_color, Color::Blue)
     }
+    /// Color of the card telephone column. Defaults to dark yellow.
     pub fn cards_list_table_tel_color(&self) -> TableColor {
         map_color_or(self.cards_list_table.tel_color, Color::DarkYellow)
     }

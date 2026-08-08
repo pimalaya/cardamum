@@ -6,7 +6,9 @@ use comfy_table::{Cell, Color, Row, Table};
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
-use crate::shared::{addressbook::Addressbook, client::AddressbookClient};
+use crate::shared::{
+    addressbook::Addressbook, client::AddressbookClient, table::style_from_preset,
+};
 
 /// List every addressbook available to the active account.
 ///
@@ -72,7 +74,7 @@ impl fmt::Display for AddressbooksTable {
         let mut table = Table::new();
 
         table
-            .load_preset(&self.preset)
+            .load_style(style_from_preset(&self.preset))
             .set_header(Row::from([
                 Cell::new("ID"),
                 Cell::new("NAME"),

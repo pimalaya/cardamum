@@ -16,12 +16,12 @@ use pimalaya_config::toml::TomlConfig;
 
 #[cfg(feature = "carddav")]
 use crate::carddav::{cli::CarddavCommand, client::build_carddav_client};
-#[cfg(feature = "google")]
-use crate::google::{cli::GoogleCommand, client::build_google_client};
 #[cfg(feature = "jmap")]
 use crate::jmap::{cli::JmapCommand, client::build_jmap_client};
 #[cfg(feature = "msgraph")]
 use crate::msgraph::{cli::MsgraphCommand, client::build_msgraph_client};
+#[cfg(feature = "people")]
+use crate::people::{cli::PeopleCommand, client::build_people_client};
 #[cfg(feature = "vdir")]
 use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
 use crate::{
@@ -67,7 +67,7 @@ pub struct Cli {
     /// always use their own backend.
     ///
     /// Possible values: auto (default), carddav, jmap, msgraph,
-    /// google, vdir. With auto, the shared command picks the first
+    /// people, vdir. With auto, the shared command picks the first
     /// configured backend it supports; with an explicit value, it uses
     /// only that backend (and bails if the account has no matching
     /// config block, or if the operation has no implementation for
@@ -100,9 +100,9 @@ pub enum Command {
     #[cfg(feature = "msgraph")]
     #[command(subcommand)]
     Msgraph(MsgraphCommand),
-    #[cfg(feature = "google")]
+    #[cfg(feature = "people")]
     #[command(subcommand)]
-    Google(GoogleCommand),
+    People(PeopleCommand),
     #[cfg(feature = "vdir")]
     #[command(subcommand)]
     Vdir(VdirCommand),
@@ -196,11 +196,11 @@ impl Command {
                 let client = build_msgraph_client(config, name, account_config)?;
                 cmd.execute(printer, client)
             }
-            #[cfg(feature = "google")]
-            Self::Google(cmd) => {
+            #[cfg(feature = "people")]
+            Self::People(cmd) => {
                 let (config, name, account_config) =
                     resolve_account(printer, config_paths, account_name)?;
-                let client = build_google_client(config, name, account_config)?;
+                let client = build_people_client(config, name, account_config)?;
                 cmd.execute(printer, client)
             }
             #[cfg(feature = "vdir")]

@@ -1,26 +1,36 @@
 //! Configuration wizard.
 //!
 //! Run on bare `cardamum` (no subcommand), and proposed by
-//! `cli::resolve_account` when no config file is found. It writes
-//! nothing to disk: the resulting account is printed as a ready-to-save
-//! TOML document on stdout (prompts render on stderr), so
-//! `cardamum > <config>` is the write-back, exactly like ortie.
+//! `cli::resolve_account` when no config file is found. It opens with a
+//! welcome banner on stderr, then either saves the resulting account to
+//! a config file (offered when writing to a terminal) or prints it as a
+//! ready-to-save TOML document on stdout, so `cardamum > <config>` still
+//! works as the write-back when stdout is redirected, like ortie.
 //!
-//! One prompt takes an email address, a server URL, or a local vdir
+//! One prompt takes an email address, a server URL, or a local folder
 //! path, and its shape orients the setup, mirroring the cardamum-android
 //! onboarding:
 //!
 //! - an email (or bare domain) runs io-pim-discovery's parallel
-//!   discovery (see [`super::search`]) and every reachable service and
-//!   authentication method becomes one selectable configuration; a
-//!   detected Google or Microsoft account collapses to its dedicated
-//!   contacts API;
-//! - a `scheme://` URL is a CardDAV server to configure by hand;
-//! - an existing directory is a local vdir.
+//!   discovery (see [`super::search`]) and every reachable service
+//!   becomes one selectable configuration; picking one then prompts its
+//!   authentication method among those advertised; a detected Google or
+//!   Microsoft account collapses to its dedicated contacts API;
+//! - a `scheme://` URL discovers from its host, its scheme narrowing the
+//!   results (`carddav(s)` to CardDAV, `jmap(s)` to JMAP);
+//! - an existing folder is a local vdir or pimdir store.
+//!
+//! The wizard only configures what it can discover automatically. When
+//! discovery finds nothing for the given input it stops and points at the
+//! documented sample, rather than prompting for a hand-entered config.
+//!
+//! Cardamum runs no OAuth 2.0 grant itself: a grant only unlocks the
+//! external token brokers (Ortie, pizauth, oama) behind the API token
+//! credential prompt (see [`super::secret`]).
 
-use std::{collections::HashMap, fmt, path::Path};
+use std::{collections::HashMap, fmt, fs, io::IsTerminal, path::Path};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use pimalaya_cli::{printer::Printer, prompt, spinner::Spinner};
 use pimalaya_config::toml as config_toml;
 use serde::{Serialize, Serializer};
@@ -28,112 +38,192 @@ use url::Url;
 
 #[cfg(feature = "carddav")]
 use crate::config::CarddavConfig;
-#[cfg(feature = "google")]
-use crate::config::GoogleConfig;
 #[cfg(feature = "jmap")]
 use crate::config::JmapConfig;
 #[cfg(feature = "msgraph")]
 use crate::config::MsgraphConfig;
+#[cfg(feature = "people")]
+use crate::config::PeopleConfig;
+#[cfg(feature = "pimdir")]
+use crate::config::PimdirConfig;
 #[cfg(feature = "vdir")]
 use crate::config::VdirConfig;
-#[cfg(feature = "google")]
-use crate::wizard::google;
+#[cfg(feature = "carddav")]
+use crate::wizard::carddav;
 #[cfg(feature = "jmap")]
 use crate::wizard::jmap;
+#[cfg(any(feature = "vdir", feature = "pimdir"))]
+use crate::wizard::local;
 #[cfg(feature = "msgraph")]
 use crate::wizard::msgraph;
+#[cfg(feature = "people")]
+use crate::wizard::people;
 use crate::{
     account::check,
     config::{AccountConfig, Config},
     wizard::search::{self, Discovered, DiscoveredKind},
 };
-#[cfg(feature = "carddav")]
-use crate::{carddav::client::parse_carddav_server, wizard::carddav};
 
 /// The endpoint prompt label, shared by the create flow.
-const ENDPOINT_PROMPT: &str = "Email, server or vdir path:";
+const ENDPOINT_PROMPT: &str = "Email, server or path:";
+
+/// The documented sample configuration, shown in the welcome banner and
+/// pointed at when discovery finds nothing to configure automatically.
+const CONFIG_SAMPLE_URL: &str =
+    "https://github.com/pimalaya/cardamum/blob/master/config.sample.toml";
 
 /// The backend config produced by the chosen flow, folded into a fresh
 /// [`AccountConfig`] afterwards.
 enum Chosen {
     #[cfg(feature = "vdir")]
     Vdir(VdirConfig),
+    #[cfg(feature = "pimdir")]
+    Pimdir(PimdirConfig),
     #[cfg(feature = "carddav")]
     Carddav(Box<CarddavConfig>),
     #[cfg(feature = "jmap")]
     Jmap(Box<JmapConfig>),
     #[cfg(feature = "msgraph")]
     Msgraph(MsgraphConfig),
-    #[cfg(feature = "google")]
-    Google(GoogleConfig),
+    #[cfg(feature = "people")]
+    People(PeopleConfig),
 }
 
-/// Runs the wizard and prints the resulting [`Config`] as a
-/// ready-to-save TOML document, writing nothing to disk. Run on bare
+/// Runs the wizard and either saves the resulting [`Config`] to a file
+/// or prints it as a ready-to-save TOML document. Run on bare
 /// `cardamum`, and proposed by `cli::resolve_account` on first run.
+///
+/// A welcome message renders on stderr first (skipped in JSON mode) to
+/// frame what Cardamum is and what the wizard does. The generated
+/// config is then offered for saving when writing to a terminal; when
+/// stdout is redirected (`cardamum > config.toml`) or in JSON mode it is
+/// emitted straight to stdout so the redirect / script keeps working.
 pub fn run(printer: &mut impl Printer) -> Result<()> {
+    if !printer.is_json() {
+        print_welcome();
+    }
+
     let input = prompt::text::<&str>(ENDPOINT_PROMPT, None)?;
     let input = input.trim();
     if input.is_empty() {
-        bail!("Empty input: enter an email address, a server URL, or a vdir path");
+        bail!("Empty input: enter an email address, a server URL, or a folder path");
     }
 
-    let account_name = prompt::text("Account name:", Some(&default_account_name(input)))?;
-    let account = build_account(input)?;
+    // NOTE: the account name is just the TOML table key, so it is derived
+    // from the input rather than prompted; the user renames it by hand.
+    let account_name = default_account_name(input);
+    let (account, tested) = build_account(&account_name, input)?;
 
     // Test the account before printing it: a bad credential or endpoint
     // fails here and stops the process, like any other error, rather
-    // than emitting a config that cannot connect.
-    let spinner = Spinner::start("Testing account configuration");
-    if let Err(err) = check::test_account(&account) {
-        spinner.failure("Account configuration test failed");
-        return Err(err);
+    // than emitting a config that cannot connect. A flow that already
+    // validated its connection inline skips the redundant round-trip.
+    if !tested {
+        let spinner = Spinner::start("Testing account configuration");
+        if let Err(err) = check::test_account(&account) {
+            spinner.failure("Account configuration test failed");
+            return Err(err);
+        }
+        spinner.success("Account configuration is valid");
     }
-    spinner.success("Account configuration is valid");
 
     let config = Config {
         accounts: HashMap::from([(account_name, account)]),
         ..Default::default()
     };
 
-    printer.out(GeneratedConfig(config))
+    // JSON mode and a redirected stdout stay non-interactive: emit the
+    // document straight to stdout so scripts and `cardamum > config.toml`
+    // keep working. Only offer to save when writing to a terminal.
+    if printer.is_json() || !std::io::stdout().is_terminal() {
+        return printer.out(GeneratedConfig(config));
+    }
+
+    save_or_print(printer, config)
 }
 
-/// The account produced by the wizard, printed as a ready-to-save TOML
-/// document on stdout with its guidance embedded as comments, or the
-/// same config serialized as an object in JSON mode. The wizard writes
-/// nothing itself: the user redirects the output into their config file
-/// (e.g. `cardamum > <config>`), so prompts go to stderr and only this
-/// lands on stdout.
+/// Prints a welcome banner on stderr framing the project and the wizard,
+/// so bare `cardamum` explains itself before dropping into prompts. On
+/// stderr so it never pollutes a redirected config document.
+fn print_welcome() {
+    println!();
+    eprintln!("Welcome to Cardamum, the CLI to manage contacts.");
+    eprintln!();
+    eprintln!("Cardamum talks to your existing address books over CardDAV, JMAP,");
+    eprintln!("Google People, Microsoft Graph or a local folder. Before you can");
+    eprintln!("read or write contacts, it needs to know about one account.");
+    eprintln!();
+    eprintln!("This wizard discovers a provider's settings from your email address");
+    eprintln!("(or a server URL, or a local folder path), tests the connection and");
+    eprintln!("generates a ready-to-use configuration it can save for you.");
+    eprintln!();
+    eprintln!("Every field is documented in the sample configuration:");
+    eprintln!("  {CONFIG_SAMPLE_URL}");
+    eprintln!();
+}
+
+/// Offers to save the generated config to a file (default
+/// `$XDG_CONFIG_HOME/cardamum/config.toml`), falling back to printing it
+/// on stdout when the user declines or an existing file must not be
+/// overwritten. Prompts and confirmations render on stderr.
+fn save_or_print(printer: &mut impl Printer, config: Config) -> Result<()> {
+    if !prompt::bool("Save this configuration to a file, or print it?", true)? {
+        return printer.out(GeneratedConfig(config));
+    }
+
+    let default = default_config_path();
+    let path = prompt::text("Configuration file path:", default.as_deref())?;
+    let path = shellexpand::full(path.trim())?.into_owned();
+    let path = Path::new(&path);
+
+    // Bare `cardamum` runs the wizard even when a config already exists,
+    // so guard the default path: never clobber without confirmation, and
+    // fall back to printing so the generated config is never lost.
+    if path.exists()
+        && !prompt::bool(
+            format!("`{}` already exists. Overwrite it?", path.display()),
+            false,
+        )?
+    {
+        return printer.out(GeneratedConfig(config));
+    }
+
+    if let Some(parent) = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Create config directory `{}`", parent.display()))?;
+    }
+
+    fs::write(path, GeneratedConfig(config).to_string())
+        .with_context(|| format!("Write config file `{}`", path.display()))?;
+
+    eprintln!();
+    eprintln!("Configuration saved to {}.", path.display());
+    eprintln!("Run `cardamum card list` to read your contacts.");
+    Ok(())
+}
+
+/// The default config path (`$XDG_CONFIG_HOME/cardamum/config.toml`),
+/// used to seed the save prompt; `None` when no config dir resolves.
+fn default_config_path() -> Option<String> {
+    let path = dirs::config_dir()?
+        .join(env!("CARGO_PKG_NAME"))
+        .join("config.toml");
+    Some(path.to_string_lossy().into_owned())
+}
+
+/// The account produced by the wizard, rendered as a ready-to-save TOML
+/// document (for a file write or stdout), or serialized as an object in
+/// JSON mode. The framing that used to head this document as comments
+/// now lives in the stderr welcome banner, so what lands here is the
+/// bare config, whether it is saved to a file or redirected on stdout.
 struct GeneratedConfig(Config);
 
 impl fmt::Display for GeneratedConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let toml = config_toml::to_string(&self.0).map_err(|_| fmt::Error)?;
-
-        writeln!(f, "# Configuration generated by the cardamum wizard.")?;
-        writeln!(f, "#")?;
-        writeln!(
-            f,
-            "# Nothing was written to disk: save this into your config"
-        )?;
-        writeln!(f, "# file, one of:")?;
-        writeln!(f, "#   $XDG_CONFIG_HOME/cardamum/config.toml")?;
-        writeln!(f, "#   $HOME/.config/cardamum/config.toml")?;
-        writeln!(f, "#   $HOME/.cardamumrc")?;
-        writeln!(f, "#")?;
-        writeln!(
-            f,
-            "# Prompts render on stderr, so redirecting works directly:"
-        )?;
-        writeln!(f, "#   cardamum > ~/.config/cardamum/config.toml")?;
-        writeln!(f, "#")?;
-        writeln!(f, "# Every field is documented in the sample config:")?;
-        writeln!(
-            f,
-            "# https://github.com/pimalaya/cardamum/blob/master/config.sample.toml"
-        )?;
-        writeln!(f)?;
         write!(f, "{toml}")
     }
 }
@@ -144,72 +234,145 @@ impl Serialize for GeneratedConfig {
     }
 }
 
+/// The result of a configure flow: the chosen backend, and whether it
+/// already validated its connection (so the caller skips the final
+/// account test).
+struct Outcome {
+    chosen: Chosen,
+    tested: bool,
+}
+
+impl Outcome {
+    /// A not-yet-tested outcome, for the flows that defer validation to
+    /// the final account test (every backend today).
+    fn untested(chosen: Chosen) -> Self {
+        Self {
+            chosen,
+            tested: false,
+        }
+    }
+}
+
 /// Orients the setup from the input shape, then folds the chosen
-/// backend into a fresh default [`AccountConfig`].
-fn build_account(input: &str) -> Result<AccountConfig> {
-    let chosen = if is_path(input) {
-        configure_local(input)?
-    } else if input.contains("://") {
-        configure_server(input)?
+/// backend into a fresh [`AccountConfig`]. The returned flag reports
+/// whether the flow already validated its connection, so the caller can
+/// skip the final account test.
+///
+/// The account is left non-default so it does not hijack the default
+/// when the wizard's output is merged into a config that already has
+/// one. Being false, `default` is omitted from the printed TOML; the
+/// user marks their choice with `default = true`.
+fn build_account(account_name: &str, input: &str) -> Result<(AccountConfig, bool)> {
+    let Outcome { chosen, tested } = if is_path(input) {
+        Outcome::untested(configure_local(input)?)
     } else {
-        configure_email(input)?
+        configure_discovery(account_name, input)?
     };
 
     let mut account = AccountConfig {
-        default: true,
+        default: false,
         ..Default::default()
     };
 
     match chosen {
         #[cfg(feature = "vdir")]
         Chosen::Vdir(vdir) => account.vdir = Some(vdir),
+        #[cfg(feature = "pimdir")]
+        Chosen::Pimdir(pimdir) => account.pimdir = Some(pimdir),
         #[cfg(feature = "carddav")]
         Chosen::Carddav(carddav) => account.carddav = Some(*carddav),
         #[cfg(feature = "jmap")]
         Chosen::Jmap(jmap) => account.jmap = Some(*jmap),
         #[cfg(feature = "msgraph")]
         Chosen::Msgraph(msgraph) => account.msgraph = Some(msgraph),
-        #[cfg(feature = "google")]
-        Chosen::Google(google) => account.google = Some(google),
+        #[cfg(feature = "people")]
+        Chosen::People(people) => account.people = Some(people),
     }
 
-    Ok(account)
+    Ok((account, tested))
 }
 
-/// Runs the email-driven discovery flow: search the services reachable
-/// from the address, let the user pick one, and configure its backend.
-fn configure_email(input: &str) -> Result<Chosen> {
-    let email = if input.contains('@') {
-        input.to_string()
+/// Runs the discovery flow for an email, a bare domain, or a
+/// `scheme://` server URL: search the services reachable from it, keep
+/// only those supported by this build (and matching the URL scheme when
+/// one was given), let the user pick one, then configure its backend
+/// (the authentication method is picked in a second, service-specific
+/// prompt). When nothing is discovered the wizard stops rather than
+/// prompting for a hand-entered config (see [`stop_undiscovered`]).
+fn configure_discovery(account_name: &str, input: &str) -> Result<Outcome> {
+    // A `scheme://host` URL discovers from its host, and its scheme
+    // narrows the results; an email or bare domain discovers from the
+    // domain with no scheme filter.
+    let (email, scheme) = if input.contains("://") {
+        let url = Url::parse(input).with_context(|| format!("Invalid server URL `{input}`"))?;
+        let host = url.host_str().unwrap_or_default().to_string();
+        (format!("@{host}"), Some(url.scheme().to_string()))
+    } else if input.contains('@') {
+        (input.to_string(), None)
     } else {
-        format!("@{input}")
+        (format!("@{input}"), None)
     };
 
     let spinner = Spinner::start("Searching for contacts services");
     let mut found = search::search(&email)?;
     retain_supported(&mut found);
+    if let Some(scheme) = &scheme {
+        retain_scheme(&mut found, scheme)?;
+    }
 
     if found.is_empty() {
         spinner.failure("No configuration found");
-        bail!(
-            "No contacts service discovered for `{email}`; enter a server URL or vdir path instead"
-        );
+        return stop_undiscovered(input);
     }
     spinner.success(format!("Found {} configuration(s)", found.len()));
 
     let default = found.first().cloned();
     let choice = prompt::item("Choose a configuration:", found, default)?;
 
-    dispatch(&email, choice)
+    dispatch(account_name, &email, choice)
 }
 
-/// Configures the backend behind a discovered entry.
+/// Keeps only the discovered entries a `scheme://` URL asked for:
+/// `carddav`, `carddavs` and the HTTP-family schemes keep CardDAV, and
+/// `jmap` / `jmaps` keep JMAP. A proprietary entry (Graph, People) is
+/// dropped, since the user named an open protocol. An unknown scheme is
+/// rejected outright.
+fn retain_scheme(found: &mut Vec<Discovered>, scheme: &str) -> Result<()> {
+    match scheme {
+        "carddav" | "carddavs" | "http" | "https" => {
+            found.retain(|entry| matches!(entry.kind, DiscoveredKind::Carddav(_)));
+        }
+        "jmap" | "jmaps" => {
+            found.retain(|entry| matches!(entry.kind, DiscoveredKind::Jmap(_)));
+        }
+        other => bail!("Unsupported server scheme `{other}`"),
+    }
+
+    Ok(())
+}
+
+/// Stops the wizard when discovery found nothing to configure for
+/// `input`: it prints where to go next (a hand-written config, seeded
+/// from the documented sample) and errors out, rather than dropping into
+/// a hand-entry flow. Cardamum's wizard only ever configures what it can
+/// discover automatically.
+fn stop_undiscovered(input: &str) -> Result<Outcome> {
+    bail!(
+        "Could not automatically discover a configuration for `{input}`.\n\n\
+         Write your account configuration by hand instead, starting from the \
+         documented sample:\n  {CONFIG_SAMPLE_URL}"
+    )
+}
+
+/// Configures the backend behind a discovered entry. None of them
+/// validates its connection inline, so every outcome defers to the final
+/// account test.
 #[cfg_attr(
     all(
         feature = "carddav",
         feature = "jmap",
         feature = "msgraph",
-        feature = "google"
+        feature = "people"
     ),
     allow(unreachable_patterns)
 )]
@@ -217,53 +380,48 @@ fn configure_email(input: &str) -> Result<Chosen> {
     not(any(feature = "carddav", feature = "jmap")),
     allow(unused_variables)
 )]
-fn dispatch(email: &str, choice: Discovered) -> Result<Chosen> {
+fn dispatch(account_name: &str, email: &str, choice: Discovered) -> Result<Outcome> {
     match &choice.kind {
         #[cfg(feature = "carddav")]
-        DiscoveredKind::Carddav(url) => Ok(Chosen::Carddav(Box::new(
-            carddav::configure_discovered(email, url, &choice)?,
-        ))),
+        DiscoveredKind::Carddav(url) => Ok(Outcome::untested(Chosen::Carddav(Box::new(
+            carddav::configure_discovered(account_name, email, url, &choice)?,
+        )))),
         #[cfg(feature = "jmap")]
-        DiscoveredKind::Jmap(_) => Ok(Chosen::Jmap(Box::new(jmap::configure_discovered(
-            email, &choice,
-        )?))),
+        DiscoveredKind::Jmap(_) => Ok(Outcome::untested(Chosen::Jmap(Box::new(
+            jmap::configure_discovered(account_name, email, &choice)?,
+        )))),
         #[cfg(feature = "msgraph")]
-        DiscoveredKind::Msgraph => Ok(Chosen::Msgraph(msgraph::configure()?)),
-        #[cfg(feature = "google")]
-        DiscoveredKind::Google => Ok(Chosen::Google(google::configure()?)),
+        DiscoveredKind::Msgraph => Ok(Outcome::untested(Chosen::Msgraph(msgraph::configure(
+            account_name,
+        )?))),
+        #[cfg(feature = "people")]
+        DiscoveredKind::People => Ok(Outcome::untested(Chosen::People(people::configure(
+            account_name,
+        )?))),
         kind => bail!("Configuration `{kind:?}` is not supported by this build"),
     }
 }
 
-/// Configures a CardDAV server the user typed as a `scheme://` URL.
-#[cfg(feature = "carddav")]
-fn configure_server(input: &str) -> Result<Chosen> {
-    let url = parse_carddav_server(input)?;
-    Ok(Chosen::Carddav(Box::new(carddav::configure_manual(&url)?)))
-}
-
-#[cfg(not(feature = "carddav"))]
-fn configure_server(input: &str) -> Result<Chosen> {
-    bail!("`{input}` looks like a server URL, but CardDAV support is not compiled in")
-}
-
-/// Configures a local vdir from a typed directory path.
-#[cfg(feature = "vdir")]
+/// Configures a local backend from a typed folder path.
+#[cfg(any(feature = "vdir", feature = "pimdir"))]
 fn configure_local(input: &str) -> Result<Chosen> {
     let raw = input.strip_prefix("file://").unwrap_or(input);
-    let expanded = shellexpand::tilde(raw);
-    if !Path::new(expanded.as_ref()).is_dir() {
-        bail!("No such vdir directory `{raw}`");
+    let root = shellexpand::tilde(raw).into_owned();
+    if !Path::new(&root).is_dir() {
+        bail!("No such folder `{raw}`");
     }
 
-    Ok(Chosen::Vdir(VdirConfig {
-        home_dir: raw.to_string(),
-    }))
+    Ok(match local::configure(root.into())? {
+        #[cfg(feature = "vdir")]
+        local::Local::Vdir(config) => Chosen::Vdir(config),
+        #[cfg(feature = "pimdir")]
+        local::Local::Pimdir(config) => Chosen::Pimdir(config),
+    })
 }
 
-#[cfg(not(feature = "vdir"))]
+#[cfg(not(any(feature = "vdir", feature = "pimdir")))]
 fn configure_local(input: &str) -> Result<Chosen> {
-    bail!("`{input}` looks like a vdir path, but vdir support is not compiled in")
+    bail!("`{input}` looks like a folder path, but no local backend is compiled in")
 }
 
 /// Drops the discovered entries whose backend is not compiled in.
@@ -272,13 +430,13 @@ fn retain_supported(found: &mut Vec<Discovered>) {
         DiscoveredKind::Carddav(_) => cfg!(feature = "carddav"),
         DiscoveredKind::Jmap(_) => cfg!(feature = "jmap"),
         DiscoveredKind::Msgraph => cfg!(feature = "msgraph"),
-        DiscoveredKind::Google => cfg!(feature = "google"),
+        DiscoveredKind::People => cfg!(feature = "people"),
     });
 }
 
-/// Proposes a default account name from the input shape: the local part
-/// of an email, the first label of a domain or host, or the folder name
-/// of a local path.
+/// Proposes a default account name from the input shape: the first
+/// label of the domain (of an email, host, or bare domain), or the
+/// folder name of a local path.
 fn default_account_name(input: &str) -> String {
     if is_path(input) {
         let raw = input.strip_prefix("file://").unwrap_or(input);
@@ -296,7 +454,6 @@ fn default_account_name(input: &str) -> String {
     }
 
     match input.rsplit_once('@') {
-        Some((local, _)) if !local.is_empty() => local.to_string(),
         Some((_, domain)) => first_label(domain),
         None => first_label(input),
     }
@@ -316,4 +473,37 @@ fn is_path(input: &str) -> bool {
         || input.starts_with('~')
         || input.starts_with("./")
         || input.starts_with("../")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn account_name_defaults_to_the_first_domain_label() {
+        // Email: the domain's first label, never the local part.
+        assert_eq!(default_account_name("clement.douin@posteo.net"), "posteo");
+        assert_eq!(default_account_name("alice@mail.example.co.uk"), "mail");
+        // Bare domain (as discovery synthesizes it) and plain domain.
+        assert_eq!(default_account_name("@posteo.net"), "posteo");
+        assert_eq!(default_account_name("posteo.net"), "posteo");
+    }
+
+    #[test]
+    fn account_name_defaults_to_the_last_path_component() {
+        assert_eq!(
+            default_account_name("/home/alice/contacts/personal"),
+            "personal"
+        );
+        assert_eq!(default_account_name("~/contacts/work"), "work");
+        assert_eq!(
+            default_account_name("file:///var/contacts/archive"),
+            "archive"
+        );
+    }
+
+    #[test]
+    fn an_unknown_scheme_is_rejected() {
+        assert!(retain_scheme(&mut Vec::new(), "imap").is_err());
+    }
 }

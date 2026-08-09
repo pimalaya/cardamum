@@ -15,7 +15,7 @@ use crate::{
     config::{AccountConfig, Config},
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
-        card::Card,
+        card::{Card, CardUpdateOutcome},
     },
 };
 
@@ -275,7 +275,7 @@ impl AddressbookClient {
         card_id: &str,
         contents: Vec<u8>,
         if_match: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<CardUpdateOutcome> {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => {

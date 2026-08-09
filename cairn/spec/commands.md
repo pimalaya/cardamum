@@ -37,6 +37,12 @@ A protocol-specific command exposing its backend's incremental sync SHALL accept
 ### Requirement: An empty addressbook id is rejected
 The shared `-k/--addressbook` resolver SHALL reject an empty id rather than pass it to a backend, where it silently addresses the collection instead of a member.
 
+### Requirement: A partial write says so
+When a backend cannot carry out part of a write, and the protocol offers no way to insist, the command SHALL report what was left undone rather than print a plain success. On Google People an unmappable vCard property lives in a `clientData` entry the API will not clear, so an update dropping one keeps it, and the command names it.
+
+### Requirement: A displayed count is the server's
+A table SHALL NOT render an absent value as a default that reads as fact. A count the API returns only on request SHALL be requested, or left blank.
+
 ### Requirement: A rejected write is legible
 A rejected protocol write SHALL surface as prose: the server's own error type and description, plus the properties it named, never a Rust `Debug` rendering of the error value. Where the rejection has a known cause the user can act on, the message SHALL name it, as the CardDAV missing-UID hint and the JMAP `vCardProps` hint do.
 

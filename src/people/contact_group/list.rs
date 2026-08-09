@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use io_people::v1::rest::contact_groups::list::PeopleContactGroupsListParams;
+use io_people::v1::rest::contact_groups::{PeopleGroupField, list::PeopleContactGroupsListParams};
 use pimalaya_cli::printer::Printer;
 
 use crate::people::{client::PeopleClient, render::GroupsReport};
@@ -28,7 +28,15 @@ impl PeopleContactGroupListCommand {
             sync_token: self.sync_token.as_deref(),
             ..Default::default()
         };
-        let page = client.contact_groups_list(&[], &params)?.response;
+        // NOTE: People returns a group's member count only when the mask
+        // asks for it, and an absent count renders as 0, which reads as
+        // an empty group rather than as a question never asked.
+        let fields = [
+            PeopleGroupField::Name,
+            PeopleGroupField::GroupType,
+            PeopleGroupField::MemberCount,
+        ];
+        let page = client.contact_groups_list(&fields, &params)?.response;
 
         printer.out(GroupsReport {
             preset,

@@ -570,6 +570,33 @@ pub fn to_person(vcard: &str) -> Result<PeoplePerson, String> {
     Ok(person)
 }
 
+/// The names of the stashed vCard properties `base` carries and
+/// `person` drops, which an update cannot actually remove.
+///
+/// The stash is a `clientData` entry, and People refuses to empty
+/// `clientData`: an update carrying a new value replaces the entry, one
+/// carrying none leaves the old value standing, whatever the update mask
+/// says. Naming them is all a client can do about it.
+pub fn unremovable_properties(base: &PeoplePerson, person: &PeoplePerson) -> Vec<String> {
+    let kept: Vec<String> = stash_lines(person)
+        .iter()
+        .map(|line| property_name(line))
+        .collect();
+
+    stash_lines(base)
+        .iter()
+        .map(|line| property_name(line))
+        .filter(|name| !kept.contains(name))
+        .collect()
+}
+
+/// The property name of a stashed vCard line: what precedes the first
+/// parameter or value separator.
+fn property_name(line: &str) -> String {
+    let end = line.find([';', ':']).unwrap_or(line.len());
+    line[..end].to_uppercase()
+}
+
 /// The managed fields whose projection differs between the edited
 /// person and the base one (the state last synced with the server):
 /// the update mask shrinks to them, so unchanged fields are neither

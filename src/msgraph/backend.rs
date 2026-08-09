@@ -25,7 +25,7 @@ use crate::{
     msgraph::project,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
-        card::Card,
+        card::{Card, CardUpdateOutcome},
         client::paginate,
     },
 };
@@ -222,7 +222,7 @@ impl MsgraphBackend {
         card_id: &str,
         contents: Vec<u8>,
         if_match: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<CardUpdateOutcome> {
         if if_match.is_some() {
             bail!("Microsoft Graph does not support If-Match guarded updates");
         }
@@ -236,7 +236,7 @@ impl MsgraphBackend {
         let contact = project::to_contact_delta(&vcard, &base_vcard).map_err(Error::msg)?;
         self.inner.contact_update(card_id, &contact)?;
 
-        Ok(())
+        Ok(CardUpdateOutcome::default())
     }
 
     /// Deletes the contact `card_id`.

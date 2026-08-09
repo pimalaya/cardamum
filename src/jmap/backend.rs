@@ -40,7 +40,7 @@ use crate::{
     },
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
-        card::Card,
+        card::{Card, CardUpdateOutcome},
         client::paginate,
     },
 };
@@ -250,7 +250,7 @@ impl JmapBackend {
         card_id: &str,
         contents: Vec<u8>,
         if_match: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<CardUpdateOutcome> {
         if if_match.is_some() {
             bail!("JMAP does not support If-Match guarded updates");
         }
@@ -273,7 +273,7 @@ impl JmapBackend {
             bail!(card_write_error("update", &err, &unmapped));
         }
 
-        Ok(())
+        Ok(CardUpdateOutcome::default())
     }
 
     /// Destroys the ContactCard `card_id`.

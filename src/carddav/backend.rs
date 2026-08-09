@@ -16,7 +16,7 @@ use crate::{
     config::CarddavConfig,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
-        card::Card,
+        card::{Card, CardUpdateOutcome},
         client::paginate,
     },
 };
@@ -145,7 +145,7 @@ impl CarddavBackend {
         card_id: &str,
         contents: Vec<u8>,
         if_match: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<CardUpdateOutcome> {
         let if_match = match if_match {
             Some(etag) => Some(etag.to_string()),
             None => {
@@ -161,7 +161,7 @@ impl CarddavBackend {
         self.inner
             .update_card(addressbook_id, card_id, contents, if_match.as_deref())
             .map_err(card_write_error)?;
-        Ok(())
+        Ok(CardUpdateOutcome::default())
     }
 
     /// Permanently deletes `card_id` from `addressbook_id`.

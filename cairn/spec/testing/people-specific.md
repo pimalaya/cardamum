@@ -1,63 +1,56 @@
-# Google People API specific API: test report
+# Google People specific API: test report
 
-The `people` protocol-specific subcommands (nested by People resource),
-distinct from the shared `addressbook`/`card` report ([google-people.md](google-people.md)).
+The `people` protocol-specific subcommands (nested by People resource), distinct from the shared `addressbook` / `card` report ([google-people.md](google-people.md)).
 
-- cardamum: `v0.2.0 --all-features` (io-people `0.2`; iteration 4)
-- account: `people` (Bearer OAuth, `contacts` scope; token via `ortie token show -a cardamum`)
-- date: 2026-07-18
-- method: a throwaway contact group (People allows group creation) + a uniquely-marked throwaway contact (lands in `myContacts`, deleted afterward). Real contacts were only counted or reached by searching the marker; a final search-sweep confirmed 0 left behind.
+- cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; io-people 0.2)
+- account: `people` (Bearer OAuth over the `contacts` scope, token from the config's `token.command`)
+- date: 2026-08-09 (re-run; first run 2026-07-18)
+- method: a throwaway contact group created for the run, and uniquely-marked throwaway contacts, since every contact lands in `myContacts` whatever group it joins. Everything was deleted afterwards and `myContacts` was diffed against its pre-run ids.
 
 ## Command surface
 
-`contact-group {list, get, create, update, delete, members}` ·
-`connection {list, get, create, update, delete, search}` ·
-`other-contact {list, search, copy}` · `profile get`
+`contact-group {list, get, create, update, delete, members}` · `connection {list, get, create, update, delete, search}` · `other-contact {list, search, copy}` · `profile get` · `request`
 
 ## Results
 
 | Command | Variants | Result |
 | --- | --- | --- |
-| `contact-group list` | base, `groups` alias, `--page-size` | ✅ raw People groups (id/name/type/members) |
+| `profile get` | base | ⛔ **403: the token lacks the `profile` scope (S1)**; the message names it |
+| `contact-group list` | base, `--json` | ✅ user and system groups with their type and the server's member count (**S2 fixed**) |
+| `contact-group get` | `<id>` | ✅ raw group with its member count (**S2 fixed** here too) |
 | `contact-group create` | `<name>` | ✅ returns the raw created group |
-| `contact-group get` | `<id>` | ✅ raw group |
-| `contact-group update` | `<id> <name>` | ✅ etag-guarded rename (etag fetched first), verified |
-| `contact-group delete` | `<id>`, `--delete-contacts` | ✅ removed |
-| `contact-group members` | `--add people/<id>`, `--remove people/<id>` | ✅ membership +1 / −1, verified via member count |
-| `connection create` | raw People JSON inline, stdin | ✅ returns the raw created person |
-| `connection get` | `<id>` (human + `--json`), bad id | ✅; bad id → `404` |
-| `connection update` | raw JSON PATCH | ✅ **update mask derived from the JSON's top-level keys**; phone patched, rest preserved |
-| `connection list` | `--page-size`, `--sync-token` | ✅ single page; sync-token requested (see notes) |
-| `connection search` | `<query>` | ✅ isolates to the marked contact |
-| `connection delete` | `<id>` | ✅ removed; get-after → `404` |
-| errors | bad JSON body | ✅ "Parse People person JSON error" |
-| aliases | `group(s)`, `people`/`contacts`, `other`, `add`/`new`, `del`/`rm` | ✅ route correctly |
+| `contact-group update` | `<id> <name>` | ✅ renames, fetching the group's etag first to guard the write |
+| `contact-group members` | `--add`, `--remove` | ✅ membership lands both ways, confirmed by a scoped `card list`; the message reports `(+1 / -0)` |
+| `contact-group delete` | `<id>` | ✅ group removed, its contacts left in `myContacts` |
+| `connection create` | raw People JSON | ✅ returns the created person |
+| `connection get` | `<id>`, `--json` | ✅ raw person |
+| `connection update` | raw People JSON patch | ✅ the mask is derived from the body's keys and only those fields change |
+| `connection list` | base, `--json`, `--sync-token` | ✅ one page plus a `nextSyncToken`; the incremental round came back empty (S3) |
+| `connection search` | `<query>` | ✅ matches by name |
+| `connection delete` | `<id>` | ✅ removed |
+| `other-contact list` / `search` | base | ⛔ **403: insufficient scopes (S1)**; `copy` untested for the same reason |
+| `request` | `get`, `post`, `delete`, bad path | ✅ raw People in and out; a `delete` prints `{}`, which is what Google returns (S4); a bad path → 404 summarised to its title (**S5 fixed**) |
+| aliases | `groups`, `contacts` / `people`, `other`, `add` / `new`, `del` / `rm` | ✅ |
 
 ## Findings
 
 ### Bugs / issues
 
-- **None.** Every command wired and dispatched correctly; the failures below are the server rejecting on OAuth scope (well-formed requests), not code defects.
-
-### Token-scope-gated (not testable with this token)
-
-- **`profile get`** → `403 requires scope: profile`. `people/me` needs the `profile` scope; the test token carries only `contacts`.
-- **`other-contact {list, search, copy}`** → `403 insufficient authentication scopes`. `otherContacts` needs `contacts.other.readonly`, absent from the test token. The commands are implemented and send valid requests; re-mint the token with those scopes to verify live.
+- **S2: `contact-group list` and `get` reported a member count of 0 for every group: FIXED.** A group holding one contact listed as `MEMBERS 0` while the raw API reported `memberCount: 1`. Two causes stacked: the commands passed an empty `groupFields` mask, so People never returned the count, and the renderers then counted `memberResourceNames`, which the API fills only on a `get` and only up to the requested maximum. **Fix:** both commands ask for `name`, `groupType` and `memberCount`, and both renderers read the count the server sent, leaving the cell blank when it was not asked for rather than printing a zero that reads as an empty group. Re-verified on a group with one member: list and get both report 1.
 
 ### Behaviour (not bugs)
 
-- **The specific API is raw People**, not vCard: `connection create`/`update` take a raw People person JSON body, and `--json` prints the raw People person/group. `connection update` derives the People `updatePersonFields` mask from the JSON's top-level keys and fetches the current etag to guard the write.
-- **`connection create` lands in `myContacts`** (People has no create-into-a-group); use `contact-group members --add people/<id>` to file it under a group: validated.
-- **Sync-token** is requested (`requestSyncToken=true`) but the People API only returns `nextSyncToken` on the **final** page; a truncated `--page-size` page omits it (expected).
-- The connections/other-contacts ID column shows the bare id (`people/` stripped); other-contact ids keep the `otherContacts/` prefix, which `other-contact copy` takes verbatim.
+- **The specific API is raw People**, not vCard: `connection create` / `update` take a raw person JSON body, `update` deriving its `updatePersonFields` mask from the body's top-level keys, and `--json` prints the raw People payload. None of the vCard projection is involved, so the shared API's quirks (P3, P6, P8) do not appear here.
+- **S1: the account's token carries the `contacts` scope only.** `profile get` needs `profile` and the `other-contact` surface needs `contacts.other.readonly`; both fail with a 403 that names the missing scope. Those three commands stay untested until the grant is widened, which is a token matter rather than a code one.
+- **S3: an incremental `connection list --sync-token` came back empty** after a contact was updated between the two calls, on three successive attempts. A raw `people request get "people/me/connections?syncToken=…"` returns the same empty page, so the CLI is faithful and the lag is Google's.
+- `contact-group members` is the People-native way to move a contact between books, the shared API having no such verb: memberships are m:n and a contact never leaves `myContacts`.
+
+### Observations
+
+- **S4: `request delete` prints `{}`.** Unlike Graph's 204, Google answers a delete with an empty JSON object, so the passthrough prints exactly what came back. Correct, if a little bare.
+- **S5: a bad path surfaced Google's HTML error page: FIXED.** Its JSON errors always read well ("Requested entity was not found."), but the HTML fallback was the same noise the WebDAV layer shed earlier today. io-people now summarises a non-envelope body to the page's `title`, else the stripped markup: `People API returned HTTP 404: Error 404 (Not Found)!!1`.
+- Person and group resource names round-trip verbatim (`people/<id>`, `contactGroups/<id>`), and the commands accept the bare id too.
 
 ## Verdict
 
-The Google People specific API is **implemented and validated end-to-end for the
-`contacts`-scoped surface**: full contact-group CRUD + `members`, and connection
-create/get/update/delete/search with raw People JSON in/out and a JSON-key-derived
-update mask: all live-tested with a throwaway group and marked contact, cleaned
-up (sweep = 0). `profile get` and the `other-contact` family are implemented but
-**scope-gated** by the test token (need `profile` / `contacts.other.readonly`);
-re-mint the token to verify them. This completes the specific-API round for all
-four backends that expose one (vdir, carddav, msgraph, people): jmap remains.
+The Google People specific API works for everything the account's scope allows: the whole contact-group surface including `members`, connection create / get / update / delete / search, and the raw `request` passthrough, all validated live and cleaned up. The one defect this run found, **S2** (a member count printed without ever being asked for), is fixed and re-verified, as is **S5**, the unsummarised HTML error body it shared with the shared-API report as P7; see the [people-honest-writes](../../log/2026-08-09-people-honest-writes.md) log entry. Three commands (`profile get`, `other-contact list` / `search`, and `copy` behind them) remain untested because the token's scope excludes them, which the errors state plainly.

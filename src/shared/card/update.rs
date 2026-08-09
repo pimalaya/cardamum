@@ -28,16 +28,24 @@ impl CardUpdateCommand {
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         let contents = self.vcard.read()?;
 
-        client.update_card(
+        let outcome = client.update_card(
             &addressbook_id,
             &self.card_id,
             contents,
             self.if_match.as_deref(),
         )?;
 
-        printer.out(Message::new(format!(
-            "Card `{}` successfully updated",
-            self.card_id
-        )))
+        let mut msg = format!("Card `{}` successfully updated", self.card_id);
+
+        // NOTE: the write landed, but not all of it: saying so beats a
+        // clean success for a card that kept what the vCard dropped.
+        if !outcome.kept_properties.is_empty() {
+            msg.push_str(&format!(
+                ", except {}, which the server will not let go",
+                outcome.kept_properties.join(", ")
+            ));
+        }
+
+        printer.out(Message::new(msg))
     }
 }

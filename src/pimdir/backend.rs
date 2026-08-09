@@ -36,7 +36,7 @@ use crate::{
     },
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
-        card::Card,
+        card::{Card, CardUpdateOutcome},
         client::paginate,
     },
 };
@@ -228,7 +228,7 @@ impl PimdirBackend {
         card_id: &str,
         contents: Vec<u8>,
         _if_match: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<CardUpdateOutcome> {
         let placement = self.synced_placement(addressbook_id, card_id)?;
         let (_, meta, sort_key) = card::derive(&contents);
         let object = ReplicaObject {
@@ -245,7 +245,9 @@ impl PimdirBackend {
                 meta: Some(meta),
                 sort_key: Some(sort_key),
             },
-        )
+        )?;
+
+        Ok(CardUpdateOutcome::default())
     }
 
     /// Deletes `card_id` from `addressbook_id`, staged as `Remove` (a

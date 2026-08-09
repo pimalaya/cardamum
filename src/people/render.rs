@@ -162,7 +162,7 @@ impl fmt::Display for GroupsReport {
                     .add_cell(Cell::new(group_id(group)).fg(self.id_color))
                     .add_cell(Cell::new(group_name(group)))
                     .add_cell(Cell::new(group_type))
-                    .add_cell(Cell::new(group.member_resource_names.len()));
+                    .add_cell(Cell::new(member_count(group)));
                 row
             }));
 
@@ -187,6 +187,19 @@ impl fmt::Display for GroupReport {
         writeln!(f, "id: {}", group_id(group))?;
         writeln!(f, "name: {}", group_name(group))?;
         writeln!(f, "resource-name: {}", group.resource_name)?;
-        writeln!(f, "members: {}", group.member_resource_names.len())
+        writeln!(f, "members: {}", member_count(group))
     }
+}
+
+/// The group's member count as the server reports it, blank when it was
+/// not asked for.
+///
+/// `memberResourceNames` is not it: People fills that only on a `get`,
+/// and even then only up to the requested maximum, so counting it reads
+/// as an empty group in every listing.
+fn member_count(group: &PeopleContactGroup) -> String {
+    group
+        .member_count
+        .map(|count| count.to_string())
+        .unwrap_or_default()
 }

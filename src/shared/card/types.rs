@@ -29,3 +29,19 @@ pub struct Card {
     /// Raw vCard bytes.
     pub contents: Vec<u8>,
 }
+
+/// What an update could not carry out.
+///
+/// A backend that stashes the vCard properties its wire model cannot
+/// hold depends on the provider letting that stash be rewritten. Google
+/// People does not let it be emptied, so a property dropped from the
+/// vCard stays on the server: the update lands, minus that. Every other
+/// backend returns this empty.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub struct CardUpdateOutcome {
+    /// Names of the vCard properties the update dropped and the server
+    /// kept anyway, e.g. `X-CUSTOM-FIELD`.
+    #[serde(default)]
+    pub kept_properties: Vec<String>,
+}

@@ -26,7 +26,7 @@ use crate::{
     people::project,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
-        card::Card,
+        card::{Card, CardUpdateOutcome},
         client::paginate,
     },
 };
@@ -265,13 +265,18 @@ impl PeopleBackend {
     /// updates; `if_match` supplies it, otherwise the fetched one is
     /// used. A stash write (clientData in the mask) merges the server's
     /// foreign clientData entries under the same guard.
+    ///
+    /// Returns the properties the update dropped and Google kept: the
+    /// API refuses to empty `clientData`, so a stashed property can be
+    /// changed but never removed (verified down to a raw PATCH sending
+    /// an explicit empty list). The write itself lands either way.
     pub fn update_card(
         &mut self,
         _addressbook_id: &str,
         card_id: &str,
         contents: Vec<u8>,
         if_match: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<CardUpdateOutcome> {
         let vcard = into_vcard_text(contents)?;
         let resource_name = format!("people/{card_id}");
 
@@ -285,11 +290,15 @@ impl PeopleBackend {
 
         let base = project::to_vcard(&current);
         let base_person = project::to_person(&base).map_err(Error::msg)?;
+        let outcome = CardUpdateOutcome {
+            kept_properties: project::unremovable_properties(&base_person, &person),
+        };
+
         let fields = project::changed_fields(&person, &base_person);
         if fields.is_empty() {
             // NOTE: nothing differs from the server state, no request
             // to send.
-            return Ok(());
+            return Ok(outcome);
         }
 
         // NOTE: a masked update replaces the whole clientData list and
@@ -314,7 +323,7 @@ impl PeopleBackend {
         self.inner
             .contact_update(&person, &fields, project::READ_FIELDS, &[])?;
 
-        Ok(())
+        Ok(outcome)
     }
 
     /// Deletes the contact `card_id`.

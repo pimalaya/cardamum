@@ -897,8 +897,7 @@ dependencies = [
 [[package]]
 name = "io-people"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46f14a53bd0da01461eaac20402742807c75646ebfa9ce116304877d7c3ac73a"
+source = "git+https://github.com/pimalaya/io-people#0ad7782f52ce3ae032336449f3afb34aa59d23d7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",

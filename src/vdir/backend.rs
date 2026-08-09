@@ -9,7 +9,7 @@ use crate::{
     config::VdirConfig,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
-        card::Card,
+        card::{Card, CardUpdateOutcome},
         client::paginate,
     },
 };
@@ -151,7 +151,7 @@ impl VdirBackend {
         card_id: &str,
         contents: Vec<u8>,
         _if_match: Option<&str>,
-    ) -> Result<()> {
+    ) -> Result<CardUpdateOutcome> {
         let path = self.addressbook_path(addressbook_id)?;
         self.inner.store_item(
             path,
@@ -159,7 +159,7 @@ impl VdirBackend {
             VdirItemKind::Vcard,
             contents,
         )?;
-        Ok(())
+        Ok(CardUpdateOutcome::default())
     }
 
     /// Permanently deletes `card_id` from `addressbook_id`.

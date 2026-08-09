@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
+use io_people::v1::rest::contact_groups::PeopleGroupField;
 use pimalaya_cli::printer::Printer;
 
 use crate::people::{client::PeopleClient, render::GroupReport};
@@ -20,8 +21,14 @@ pub struct PeopleContactGroupGetCommand {
 impl PeopleContactGroupGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: PeopleClient) -> Result<()> {
         let resource_name = format!("contactGroups/{}", self.group_id);
+        // NOTE: the count is only returned when the mask asks for it.
+        let fields = [
+            PeopleGroupField::Name,
+            PeopleGroupField::GroupType,
+            PeopleGroupField::MemberCount,
+        ];
         let group = client
-            .contact_group_get(&resource_name, self.max_members, &[])?
+            .contact_group_get(&resource_name, self.max_members, &fields)?
             .response;
 
         printer.out(GroupReport(group))

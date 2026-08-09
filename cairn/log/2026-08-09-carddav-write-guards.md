@@ -14,6 +14,6 @@ The 2026-08-09 Fastmail re-run left two write-path defects standing, both cases 
 
 A read-then-merge round-trip disappeared with it: the carddav adapter used to list every addressbook just to refill the fields the caller had not touched, which a real patch makes pointless. The `carddav proppatch` command builds the same patch, set-only, so its behaviour is unchanged.
 
-io-webdav is consumed through a local-path patch until this work is pushed upstream; see the TODO on the `[patch.crates-io]` entry in Cargo.toml.
+The io-webdav side landed upstream, so cardamum consumes it through the usual git patch again; the local-path pin used while developing the fix is gone.
 
 Verified on Fastmail: clearing the description leaves the color alone and vice versa, a set and a removal ride in one PROPPATCH, values can be set again after being cleared, an absent card id is rejected with 412 and creates nothing, and an existing card still updates with no ETag. The surrounding shared and specific commands were swept for regressions. Reports: [carddav-fastmail.md](../spec/testing/carddav-fastmail.md) and [carddav-specific.md](../spec/testing/carddav-specific.md).

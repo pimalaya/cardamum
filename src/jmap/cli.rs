@@ -19,7 +19,7 @@ use crate::jmap::{
 pub enum JmapCommand {
     #[command(subcommand, visible_aliases = ["abook", "addressbook"])]
     AddressBook(JmapAddressBookCommand),
-    #[command(subcommand, visible_aliases = ["card", "cards"])]
+    #[command(subcommand, visible_aliases = ["card"])]
     ContactCard(JmapContactCardCommand),
     #[command(subcommand)]
     Session(JmapSessionCommand),

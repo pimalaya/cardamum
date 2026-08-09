@@ -5,7 +5,7 @@ use clap::Parser;
 use io_jmap::rfc9610::address_book::set::{JmapAddressBookCreate, JmapAddressBookSetArgs};
 use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, render::BookReport};
+use crate::jmap::{client::JmapClient, error::format_set_error, render::BookReport};
 
 /// Create a JMAP AddressBook (`AddressBook/set` create).
 ///
@@ -37,7 +37,7 @@ impl JmapAddressBookCreateCommand {
         let out = client.address_book_set(args)?;
 
         if let Some(err) = out.not_created.into_values().next() {
-            bail!("AddressBook create rejected: {err:?}");
+            bail!("AddressBook create rejected{}", format_set_error(&err));
         }
         let created = out
             .created

@@ -8,11 +8,12 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use serde_json::{Map, Value};
 
-/// Positional raw JSContact JSON source for `contact-card create` /
-/// `update`.
+/// Positional raw JSON source, shared by the commands that take a JSON
+/// body: a JSContact card for `contact-card create` / `update`, a JMAP
+/// request object for `request`.
 #[derive(Debug, Parser)]
 pub struct JsonArg {
-    /// A path to a JSON file, raw JSContact JSON, or `-` for stdin.
+    /// A path to a JSON file, raw JSON, or `-` for stdin.
     #[arg(value_name = "JSON")]
     pub body: String,
 }
@@ -25,21 +26,21 @@ impl JsonArg {
             let mut buf = String::new();
             stdin()
                 .read_to_string(&mut buf)
-                .context("Read JSContact from stdin error")?;
+                .context("Read JSON from stdin error")?;
             buf
         } else {
             let path = PathBuf::from(&self.body);
             if path.is_file() {
                 fs::read_to_string(&path)
-                    .with_context(|| format!("Read JSContact from `{}` error", path.display()))?
+                    .with_context(|| format!("Read JSON from `{}` error", path.display()))?
             } else {
                 self.body
             }
         };
 
-        match serde_json::from_str(&raw).context("Parse JSContact JSON error")? {
+        match serde_json::from_str(&raw).context("Parse JSON error")? {
             Value::Object(map) => Ok(map),
-            _ => anyhow::bail!("JSContact must be a JSON object"),
+            _ => anyhow::bail!("The JSON body must be an object"),
         }
     }
 }

@@ -10,8 +10,8 @@ use crate::jmap::{client::JmapClient, render::BooksReport};
 /// JSON output: `{"list": [<raw JMAP AddressBook>...], "state"}`.
 #[derive(Debug, Parser)]
 pub struct JmapAddressBookGetCommand {
-    /// AddressBook id to fetch; repeatable. Omit to fetch all.
-    #[arg(long = "id", value_name = "ID")]
+    /// AddressBook id(s) to fetch. Omit to fetch all.
+    #[arg(value_name = "ID")]
     pub ids: Vec<String>,
 }
 

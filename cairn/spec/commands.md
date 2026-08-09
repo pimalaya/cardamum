@@ -25,5 +25,14 @@ pimdir has no protocol-specific surface by design: it is a store rather than a p
 ### Requirement: Specific commands are raw-faithful
 A specific command SHALL surface the native ids and metadata the shared layer normalizes away (ETags, CTags, sync tokens, hrefs, the Graph `changeKey`, the People `etag` and `resourceName`), and SHALL make the incremental-sync primitive its headline (`report sync`, `changes`, `delta`). Default human output is a friendly table; `--json` SHALL emit the raw native payload, and create and update SHALL accept the raw native representation. Each backend keeps a raw escape hatch: a raw XML body for CardDAV, raw JSON in and out plus a generic request passthrough for the object backends. Precondition control is offered only where the protocol has it (CardDAV `--if-match` and `--if-none-match`).
 
+### Requirement: Specific commands take their ids positionally
+A protocol-specific command SHALL take the ids it operates on as positional arguments, repeatable where the protocol accepts several, and reserve flags for the rest, mirroring Himalaya. A short option SHALL NOT be given to an argument whose letter the global options already use: clap asserts on the collision in a debug build and silently makes the letter ambiguous in a release one, so the command never runs either way.
+
+### Requirement: A command prints what the server returned
+A command SHALL render only the fields the server's response actually carries, and SHALL report success in words when the response carries nothing to show, rather than printing empty field slots. This matters most on the write path, where a JMAP `set` response echoes only the properties the server itself decided. `--json` still emits the raw native payload.
+
+### Requirement: A rejected write is legible
+A rejected protocol write SHALL surface as prose: the server's own error type and description, plus the properties it named, never a Rust `Debug` rendering of the error value. Where the rejection has a known cause the user can act on, the message SHALL name it, as the CardDAV missing-UID hint and the JMAP `vCardProps` hint do.
+
 ### Requirement: Output streams
 All output, data and errors alike, SHALL go to stdout through the printer, distinguished by the exit code; `--json` switches every command to JSON. stderr carries logs and interactive prompts only, so redirecting stdout is always safe.

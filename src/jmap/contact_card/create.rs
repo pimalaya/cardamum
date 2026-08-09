@@ -5,7 +5,9 @@ use clap::Parser;
 use io_jmap::rfc9610::contact_card::{JmapContactCard, set::JmapContactCardSetArgs};
 use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, input::JsonArg, render::CardReport};
+use crate::jmap::{
+    client::JmapClient, error::format_set_error, input::JsonArg, render::CardReport,
+};
 
 /// Create a ContactCard from a raw JSContact JSON body
 /// (`ContactCard/set` create).
@@ -37,7 +39,7 @@ impl JmapContactCardCreateCommand {
         let out = client.contact_card_set(args)?;
 
         if let Some(err) = out.not_created.into_values().next() {
-            bail!("ContactCard create rejected: {err:?}");
+            bail!("ContactCard create rejected{}", format_set_error(&err));
         }
         let created = out
             .created

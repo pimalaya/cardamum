@@ -3,7 +3,7 @@ use clap::Parser;
 use io_jmap::rfc9610::address_book::set::JmapAddressBookSetArgs;
 use pimalaya_cli::printer::{Message, Printer};
 
-use crate::jmap::client::JmapClient;
+use crate::jmap::{client::JmapClient, error::format_set_error};
 
 /// Destroy a JMAP AddressBook (`AddressBook/set` destroy).
 ///
@@ -28,7 +28,7 @@ impl JmapAddressBookDestroyCommand {
         let out = client.address_book_set(args)?;
 
         if let Some(err) = out.not_destroyed.into_values().next() {
-            bail!("AddressBook destroy rejected: {err:?}");
+            bail!("AddressBook destroy rejected{}", format_set_error(&err));
         }
 
         printer.out(Message::new(format!(

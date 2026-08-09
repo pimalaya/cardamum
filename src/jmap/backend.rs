@@ -25,15 +25,19 @@ use io_jmap::{
             JmapContactCard,
             get::JmapContactCardGetOptions,
             query::{JmapContactCardFilter, JmapContactCardQueryOptions},
-            set::{JmapContactCardPatch, JmapContactCardSetArgs},
+            set::{JmapContactCardPatch, JmapContactCardSetArgs, JmapContactCardSetItemError},
         },
     },
 };
 use secrecy::{ExposeSecret, SecretString};
+use serde_json::Value;
 
 use crate::{
     config::{JmapAuthConfig, JmapConfig, parse_server},
-    jmap::project,
+    jmap::{
+        error::{JmapSetError, format_set_error},
+        project,
+    },
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::Card,
@@ -101,7 +105,7 @@ impl JmapBackend {
         let out = self.inner.address_book_set(args)?;
 
         if let Some(err) = out.not_created.into_values().next() {
-            bail!("JMAP AddressBook create rejected: {err:?}");
+            bail!("JMAP AddressBook create rejected{}", format_set_error(&err));
         }
 
         out.created
@@ -133,7 +137,7 @@ impl JmapBackend {
         let out = self.inner.address_book_set(args)?;
 
         if let Some(err) = out.not_updated.into_values().next() {
-            bail!("JMAP AddressBook update rejected: {err:?}");
+            bail!("JMAP AddressBook update rejected{}", format_set_error(&err));
         }
 
         Ok(())
@@ -150,7 +154,10 @@ impl JmapBackend {
         let out = self.inner.address_book_set(args)?;
 
         if let Some(err) = out.not_destroyed.into_values().next() {
-            bail!("JMAP AddressBook destroy rejected: {err:?}");
+            bail!(
+                "JMAP AddressBook destroy rejected{}",
+                format_set_error(&err)
+            );
         }
 
         Ok(())
@@ -205,6 +212,7 @@ impl JmapBackend {
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let vcard = into_vcard_text(contents)?;
         let card = project::to_jscontact(&vcard).map_err(Error::msg)?;
+        let unmapped = unmapped_properties(card.get("vCardProps"));
 
         let create = BTreeMap::from([(
             "c0".to_string(),
@@ -221,7 +229,7 @@ impl JmapBackend {
         let out = self.inner.contact_card_set(args)?;
 
         if let Some(err) = out.not_created.into_values().next() {
-            bail!("JMAP ContactCard create rejected: {err:?}");
+            bail!(card_write_error("create", &err, &unmapped));
         }
 
         out.created
@@ -252,6 +260,7 @@ impl JmapBackend {
         let base_vcard = into_vcard_text(base.contents)?;
 
         let patch = project::to_patch(&vcard, Some(&base_vcard)).map_err(Error::msg)?;
+        let unmapped = unmapped_properties(patch.get("vCardProps"));
 
         let update = BTreeMap::from([(card_id.to_string(), JmapContactCardPatch(patch))]);
         let args = JmapContactCardSetArgs {
@@ -261,7 +270,7 @@ impl JmapBackend {
         let out = self.inner.contact_card_set(args)?;
 
         if let Some(err) = out.not_updated.into_values().next() {
-            bail!("JMAP ContactCard update rejected: {err:?}");
+            bail!(card_write_error("update", &err, &unmapped));
         }
 
         Ok(())
@@ -276,7 +285,10 @@ impl JmapBackend {
         let out = self.inner.contact_card_set(args)?;
 
         if let Some(err) = out.not_destroyed.into_values().next() {
-            bail!("JMAP ContactCard destroy rejected: {err:?}");
+            bail!(
+                "JMAP ContactCard destroy rejected{}",
+                format_set_error(&err)
+            );
         }
 
         Ok(())
@@ -317,4 +329,44 @@ fn into_addressbook(book: JmapAddressBook) -> Addressbook {
 /// Decodes raw card bytes as UTF-8 vCard text.
 fn into_vcard_text(contents: Vec<u8>) -> Result<String> {
     String::from_utf8(contents).map_err(|_| anyhow::anyhow!("Card contents are not valid UTF-8"))
+}
+
+/// The vCard property names carried by a JSContact `vCardProps` member,
+/// which holds each unmappable property in jCard syntax (RFC 9555
+/// §2.15), the name being the first element of its array.
+fn unmapped_properties(vcard_props: Option<&Value>) -> Vec<String> {
+    let Some(Value::Array(props)) = vcard_props else {
+        return Vec::new();
+    };
+
+    props
+        .iter()
+        .filter_map(|prop| prop.get(0)?.as_str())
+        .map(|name| name.to_uppercase())
+        .collect()
+}
+
+/// A rejected card write, rendered as prose, naming the properties
+/// behind a `vCardProps` rejection.
+///
+/// A vCard property JSContact cannot model travels in the standard
+/// `vCardProps` member, which some servers (Fastmail) refuse outright,
+/// taking the whole write down with it. The server error only points at
+/// `vCardProps`, so the hint names the properties that landed there:
+/// they are what has to go for the write to pass.
+fn card_write_error(verb: &str, err: &JmapContactCardSetItemError, unmapped: &[String]) -> Error {
+    let msg = format!("JMAP ContactCard {verb} rejected{}", format_set_error(err));
+
+    if !err.properties().iter().any(|prop| prop == "vCardProps") {
+        return anyhow!(msg);
+    }
+
+    let hint = "This server refuses the standard `vCardProps` member, where a vCard property JSContact cannot model is preserved";
+    match unmapped {
+        [] => anyhow!("{msg}. {hint}."),
+        names => anyhow!(
+            "{msg}. {hint}; the card carries {}, which JMAP has no home for on this server.",
+            names.join(", ")
+        ),
+    }
 }

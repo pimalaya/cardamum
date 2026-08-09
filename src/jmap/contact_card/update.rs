@@ -5,14 +5,18 @@ use clap::Parser;
 use io_jmap::rfc9610::contact_card::set::{JmapContactCardPatch, JmapContactCardSetArgs};
 use pimalaya_cli::printer::{Message, Printer};
 
-use crate::jmap::{client::JmapClient, input::JsonArg, render::CardReport};
+use crate::jmap::{
+    client::JmapClient, error::format_set_error, input::JsonArg, render::CardReport,
+};
 
 /// Update a ContactCard from a raw JSContact patch (`ContactCard/set`
 /// update). The JSON's top-level keys are the patch (JSON pointers are
 /// supported by JMAP as dotted keys).
 ///
-/// JSON output: the raw JMAP ContactCard after the update (or a message
-/// when the server returns no object).
+/// JSON output: the raw JMAP ContactCard after the update, or
+/// `{"message": "..."}` when the server returns nothing to show (most
+/// do: a `set` response echoes only the properties the server itself
+/// decided).
 #[derive(Debug, Parser)]
 pub struct JmapContactCardUpdateCommand {
     /// ContactCard id.
@@ -34,11 +38,23 @@ impl JmapContactCardUpdateCommand {
         let out = client.contact_card_set(args)?;
 
         if let Some(err) = out.not_updated.into_values().next() {
-            bail!("ContactCard update rejected: {err:?}");
+            bail!("ContactCard update rejected{}", format_set_error(&err));
         }
 
-        match out.updated.into_values().next().flatten() {
-            Some(card) => printer.out(CardReport(card)),
+        // NOTE: the server may answer with no object at all, or with one
+        // carrying only its own bookkeeping (Fastmail returns `updated`
+        // and a blob id). Both mean "nothing to show beyond the
+        // success", so say that rather than print an empty block.
+        let updated = out
+            .updated
+            .into_values()
+            .next()
+            .flatten()
+            .map(CardReport)
+            .filter(|report| !report.is_empty());
+
+        match updated {
+            Some(report) => printer.out(report),
             None => printer.out(Message::new(format!(
                 "ContactCard `{}` successfully updated",
                 self.id

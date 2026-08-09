@@ -3,7 +3,7 @@ use clap::Parser;
 use io_jmap::rfc9610::contact_card::set::JmapContactCardSetArgs;
 use pimalaya_cli::printer::{Message, Printer};
 
-use crate::jmap::client::JmapClient;
+use crate::jmap::{client::JmapClient, error::format_set_error};
 
 /// Destroy a ContactCard (`ContactCard/set` destroy).
 ///
@@ -24,7 +24,7 @@ impl JmapContactCardDestroyCommand {
         let out = client.contact_card_set(args)?;
 
         if let Some(err) = out.not_destroyed.into_values().next() {
-            bail!("ContactCard destroy rejected: {err:?}");
+            bail!("ContactCard destroy rejected{}", format_set_error(&err));
         }
 
         printer.out(Message::new(format!(

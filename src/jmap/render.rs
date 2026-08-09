@@ -130,12 +130,38 @@ impl fmt::Display for CardsReport {
 #[serde(transparent)]
 pub struct CardReport(pub JmapContactCard);
 
+impl CardReport {
+    /// Whether the report has nothing to show: the card carries none of
+    /// the three fields [`fmt::Display`] renders. A `set` response often
+    /// lands here, carrying only server bookkeeping such as `updated`,
+    /// which is the caller's cue to confirm in words instead.
+    pub fn is_empty(&self) -> bool {
+        let card = &self.0;
+        card.id.is_none() && card_name(card).is_empty() && card_books(card).is_empty()
+    }
+}
+
 impl fmt::Display for CardReport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // NOTE: a `set` response echoes only the properties the server
+        // itself decided, so most of these are absent after a write.
+        // Printing an empty slot for each would read as data loss.
         let card = &self.0;
-        writeln!(f, "id: {}", card.id.as_deref().unwrap_or(""))?;
-        writeln!(f, "name: {}", card_name(card))?;
-        writeln!(f, "address-books: {}", card_books(card))
+        if let Some(id) = card.id.as_deref() {
+            writeln!(f, "id: {id}")?;
+        }
+
+        let name = card_name(card);
+        if !name.is_empty() {
+            writeln!(f, "name: {name}")?;
+        }
+
+        let books = card_books(card);
+        if !books.is_empty() {
+            writeln!(f, "address-books: {books}")?;
+        }
+
+        Ok(())
     }
 }
 

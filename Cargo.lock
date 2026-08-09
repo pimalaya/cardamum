@@ -2116,8 +2116,7 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 [[package]]
 name = "vcard-rs"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da464a459de1592f25879cb802b771a446e0caf3606eb133bdddd85ed5d0782a"
+source = "git+https://github.com/pimalaya/vcard#b0f208fdc6225d714d4d866c6298fc721d9be4ac"
 dependencies = [
  "memchr",
  "serde_json",

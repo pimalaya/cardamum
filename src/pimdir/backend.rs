@@ -26,6 +26,7 @@ use io_replica::{
     object::ReplicaObject,
     placement::{ReplicaFlags, ReplicaHandle, ReplicaPlacement},
 };
+use log::warn;
 
 use crate::{
     config::PimdirConfig,
@@ -102,26 +103,19 @@ impl PimdirBackend {
         Ok(name.to_string())
     }
 
-    /// Renames the collection identified by `id`.
+    /// Always fails: a collection's row (id, display name, description,
+    /// colour) is what a sync writes from the server, and this backend stages
+    /// item mutations only, so every field of it is refused rather than
+    /// changed locally into something no sync would carry.
     ///
-    /// pimdir stores no display name, description or colour of its own beyond
-    /// the collection row a sync writes, so only a rename is honoured: a patch
-    /// carrying just a description or a colour is rejected rather than
-    /// silently dropped.
-    pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
-        if patch.description.is_some() || patch.color.is_some() {
-            bail!(
-                "The pimdir backend stores no addressbook description or color; \
-                 only a rename is supported"
-            );
-        }
-
-        let Some(name) = patch.name else {
-            return Ok(());
-        };
-
-        self.inner.store.rename_collection(id, &name)?;
-        Ok(())
+    /// A rename is refused for a sharper reason too: io-pimdir's
+    /// `rename_collection` renames the *identifier*, so honouring `--name`
+    /// here would move every card under an id nobody asked for.
+    pub fn update_addressbook(&mut self, _id: &str, _patch: AddressbookDiff) -> Result<()> {
+        bail!(
+            "The pimdir backend cannot update an addressbook: its name, description \
+             and color come from the server through a sync. Rename it there and sync"
+        )
     }
 
     /// Always fails: io-pimdir exposes no collection removal, and io-replica
@@ -146,6 +140,8 @@ impl PimdirBackend {
         page: Option<u32>,
         page_size: Option<u32>,
     ) -> Result<Vec<Card>> {
+        self.known_collection(addressbook_id)?;
+
         let cards = self
             .scan_items(addressbook_id)?
             .into_iter()
@@ -160,6 +156,8 @@ impl PimdirBackend {
     /// hydrated to `Full` (no local body), the cue to sync rather than a
     /// data-loss error.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
+        self.known_collection(addressbook_id)?;
+
         let seq = parse_id(card_id)?;
         let Some(item) = self.inner.store.get_item(addressbook_id, seq)? else {
             bail!("Card `{card_id}` not found in `{addressbook_id}`");
@@ -186,6 +184,8 @@ impl PimdirBackend {
     /// Adds a locally-authored card to `addressbook_id`, staged as `Add` (the
     /// next sync uploads it). Returns the public id the store assigned.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
+        self.known_collection(addressbook_id)?;
+
         let (link_id, meta, sort_key) = card::derive(&contents);
         let object = ReplicaObject {
             hash: content_hash(&contents),
@@ -291,9 +291,28 @@ impl PimdirBackend {
     /// rather than handing the preview back, so nothing downstream can mistake
     /// one for a real card.
     fn card_from_item(&self, addressbook_id: &str, item: PimdirItem) -> Result<Card> {
-        let contents = match &item.object {
-            Some(hash) => self.inner.blobs.get(hash)?.unwrap_or_default(),
-            None => preview_vcard(&summary_of(&item)),
+        let stored = match &item.object {
+            Some(hash) => self.inner.blobs.get(hash)?,
+            None => None,
+        };
+
+        let contents = match stored {
+            Some(contents) => contents,
+            None => {
+                // NOTE: no body to show, either because the card was never
+                // hydrated or because its blob is gone from an inconsistent
+                // store. The preview keeps the row readable; the second case
+                // is worth a word, since `get_card` will refuse outright.
+                if item.object.is_some() {
+                    warn!(
+                        "body blob missing for card `{}` in `{addressbook_id}`, \
+                         listing its summary instead",
+                        item.seq
+                    );
+                }
+
+                preview_vcard(&summary_of(&item))
+            }
         };
 
         Ok(Card {
@@ -302,6 +321,27 @@ impl PimdirBackend {
             etag: item.object.map(|hash| hash.0),
             contents,
         })
+    }
+
+    /// Fails unless `collection` is a collection the store knows.
+    ///
+    /// The store's write seam creates a collection on demand and its read seam
+    /// answers an unknown one with an empty page, so without this a typo in
+    /// `-k` would invent an addressbook on a write and read as an empty one on
+    /// a list.
+    fn known_collection(&self, collection: &str) -> Result<()> {
+        let known = self
+            .inner
+            .store
+            .list_collections()?
+            .into_iter()
+            .any(|candidate| candidate.id == collection);
+
+        if !known {
+            bail!("Addressbook `{collection}` not found");
+        }
+
+        Ok(())
     }
 
     /// The source's placement for the public id `card_id`, guaranteed to carry

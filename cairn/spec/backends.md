@@ -28,6 +28,9 @@ A card's shared `id` SHALL be the backend's own identifier, used verbatim end to
 ### Requirement: Local storage backends
 vdir and pimdir SHALL adapt io-vdir and io-pimdir. vdir stores each addressbook as an immediate subdirectory of `vdir.home-dir` and each card as a `.vcf` file inside it, byte-faithfully. pimdir is an offline cache the sync engine (io-replica plus io-pimdir) populates, and follows the cache requirements below.
 
+### Requirement: A cache renames nothing it cannot push
+The pimdir backend SHALL refuse every `addressbook update` field. Its collection row (id, display name, description, colour) is written by the sync from the server, and the backend stages item mutations only, so any local edit of it is a change no sync would carry. A missing body SHALL fall back to the summary preview in a listing, as an unhydrated card does, rather than render as a blank row.
+
 ### Requirement: pimdir is a cache, not a server
 The pimdir backend SHALL treat the store as a possibly-partial cache. `get_card` on a card whose body is not local (`level < Full`, no stored object) SHALL report a clear "body not fetched" state, the cue to sync, rather than a data-loss error. The card still lists: `list_cards` SHALL project the stored `v: 1` summary into a minimal preview vCard (`UID`, `FN`, `EMAIL`) so a contact list reads correctly before a full sync, while `get_card` refuses outright so a preview can never be mistaken for the document of record.
 
@@ -44,7 +47,7 @@ When `pimdir.source` is unset, the pimdir backend SHALL attribute its writes to 
 The pimdir backend SHALL expand `~` and environment variables on `pimdir.root` before opening the store and its blob reader. Opening the raw path would create an empty store at a literal `./~/…` relative to the cwd and silently return an empty addressbook list.
 
 ### Requirement: pimdir addressbook limits are explicit
-`create_addressbook` SHALL declare a local `text/vcard` collection and say nothing about a remote one, since pimdir stages item mutations only. `update_addressbook` SHALL honour a rename and reject a patch carrying a description or a colour, which pimdir does not store. `delete_addressbook` SHALL always fail with a message naming the alternative (delete on the server and sync, or remove the store directory), because io-pimdir exposes no collection removal and io-replica has no collection-level mutation to stage one.
+`create_addressbook` SHALL declare a local `text/vcard` collection and say nothing about a remote one, since pimdir stages item mutations only. `update_addressbook` SHALL always fail, per the requirement above: io-pimdir's `rename_collection` renames the identifier rather than the display name, and the row it would touch is the sync's to write. `delete_addressbook` SHALL always fail with a message naming the alternative (delete on the server and sync, or remove the store directory), because io-pimdir exposes no collection removal and io-replica has no collection-level mutation to stage one.
 
 ### Requirement: Backend selection is local-first
 The shared commands run over an `AddressbookClient` owning one `BackendClient` variant per compiled-in backend. The global `--backend` flag picks it: `auto` (the default) SHALL take the first configured-and-allowed backend in priority order, which puts the local stores (vdir, then pimdir) before the network ones so an offline store wins over a round-trip. A named value pins that backend and bails when the account has no matching config block. The protocol-specific commands build their own client and ignore `--backend` entirely.

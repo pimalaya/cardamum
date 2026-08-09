@@ -28,7 +28,7 @@ Every backend pairs a **shared** run (the cross-protocol `addressbook` and `card
 | Backend | Shared | Specific |
 | --- | --- | --- |
 | vdir | [vdir-local.md](vdir-local.md) | *(combined)* |
-| pimdir | *(not yet run)* | *(none: pimdir ships no protocol-specific surface)* |
+| pimdir | [pimdir-local.md](pimdir-local.md) | *(none: pimdir ships no protocol-specific surface)* |
 
 ## Status
 
@@ -52,4 +52,4 @@ The 2026-08-09 vdir re-run, in a throwaway local instance, found the specific su
 
 **Open:** Fastmail rejects the standard `vCardProps` member (RFC 9555 §2.15), so a vCard carrying a property JSContact cannot model still fails to write over JMAP, now with a message naming that property (J6). Whether cardamum should stash such properties, as the Graph and People backends do, is a product decision. On CardDAV, the PROPPATCH gap that run exposed (I5) is fixed too: io-webdav now returns the multistatus plus the properties the request carried, and the client fails when one comes back refused or unmentioned, which is how iCloud answers for a collection it does not have. See [jmap-fastmail.md](jmap-fastmail.md) and [jmap-specific.md](jmap-specific.md).
 
-Not yet run: the pimdir backend, which needs a store populated by a Neverest sync (see [backends.md](../backends.md) for what a run has to cover: the availability-aware read path and the staged-write path both need a real synced store).
+The 2026-08-09 pimdir run used two stores: one cardamum created from scratch, and one **seeded to look like a sync engine populated it**, by a small harness written against io-pimdir and io-replica for the purpose. The seeded store finally exercised the two behaviours that make pimdir a cache and had never been tested: an unhydrated card previews from its stored `v: 1` summary and refuses to be read with a "run a sync" message, and a write against a synced collection is staged for the next sync as a dirty placement, a tombstone or a baseless create. Both hold. The run found four defects, all fixed and re-verified the same day: `addressbook update -n` rewrote the collection **id** rather than its display name, stranding every card under the old id and silently breaking `addressbook.default`, and now every field of that command is refused, since the collection row is the sync's to write; an unknown addressbook is no longer listed as empty nor created by a write; and a card whose stored body is missing previews from its summary instead of rendering blank. See the [pimdir-write-guards](../../log/2026-08-09-pimdir-write-guards.md) log entry. Conflict handling and the three-way merge are out of scope for this client: they belong to the sync engine.

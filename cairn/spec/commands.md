@@ -43,6 +43,9 @@ When a backend cannot carry out part of a write, and the protocol offers no way 
 ### Requirement: A displayed count is the server's
 A table SHALL NOT render an absent value as a default that reads as fact. A count the API returns only on request SHALL be requested, or left blank.
 
+### Requirement: A command resolves its addressbook before acting
+A shared command SHALL resolve the addressbook it was given before reading or writing through it, and SHALL fail naming it when it does not exist. Listing an unknown addressbook SHALL NOT read as empty, and writing into one SHALL NOT create it.
+
 ### Requirement: A rejected write is legible
 A rejected protocol write SHALL surface as prose: the server's own error type and description, plus the properties it named, never a Rust `Debug` rendering of the error value. Where the rejection has a known cause the user can act on, the message SHALL name it, as the CardDAV missing-UID hint and the JMAP `vCardProps` hint do.
 

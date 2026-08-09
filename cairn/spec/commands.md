@@ -29,7 +29,13 @@ A specific command SHALL surface the native ids and metadata the shared layer no
 A protocol-specific command SHALL take the ids it operates on as positional arguments, repeatable where the protocol accepts several, and reserve flags for the rest, mirroring Himalaya. A short option SHALL NOT be given to an argument whose letter the global options already use: clap asserts on the collision in a debug build and silently makes the letter ambiguous in a release one, so the command never runs either way.
 
 ### Requirement: A command prints what the server returned
-A command SHALL render only the fields the server's response actually carries, and SHALL report success in words when the response carries nothing to show, rather than printing empty field slots. This matters most on the write path, where a JMAP `set` response echoes only the properties the server itself decided. `--json` still emits the raw native payload.
+A command SHALL render only the fields the server's response actually carries, and SHALL report success in words when the response carries nothing to show, rather than printing empty field slots. This matters most on the write path, where a JMAP `set` response echoes only the properties the server itself decided, and where a REST delete answers 204 with no body at all: text output SHALL then print nothing. `--json` still emits the raw native payload.
+
+### Requirement: An incremental-sync command can resume
+A protocol-specific command exposing its backend's incremental sync SHALL accept the resume token that sync hands back, in whatever shape the protocol uses (a Graph `@odata.deltaLink` URL, a People sync token, a JMAP or DAV state string). A command that documents a resume SHALL provide the flag for it.
+
+### Requirement: An empty addressbook id is rejected
+The shared `-k/--addressbook` resolver SHALL reject an empty id rather than pass it to a backend, where it silently addresses the collection instead of a member.
 
 ### Requirement: A rejected write is legible
 A rejected protocol write SHALL surface as prose: the server's own error type and description, plus the properties it named, never a Rust `Debug` rendering of the error value. Where the rejection has a known cause the user can act on, the message SHALL name it, as the CardDAV missing-UID hint and the JMAP `vCardProps` hint do.

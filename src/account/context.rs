@@ -83,12 +83,22 @@ impl Account {
     /// Resolves the addressbook id a shared-API command operates on: the
     /// `-k/--addressbook` flag wins; otherwise the `addressbook.default`
     /// config is used; otherwise the command bails.
+    ///
+    /// An empty id bails too: backends build a path from it, where an
+    /// empty segment silently addresses the parent collection instead of
+    /// a member, and the server's answer to that explains nothing
+    /// (Microsoft Graph replies `405 The OData request is not
+    /// supported`).
     pub fn addressbook_id(&self, flag: Option<String>) -> Result<String> {
-        if let Some(id) = flag.or_else(|| self.addressbook_default.clone()) {
-            return Ok(id);
+        let Some(id) = flag.or_else(|| self.addressbook_default.clone()) else {
+            bail!("Missing addressbook id; pass -k/--addressbook or set addressbook.default")
+        };
+
+        if id.trim().is_empty() {
+            bail!("Addressbook id cannot be empty");
         }
 
-        bail!("Missing addressbook id; pass -k/--addressbook or set addressbook.default")
+        Ok(id)
     }
 }
 

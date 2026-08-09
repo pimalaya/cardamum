@@ -13,20 +13,35 @@ use crate::{
 };
 
 /// One page of the contacts delta (Graph incremental sync): the
-/// contacts changed or removed since the last round. Feed the returned
-/// `@odata.deltaLink` back to resume; a `@odata.nextLink` means the page
-/// was truncated.
+/// contacts changed or removed since the last round.
+///
+/// Without `--delta-link` this opens a fresh round, enumerating
+/// everything and ending with an `@odata.deltaLink`. Feed that link back
+/// through `--delta-link` for the next round, which returns only what
+/// changed since; a page ending with an `@odata.nextLink` was truncated,
+/// and that link goes back through the same flag to drain the rest.
 ///
 /// JSON output: `{"contacts": [<raw Graph delta>...], "@odata.nextLink",
 /// "@odata.deltaLink"}`.
 #[derive(Debug, Parser)]
 pub struct MsgraphContactDeltaCommand {
     /// Contact folder id; omit for the default Contacts folder.
-    #[arg(short = 'f', long, value_name = "FOLDER-ID")]
+    #[arg(
+        short = 'f',
+        long,
+        value_name = "FOLDER-ID",
+        conflicts_with = "delta_link"
+    )]
     pub folder: Option<String>,
     /// Comma-separated properties to return (`$select`).
-    #[arg(long, value_name = "CSV")]
+    #[arg(long, value_name = "CSV", conflicts_with = "delta_link")]
     pub select: Option<String>,
+    /// `@odata.deltaLink` or `@odata.nextLink` from a previous page, to
+    /// continue that round instead of opening a new one. The link
+    /// already carries the folder and the properties, so neither is
+    /// passed again.
+    #[arg(long, value_name = "URL")]
+    pub delta_link: Option<String>,
 }
 
 impl MsgraphContactDeltaCommand {
@@ -34,9 +49,11 @@ impl MsgraphContactDeltaCommand {
         let preset = client.account.table_preset().to_string();
         let id_color = client.account.cards_list_table_id_color();
 
-        let page = client
-            .contacts_delta(self.folder.as_deref(), self.select.as_deref())?
-            .response;
+        let page = match &self.delta_link {
+            Some(link) => client.contacts_delta_from_link(link)?,
+            None => client.contacts_delta(self.folder.as_deref(), self.select.as_deref())?,
+        }
+        .response;
 
         printer.out(DeltaReport {
             preset,
@@ -93,11 +110,9 @@ impl fmt::Display for DeltaReport {
         if let Some(delta_link) = &self.delta_link {
             writeln!(f, "delta-link: {delta_link}")?;
         }
-        if self.next_link.is_some() {
-            writeln!(
-                f,
-                "(page truncated: follow @odata.nextLink to drain the rest)"
-            )?;
+        if let Some(next_link) = &self.next_link {
+            writeln!(f, "next-link: {next_link}")?;
+            writeln!(f, "(page truncated: pass the next-link to --delta-link)")?;
         }
         Ok(())
     }

@@ -70,6 +70,7 @@ url = { version = "2.5", features = ["serde"] }
 vcard-rs = { version = "0.2", default-features = false, features = ["parser"], optional = true }
 
 [patch.crates-io]
+io-msgraph.git = "https://github.com/pimalaya/io-msgraph"
 io-pimdir.git = "https://github.com/pimalaya/io-pimdir"
 io-replica.git = "https://github.com/pimalaya/io-replica"
 io-webdav.git = "https://github.com/pimalaya/io-webdav"

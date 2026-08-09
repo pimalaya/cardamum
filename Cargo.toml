@@ -72,6 +72,7 @@ vcard-rs = { version = "0.2", default-features = false, features = ["parser"], o
 [patch.crates-io]
 io-msgraph.git = "https://github.com/pimalaya/io-msgraph"
 io-people.git = "https://github.com/pimalaya/io-people"
+io-vdir.git = "https://github.com/pimalaya/io-vdir"
 io-pimdir.git = "https://github.com/pimalaya/io-pimdir"
 io-replica.git = "https://github.com/pimalaya/io-replica"
 io-webdav.git = "https://github.com/pimalaya/io-webdav"

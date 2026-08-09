@@ -2,6 +2,8 @@
 //! addressbook and card operations onto [`io_vdir::client::VdirClient`]
 //! calls against the configured home directory.
 
+use std::path::Path;
+
 use anyhow::{Result, bail};
 use io_vdir::{client::VdirClient, collection::VdirCollection, item::VdirItemKind, path::VdirPath};
 
@@ -143,16 +145,26 @@ impl VdirBackend {
         Ok(id)
     }
 
-    /// Overwrites `card_id` inside `addressbook_id`. `if_match` is
-    /// ignored: vdir has no entity-tag concept.
+    /// Overwrites `card_id` inside `addressbook_id`.
+    ///
+    /// The item is located first: storing by id writes whatever file name it
+    /// is given, so an unknown id would be created rather than rejected.
+    /// `if_match` is refused rather than ignored, vdir having no entity tag to
+    /// check it against, as on the other backends without one.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
         card_id: &str,
         contents: Vec<u8>,
-        _if_match: Option<&str>,
+        if_match: Option<&str>,
     ) -> Result<CardUpdateOutcome> {
+        if if_match.is_some() {
+            bail!("The vdir backend has no ETag, so it cannot honour If-Match");
+        }
+
         let path = self.addressbook_path(addressbook_id)?;
+        self.inner.locate_item(path.clone(), card_id)?;
+
         self.inner.store_item(
             path,
             Some(card_id.to_string()),
@@ -169,13 +181,23 @@ impl VdirBackend {
         Ok(())
     }
 
-    /// Resolves `addressbook_id` against the home directory, rejecting
-    /// an empty id.
+    /// Resolves `addressbook_id` to an existing collection directory.
+    ///
+    /// A write to a vdir collection creates whatever directory it is handed,
+    /// and a read of a missing one lists nothing, so a path built without
+    /// looking would let a typo in `-k` invent an addressbook on a create and
+    /// read as an empty one on a list.
     fn addressbook_path(&self, addressbook_id: &str) -> Result<VdirPath> {
         if addressbook_id.is_empty() {
             bail!("Addressbook id cannot be empty");
         }
-        Ok(self.inner.root().join(addressbook_id))
+
+        let path = self.inner.root().join(addressbook_id);
+        if !Path::new(path.as_str()).is_dir() {
+            bail!("Addressbook `{addressbook_id}` not found");
+        }
+
+        Ok(path)
     }
 }
 

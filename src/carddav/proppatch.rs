@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Parser;
 use io_webdav::rfc6352::addressbook::CarddavAddressbookPatch;
 use pimalaya_cli::printer::{Message, Printer};
@@ -28,6 +28,10 @@ pub struct CarddavProppatchCommand {
 
 impl CarddavProppatchCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
+        if self.name.is_none() && self.description.is_none() && self.color.is_none() {
+            bail!("Nothing to patch: pass at least one of --name, --description or --color");
+        }
+
         let patch = CarddavAddressbookPatch {
             id: self.id.clone(),
             display_name: self.name.map(Some),

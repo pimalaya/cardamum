@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
 
@@ -35,6 +35,10 @@ impl AddressbookUpdateCommand {
             description: self.description.map(|d| (!d.is_empty()).then_some(d)),
             color: self.color.map(|c| (!c.is_empty()).then_some(c)),
         };
+
+        if patch == AddressbookDiff::default() {
+            bail!("Nothing to update: pass at least one of --name, --description or --color");
+        }
 
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         client.update_addressbook(&addressbook_id, patch)?;

@@ -980,7 +980,7 @@ dependencies = [
 [[package]]
 name = "io-webdav"
 version = "0.1.0"
-source = "git+https://github.com/pimalaya/io-webdav#1b69aaffb731225bcf4a124865920416890027a6"
+source = "git+https://github.com/pimalaya/io-webdav#7d80b90ba3e1691107d17eaec71cec5802ae1b4a"
 dependencies = [
  "anyhow",
  "io-http",
@@ -1379,7 +1379,7 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 [[package]]
 name = "pimalaya-cli"
 version = "0.2.0"
-source = "git+https://github.com/pimalaya/cli#71bc803bfa506a3248105da2586fb8dfb48f774f"
+source = "git+https://github.com/pimalaya/cli#229aae12777e686f9bff96924884c70747bfd2dd"
 dependencies = [
  "anyhow",
  "clap",

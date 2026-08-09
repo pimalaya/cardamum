@@ -2,10 +2,10 @@
 //! addressbook and card operations onto
 //! [`io_webdav::client::WebdavClientStd`] calls (RFC 6352).
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use io_webdav::{
     client::{WebdavClientStd, WebdavClientStdError},
-    rfc4918::send::WebdavSendError,
+    rfc4918::{send::WebdavSendError, summarize_body},
     rfc6352::{
         addressbook::{CarddavAddressbook, CarddavAddressbookPatch},
         card::CarddavCardEntry,
@@ -132,12 +132,13 @@ impl CarddavBackend {
     /// Overwrites `card_id` inside `addressbook_id`, gating on
     /// `if_match` when present (RFC 9110 If-Match).
     ///
-    /// A WebDAV `PUT` is create-or-replace, so without a precondition
-    /// an unknown id would quietly create a card instead of failing.
-    /// The caller's ETag guards against that on its own; when there is
-    /// none, `If-Match: *` stands in, which RFC 9110 §13.1.1 defines as
-    /// "the resource must exist" and the server answers with 412 when
-    /// it does not.
+    /// A WebDAV `PUT` is create-or-replace, so without a precondition an
+    /// unknown id would quietly create a card instead of failing. The
+    /// caller's ETag guards against that on its own; without one, the
+    /// card's current version is read first and its ETag stands in, so
+    /// an unknown id fails on the read rather than creating anything.
+    /// `If-Match: *` would say the same in one request, but iCloud
+    /// answers 412 to the wildcard even for a card that is right there.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
@@ -145,10 +146,20 @@ impl CarddavBackend {
         contents: Vec<u8>,
         if_match: Option<&str>,
     ) -> Result<()> {
-        let if_match = if_match.unwrap_or("*");
+        let if_match = match if_match {
+            Some(etag) => Some(etag.to_string()),
+            None => {
+                self.inner
+                    .read_card(addressbook_id, card_id)
+                    .with_context(|| {
+                        format!("Cannot read the current version of card `{card_id}`")
+                    })?
+                    .etag
+            }
+        };
 
         self.inner
-            .update_card(addressbook_id, card_id, contents, Some(if_match))
+            .update_card(addressbook_id, card_id, contents, if_match.as_deref())
             .map_err(card_write_error)?;
         Ok(())
     }
@@ -188,10 +199,10 @@ fn into_card(addressbook_id: &str, entry: CarddavCardEntry) -> Card {
 /// precondition, RFC 6352 §6.3.2.1). cardamum forwards the vCard
 /// unchanged and never inspects it; this only surfaces the server's own
 /// rejection, since providers disagree on what they accept: most
-/// require a `UID`, and some (e.g. iCloud) require vCard 3.0 with an `N`
-/// property. Every other error passes through untouched.
+/// require a `UID`, and some (e.g. iCloud) also require an `N`. Every
+/// other error passes through untouched.
 fn card_write_error(err: WebdavClientStdError) -> anyhow::Error {
-    let WebdavClientStdError::Send(WebdavSendError::HttpStatus(403, body)) = &err else {
+    let WebdavClientStdError::Send(WebdavSendError::HttpStatus { status: 403, body }) = &err else {
         return err.into();
     };
 
@@ -203,27 +214,10 @@ fn card_write_error(err: WebdavClientStdError) -> anyhow::Error {
     anyhow!(
         "The server rejected the vCard as invalid. cardamum sends the vCard \
          you provide unchanged, and providers disagree on what they accept: \
-         most require a UID property, and some (e.g. iCloud) require vCard 3.0 \
-         with an N property. Server response: {}",
-        server_detail(body)
+         most require a UID property, and some (e.g. iCloud) also require an N \
+         property. Server response: {}",
+        summarize_body(body)
     )
-}
-
-/// Extracts the human-readable text of a DAV `<responsedescription>`
-/// from a server error body, falling back to the trimmed body. This
-/// reads the server's own error response, not the vCard.
-fn server_detail(body: &str) -> String {
-    if let Some(open) = body.find("responsedescription>") {
-        let rest = &body[open + "responsedescription>".len()..];
-        if let Some(close) = rest.find("</") {
-            let text = rest[..close].trim();
-            if !text.is_empty() {
-                return text.to_string();
-            }
-        }
-    }
-
-    body.trim().to_string()
 }
 
 /// Generates a fresh CardDAV card resource name (a random UUIDv4 plus

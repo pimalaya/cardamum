@@ -16,6 +16,12 @@ The shared adapters SHALL cover, per backend: `list_addressbooks`, `create_addre
 ### Requirement: Network backends
 CardDAV, JMAP, Microsoft Graph and Google People SHALL each adapt their io-* high-level client. CardDAV reuses io-webdav's addressbook and card verbs over the resolved addressbook home set. JMAP reuses io-jmap's RFC 9610 `AddressBook` and `ContactCard` methods. Microsoft Graph maps contact folders to addressbooks over io-msgraph's `contact_folders` / `contacts` surface. Google People maps contact groups to addressbooks over io-people's `contactGroups` / `people` surface.
 
+### Requirement: A shared update never creates
+The shared `card update` and `addressbook update` SHALL fail when the target does not exist, rather than creating it. On a backend whose write verb is create-or-replace (CardDAV `PUT`), the adapter SHALL add the existence precondition the protocol offers (`If-Match: *`, RFC 9110 §13.1.1) whenever the caller supplied no stricter one. A protocol-specific command SHALL keep its verb's native semantics instead: `carddav put` stays create-or-replace, gated only by the preconditions the caller passes.
+
+### Requirement: Clearing an optional field removes it
+A shared update SHALL distinguish "leave this field untouched" from "clear this field", and SHALL carry the difference all the way to the wire: on CardDAV a cleared property leaves as a `DAV:remove` instruction (RFC 4918 §9.2), never as an omitted `DAV:set`. A backend that cannot express removal SHALL report that rather than accept the request and drop it. The adapter SHALL forward the diff as such, never reading the current state to merge unchanged fields by hand.
+
 ### Requirement: Card ids are backend-native and verbatim
 A card's shared `id` SHALL be the backend's own identifier, used verbatim end to end: the last path segment of the resource href (CardDAV), the file stem (vdir), the `ContactCard` id (JMAP), the contact id (Graph), the person id (People), or the store-assigned public `seq` (pimdir). No adapter SHALL add or strip a file extension when addressing a resource. CardDAV names a new card `<uuid>.vcf` itself and passes the whole name through, since the server owns the resource name from then on.
 

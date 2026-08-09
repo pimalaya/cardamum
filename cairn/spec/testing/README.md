@@ -32,6 +32,10 @@ Every backend pairs a **shared** run (the cross-protocol `addressbook` and `card
 
 ## Status
 
-Every bug surfaced by these runs was fixed in-tree or upstream. The CardDAV runs drove the io-webdav resource-id fix (a card's id is now the server-returned last path segment, verbatim, with no extension added or stripped), confirmed on three servers. The JMAP run drove the move of the JSContact projection from calcard to vcard-rs, since calcard's non-standard `vCard` container was rejected by Fastmail.
+Most bugs surfaced by these runs were fixed in-tree or upstream. The CardDAV runs drove the io-webdav resource-id fix (a card's id is now the server-returned last path segment, verbatim, with no extension added or stripped), confirmed on three servers. The JMAP run drove the move of the JSContact projection from calcard to vcard-rs, since calcard's non-standard `vCard` container was rejected by Fastmail.
+
+The 2026-08-09 Fastmail re-run drove two more: `card update` on an absent id used to create the card, since an unguarded WebDAV `PUT` is create-or-replace (F5), and `addressbook update -d "" / -C ""` was a no-op because io-webdav's addressbook PROPPATCH had no `DAV:remove` path (F4). Both are fixed and re-verified live; see the [carddav-write-guards](../../log/2026-08-09-carddav-write-guards.md) log entry.
+
+The same run also found `carddav mkcol` and `carddav proppatch` leaking the `CarddavAddressbook` type name into their success message (S1), fixed the same day. Only the cosmetic observations listed in each report remain open.
 
 Not yet run: the pimdir backend, which needs a store populated by a Neverest sync (see [backends.md](../backends.md) for what a run has to cover: the availability-aware read path and the staged-write path both need a real synced store).

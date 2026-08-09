@@ -40,7 +40,7 @@ impl CarddavMkcolCommand {
         client.create_addressbook(&wire)?;
 
         printer.out(Message::new(format!(
-            "CarddavAddressbook `{}` successfully created",
+            "Addressbook `{}` successfully created",
             self.id
         )))
     }

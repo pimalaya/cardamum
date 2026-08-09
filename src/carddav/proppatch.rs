@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::Parser;
-use io_webdav::rfc6352::addressbook::CarddavAddressbook;
+use io_webdav::rfc6352::addressbook::CarddavAddressbookPatch;
 use pimalaya_cli::printer::{Message, Printer};
 
 use crate::carddav::client::CarddavClient;
@@ -28,19 +28,17 @@ pub struct CarddavProppatchCommand {
 
 impl CarddavProppatchCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
-        let wire = CarddavAddressbook {
+        let patch = CarddavAddressbookPatch {
             id: self.id.clone(),
-            display_name: self.name,
-            description: self.description,
-            color: self.color,
-            ctag: None,
-            sync_token: None,
+            display_name: self.name.map(Some),
+            description: self.description.map(Some),
+            color: self.color.map(Some),
         };
 
-        client.update_addressbook(&wire)?;
+        client.update_addressbook(&patch)?;
 
         printer.out(Message::new(format!(
-            "CarddavAddressbook `{}` properties successfully patched",
+            "Addressbook `{}` properties successfully patched",
             self.id
         )))
     }

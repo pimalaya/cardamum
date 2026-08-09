@@ -2,14 +2,13 @@
 name = "cardamum"
 description = "CLI to manage contacts"
 version = "0.2.0"
-authors = ["soywod <clement.douin@posteo.net>"]
+authors = ["Clément DOUIN (soywod) <clement.douin@posteo.net>"]
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
 categories = ["command-line-utilities"]
 keywords = ["cli", "contact", "carddav", "jmap", "vdir"]
 homepage = "https://pimalaya.org"
-documentation = "https://github.com/pimalaya/cardamum"
 repository = "https://github.com/pimalaya/cardamum"
 
 [package.metadata.docs.rs]

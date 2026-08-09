@@ -53,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed a 404 when connecting to a CardDAV server whose discovery (PACC or RFC 6764) hands back a bare origin rather than the context root (fastmail serves contacts under `/dav/` and 404s everything else). The client now probes `.well-known/carddav` and follows its redirect before the principal walk whenever the resolved server path is `/`, mirroring the cardamum-android behaviour.
 - Fixed the raw OS error (`No such file or directory`) surfaced by the vdir-specific `rename` / `delete` (and now `item`) commands when the collection does not exist; they bail with "Collection `<name>` not found" instead.
 - Fixed `carddav discover` failing outright on a `home`-configured account (e.g. iCloud), where the principal is never resolved: it now reports each endpoint best-effort, showing `principal: (unresolved)` instead of erroring.
+- Fixed `card update` creating a card when the given id does not exist, instead of failing: a WebDAV `PUT` is create-or-replace, so on CardDAV the update now carries `If-Match: *` (the resource must exist) when you pass no `--if-match` of your own. An unknown id is rejected by the server and nothing is written. The raw `carddav put` stays create-or-replace, which is what that protocol verb means.
+- Fixed `addressbook update --description ""` and `--color ""` silently doing nothing on CardDAV although the help documents `""` as the way to clear a property. A cleared property is now sent as a PROPPATCH `DAV:remove` instruction; properties you do not pass are still left untouched.
 
 ## [0.1.0] - 2025-10-24
 

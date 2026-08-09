@@ -6,7 +6,10 @@ use anyhow::{Result, anyhow, bail};
 use io_webdav::{
     client::{WebdavClientStd, WebdavClientStdError},
     rfc4918::send::WebdavSendError,
-    rfc6352::{addressbook::CarddavAddressbook, card::CarddavCardEntry},
+    rfc6352::{
+        addressbook::{CarddavAddressbook, CarddavAddressbookPatch},
+        card::CarddavCardEntry,
+    },
 };
 
 use crate::{
@@ -64,34 +67,20 @@ impl CarddavBackend {
         Ok(name.to_string())
     }
 
-    /// Applies `patch` to the addressbook identified by `id`, merging
-    /// it against the current collection properties.
+    /// Applies `patch` to the addressbook identified by `id`.
+    ///
+    /// The diff maps one-to-one onto a `PROPPATCH`: a field left unset
+    /// is absent from the request and keeps its server value, while a
+    /// cleared one leaves as a `DAV:remove` instruction.
     pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
-        let addressbooks = self.inner.list_addressbooks()?;
-        let current = addressbooks
-            .into_iter()
-            .find(|addressbook| addressbook.id == id)
-            .ok_or_else(|| anyhow::anyhow!("Addressbook `{id}` not found"))?;
-
-        let next = CarddavAddressbook {
+        let patch = CarddavAddressbookPatch {
             id: id.to_string(),
-            display_name: match patch.name {
-                Some(name) => Some(name),
-                None => current.display_name,
-            },
-            description: match patch.description {
-                Some(description) => description,
-                None => current.description,
-            },
-            color: match patch.color {
-                Some(color) => color,
-                None => current.color,
-            },
-            ctag: None,
-            sync_token: None,
+            display_name: patch.name.map(Some),
+            description: patch.description,
+            color: patch.color,
         };
 
-        self.inner.update_addressbook(&next)?;
+        self.inner.update_addressbook(&patch)?;
         Ok(())
     }
 
@@ -142,6 +131,13 @@ impl CarddavBackend {
 
     /// Overwrites `card_id` inside `addressbook_id`, gating on
     /// `if_match` when present (RFC 9110 If-Match).
+    ///
+    /// A WebDAV `PUT` is create-or-replace, so without a precondition
+    /// an unknown id would quietly create a card instead of failing.
+    /// The caller's ETag guards against that on its own; when there is
+    /// none, `If-Match: *` stands in, which RFC 9110 §13.1.1 defines as
+    /// "the resource must exist" and the server answers with 412 when
+    /// it does not.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
@@ -149,8 +145,10 @@ impl CarddavBackend {
         contents: Vec<u8>,
         if_match: Option<&str>,
     ) -> Result<()> {
+        let if_match = if_match.unwrap_or("*");
+
         self.inner
-            .update_card(addressbook_id, card_id, contents, if_match)
+            .update_card(addressbook_id, card_id, contents, Some(if_match))
             .map_err(card_write_error)?;
         Ok(())
     }

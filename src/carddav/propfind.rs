@@ -20,7 +20,7 @@ use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
 /// [{"id", "etag"}]}` (with arg).
 #[derive(Debug, Parser)]
 pub struct CarddavPropfindCommand {
-    /// CarddavAddressbook to enumerate; omit to list the addressbook
+    /// Addressbook to enumerate; omit to list the addressbook
     /// collections under the home-set.
     #[arg(value_name = "ADDRESSBOOK")]
     pub addressbook_id: Option<String>,

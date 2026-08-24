@@ -7,7 +7,7 @@ created: 2026-08-09
 
 # Google People: a count that was never asked for, an error page, and an update that keeps what it says it dropped
 
-Three findings from the 2026-08-09 Google People run ([google-people.md](../../spec/testing/google-people.md), [people-specific.md](../../spec/testing/people-specific.md)).
+Three findings from the 2026-08-09 Google People run ([google-people.md](../../../spec/testing/google-people.md), [people-specific.md](../../../spec/testing/people-specific.md)).
 
 **S2: `contact-group list` reports a member count of 0 for every group.** A group holding one contact lists as `MEMBERS 0` while `contact-group get` on the same id reports `memberCount: 1`. Google's `contactGroups.list` returns `memberCount` only when the `groupFields` mask asks for it, and the list call passes an empty mask, so the absent value renders as zero, reading as fact rather than as "not asked".
 

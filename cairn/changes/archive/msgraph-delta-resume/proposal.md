@@ -7,7 +7,7 @@ created: 2026-08-09
 
 # `contact delta` promises a resume it cannot do
 
-The 2026-08-09 Microsoft Graph run ([msgraph-specific.md](../../spec/testing/msgraph-specific.md)) found `msgraph contact delta` advertising, in its own help, "Feed the returned `@odata.deltaLink` back to resume". Its only flags are `--folder` and `--select`, so there is nowhere to put the link: every call starts a fresh round, and the incremental half of the incremental sync is unreachable from the command whose headline it is.
+The 2026-08-09 Microsoft Graph run ([msgraph-specific.md](../../../spec/testing/msgraph-specific.md)) found `msgraph contact delta` advertising, in its own help, "Feed the returned `@odata.deltaLink` back to resume". Its only flags are `--folder` and `--select`, so there is nowhere to put the link: every call starts a fresh round, and the incremental half of the incremental sync is unreachable from the command whose headline it is.
 
 The capability exists underneath: passing the link to `msgraph request get <deltaLink>` returns exactly what changed since, which is how the resume was verified during the run. What is missing is the flag, and, under it, an io-msgraph constructor: `MsgraphContactsDelta::new` only ever builds the opening URL of a round.
 

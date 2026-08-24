@@ -34,14 +34,18 @@ impl AccountCheckCommand {
         let mut config = match Config::from_paths_or_default(config_paths)? {
             Some(config) => config,
             None => bail!(
-                "No configuration found. Run bare `cardamum` to launch the wizard \
-                 and generate one."
+                "No configuration found at {}, run `cardamum configure` to generate one",
+                Config::target_path(config_paths)?.display(),
             ),
         };
 
         let (name, account_config) = config
             .take_account(account_name)?
-            .ok_or_else(|| anyhow::anyhow!("Cannot find account"))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "No default account found, name one with `-a <NAME>` or mark one with `default = true`"
+                )
+            })?;
 
         let mut report = CheckReport {
             account: name,

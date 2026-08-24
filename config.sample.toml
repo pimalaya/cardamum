@@ -159,6 +159,10 @@ jmap.auth.bearer.token.command = "ortie token show"
 #jmap.tls.provider = "rustls"
 #jmap.tls.rustls.crypto = "ring"
 
+# ALPN identifiers offered during the TLS handshake, `[]` to skip the
+# negotiation. Rustls only; native-tls ignores them.
+#jmap.alpn = ["http/1.1"]
+
 # --------------------------------------------------------------------------------
 # Microsoft Graph backend
 #
@@ -171,6 +175,9 @@ jmap.auth.bearer.token.command = "ortie token show"
 msgraph.auth.token.command = "ortie token show"
 #msgraph.auth.token.raw = "oauth2-token"
 
+#msgraph.tls.provider = "rustls"
+#msgraph.alpn = ["http/1.1"]
+
 # --------------------------------------------------------------------------------
 # Google People backend
 #
@@ -180,3 +187,6 @@ msgraph.auth.token.command = "ortie token show"
 [accounts.people-example]
 people.auth.token.command = "ortie token show"
 #people.auth.token.raw = "oauth2-token"
+
+#people.tls.provider = "rustls"
+#people.alpn = ["http/1.1"]

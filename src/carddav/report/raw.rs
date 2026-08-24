@@ -47,7 +47,7 @@ impl CarddavReportRawCommand {
         let home = client
             .addressbook_home_set
             .clone()
-            .ok_or_else(|| anyhow!("addressbook home-set is not resolved"))?;
+            .ok_or_else(|| anyhow!("Addressbook home-set is not resolved"))?;
         let path = format!(
             "{}/{}",
             home.path().trim_end_matches('/'),

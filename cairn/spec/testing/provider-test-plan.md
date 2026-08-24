@@ -107,7 +107,7 @@ After delete, **list (or read) to confirm the card is truly gone**, not just rep
 - **UID handling**: does the server require a `UID`? Does the backend mint one when absent, and is the vCard `UID` the same as the resource id?
 - **vCard version**: which version the server stores/returns (a 4.0 write may come back as 3.0).
 - **Metadata clearing**: whether `addressbook update -d "" / -C ""` actually removes the property or is a no-op.
-- **Custom-data stash**: on the API backends (Graph, People), whether properties with no provider slot survive a round-trip (see [../custom-data.md](../custom-data.md)).
+- **Custom-data stash**: on the API backends (Graph, People), whether properties with no provider slot survive a round-trip (see [../projection.md](../projection.md)).
 - **Default addressbook**: whether omitting `-k` falls back to `addressbook.default`, and whether that is safe to test against.
 
 ## Cleanup

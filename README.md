@@ -8,20 +8,8 @@ CLI to manage contacts, written in Rust
 ## Table of contents
 
 - [Features](#features)
-- [RFC coverage](#rfc-coverage)
 - [Installation](#installation)
-  - [Pre-built binary](#pre-built-binary)
-  - [Cargo](#cargo)
-  - [Nix](#nix)
-  - [Sources](#sources)
 - [Configuration](#configuration)
-  - [Apple](#apple)
-  - [Google](#google)
-  - [Microsoft](#microsoft)
-  - [Fastmail](#fastmail)
-  - [Posteo](#posteo)
-  - [Proton](#proton)
-  - [Local addressbooks](#local-addressbooks)
 - [Usage](#usage)
 - [AI policy](https://github.com/pimalaya/.github/blob/master/AI_POLICY.md)
 - [License](#license)
@@ -50,36 +38,6 @@ CLI to manage contacts, written in Rust
 
 > [!TIP]
 > Each backend sits behind its own cargo feature. `carddav`, `jmap`, `msgraph`, `people` and `vdir` are enabled by default, `pimdir` is opt-in. Build with `--no-default-features` and pick the ones you need.
-
-## RFC coverage
-
-| RFC    | What is covered                                                                              |
-|--------|----------------------------------------------------------------------------------------------|
-| [6352] | CardDAV: address book collections, address object resources, and the `addressbook-query` and `addressbook-multiget` REPORTs |
-| [4918] | WebDAV: the `PROPFIND`, `PROPPATCH`, `MKCOL`, `GET`, `PUT` and `DELETE` methods CardDAV builds on |
-| [5397] | Current-user-principal, the first step of the CardDAV discovery walk                          |
-| [6578] | Collection synchronization: the `sync-collection` REPORT and the sync token a listing reports |
-| [6764] | CardDAV service discovery: the `_carddav` and `_carddavs` SRV records, and `.well-known/carddav` |
-| [6350] | vCard: the contact format read, written and rendered by every backend                        |
-| [8620] | JMAP: the session resource, its `.well-known/jmap` discovery and the request and response envelope |
-| [9610] | JMAP contacts: the `AddressBook` and `ContactCard` types, their `changes` and their `copy`    |
-| [9555] | JSContact, the JMAP contact model, converted to and from vCard                                |
-| [7617] | HTTP Basic authentication                                                                     |
-| [6750] | HTTP Bearer authentication, for a provider-issued or broker-refreshed API token               |
-
-[4918]: https://www.rfc-editor.org/rfc/rfc4918
-[5397]: https://www.rfc-editor.org/rfc/rfc5397
-[6350]: https://www.rfc-editor.org/rfc/rfc6350
-[6352]: https://www.rfc-editor.org/rfc/rfc6352
-[6578]: https://www.rfc-editor.org/rfc/rfc6578
-[6750]: https://www.rfc-editor.org/rfc/rfc6750
-[6764]: https://www.rfc-editor.org/rfc/rfc6764
-[7617]: https://www.rfc-editor.org/rfc/rfc7617
-[8620]: https://www.rfc-editor.org/rfc/rfc8620
-[9555]: https://www.rfc-editor.org/rfc/rfc9555
-[9610]: https://www.rfc-editor.org/rfc/rfc9610
-
-Microsoft Graph and Google People are provider APIs rather than RFCs: their contact resources are covered through the [Graph contact](https://learn.microsoft.com/en-us/graph/api/resources/contact) and [People](https://developers.google.com/people) references.
 
 ## Installation
 
@@ -143,13 +101,11 @@ The configuration is loaded from the first existing path among:
 - `$HOME/.config/cardamum/config.toml`
 - `$HOME/.cardamumrc`
 
-Override the path with `cardamum -c <PATH>` or `CARDAMUM_CONFIG=<PATH>`. Multiple paths can be passed at once, separated by `:`; the first is the base and the rest are deep-merged on top, which is how a public configuration and a private one stay separate files. The full field reference lives in [config.sample.toml](./config.sample.toml).
+Override the path with `cardamum -c <PATH>` or `CARDAMUM_CONFIG=<PATH>`, `:`-separated to deep-merge several files on top of the first. The full field reference lives in [config.sample.toml](./config.sample.toml).
 
-Run `cardamum configure` to launch the wizard, which a bare `cardamum` also offers when it finds no configuration. It asks one question, taking an email address, a server URL, or a local folder path, and the shape of what you type decides the rest. An address is discovered: every reachable service is offered, and picking one prompts only how to authenticate against it. A URL discovers from its host, its scheme narrowing the results. A folder is detected as a vdir home or a pimdir store. The wizard tests the account, then writes it into your configuration file, appending an `[accounts.<name>]` block when one is already there.
+`cardamum configure` generates an account, and a bare `cardamum` offers it when it finds no configuration. It asks one question, taking an email address, a server URL or a local folder path, discovers what it can, tests the account, then writes it here, appending an `[accounts.<name>]` block when one is already there. What it cannot discover it does not ask for: a self-hosted server publishing no discovery record is written by hand.
 
-What it cannot discover it does not ask for: a self-hosted server publishing no discovery record is written by hand, against the sample above. Credentials come from an OS keyring (`secret-tool`, `kwallet-query`, `security`, `pass`), a token broker such as [Ortie](https://github.com/pimalaya/ortie), any custom command, or a raw value in the file. Cardamum reads secrets but never issues or refreshes them, so a provider requiring OAuth 2.0 needs a broker to keep its token fresh.
-
-Ready-made blocks for common providers follow.
+Secrets come from an OS keyring, a token broker such as [Ortie](https://github.com/pimalaya/ortie), any command or a raw value. Cardamum reads them but never issues or refreshes them, so a provider on OAuth 2.0 needs a broker. Ready-made blocks for common providers follow.
 
 ### Apple
 

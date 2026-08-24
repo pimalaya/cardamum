@@ -7,7 +7,7 @@ created: 2026-08-09
 
 # Guard a CardDAV update with the card's ETag, not with the wildcard
 
-The [carddav-write-guards](../archive/carddav-write-guards/proposal.md) change stopped `card update` from creating a card under an unknown id by sending `If-Match: *`, which RFC 9110 §13.1.1 defines as "the resource must exist". Fastmail honours it. The 2026-08-09 iCloud run found that iCloud does not: it answers `412 Persist Error` to a wildcard `If-Match` even when the resource is right there, so every `card update` on iCloud now fails.
+The [carddav-write-guards](../carddav-write-guards/proposal.md) change stopped `card update` from creating a card under an unknown id by sending `If-Match: *`, which RFC 9110 §13.1.1 defines as "the resource must exist". Fastmail honours it. The 2026-08-09 iCloud run found that iCloud does not: it answers `412 Persist Error` to a wildcard `If-Match` even when the resource is right there, so every `card update` on iCloud now fails.
 
 Isolated against the live server: an update carrying an explicit correct ETag succeeds, a raw `carddav put --if-match '*'` on an existing card fails with 412, and the same put unguarded succeeds. The wildcard is the only thing iCloud refuses.
 

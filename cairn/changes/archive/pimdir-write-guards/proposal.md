@@ -7,7 +7,7 @@ created: 2026-08-09
 
 # pimdir: a rename that renames the wrong thing, and three writes that never look first
 
-The 2026-08-09 pimdir run ([pimdir-local.md](../../spec/testing/pimdir-local.md)) found four defects, all on the shared arm.
+The 2026-08-09 pimdir run ([pimdir-local.md](../../../spec/testing/pimdir-local.md)) found four defects, all on the shared arm.
 
 **PD1: `addressbook update -n <name>` rewrites the collection's id.** io-pimdir's `rename_collection(collection, new_id)` renames the identifier, as its parameter says; the backend calls it with the display name. So `-n "Contacts"` leaves `{"id": "Contacts", "name": "contacts"}`, every card stranded under an id nobody typed, and the account's `addressbook.default` matching nothing, so a plain `card list` reports zero contacts.
 

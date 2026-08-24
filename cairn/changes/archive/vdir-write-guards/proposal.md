@@ -7,7 +7,7 @@ created: 2026-08-09
 
 # vdir: writing through to the filesystem without looking first
 
-The 2026-08-09 vdir run ([vdir-local.md](../../spec/testing/vdir-local.md)) found the specific surface clean and six defects on the shared one. Four are the local twins of what the network backends were fixed for the same day, and two were carried over from July.
+The 2026-08-09 vdir run ([vdir-local.md](../../../spec/testing/vdir-local.md)) found the specific surface clean and six defects on the shared one. Four are the local twins of what the network backends were fixed for the same day, and two were carried over from July.
 
 **V5: `card update <absent-id>` creates the file.** The shared update calls `store_item` with whatever id it is given, so `card update -k contacts absent-id …` writes `absent-id.vcf` and reports success. The specific `vdir item update` on the same id fails properly, so the shared path is the outlier: this is CardDAV's F5 on a filesystem.
 

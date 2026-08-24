@@ -396,10 +396,10 @@ impl PimdirBackend {
                     arg = Some(ReplicaArg::Write);
                 }
                 ReplicaCoroutineState::Yielded(_) => {
-                    bail!("pimdir mutate asked for an unexpected step");
+                    bail!("Unexpected step in the pimdir mutate coroutine");
                 }
                 ReplicaCoroutineState::Complete(result) => {
-                    return result.map_err(|err| anyhow!("pimdir mutate failed: {err}"));
+                    return result.map_err(|err| anyhow!("Stage the pimdir mutation: {err}"));
                 }
             }
         }

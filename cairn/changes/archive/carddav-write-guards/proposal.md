@@ -7,7 +7,7 @@ created: 2026-08-09
 
 # CardDAV write guards: update means update, clearing means clearing
 
-The 2026-08-09 Fastmail re-run ([carddav-fastmail.md](../../spec/testing/carddav-fastmail.md)) left two defects standing, both on the write path, both making a command claim it did something it did not do.
+The 2026-08-09 Fastmail re-run ([carddav-fastmail.md](../../../spec/testing/carddav-fastmail.md)) left two defects standing, both on the write path, both making a command claim it did something it did not do.
 
 **F5: `card update` on an absent id fabricates a card.** `cardamum card update -k <book> <absent-id> '<vcard>'` prints "successfully updated", exits 0, and the card shows up in `card list`. Nothing was replaced. The cause is that io-webdav's `CarddavCardUpdate` issues a plain `PUT` with no precondition, and an unconditional WebDAV `PUT` is create-or-replace (RFC 4918 §9.7). The shared `card` API distinguishes `create` from `update` and its own help says "Replace the bytes of an existing vCard", so silently creating is wrong twice over: it contradicts the contract, and it turns a typo into data.
 

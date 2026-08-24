@@ -363,9 +363,9 @@ fn card_write_error(verb: &str, err: &JmapContactCardSetItemError, unmapped: &[S
 
     let hint = "This server refuses the standard `vCardProps` member, where a vCard property JSContact cannot model is preserved";
     match unmapped {
-        [] => anyhow!("{msg}. {hint}."),
+        [] => anyhow!("{msg}. {hint}"),
         names => anyhow!(
-            "{msg}. {hint}; the card carries {}, which JMAP has no home for on this server.",
+            "{msg}. {hint}; the card carries {}, which JMAP has no home for on this server",
             names.join(", ")
         ),
     }

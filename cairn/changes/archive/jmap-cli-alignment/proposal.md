@@ -7,7 +7,7 @@ created: 2026-08-09
 
 # Align the JMAP CLI with Himalaya, and stop leaking internals through it
 
-The 2026-08-09 Fastmail JMAP run ([jmap-fastmail.md](../../spec/testing/jmap-fastmail.md), [jmap-specific.md](../../spec/testing/jmap-specific.md)) found one command that cannot run at all and a handful of places where an internal shape reaches the user.
+The 2026-08-09 Fastmail JMAP run ([jmap-fastmail.md](../../../spec/testing/jmap-fastmail.md), [jmap-specific.md](../../../spec/testing/jmap-specific.md)) found one command that cannot run at all and a handful of places where an internal shape reaches the user.
 
 **S4: `jmap contact-card copy` aborts before doing anything.** It declares `--from-account` with `short = 'a'`, which collides with the global `-a/--account`. In a debug build clap asserts and the process dies with exit 101; in a release build, where those assertions are compiled out, the duplicate short is simply ambiguous. The command has therefore never run. Himalaya's twin (`jmap email copy`) already has the argument model to copy: ids positional and repeatable, everything else long-only.
 

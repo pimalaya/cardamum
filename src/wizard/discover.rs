@@ -98,15 +98,12 @@ pub fn run() -> Result<(String, AccountConfig)> {
         bail!("Empty input: enter an email address, a server URL, or a folder path");
     }
 
-    // NOTE: the account name is just the TOML table key, so it is derived
-    // from the input rather than prompted; the user renames it by hand.
     let account_name = default_account_name(input);
     let (account, tested) = build_account(&account_name, input)?;
 
-    // Test the account before printing it: a bad credential or endpoint
-    // fails here and stops the process, like any other error, rather
-    // than emitting a config that cannot connect. A flow that already
-    // validated its connection inline skips the redundant round-trip.
+    // NOTE: testing here stops a bad credential or endpoint from
+    // yielding an account that cannot connect. A flow validating its
+    // connection inline skips the redundant round-trip.
     if !tested {
         let spinner = Spinner::start("Testing account configuration");
         if let Err(err) = check::test_account(&account) {
@@ -184,9 +181,6 @@ fn build_account(account_name: &str, input: &str) -> Result<(AccountConfig, bool
 /// prompt). When nothing is discovered the wizard stops rather than
 /// prompting for a hand-entered config (see [`stop_undiscovered`]).
 fn configure_discovery(account_name: &str, input: &str) -> Result<Outcome> {
-    // A `scheme://host` URL discovers from its host, and its scheme
-    // narrows the results; an email or bare domain discovers from the
-    // domain with no scheme filter.
     let (email, scheme) = if input.contains("://") {
         let url = Url::parse(input).with_context(|| format!("Invalid server URL `{input}`"))?;
         let host = url.host_str().unwrap_or_default().to_string();
@@ -365,10 +359,8 @@ mod tests {
 
     #[test]
     fn account_name_defaults_to_the_first_domain_label() {
-        // Email: the domain's first label, never the local part.
         assert_eq!(default_account_name("clement.douin@posteo.net"), "posteo");
         assert_eq!(default_account_name("alice@mail.example.co.uk"), "mail");
-        // Bare domain (as discovery synthesizes it) and plain domain.
         assert_eq!(default_account_name("@posteo.net"), "posteo");
         assert_eq!(default_account_name("posteo.net"), "posteo");
     }

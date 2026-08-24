@@ -1,20 +1,15 @@
-//! pimdir arm of the shared-API client: glue mapping the shared addressbook
-//! and card operations onto a local [pimdir](https://github.com/pimalaya/pimdir)
-//! store.
+//! pimdir arm of the shared-API client: glue mapping the shared
+//! addressbook and card operations onto a local pimdir store.
 //!
-//! Reads project [`io_pimdir`]'s client read API (`list_collections`,
-//! `list_items_page_asc`, `get_item`, `count_items`) plus the blob store,
-//! building cards from the stored `v: 1` summary (pimdir SPEC Annex A). A card
-//! whose body is not local (`level < Full`) still lists; [`get_card`] reports
-//! "body not fetched" rather than an error, the cue to sync.
+//! Reads build cards from the stored `v: 1` summary (pimdir SPEC Annex
+//! A) plus the blob store. A card whose body is not local still lists,
+//! and reading it reports "body not fetched" rather than erroring.
 //!
-//! [`get_card`]: PimdirBackend::get_card
-//!
-//! Writes stage io-replica [`ReplicaMutation`]s through the store's mutate
-//! seam (never raw SQL), so the next sync derives and pushes them. A write is
-//! attributed to the client's configured source; it fails loudly when the
-//! store was not synced as that source (no binding for the card), rather than
-//! silently staging a change no sync will carry.
+//! Writes stage io-replica [`ReplicaMutation`]s through the store's
+//! mutate seam, never raw SQL, so the next sync derives and pushes them.
+//! A write is attributed to the configured source, and fails loudly when
+//! the store was not synced as that source rather than silently staging
+//! a change no sync will carry.
 
 use anyhow::{Result, anyhow, bail};
 use io_pimdir::PimdirItem;

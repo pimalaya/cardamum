@@ -133,9 +133,9 @@ mod tests {
     fn to_jscontact_emits_no_non_standard_vcard_container() {
         let card = to_jscontact(VCARD).unwrap();
 
-        // vcard-rs preserves unmapped properties under the standard
-        // `vCardProps` member; it never emits calcard's non-standard
-        // top-level `vCard` object that strict servers reject.
+        // NOTE: unmapped properties belong under the standard
+        // `vCardProps` member, never a top-level `vCard` object, which
+        // strict servers reject.
         assert!(!card.contains_key("vCard"), "{card:?}");
     }
 

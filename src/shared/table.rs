@@ -22,13 +22,13 @@ const COMPONENTS: usize = 19;
 /// `TableComponent` enum:
 ///
 /// ```text
-///  0 left border           7 right header intersection   14 bottom border intersections
-///  1 right border          8 vertical lines              15 top left corner
-///  2 top border            9 horizontal lines            16 top right corner
-///  3 bottom border        10 middle intersections        17 bottom left corner
-///  4 left header inters.  11 left border intersections   18 bottom right corner
-///  5 header lines         12 right border intersections
-///  6 middle header inters. 13 top border intersections
+///  0 left border           7 right header inters.  14 bottom border inters.
+///  1 right border          8 vertical lines       15 top left corner
+///  2 top border            9 horizontal lines     16 top right corner
+///  3 bottom border        10 middle inters.      17 bottom left corner
+///  4 left header inters.  11 left border inters.  18 bottom right corner
+///  5 header lines         12 right border inters.
+///  6 middle header inters. 13 top border inters.
 /// ```
 ///
 /// A space means "don't draw this component", and so does a component
@@ -84,10 +84,6 @@ mod tests {
 
     use super::{DEFAULT_PRESET, style_from_preset};
 
-    // The v7 preset strings, mapped against the v8 constants they were
-    // replaced by. Equality across all six line styles proves the
-    // character-to-builder-slot mapping.
-
     #[test]
     fn utf8_full_matches_upstream() {
         let preset = "││──╞═╪╡┆╌┼├┤┬┴┌┐└┘";
@@ -127,8 +123,6 @@ mod tests {
 
     #[test]
     fn missing_components_draw_nothing() {
-        // A short string leaves the remaining components unset, exactly
-        // as an explicit run of spaces would.
         assert_eq!(
             style_from_preset("││──"),
             style_from_preset("││──               ")

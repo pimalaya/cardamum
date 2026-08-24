@@ -15,14 +15,11 @@ pub struct Addressbook {
     /// last URL segment (CardDAV), AddressBook id (JMAP), contact
     /// folder id (Graph) or contact group id (Google).
     pub id: String,
-
     /// Human-readable display name.
     pub name: String,
-
     /// Free-form description, when the backend exposes it.
     #[serde(default)]
     pub description: Option<String>,
-
     /// ASCII `#RRGGBB` color marker, when the backend exposes it.
     #[serde(default)]
     pub color: Option<String>,

@@ -1,11 +1,9 @@
-//! Cross-protocol [`AddressbookClient`] for the shared subcommands
-//! (`addressbooks`, `cards`).
+//! Cross-protocol [`AddressbookClient`] for the shared `addressbook`
+//! and `card` commands.
 //!
-//! One variant per compiled-in backend (vdir, CardDAV, JMAP, Microsoft
-//! Graph, Google People); a value always holds exactly one. Each
-//! shared-API method dispatches to the active backend's matching
-//! method; the per-backend glue lives in each protocol module's
-//! backend submodule.
+//! One variant per compiled-in backend, a value always holding exactly
+//! one. Each shared-API method dispatches to the active backend, the
+//! glue living in each protocol module's backend submodule.
 
 use anyhow::{Result, bail};
 

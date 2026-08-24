@@ -26,10 +26,9 @@ impl PimdirClient {
     /// app writes as it with no configuration; otherwise it falls back to
     /// `local`.
     pub fn new(config: PimdirConfig) -> Result<Self> {
-        // Expand `~` and env vars: `root` is a `PathBuf` that carries the raw
-        // `~/…` verbatim, and opening it unexpanded would silently create an
-        // empty store at a literal `./~/…` relative to the cwd (an empty
-        // addressbook list), not the intended home-relative one.
+        // NOTE: `root` carries a raw `~/…` verbatim, and opening it
+        // unexpanded would silently create an empty store at a literal
+        // `./~/…` relative to the cwd.
         let root = shellexpand::full(&config.root.to_string_lossy())
             .map(|expanded| PathBuf::from(expanded.into_owned()))
             .unwrap_or_else(|_| config.root.clone());
@@ -42,7 +41,6 @@ impl PimdirClient {
         let source = match config.source.clone() {
             Some(source) => source,
             None => {
-                // Peek the store's sources (source-independent) to pick one.
                 let probe = open("probe")?;
                 match probe.distinct_sources()?.as_slice() {
                     [only] => only.clone(),

@@ -1,23 +1,20 @@
 //! Command generating an account.
 //!
 //! The wizard generates, it never edits: it discovers an account from
-//! one prompt (see [`super::discover`]), tests it, then hands the
-//! resulting `[accounts.<name>]` table back as a file to create, a block
-//! to append, or a document on stdout. Everything discovery does not
-//! cover is written by hand against the documented sample.
+//! one prompt ([`super::discover`]), tests it, then hands the resulting
+//! `[accounts.<name>]` table back as a file to create, a block to
+//! append, or a document on stdout.
 //!
 //! It runs from `cardamum configure`, and from the offer a bare
-//! `cardamum` or a command needing an account raises when it finds no
-//! configuration. That offer is the only place the wizard introduces
-//! itself, with a welcome naming the file that is missing: the command
-//! asked for by name goes straight to the prompts.
+//! `cardamum` or a command needing an account raises. That offer is the
+//! only place the wizard introduces itself: the command asked for by
+//! name goes straight to the prompts.
 //!
-//! Appending is a plain text append rather than a re-serialization of
-//! the whole file, so comments, ordering and hand-written formatting
-//! come out untouched. Two rules guard it: the account name must be
-//! free, since two `[accounts.<name>]` tables make the whole document
-//! fail to parse, and the generated account claims the default only when
-//! no other account does.
+//! Appending is a plain text append rather than a re-serialization, so
+//! comments, ordering and hand-written formatting come out untouched.
+//! Two rules guard it: the account name must be free, since two
+//! `[accounts.<name>]` tables make the whole document fail to parse, and
+//! the generated account claims the default only when no other does.
 
 use std::{
     fmt,
@@ -51,16 +48,11 @@ impl ConfigureCommand {
     /// Runs the wizard, then saves, appends or prints the account.
     ///
     /// No welcome: whoever typed the command knows what it does. The
-    /// banner belongs to the offer a missing configuration raises, which
-    /// is where the wizard meets someone who did not ask for it. The
-    /// account name is not asked either, since it is only the TOML table
-    /// key, and renaming it is one edit in the file the wizard just
-    /// wrote.
+    /// account name is not asked either, being only the TOML table key.
     ///
-    /// A redirected stdout (`cardamum configure > config.toml`) and the
-    /// JSON output both stay non-interactive: the document goes to
-    /// stdout and no file is touched. The prompts render on stderr, so
-    /// they stay out of the redirected document.
+    /// A redirected stdout and the JSON output both stay
+    /// non-interactive: the document goes to stdout and no file is
+    /// touched. The prompts render on stderr, so they stay out of it.
     pub fn execute(self, printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
         if !stdin().is_terminal() {
             bail!(
@@ -75,9 +67,8 @@ impl ConfigureCommand {
         let (base_name, mut account) = discover::run()?;
         let name = account_name(&base_name, existing.as_ref());
 
-        // NOTE: a second `default = true` would make the account every
-        // command picks depend on map ordering, so the generated one
-        // claims the default only when no other account does.
+        // NOTE: two `default = true` would make the account every command
+        // picks depend on map ordering.
         let default = !existing.as_ref().is_some_and(|config| config.has_default);
         account.default = default;
 
@@ -98,9 +89,9 @@ impl ConfigureCommand {
     }
 }
 
-/// What a configuration file already on disk constrains in the generated
-/// account: the names it takes, and whether one of its accounts already
-/// claims the default.
+/// What a configuration already on disk constrains in the generated
+/// account: the names it takes, and whether one of its accounts claims
+/// the default.
 struct ExistingConfig {
     names: Vec<String>,
     has_default: bool,
@@ -108,11 +99,9 @@ struct ExistingConfig {
 
 impl ExistingConfig {
     /// Reads the configuration at the given path, or `None` when no file
-    /// is there.
-    ///
-    /// A file that fails to parse is an error rather than a `None`:
-    /// appending to a broken document would bury the actual problem
-    /// under a second one.
+    /// is there. A file that fails to parse is an error rather than a
+    /// `None`, since appending to a broken document would bury the
+    /// actual problem under a second one.
     fn read(path: &Path) -> Result<Option<Self>> {
         if !path.exists() {
             return Ok(None);
@@ -150,12 +139,9 @@ impl fmt::Display for GeneratedConfig {
 /// Frames Cardamum, names the configuration file that is missing, and
 /// points at the sample for everything the wizard does not cover.
 ///
-/// Printed before the offer a bare `cardamum` or a command needing an
-/// account raises when it finds no configuration, so the wizard
-/// introduces itself to someone who did not ask for it. `configure`
-/// skips it, since it was asked for by name.
-///
-/// On stderr, so a redirected stdout holds the document alone.
+/// Printed before the offer, so the wizard introduces itself to someone
+/// who did not ask for it; `configure` skips it. On stderr, so a
+/// redirected stdout holds the document alone.
 pub fn print_welcome(path: &Path) {
     eprintln!();
     eprintln!("Welcome to Cardamum, the CLI to manage contacts.");
@@ -181,10 +167,9 @@ pub fn print_welcome(path: &Path) {
 /// The name discovery proposes, suffixed until the configuration does
 /// not already hold it.
 ///
-/// Not prompted: the name is only the TOML table key, and whoever wants
-/// another one renames it in the file. It still has to be free, since a
-/// second `[accounts.<name>]` table makes the whole document fail to
-/// parse, taking the accounts that used to work down with it.
+/// Not prompted: the name is only the TOML table key. It still has to be
+/// free, a second `[accounts.<name>]` table making the whole document
+/// fail to parse, and taking the working accounts down with it.
 fn account_name(base: &str, existing: Option<&ExistingConfig>) -> String {
     let taken = existing
         .map(|config| config.names.as_slice())
@@ -246,11 +231,8 @@ fn append_or_print(printer: &mut impl Printer, path: &Path, config: GeneratedCon
         .open(path)
         .with_context(|| format!("Open the config file {}", path.display()))?;
 
-    // NOTE: appending text keeps every comment and every hand-written
-    // line of the file as they are, which parsing and re-serializing the
-    // whole document would not. The leading newline separates the two
-    // tables, and terminates the last line when the file ends without
-    // one.
+    // NOTE: the leading newline separates the two tables, and terminates
+    // the last line when the file ends without one.
     write!(file, "\n{config}")
         .with_context(|| format!("Append to the config file {}", path.display()))?;
 
@@ -260,10 +242,8 @@ fn append_or_print(printer: &mut impl Printer, path: &Path, config: GeneratedCon
 }
 
 /// Tells where the account landed, under which name, and what to run
-/// next.
-///
-/// The name matters here because it was never asked for: an account that
-/// did not claim the default is only reachable through `-a`.
+/// next. The name matters because it was never asked for: an account
+/// that did not claim the default is only reachable through `-a`.
 fn print_saved(path: &Path, config: &GeneratedConfig) {
     let name = &config.name;
 
@@ -324,13 +304,11 @@ mod tests {
             Some("/tmp/contacts")
         );
 
-        // Every other field is left at its default, so none of them is
-        // written: a generated document holds what was configured.
+        // NOTE: a generated document holds what was configured, every
+        // other field being left at its default.
         assert!(!document.contains("carddav"));
         assert!(!document.contains("table"));
 
-        // The account name heads the block, and `default` reads before
-        // the backend it qualifies.
         let lines: Vec<&str> = document.lines().collect();
         assert_eq!(lines[0], "[accounts.perso]");
         assert_eq!(lines[1], "default = true");
@@ -362,9 +340,8 @@ mod tests {
             ..Default::default()
         };
 
-        // Serialized alphabetically, `carddav.server` would sit under the
-        // `carddav.auth` credential; the renderer lifts the endpoint of a
-        // group to its top.
+        // NOTE: serialized alphabetically, `carddav.server` would sit
+        // under the `carddav.auth` credential authenticating against it.
         let document = account.render("perso").expect("render the account");
         let carddav: Vec<&str> = document
             .lines()
@@ -379,8 +356,8 @@ mod tests {
     fn an_appended_account_keeps_the_existing_one() {
         let path = config_path();
 
-        // No trailing newline, the shape an appended block has to survive
-        // without merging into the last line.
+        // NOTE: no trailing newline, the shape an appended block has to
+        // survive without merging into the last line.
         fs::write(
             &path,
             "# my accounts\n[accounts.work]\ndefault = true\nvdir.home-dir = \"/tmp/work\"",
@@ -406,7 +383,6 @@ mod tests {
 
         assert_eq!(config.accounts.len(), 2);
 
-        // Exactly one default, and the comment is still there.
         let defaults = config
             .accounts
             .values()

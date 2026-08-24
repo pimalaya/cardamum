@@ -58,7 +58,6 @@ pub struct Cli {
     /// newcomer does first, and shows this help otherwise.
     #[command(subcommand)]
     pub cmd: Option<Command>,
-
     /// Override the default configuration file path.
     ///
     /// The given paths are shell-expanded then canonicalized (if
@@ -73,16 +72,12 @@ pub struct Cli {
     pub account: AccountFlag,
     /// Force a specific backend for cross-protocol commands.
     ///
-    /// Only consumed by the shared commands (addressbook, card); the
-    /// protocol-specific subcommands (vdir, carddav) ignore it and
-    /// always use their own backend.
-    ///
-    /// Possible values: auto (default), carddav, jmap, msgraph,
-    /// people, vdir. With auto, the shared command picks the first
-    /// configured backend it supports; with an explicit value, it uses
-    /// only that backend (and bails if the account has no matching
-    /// config block, or if the operation has no implementation for
-    /// it).
+    /// Only consumed by the shared commands (`addressbook`, `card`); the
+    /// protocol-specific subcommands ignore it and always use their own
+    /// backend. With `auto` (the default) the shared command picks the
+    /// first configured backend it supports; with an explicit value it
+    /// uses only that one, and bails when the account declares no
+    /// matching block or the operation has no arm for it.
     #[arg(short, long, global = true, default_value_t)]
     pub backend: Backend,
     #[command(flatten)]
@@ -91,17 +86,14 @@ pub struct Cli {
     pub log: LogFlags,
 }
 
+/// Top-level subcommands: the shared API, one family per protocol, then
+/// the meta commands.
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    // --- Shared API
-    //
     #[command(subcommand, alias = "addressbooks", visible_alias = "abook")]
     Addressbook(AddressbookCommand),
     #[command(subcommand, alias = "cards")]
     Card(CardCommand),
-
-    // --- Protocol-specific APIs
-    //
     #[cfg(feature = "carddav")]
     #[command(subcommand)]
     Carddav(CarddavCommand),
@@ -117,9 +109,6 @@ pub enum Command {
     #[cfg(feature = "vdir")]
     #[command(subcommand)]
     Vdir(VdirCommand),
-
-    // --- Meta
-    //
     /// Configure an account interactively.
     #[command(visible_alias = "wizard")]
     Configure(ConfigureCommand),
@@ -133,10 +122,9 @@ pub enum Command {
 /// whether the wizard ran.
 ///
 /// Raised from the two places nothing can happen without a
-/// configuration: a bare invocation, and a command that needs an
-/// account. It is a hook rather than a gate, so declining it decides
-/// nothing: what happens next is the caller's business, and for a
-/// command that is simply carrying on.
+/// configuration: a bare invocation, and a command needing an account.
+/// It is a hook rather than a gate, so what happens after a declined
+/// offer is the caller's business.
 pub fn offer_configuration(
     printer: &mut impl Printer,
     config_paths: &[PathBuf],
@@ -153,17 +141,13 @@ pub fn offer_configuration(
     Ok(true)
 }
 
-/// Resolves the account a command runs against: loads the merged config
-/// from `config_paths`, then takes the account named by `-a` (or the one
-/// marked `default`). Returns the leftover global config, the resolved
-/// account name and its config.
+/// Resolves the account a command runs against: loads the merged config,
+/// then takes the account named by `-a`, or the one marked `default`.
+/// Returns the leftover global config, the account name and its config.
 ///
-/// A missing configuration is met with the wizard rather than with an
-/// error: the welcome frames what Cardamum is and offers to generate an
-/// account, then the command carries on either way. Accepting is what
-/// gives it a chance to work; declining leaves it to fail on the
-/// configuration it still has not got. The two other failures name what
-/// is missing and how to pick an account.
+/// A missing configuration raises the offer rather than an error, and
+/// the command carries on either way. Each of the three failures names
+/// what is missing and how to pick an account.
 pub fn resolve_account(
     printer: &mut impl Printer,
     config_paths: &[PathBuf],
@@ -172,22 +156,17 @@ pub fn resolve_account(
     let mut config = match Config::from_paths_or_default(config_paths)? {
         Some(config) => config,
         None => {
-            // NOTE: the target path is where `-c` pointed, or the default
-            // location when it named none, so a mistyped path shows up as
-            // itself rather than as a generic first run.
             let path = Config::target_path(config_paths)?;
 
-            // NOTE: nobody is there to answer a prompt in a script or a
-            // cron job, and a JSON consumer wants a failure it can read,
-            // so both skip the offer and fail below.
+            // NOTE: a cron job cannot answer a prompt and a JSON consumer
+            // wants a failure it can read, so both skip the offer.
             if !printer.is_json() && stdin().is_terminal() {
                 offer_configuration(printer, config_paths, &path)?;
             }
 
-            // NOTE: the wizard also prints the account instead of writing
-            // it, so having run it proves nothing: the configuration is
-            // looked up again, and the command fails the ordinary way
-            // when nothing landed.
+            // NOTE: the wizard may print the account instead of writing
+            // it, so having run it proves nothing: look the
+            // configuration up again and fail the ordinary way.
             match Config::from_paths_or_default(config_paths)? {
                 Some(config) => config,
                 None => bail!(
@@ -199,7 +178,7 @@ pub fn resolve_account(
     };
 
     // NOTE: an empty name and `default` both mean the default account,
-    // which is the next block's business.
+    // resolved below rather than looked up by name.
     let named = account_name.filter(|name| !name.is_empty() && *name != "default");
 
     if let Some(name) = named.filter(|name| !config.accounts.contains_key(*name)) {
@@ -230,8 +209,6 @@ impl Command {
         backend: Backend,
     ) -> Result<()> {
         match self {
-            // --- Shared API
-            //
             Self::Addressbook(cmd) => {
                 let (config, _name, account_config) =
                     resolve_account(printer, config_paths, account_name)?;
@@ -245,8 +222,6 @@ impl Command {
                 cmd.execute(printer, client)
             }
 
-            // --- Protocol-specific APIs
-            //
             #[cfg(feature = "carddav")]
             Self::Carddav(cmd) => {
                 let (config, name, account_config) =
@@ -283,8 +258,6 @@ impl Command {
                 cmd.execute(printer, client)
             }
 
-            // --- Meta
-            //
             Self::Configure(cmd) => cmd.execute(printer, config_paths),
             Self::Account(cmd) => cmd.execute(printer, config_paths, account_name, backend),
             Self::Completions(cmd) => cmd.execute(printer, Cli::command()),

@@ -126,12 +126,11 @@ pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
         }
     };
 
-    // A bare origin (path `/`) is not necessarily the DAV context root:
-    // PACC and RFC 6764 both hand back e.g. `https://carddav.fastmail.com/`,
-    // yet fastmail 404s every request outside `/dav/*`. Probe
-    // `.well-known/carddav` and follow its redirect first, mirroring the
-    // cardamum-android connect-time probe. No redirect keeps the origin,
-    // which plenty of servers serve the walk from directly.
+    // NOTE: a bare origin is not necessarily the DAV context root.
+    // Discovery hands back `https://carddav.fastmail.com/`, yet Fastmail
+    // 404s everything outside `/dav/*`, so probe `.well-known/carddav`
+    // and follow its redirect. No redirect keeps the origin, which
+    // plenty of servers serve the walk from directly.
     let server = match server.path() {
         "" | "/" => probe_carddav_context_root(&server, &tls).unwrap_or(server),
         _ => server,
@@ -253,9 +252,9 @@ fn google_carddav_server(auth: &WebdavAuth, tls: &Tls) -> Result<Url> {
         return Ok(url);
     }
 
-    // No redirect means Google rejected the probe (most often a 401
-    // from an invalid or expired token); surface its status and body so
-    // the real cause is visible instead of a generic "no redirect".
+    // NOTE: no redirect means Google rejected the probe, most often a
+    // 401 from an expired token, so surface its status and body rather
+    // than a generic "no redirect".
     let status = *output.response.status;
     let body = String::from_utf8_lossy(&output.response.body);
     let body = body.trim();

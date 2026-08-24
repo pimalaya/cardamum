@@ -82,7 +82,6 @@ pub fn to_vcard(contact: &MsgraphContact) -> String {
         card.push(text_prop(VcardPropKind::Uid, vec![], id));
     }
 
-    // FN is mandatory: the display name, or composed from the parts.
     card.push(text_prop(VcardPropKind::Fn, vec![], &display_name(contact)));
 
     // NOTE: the Graph title is the honorific (Dr., Mrs.), hence the N
@@ -1000,14 +999,12 @@ mod tests {
         let vcard = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:X\r\nEND:VCARD\r\n";
         let contact = to_contact(vcard).unwrap();
 
-        // Managed but absent from the vCard: cleared by the PATCH.
         assert_eq!(contact.spouse_name, MsgraphField::Null);
         assert_eq!(contact.mobile_phone, MsgraphField::Null);
         assert_eq!(contact.home_address, MsgraphField::Null);
         assert_eq!(contact.business_phones, MsgraphField::Set(vec![]));
         assert_eq!(contact.email_addresses, MsgraphField::Set(vec![]));
 
-        // Unmanaged Graph fields: out of the body, preserved.
         assert_eq!(contact.file_as, MsgraphField::Unset);
         assert_eq!(contact.assistant_name, MsgraphField::Unset);
         assert_eq!(contact.manager, MsgraphField::Unset);
@@ -1024,12 +1021,11 @@ mod tests {
 
         let contact = to_contact_delta(edited, base).unwrap();
 
-        // Changed: the new value; cleared: an explicit Null.
         assert_eq!(contact.mobile_phone.as_deref(), Some("+444444"));
         assert_eq!(contact.personal_notes, MsgraphField::Null);
 
-        // Unchanged (set or absent on both sides): out of the body,
-        // no gratuitous nulls for the Outlook backend to choke on.
+        // NOTE: unchanged on both sides means out of the body, since a
+        // gratuitous null is what the Outlook backend chokes on.
         assert_eq!(contact.display_name, MsgraphField::Unset);
         assert_eq!(contact.email_addresses, MsgraphField::Unset);
         assert_eq!(contact.birthday, MsgraphField::Unset);
@@ -1081,11 +1077,10 @@ mod tests {
 
         let contact = to_contact(vcard).unwrap();
 
-        // One mobile slot: the second cell TEL is dropped, not
-        // misfiled as a business phone.
+        // NOTE: one mobile slot, so the second cell TEL is dropped
+        // rather than misfiled as a business phone.
         assert_eq!(contact.mobile_phone.as_deref(), Some("+331111"));
 
-        // Two business, two home phone slots; three email and IM slots.
         assert_eq!(
             contact.business_phones.as_option().unwrap(),
             &vec!["+333331".to_string(), "+333332".to_string()]
@@ -1097,7 +1092,6 @@ mod tests {
         assert_eq!(contact.email_addresses.as_option().unwrap().len(), 3);
         assert_eq!(contact.im_addresses.as_option().unwrap().len(), 3);
 
-        // One address per home, work and other slot.
         let home = contact.home_address.as_option().unwrap();
         assert_eq!(home.street.as_deref(), Some("First St"));
         assert_eq!(contact.spouse_name, MsgraphField::Null);
@@ -1153,9 +1147,8 @@ mod tests {
         assert!(vcard.contains("X-MSGRAPH-ASSISTANT:Sam\r\n"));
         assert!(vcard.contains("X-MSGRAPH-MANAGER:Alex\r\n"));
 
-        // Consumed on the way back: the fields stay Unset (out of the
-        // body, server authoritative) and the lines stay out of the
-        // stash.
+        // NOTE: consumed on the way back, so the fields stay Unset and
+        // the lines stay out of the stash.
         let back = to_contact(&vcard).unwrap();
         assert_eq!(back.file_as, MsgraphField::Unset);
         assert_eq!(back.office_location, MsgraphField::Unset);
@@ -1174,8 +1167,6 @@ mod tests {
             MsgraphField::Unset
         );
 
-        // A dropped remainder clears the server-side stash through an
-        // explicit empty value.
         let cleared = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:X\r\nEND:VCARD\r\n";
         let delta = to_contact_delta(cleared, base).unwrap();
         let props = delta.single_value_extended_properties.as_option().unwrap();

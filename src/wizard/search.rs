@@ -147,10 +147,10 @@ pub fn search(email: &str) -> Result<Vec<Discovered>> {
     let provider = provider_of(email, &configs);
     let mut found = Vec::new();
 
-    // A detected provider collapses to its dedicated API, so the
-    // discovered CardDAV/JMAP entries are offered for other providers
-    // only (this also drops any bogus origin-fallback CardDAV row a
-    // consumer domain might surface).
+    // NOTE: a detected provider collapses to its dedicated API, so the
+    // CardDAV and JMAP entries are offered for other providers only.
+    // This also drops the bogus origin-fallback CardDAV row a consumer
+    // domain can surface.
     if provider.is_none() {
         for config in &configs {
             let DiscoveryEndpoint::Http(raw) = &config.endpoint else {
@@ -318,7 +318,7 @@ mod tests {
             }
         );
         assert_eq!(
-            caps_of(&[oauth.clone()]),
+            caps_of(std::slice::from_ref(&oauth)),
             AuthCaps {
                 oauth: true,
                 ..Default::default()

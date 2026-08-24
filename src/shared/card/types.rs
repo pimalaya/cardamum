@@ -15,17 +15,14 @@ pub struct Card {
     /// ContactCard id (JMAP), contact id (Graph) or person id
     /// (Google).
     pub id: String,
-
     /// Parent addressbook identifier.
     pub addressbook_id: String,
-
     /// Entity tag (RFC 9110 §8.8.3, without surrounding quotes) when
     /// the backend exposes one: the CardDAV ETag, the Graph changeKey,
     /// the Google person etag or a JSON hash for JMAP; vdir surfaces
     /// `None`.
     #[serde(default)]
     pub etag: Option<String>,
-
     /// Raw vCard bytes.
     pub contents: Vec<u8>,
 }

@@ -1,12 +1,13 @@
-//! pimdir backend: Cardamum over a local [pimdir](https://github.com/pimalaya/pimdir)
-//! store, an offline **cache** (SQLite index plus content-addressed blobs) that
-//! the sync engine (Neverest) populates, not a live server.
+//! pimdir backend: Cardamum over a local
+//! [pimdir](https://github.com/pimalaya/pimdir) store, the offline cache
+//! a sync engine fills. A SQLite index plus content-addressed blobs, not
+//! a live server.
 //!
-//! Reads project the store's shared items ([`io_pimdir`]'s client read API) and
-//! are availability-aware: a card whose body is not local (`level < Full`) lists
-//! fine from its stored summary but reads as "body not fetched" rather than an
-//! error, the client's cue to sync. Writes are **staged** io-replica mutations a
-//! later sync propagates; they are attributed to the configured
+//! Reads project the store's shared items and are availability-aware: a
+//! card whose body is not local lists fine from its stored summary but
+//! reads as "body not fetched" rather than erroring, the cue to sync.
+//! Writes are staged io-replica mutations a later sync propagates,
+//! attributed to the configured
 //! [`source`](crate::config::PimdirConfig::source), which must match the sync
 //! source for the change to reach the servers.
 //!

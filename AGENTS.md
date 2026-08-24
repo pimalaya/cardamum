@@ -1,6 +1,6 @@
 # AGENTS.md: Cairn activation
 
-This repository follows **Cairn**, a language- and tool-agnostic convention for keeping a living spec, reviewable change proposals, and an honest history next to the code. The normative format lives in [pimalaya/cairn](https://github.com/pimalaya/cairn) (`CAIRN.md` for the rules, `GUIDE.md` for the by-hand procedure). No tooling is required: you create and check the structure by reading and following the rules.
+This repository follows **Cairn**, a language- and tool-agnostic convention for keeping a living spec, reviewable change proposals, and an honest history next to the code. The normative format lives in [pimalaya/cairn](https://github.com/pimalaya/cairn) (CAIRN.md for the rules, GUIDE.md for the by-hand procedure). No tooling is required: you create and check the structure by reading and following the rules.
 
 The Cairn root of this repository is [`cairn/`](./cairn). The [src/main.rs](./src/main.rs) header remains the architecture entry point for the code itself; `cairn/spec/` is the behavioural truth behind it.
 
@@ -10,9 +10,9 @@ If you are an agent working in this repository, do the following **by default, w
 
 For anything beyond a trivial fix, create `cairn/changes/<change-id>/` with:
 
-- `proposal.md`: *why* and *what* (frontmatter: `cairn: change`, `id`, `status: active`, `created`).
-- `tasks.md`: the checklist (frontmatter: `cairn: tasks`, `change`).
-- `delta.md`: what this changes in the spec, under the three literal headings `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`.
+- proposal.md: *why* and *what* (frontmatter: `cairn: change`, `id`, `status: active`, `created`).
+- tasks.md: the checklist (frontmatter: `cairn: tasks`, `change`).
+- delta.md: what this changes in the spec, under the three literal headings `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`.
 
 Let the human review intent **before** you write code. Trivial fixes may skip this and go straight to landing.
 
@@ -26,7 +26,7 @@ Let the human review intent **before** you write code. Trivial fixes may skip th
 
 ## 3. Stay conformant
 
-Check the structure yourself against the strict rules (CAIRN.md §8): a discoverable root, `spec/ changes/ log/` present, every Cairn file carrying a valid `cairn:` type, each change having `proposal.md` and `tasks.md`, kebab-case ids, literal delta headings, and a log entry for every landed change. Everything else (prose, naming, ordering, extra files) is free.
+Check the structure yourself against the strict rules (CAIRN.md §8): a discoverable root, `spec/ changes/ log/` present, every Cairn file carrying a valid `cairn:` type, each change having proposal.md and tasks.md, kebab-case ids, literal delta headings, and a log entry for every landed change. Everything else (prose, naming, ordering, extra files) is free.
 
 ## 4. Repository conventions
 

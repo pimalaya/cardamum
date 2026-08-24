@@ -16,7 +16,8 @@
 use io_replica::placement::{ReplicaLinkId, ReplicaMeta, ReplicaSortKey};
 use serde::{Deserialize, Serialize};
 
-/// The `text/vcard` meta schema version this writer emits (pimdir SPEC Annex A).
+/// The `text/vcard` meta schema version this writer emits, from the
+/// pimdir SPEC Annex A.
 const META_VERSION: u8 = 1;
 
 /// Versioned card summary persisted as the `text/vcard` [`ReplicaMeta`] blob,
@@ -121,8 +122,8 @@ fn properties(raw: &[u8]) -> Vec<(String, String)> {
     for line in text.split('\n') {
         let line = line.strip_suffix('\r').unwrap_or(line);
         match line.strip_prefix([' ', '\t']) {
-            // A line starting with one whitespace continues the previous one,
-            // that whitespace being the fold marker rather than content.
+            // NOTE: a leading whitespace is the fold marker rather than
+            // content, so the line continues the previous one.
             Some(rest) => {
                 if let Some(last) = logical.last_mut() {
                     last.push_str(rest);
@@ -146,8 +147,8 @@ fn split_property(line: &str) -> Option<(String, String)> {
     let colon = unquoted_colon(line)?;
     let (head, value) = line.split_at(colon);
 
-    // Parameters (`;TYPE=work`) and a group prefix (`item1.EMAIL`) both
-    // decorate the name; neither is part of it.
+    // NOTE: parameters (`;TYPE=work`) and a group prefix
+    // (`item1.EMAIL`) both decorate the name without being part of it.
     let name = head.split(';').next().unwrap_or(head);
     let name = name.rsplit('.').next().unwrap_or(name);
 
@@ -212,8 +213,8 @@ mod tests {
 
     #[test]
     fn the_uid_is_the_link_id_even_when_it_holds_colons() {
-        // A `urn:uuid:` UID is the common shape, and it is exactly the case a
-        // naive "split on the first colon" would mangle.
+        // NOTE: a `urn:uuid:` UID is the case a naive split on the first
+        // colon would mangle.
         let (link, _, _) = derive(CARD.as_bytes());
         assert_eq!(link.0, "uid:urn:uuid:4fbe8971-0bc3-424c-9c26-36c3e1eff6b1");
     }
@@ -234,7 +235,8 @@ mod tests {
 
     #[test]
     fn folded_lines_are_unfolded_before_the_name_is_read() {
-        // The fold splits `UID` mid-value and `FN` mid-name, both legal.
+        // NOTE: the fold splits `UID` mid-value and `FN` mid-name, both
+        // legal.
         let raw = "BEGIN:VCARD\r\n\
              VERSION:4.0\r\n\
              UID:card\r\n \
@@ -254,7 +256,6 @@ mod tests {
         assert_eq!(card["v"], 1);
         assert_eq!(card["fn"], "Jane Doe");
         assert_eq!(card["size"], CARD.len());
-        // A group prefix (`item1.EMAIL`) names the same property.
         assert_eq!(
             card["emails"],
             serde_json::json!(["jane@example.org", "jane@home.example.org"])
@@ -299,7 +300,6 @@ mod tests {
         let (_, _, key) = derive(CARD.as_bytes());
         assert_eq!(key.0, "jane doe");
 
-        // No FN means no key, which the store reads as unknown.
         let raw = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:x\r\nEND:VCARD\r\n";
         let (_, _, key) = derive(raw.as_bytes());
         assert!(key.is_unknown());

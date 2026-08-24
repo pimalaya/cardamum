@@ -1,11 +1,8 @@
 //! Merged runtime account: the DTO every command consumes.
 //!
-//! Built by the dispatch layer in this order:
-//!
-//! 1. [`Account::default`] (all fields `None`).
-//! 2. Fold the global [`Config`] via `Account::from(config)`.
-//! 3. Fold the selected `[accounts.<name>]` via [`Account::merge`]
-//!    with `Account::from(account_config)`.
+//! The dispatch layer builds it by folding the global [`Config`] onto a
+//! defaulted account, then the selected `[accounts.<name>]` block onto
+//! that, so the narrower value always wins ([`Account::merge`]).
 
 use anyhow::{Result, bail};
 use comfy_table::{Color as TableColor, ContentArrangement};
@@ -25,13 +22,10 @@ const DEFAULT_CARDS_LIST_PAGE_SIZE: u32 = 25;
 pub struct Account {
     pub table_preset: Option<String>,
     pub table_arrangement: Option<TableArrangementConfig>,
-
     pub cards_list_page_size: Option<u32>,
-
     /// Fallback addressbook id for `card` commands when their
     /// `-k/--addressbook` flag is omitted.
     pub addressbook_default: Option<String>,
-
     /// Per-column color overrides for `addressbooks list`.
     pub addressbooks_list_table: AddressbookListTableConfig,
     /// Per-column color overrides for `cards list`.

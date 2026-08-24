@@ -15,7 +15,6 @@ pub struct CardUpdateCommand {
     /// gated on a server-side match (RFC 9110 If-Match).
     #[arg(long, value_name = "ETAG")]
     pub if_match: Option<String>,
-
     /// Card UID.
     #[arg(value_name = "CARD-ID")]
     pub card_id: String,

@@ -40,25 +40,28 @@ fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     *value == T::default()
 }
 
-/// Global configuration.
+/// The whole TOML configuration file: the options shared by every
+/// account, then the accounts themselves.
 ///
-/// Represents the whole TOML user's configuration file.
-/// `deny_unknown_fields` is intentionally omitted so future tooling
-/// (TUI, neverest) can share the same file without bouncing off
-/// unknown top-level keys.
+/// `deny_unknown_fields` is omitted so a neighbouring tool can share the
+/// same file without bouncing off an unknown top-level key.
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
+    /// Table rendering options, shared by every list command.
     #[serde(default)]
     pub table: TableConfig,
+    /// Addressbook options, overridable per account.
     #[serde(default)]
     pub addressbook: AddressbookConfig,
+    /// Card options, overridable per account.
     #[serde(default)]
     pub card: CardConfig,
-    /// `account list` rendering options (global only; there is no
-    /// per-account override for the listing of accounts).
+    /// `account list` rendering options, global only: the listing of
+    /// accounts stands outside any one account.
     #[serde(default)]
     pub account: AccountListingConfig,
+    /// The accounts, keyed by their `[accounts.<name>]` table name.
     pub accounts: HashMap<String, AccountConfig>,
 }
 
@@ -112,13 +115,12 @@ impl AccountConfig {
     /// Renders this account as an `[accounts.<name>]` block, ready to be
     /// written to a configuration file or appended to one.
     ///
-    /// The serializer decides what is written, so a field left at its
-    /// default is omitted and nothing has to be listed here twice. What
-    /// this adds is reading order: the flattened dotted keys come out
-    /// alphabetically, which buries the endpoint under the credentials
-    /// that authenticate against it, and runs every group together. The
-    /// groups are reordered, the endpoint is lifted to the top of its
-    /// own, and a blank line separates them.
+    /// The serializer decides what is written, so a defaulted field is
+    /// omitted and nothing is listed here twice. What this adds is
+    /// reading order, the flattened dotted keys coming out alphabetically
+    /// and running every group together: the groups are reordered
+    /// ([`RENDER_ORDER`]), the endpoint is lifted to the top of its own
+    /// ([`ENDPOINT_KEYS`]), and a blank line separates them.
     pub fn render(&self, name: &str) -> Result<String> {
         // NOTE: borrowed rather than built into a `Config`, which would
         // mean cloning the account (and so deriving `Clone` down every
@@ -134,8 +136,6 @@ impl AccountConfig {
         };
         let rendered = pimalaya_config::toml::to_string(&document)?;
 
-        // The emitter writes the header itself, and everything below it
-        // is one dotted key per line.
         let (header, body) = match rendered.split_once('\n') {
             Some((header, body)) => (header, body),
             None => return Ok(rendered),
@@ -166,8 +166,8 @@ impl AccountConfig {
                 document.push('\n');
             }
 
-            // The endpoint is what the group is about, so it reads first;
-            // the credentials and the quirks qualify it.
+            // NOTE: the endpoint is what the group is about, so it reads
+            // first; the credentials and the quirks qualify it.
             lines.sort_by_key(|line| {
                 let field = line.split(['.', ' ']).nth(1).unwrap_or_default();
 
@@ -191,28 +191,35 @@ impl AccountConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct AccountConfig {
-    /// Whether the commands with no `-a <NAME>` run against this
+    /// Whether the commands passing no `-a <NAME>` run against this
     /// account.
     #[serde(default, skip_serializing_if = "is_default")]
     pub default: bool,
-
+    /// Table rendering options, overriding the global ones.
     #[serde(default)]
     pub table: TableConfig,
+    /// Addressbook options, overriding the global ones.
     #[serde(default)]
     pub addressbook: AddressbookConfig,
+    /// Card options, overriding the global ones.
     #[serde(default)]
     pub card: CardConfig,
-
+    /// The local vdir home this account reads.
     #[cfg(feature = "vdir")]
     pub vdir: Option<VdirConfig>,
+    /// The local pimdir store this account reads.
     #[cfg(feature = "pimdir")]
     pub pimdir: Option<PimdirConfig>,
+    /// The CardDAV server this account talks to.
     #[cfg(feature = "carddav")]
     pub carddav: Option<CarddavConfig>,
+    /// The JMAP server this account talks to.
     #[cfg(feature = "jmap")]
     pub jmap: Option<JmapConfig>,
+    /// The Microsoft Graph account this account talks to.
     #[cfg(feature = "msgraph")]
     pub msgraph: Option<MsgraphConfig>,
+    /// The Google People account this account talks to.
     #[cfg(feature = "people")]
     pub people: Option<PeopleConfig>,
 }
@@ -270,7 +277,6 @@ pub struct CarddavConfig {
     /// Pre-resolved addressbook home-set URL. Skips every discovery
     /// step; the client lists addressbooks at this URL.
     pub home: Option<Url>,
-
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
@@ -307,18 +313,15 @@ pub struct JmapConfig {
     /// to the session endpoint. Supported schemes: `http`, `https`,
     /// `jmap` (mapped to http), `jmaps` (mapped to https).
     pub server: String,
-
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
-
     /// ALPN protocol identifiers offered during the TLS handshake.
     /// Defaults to `["http/1.1"]` (JMAP rides on HTTP/1.1). Set to
     /// `[]` to skip ALPN negotiation entirely. Only relevant for the
     /// rustls provider; `native-tls` ignores ALPN.
     #[serde(default = "io_jmap::client::JmapClientStd::default_alpn")]
     pub alpn: Vec<String>,
-
     /// Authentication configuration.
     pub auth: JmapAuthConfig,
 }
@@ -350,18 +353,15 @@ pub struct MsgraphConfig {
     /// target another mailbox.
     #[serde(default = "default_msgraph_user_id")]
     pub user_id: String,
-
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
-
     /// ALPN protocol identifiers offered during the TLS handshake.
     /// Defaults to `["http/1.1"]` (the Graph API rides on HTTP/1.1).
     /// Set to `[]` to skip ALPN negotiation entirely. Only relevant
     /// for the rustls provider; `native-tls` ignores ALPN.
     #[serde(default = "default_http_alpn")]
     pub alpn: Vec<String>,
-
     /// Authentication configuration.
     pub auth: MsgraphAuthConfig,
 }
@@ -389,14 +389,12 @@ pub struct PeopleConfig {
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
-
     /// ALPN protocol identifiers offered during the TLS handshake.
     /// Defaults to `["http/1.1"]` (the People API rides on HTTP/1.1).
     /// Set to `[]` to skip ALPN negotiation entirely. Only relevant
     /// for the rustls provider; `native-tls` ignores ALPN.
     #[serde(default = "default_http_alpn")]
     pub alpn: Vec<String>,
-
     /// Authentication configuration.
     pub auth: PeopleAuthConfig,
 }

@@ -10,23 +10,12 @@
 # can be passed at once, separated by `:`; the first one is the base and the
 # rest are deep-merged on top of it.
 #
-# Run `cardamum configure` to launch the wizard; a bare `cardamum` offers it
-# when it finds no configuration. It opens with a single prompt that takes an
-# email address, a server URL, or a local folder
-# path. The recommended path is automatic discovery: enter your email address
-# and the wizard searches every reachable contacts service (CardDAV, JMAP, plus
-# the Google People and Microsoft Graph APIs for those providers) and lets you
-# pick one, then asks how to authenticate against it. A `scheme://` URL
-# discovers from its host, its scheme narrowing the results (`carddav(s)` to
-# CardDAV, `jmap(s)` to JMAP). A filesystem path is a local vdir or pimdir
-# store, told apart by their on-disk markers.
-#
-# The wizard only configures what it can discover automatically: it never
-# prompts for a hand-entered server field, and stops with a pointer to this
-# file when discovery finds nothing. It tests the account, then offers to write
-# it here, creating this file or appending an `[accounts.<name>]` block to it;
-# when stdout is redirected it prints the block instead, so
-# `cardamum configure > config.toml` still works.
+# `cardamum configure` generates an account from your email address: it
+# discovers the contacts services your provider publishes, asks which one to use
+# and how to authenticate, tests the connection, and writes the account here.
+# Everything it does not cover is written by hand, which is what this file
+# documents: keep the backend you need and delete the rest. Ready-made blocks
+# for named providers live in the README.
 # ================================================================================
 
 # --------------------------------------------------------------------------------
@@ -79,11 +68,10 @@
 # --------------------------------------------------------------------------------
 # Accounts
 #
-# Each account speaks exactly one backend. The blocks below show every
-# supported backend as its own account; keep the ones you need. Secrets accept
-# either a `command` (a shell command line string run through the platform
-# shell, or a program + args list) or a `raw` plaintext value. OAuth 2.0 access
-# tokens are typically issued and refreshed by an external tool such as `ortie`.
+# One block per account, each declaring one backend. Secrets accept either a
+# `command` (a shell command line, or a program plus its arguments) or a `raw`
+# plaintext value. An OAuth 2.0 token is issued and refreshed by an external
+# tool such as `ortie`, which the command reads it from.
 # --------------------------------------------------------------------------------
 
 # --------------------------------------------------------------------------------
@@ -102,11 +90,10 @@ vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
 # --------------------------------------------------------------------------------
 # pimdir backend
 #
-# A local pimdir store: a SQLite index plus a content-addressed blob directory,
-# populated by a sync engine such as Neverest. It is an offline cache, not a
-# server: a card whose body has not been fetched yet still lists (from its
-# stored summary) but cannot be read until a sync hydrates it, and every write
-# is staged as a pending action the next sync pushes.
+# A local pimdir store, the offline cache a sync engine such as Neverest fills.
+# It is a cache, not a server: a card whose body has not been fetched yet still
+# lists but cannot be read until a sync hydrates it, and every write is staged
+# for the next sync to push.
 # --------------------------------------------------------------------------------
 
 #[accounts.pimdir-example]
@@ -124,20 +111,12 @@ vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
 # --------------------------------------------------------------------------------
 # CardDAV backend
 #
-# The addressbook home set is resolved from the first of these that is set, in
-# order of precedence:
-#
-# 1. `carddav.home`: pre-resolved addressbook home set URL; every discovery
-#    step is skipped. Fastest, least safe.
-# 2. `carddav.server`: principal + home-set discovery start from the given
-#    context root. Skips domain resolution. Accepts a full URL, a bare domain,
-#    or `domain:port`; bare authorities default to `https://`.
-# 3. `carddav.discover`: a bare domain resolved to a server URL at runtime
-#    (PACC, then `.well-known`, then RFC 6764 SRV last), then principal +
-#    home-set discovery. Convenient but adds DNS + HTTP round-trips on every run.
-#
-# The wizard records both `discover` and `server`: `server` wins, and `discover`
-# stays as a fallback to re-resolve from.
+# The addressbook home set is resolved from the first field that is set, each
+# skipping more work than the next: `home` is the pre-resolved home set URL and
+# skips every step, `server` is the context root the principal walk starts from,
+# and `discover` is a bare domain resolved at runtime (PACC, `.well-known`, then
+# RFC 6764 SRV) at the cost of DNS and HTTP round-trips on every run. `server`
+# accepts a full URL, a bare domain or `domain:port`, defaulting to `https://`.
 # --------------------------------------------------------------------------------
 
 [accounts.carddav-example]

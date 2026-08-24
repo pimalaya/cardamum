@@ -107,7 +107,6 @@ pub fn to_vcard(person: &PeoplePerson) -> String {
         card.push(text_prop(VcardPropKind::Uid, vec![], id));
     }
 
-    // FN is mandatory: the display name, or composed from the parts.
     card.push(text_prop(VcardPropKind::Fn, vec![], &display_name(person)));
 
     if let Some(name) = person.names.first() {
@@ -1129,7 +1128,6 @@ mod tests {
         assert!(restored.contains("BDAY:--0412\r\n"));
         assert!(restored.ends_with("END:VCARD\r\n"));
 
-        // The restored document projects back to the same person.
         assert_eq!(to_person(&restored).unwrap(), person);
     }
 
@@ -1153,15 +1151,15 @@ mod tests {
             ..Default::default()
         }];
 
-        // Memberships are structural addressbook data, not a minted
+        // NOTE: memberships are structural addressbook data, not a minted
         // vendor property.
         let vcard = to_vcard(&person);
         assert!(!vcard.contains("X-GOOGLE-MEMBERSHIP"));
         assert!(vcard.contains("X-GOOGLE-EXTERNAL-ID;TYPE=account:42\r\n"));
 
-        // Consumed on the way back: the server value is authoritative,
-        // so the minted lines neither project nor reach the stash; a
-        // legacy X-GOOGLE-MEMBERSHIP line is dropped the same way.
+        // NOTE: the minted lines are consumed on the way back, so they
+        // neither project nor reach the stash, and a legacy
+        // X-GOOGLE-MEMBERSHIP line is dropped the same way.
         let legacy = vcard.replace(
             "END:VCARD",
             "X-GOOGLE-MEMBERSHIP:contactGroups/myContacts\r\nEND:VCARD",

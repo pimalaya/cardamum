@@ -80,6 +80,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed an empty `-k/--addressbook` reaching the backend, where an empty path segment addresses the parent collection instead of a member and the server answers something unrelated (Microsoft Graph: `405 The OData request is not supported`). The shared resolver now rejects it with "Addressbook id cannot be empty".
 - Fixed `addressbook update` and `carddav proppatch` reporting success when the server changed nothing: a CardDAV PROPPATCH answers 207 whether or not it applied anything, and iCloud answers a collection that does not exist with a status naming no property at all. Both commands now fail when a property comes back refused, or unmentioned. Passing no field flag at all is also an error now ("Nothing to update"), instead of sending an empty request and reporting success.
 - Fixed `addressbook update --description ""` and `--color ""` silently doing nothing on CardDAV although the help documents `""` as the way to clear a property. A cleared property is now sent as a PROPPATCH `DAV:remove` instruction; properties you do not pass are still left untouched.
+- Fixed the Nix package shipping no manual pages and no shell completions: its install step passed the output directory as a positional argument, which the `manuals` and `completions` commands read as a command name, so the build failed on "Cannot find command". Both are now given with `-d`.
 
 ## [0.1.0] - 2025-10-24
 

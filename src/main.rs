@@ -84,17 +84,18 @@
 //! top-level block plus named `[accounts.<name>]` blocks each carrying
 //! one backend sub-block. `cli::resolve_account` selects the account
 //! (`-a` or `default`); a config that exists but lacks it is a hard
-//! error. When no config exists, the wizard is proposed; bare `cardamum`
-//! (no subcommand) also runs it. The [`wizard`] mirrors Himalaya's: from
-//! a single email / server-URL / folder-path prompt it discovers an
-//! account, prompts the authentication method among those the service
-//! advertised, tests the account, then offers to save it to a config
-//! file. It configures only what it can discover, stopping with a
-//! pointer to config.sample.toml rather than prompting for a
-//! hand-entered server field. When stdout is redirected or `--json` is
-//! set it prints the TOML document instead of saving (prompts stay on
-//! stderr), so `cardamum > <config>` is still the write-back, exactly
-//! like Ortie.
+//! error. Bare `cardamum` (no subcommand) runs the interactive
+//! [`wizard`], which discovers an account and offers to save it to a
+//! config file (or prints it on stdout when redirected); it is also
+//! proposed when a command finds no config, and `cardamum configure`
+//! runs it by name. Bare `cardamum --account <NAME>` shows the help
+//! instead. The wizard mirrors Himalaya's: from a single email /
+//! server-URL / folder-path prompt it discovers an account, prompts the
+//! authentication method among those the service advertised, tests the
+//! account, then writes it as an `[accounts.<name>]` block, creating the
+//! config file or appending to the one already there. It configures only
+//! what it can discover, stopping with a pointer to config.sample.toml
+//! rather than prompting for a hand-entered server field.
 //!
 //! ## Output
 //!
@@ -127,11 +128,17 @@ mod shared;
 mod vdir;
 mod wizard;
 
-use anyhow::Result;
-use clap::Parser;
-use pimalaya_cli::{error::ErrorReport, log::Logger, printer::StdoutPrinter};
+use std::{
+    io::{IsTerminal, stdin},
+    path::PathBuf,
+};
 
-use crate::{cli::Cli, wizard::discover};
+use anyhow::Result;
+use clap::{CommandFactory, Parser};
+use pimalaya_cli::{error::ErrorReport, log::Logger, printer::Printer, printer::StdoutPrinter};
+use pimalaya_config::toml::TomlConfig;
+
+use crate::{cli::Cli, config::Config};
 
 fn main() {
     let cli = Cli::parse();
@@ -146,8 +153,47 @@ fn execute(cli: Cli, printer: &mut StdoutPrinter) -> Result<()> {
     let account = cli.account.name.as_deref();
     let backend = cli.backend;
 
-    match cli.cmd {
-        Some(cmd) => cmd.execute(printer, config, account, backend),
-        None => discover::run(printer),
+    let Some(cmd) = cli.cmd else {
+        return meet_bare_invocation(printer, config, account.is_some());
+    };
+
+    cmd.execute(printer, config, account, backend)
+}
+
+/// Meets a bare `cardamum`, which is where a newcomer lands.
+///
+/// With no command there is nothing to run: a missing configuration
+/// raises the offer, and an existing one gets the help, which is also
+/// what a script or a JSON caller gets since neither can answer a
+/// prompt. A file that exists but fails to parse counts as a
+/// configuration, so the offer never proposes to write over a broken
+/// one: the parse error surfaces when a real command reads it.
+///
+/// `--account` names an account to act on, so with no subcommand it is a
+/// half-typed command rather than a first run: it gets the help, which
+/// points at the commands, instead of an offer to create an account.
+fn meet_bare_invocation(
+    printer: &mut StdoutPrinter,
+    config_paths: &[PathBuf],
+    named_account: bool,
+) -> Result<()> {
+    let configured = Config::from_paths_or_default(config_paths)
+        .ok()
+        .flatten()
+        .is_some();
+
+    if !configured && !named_account && !printer.is_json() && stdin().is_terminal() {
+        let path = Config::target_path(config_paths)?;
+
+        // NOTE: a bare invocation has nothing to run after the offer, so
+        // a declined one falls back to the help. The wizard already says
+        // what to run next when it ran.
+        if cli::offer_configuration(printer, config_paths, &path)? {
+            return Ok(());
+        }
     }
+
+    Cli::command().print_help()?;
+
+    Ok(())
 }

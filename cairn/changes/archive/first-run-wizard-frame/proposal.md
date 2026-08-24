@@ -1,7 +1,7 @@
 ---
 cairn: change
 id: first-run-wizard-frame
-status: active
+status: landed
 created: 2026-08-14
 ---
 

@@ -1,5 +1,6 @@
 #[cfg(feature = "carddav")]
 pub mod carddav;
+pub mod configure;
 pub mod discover;
 #[cfg(feature = "jmap")]
 pub mod jmap;

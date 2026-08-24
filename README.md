@@ -52,7 +52,7 @@ CLI to manage contacts.
   - JMAP session `.well-known/jmap` [rfc8620](https://datatracker.ietf.org/doc/html/rfc8620)
 - Per-backend Cargo features: `carddav`, `jmap`, `msgraph`, `people`, `vdir`, `pimdir` (all on by default)
 - TOML configuration with multi-account support
-- Interactive wizard on first run: it discovers a provider from your email address, tests the connection, and saves a ready-to-use configuration
+- Interactive wizard, on first run and from `cardamum configure`: it discovers a provider from your email address, tests the connection, and saves a ready-to-use account
 - JSON output via `--json`
 
 ## Installation
@@ -124,14 +124,14 @@ The configuration is loaded from the first existing path among:
 
 Override with `cardamum -c <PATH>`. Multiple paths can be passed at once, separated by `:`; the first is the base and the rest are deep-merged on top.
 
-Run bare `cardamum` (no subcommand) to launch the wizard; it is also proposed when a command finds no config file. It opens with a single prompt that takes an email address, a server URL, or a local folder path, and its shape orients the rest of the setup, exactly like the Cardamum Android onboarding. An email address (or bare domain) runs discovery: the wizard detects the provider then searches every reachable contacts service (CardDAV, JMAP, plus the Google People and Microsoft Graph APIs for those providers) and lets you pick one, then asks how to authenticate against it. A `scheme://` URL discovers from its host, its scheme narrowing the results. A filesystem path is a local vdir or pimdir store, told apart by their on-disk markers.
+Run `cardamum configure` to launch the wizard. A bare `cardamum` offers it when it finds no configuration, and so does any command needing an account; already configured, a bare `cardamum` shows the help instead. The wizard opens with a single prompt that takes an email address, a server URL, or a local folder path, and its shape orients the rest of the setup, exactly like the Cardamum Android onboarding. An email address (or bare domain) runs discovery: the wizard detects the provider then searches every reachable contacts service (CardDAV, JMAP, plus the Google People and Microsoft Graph APIs for those providers) and lets you pick one, then asks how to authenticate against it. A `scheme://` URL discovers from its host, its scheme narrowing the results. A filesystem path is a local vdir or pimdir store, told apart by their on-disk markers.
 
 The wizard configures only what it can discover automatically. It never asks you to type a server field by hand, and when discovery finds nothing it stops and points you at the documented sample. A self-hosted server that publishes no discovery record is configured by writing the account yourself.
 
-It then tests the connection and offers to save the configuration for you. When stdout is redirected it prints the TOML document instead, so redirecting still saves it, exactly like Ortie:
+It then tests the connection and offers to save the account, creating the configuration file or appending an `[accounts.<name>]` block to the one already there, so a second account never means merging by hand. The append is plain text, leaving your comments and formatting untouched. When stdout is redirected, or with `--json`, it prints the block instead of writing anything:
 
 ```sh
-cardamum > ~/.config/cardamum/config.toml
+cardamum configure > ~/.config/cardamum/config.toml
 ```
 
 Credentials come from an OS keyring (`secret-tool`, `kwallet-query`, `security`, `pass`), an OAuth 2.0 token broker (`ortie`, `pizauth`, `oama`), a custom command, or a raw value in the file. Cardamum reads secrets but never issues or refreshes them: it runs no OAuth 2.0 grant, so for providers that require OAuth (Google, Microsoft, and any CardDAV or JMAP server behind it) pick a broker such as [Ortie](https://github.com/pimalaya/ortie), which refreshes and prints a fresh token on every read. See the [Google](#google) example below.

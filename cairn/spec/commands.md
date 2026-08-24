@@ -6,7 +6,10 @@ status: current
 
 # Commands
 
-The command tree splits into three groups. The shared API (`addressbook`, `card`) is the cross-protocol least-common-denominator surface, behaving the same whatever backend serves the active account. The protocol-specific APIs each expose the full surface of one backend, including operations the shared API cannot model. The meta commands (`account`, `completions`, `manuals`) cover account inspection, shell completions and man pages.
+The command tree splits into three groups. The shared API (`addressbook`, `card`) is the cross-protocol least-common-denominator surface, behaving the same whatever backend serves the active account. The protocol-specific APIs each expose the full surface of one backend, including operations the shared API cannot model. The meta commands (`configure`, `account`, `completions`, `manuals`) cover account generation and inspection, shell completions and man pages.
+
+### Requirement: The top-level help orients a newcomer
+The top-level help SHALL frame the first run in its long description, naming the bare invocation and `cardamum configure` as the two ways to generate an account, and SHALL end with the shared Pimalaya footer (`pimalaya_cli::footer`) pointing at the issue tracker and the sponsoring page, as every other Pimalaya CLI does.
 
 ### Requirement: Subcommands carry their own data and chain
 Each subcommand SHALL be a clap-derived struct holding its own arguments, with an `execute(self, printer, client)` method. `Command::execute` in [cli.rs](../../src/cli.rs) is the single dispatch point: it resolves the account (proposing the wizard when no config exists), builds the appropriate client, and hands it to the subcommand.

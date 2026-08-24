@@ -177,7 +177,6 @@ dependencies = [
  "clap_mangen",
  "comfy-table",
  "crossterm",
- "dirs",
  "env_logger",
  "getrandom 0.4.3",
  "io-http",
@@ -198,6 +197,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shellexpand",
+ "toml",
  "url",
  "vcard-rs",
 ]

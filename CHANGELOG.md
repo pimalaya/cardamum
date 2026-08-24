@@ -18,8 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added a Google People-specific API (`people`), nested by People resource: `contact-group {list, get, create, update, delete, members}`, `connection {list, get, create, update, delete, search}`, `other-contact {list, search, copy}` and `profile get`. It works with the raw People model: `create`/`update` take a People person JSON body and `--json` prints the raw People payload, `connection update` deriving the `updatePersonFields` mask from the body's keys, and exposes the People-native surface the shared API hides: `connection list --sync-token`, the `other-contact` source and `contact-group members`.
 - Added a JMAP-specific API (`jmap`), nested by JMAP object type: `address-book {get, create, update, destroy, changes}`, `contact-card {get, query, create, update, destroy, changes, copy}` and `session get`. It works with the raw JSContact model: `create`/`update` take a JSContact JSON body (`update` a JMAP patch), `--json` prints the raw JMAP payload, and exposes the JMAP-native surface the shared API hides: `changes` incremental sync on both objects, `session get`, and cross-account `contact-card copy`.
 - Added raw protocol escape hatches to the specific APIs: `msgraph`/`people` `request <method> <path> [json]` and `jmap request <json>` (a raw JMAP method-call), each printing the raw response, plus CardDAV `report raw <addressbook> <xml>` for an arbitrary REPORT body. Also added `vdir item copy` / `move` between collections.
+- Added the `configure` command (alias `wizard`), which runs the wizard by name, so a second account no longer means running the binary bare.
 
 ### Changed
+
+- Aligned the first run with Himalaya, Ortie, Comodoro and Carillon: the wizard became a hook rather than a gate. **Behaviour change.**
+
+  A missing configuration now raises an offer, from a bare `cardamum` and from any command needing an account, and the command carries on afterwards either way instead of the process exiting. A bare `cardamum` shows the help when a configuration exists, or when `--account` names one, rather than always running the wizard. Nothing prompts when stdin is not a terminal or `--json` is set. The welcome moved onto the offer and names the configuration path that was looked for, so a mistyped `-c` reads as the typo it is.
+
+  The wizard no longer prompts for a target path: it writes where `-c` or `CARDAMUM_CONFIG` pointed, or the default location. A configuration already there is appended to as plain text, keeping its comments and formatting, instead of being overwritten. The generated account takes a name the file does not already hold, suffixed until free, and claims `default = true` only when no other account does, so the first account generated is usable without hand-editing. The rendered block orders its groups most-defining first, lifts each backend's endpoint above the credentials qualifying it, and separates groups with a blank line.
+
+  Account resolution failures each name what is missing: a missing configuration names the path it looked for, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
 
 - Bumped io-http to 0.5.
 

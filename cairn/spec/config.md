@@ -14,6 +14,9 @@ The configuration SHALL be loaded from the first valid path among `$XDG_CONFIG_H
 ### Requirement: Account resolution is explicit or default
 `cli::resolve_account` SHALL select the account named by `-a`, else the one marked `default = true`. A config that exists but lacks the requested account, or has no default, is a hard error naming the fix. Only when no config file exists at all is the wizard proposed.
 
+### Requirement: Account resolution failures name what is missing
+Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
+
 ### Requirement: One backend block per backend
 Each account block SHALL carry at most one sub-block per compiled-in backend (`vdir`, `pimdir`, `carddav`, `jmap`, `msgraph`, `people`), each deserialized with `deny_unknown_fields` so a typo is an error rather than a silently ignored option. An account may declare several, and `--backend` picks between them (see [backends.md](backends.md)).
 

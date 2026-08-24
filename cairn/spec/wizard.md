@@ -6,9 +6,21 @@ status: current
 
 # Wizard
 
-Bare `cardamum` (no subcommand) runs the interactive configuration wizard, and it is also proposed when a command finds no config at all. The wizard discovers an account, tests it, and either saves it to a config file or prints it as a ready-to-save TOML fragment on stdout. Prompts render on stderr, so redirecting stdout into a config file works directly.
+`cardamum configure` runs the interactive configuration wizard, and it is also offered when a bare `cardamum` or a command needing an account finds no configuration. The wizard discovers an account, tests it, and either writes it into the configuration file or prints it as a ready-to-save `[accounts.<name>]` block on stdout. Prompts render on stderr, so redirecting stdout into a config file works directly.
 
 The flow mirrors Himalaya's wizard requirement for requirement, adapted to contacts: the two products share one onboarding model, so what is learned about one applies to the other.
+
+### Requirement: A named command runs the wizard
+A `configure` command (alias `wizard`) SHALL run the wizard by name, without the welcome, since whoever typed it knows what it does. It refuses to run when stdin is not a terminal, naming the sample configuration to write by hand instead.
+
+### Requirement: The offer is a hook, not a gate
+A missing configuration SHALL raise an offer to generate one, from a bare invocation and from any command needing an account. The offer never ends the process: a command carries on afterwards either way, so accepting gives it a chance to work and declining leaves it to fail on the configuration it still has not got. A bare invocation has nothing to carry on to, so a declined offer falls back to the help, which is also what someone already configured gets. Nothing is offered when stdin is not a terminal or `--json` is set.
+
+### Requirement: The welcome names the missing path
+The welcome SHALL name the configuration path that was looked for, which is the one `-c` or `CARDAMUM_CONFIG` gave or the default location, so a mistyped path shows up as itself rather than as a generic first run. It frames the product, points at the documented sample, and names the command that runs the wizard again later.
+
+### Requirement: A generated account reads in a deliberate order
+The serializer SHALL decide what a generated account holds, so a defaulted field is omitted and no field is enumerated twice, but the rendering SHALL order what it emits: the groups run most-defining first, an unrecognised group renders after them rather than being dropped, a group's endpoint key (`server`, `discover`, `home`, `home-dir`, `root`) reads before the credentials qualifying it, and a blank line separates groups.
 
 ### Requirement: Input orients the flow
 A single prompt SHALL accept an email address (or bare domain), a `scheme://` server URL, or a local folder path. An email, bare domain or server URL runs io-pim-discovery's parallel discovery; a folder is a local vdir or pimdir store. A server URL discovers from its host and its scheme narrows the discovered entries: `carddav`, `carddavs` and the HTTP-family schemes keep CardDAV, `jmap` and `jmaps` keep JMAP, and the proprietary entries (Google People, Microsoft Graph) are dropped when a scheme is given. An unknown scheme is rejected outright. The wizard SHALL NOT offer any hand-entry of server fields.
@@ -33,14 +45,14 @@ The wizard SHALL NOT prompt for an account name. It derives one from the input (
 ### Requirement: Connection tested before saving
 The account's connection SHALL be tested before the fragment is saved or printed, so a bad credential or endpoint stops the wizard instead of yielding a config that cannot connect. A flow that already validated its connection inline may skip the final test; no cardamum flow does today. The generated fragment is compact: only the `[accounts.<name>]` table stays a section header, other tables flatten into dotted keys, and empty tables and defaulted values are dropped.
 
-### Requirement: Saved by default, printed when redirected
-When stdout is a terminal and `--json` is not set, the wizard SHALL offer to save the generated config to a file, defaulting to `$XDG_CONFIG_HOME/cardamum/config.toml`, creating the parent directory as needed and never overwriting an existing file without confirmation. Declining the save, or declining an overwrite, SHALL fall back to printing so the generated config is never lost. In JSON mode or when stdout is redirected the document is emitted straight to stdout, so `cardamum > config.toml` and any script keep working.
+### Requirement: Saved where the configuration lives, printed when redirected
+When stdout is a terminal and `--json` is not set, the wizard SHALL offer to save the generated account to the configuration file, which is where `-c` or `CARDAMUM_CONFIG` pointed or the default location, creating the parent directory as needed. It SHALL NOT prompt for that path. A file that does not exist is written whole; one that does is appended to as plain text, never parsed and re-serialized, so comments, ordering and formatting survive. Declining the save SHALL fall back to printing so the generated account is never lost. In JSON mode or when stdout is redirected the document is emitted straight to stdout, so `cardamum configure > config.toml` and any script keep working.
 
-### Requirement: The generated account is never the default
-The generated account SHALL carry `default = false`, so a fragment merged into a config that already has a default does not hijack it. Being false, `default` is omitted from the printed TOML, and the user marks their choice with `default = true`.
+### Requirement: The generated account claims the default only when it is free
+The generated account SHALL claim `default = true` only when no other account in the configuration already does, and SHALL take a name the configuration does not already hold, suffixed until free. A second `[accounts.<name>]` table makes the whole document fail to parse, and two defaults resolve to whichever the account map yields first.
 
 ### Requirement: Guidance frames the run, not the document
-A welcome banner SHALL render on stderr before the first prompt (skipped in JSON mode), framing what Cardamum is, what the wizard does, and where the documented sample lives. The generated document itself SHALL carry no commentary, so what lands on stdout or in the config file is bare config.
+The welcome banner SHALL render on stderr, and only from the offer: `configure`, asked for by name, goes straight to the prompts. The generated document itself SHALL carry no commentary, so what lands on stdout or in the config file is bare config. Once the account is written, the wizard SHALL report where it landed, under which name, and what to run next, naming `-a <NAME>` when another account holds the default.
 
 ### Requirement: Stop when nothing is discovered
 When discovery yields no supported configuration for the given input, an empty result, the deadline elapsing with nothing completed, or a URL scheme filter leaving no entry, the wizard SHALL stop with a message stating it could not automatically discover a configuration for the input, and inviting the user to write the account by hand using the documented sample configuration (linked). It SHALL NOT prompt for any server field or emit a partial account. The wizard performs no hand-entry configuration of remote accounts.

@@ -20,7 +20,7 @@ Cardamum v2 lands on the Himalaya v2 stack (pimalaya-cli, pimalaya-config, pimal
 
 The plural `addressbooks` / `cards` forms stay as hidden aliases. The new `--backend` flag pins the shared subcommands to a specific backend (default: `auto`). The addressbook is now the `-k/--addressbook` flag rather than a positional argument, falling back to `addressbook.default`; `card create` and `card update` take their vCard as a trailing positional (a path, raw contents, or `-` for stdin) rather than `--file`.
 
-There is no `account configure`: bare `cardamum` runs the wizard, which is now the single way to create an account.
+There is no `account configure`: `cardamum configure` (alias `wizard`) runs the wizard, which is now the single way to create an account. A bare `cardamum` offers it when no configuration is found, and shows the help otherwise.
 
 ## TOML configuration
 
@@ -45,7 +45,7 @@ Four backends are new: `jmap`, `msgraph`, `people` and `pimdir`, each with its o
 
 ## The wizard
 
-Bare `cardamum` runs a discovery-driven wizard aligned with Himalaya's. It takes one input (an email address, a server URL, or a local folder path), lists the services it discovers, asks how to authenticate, tests the connection, and offers to save the configuration. It configures only what it discovers: there is no hand-entry of server fields, so a self-hosted server publishing no discovery record is configured by writing the account yourself from config.sample.toml.
+`cardamum configure` runs a discovery-driven wizard aligned with Himalaya's, and it is offered on a bare `cardamum` or on any command finding no configuration. It takes one input (an email address, a server URL, or a local folder path), lists the services it discovers, asks how to authenticate, tests the connection, then writes the account into the configuration file, creating it or appending an `[accounts.<name>]` block to the one already there. It configures only what it discovers: there is no hand-entry of server fields, so a self-hosted server publishing no discovery record is configured by writing the account yourself from config.sample.toml.
 
 ## License
 

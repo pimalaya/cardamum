@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added a `pimdir` local backend: Cardamum over a [pimdir](https://github.com/pimalaya/pimdir) store, the SQLite-indexed, content-addressed offline cache a sync engine such as Neverest populates. It is a cache rather than a server, so a card whose body has not been fetched yet still lists (projected from its stored summary) but reports "body not fetched" on read, and every write is staged as a pending action the next sync pushes. Its link ids, summaries, sort keys and content hashes match Neverest's, so a card added here deduplicates against the same card arriving through a sync.
+- Added a `pimdir` local backend: Cardamum over a [pimdir](https://github.com/pimalaya/pimdir) store, the SQLite-indexed, content-addressed offline cache a sync engine such as Neverest populates. It is a cache rather than a server, so a card whose body has not been fetched yet still lists (projected from its stored summary) but reports "body not fetched" on read, and every write is staged as a pending action the next sync pushes. Its link ids, summaries and sort keys match Neverest's, and bodies are hashed by the store itself (io-pimdir owns the algorithm a store declares and the lowercase base32 encoding an object path requires), so a card added here deduplicates against the same card arriving through a sync or through the phone.
 - Added three remote backends alongside CardDAV: JMAP contacts (RFC 8620 + RFC 9610, via io-jmap), the Microsoft Graph contacts API (via io-msgraph), and the Google People API (via io-people), each behind its own cargo feature (`jmap`, `msgraph`, `people`). The `--backend` flag and the `account list` / `account check` reports gained the matching variants.
 - Synthesized a vCard document of record for the backends with no native vCard representation: JMAP ContactCards convert through vcard-rs's JSContact codec (RFC 9555), while Graph and People contacts project field-by-field with a provider-side stash for the properties that have no first-class slot. The projection modules are ported from cardamum-android so both products treat provider quirks identically.
 - Added the `vdir item` subcommand (`list`, `get`, `create`, `update`, `delete`) to the vdir-specific API, operating on the raw item files of any kind byte-for-byte. Unlike the shared `card` API it surfaces iCalendar items too and reports each item's kind; `create` infers the kind from the input (`--kind` to override) and `update` preserves it.
@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added raw protocol escape hatches to the specific APIs: `msgraph`/`people` `request <method> <path> [json]` and `jmap request <json>` (a raw JMAP method-call), each printing the raw response, plus CardDAV `report raw <addressbook> <xml>` for an arbitrary REPORT body. Also added `vdir item copy` / `move` between collections.
 
 ### Changed
+
+- Bumped io-http to 0.5.
+
+- Bumped pimalaya-stream to 0.3, whose `Read` and `Write` retry a stream reporting it is not ready. **Behaviour change.**
+
+  A blocking socket is not supposed to report `EAGAIN`, yet callers saw one surface mid-exchange and end the exchange with a bare `Resource temporarily unavailable (os error 35)`, macOS especially and the more readily the longer the exchange ran. The transport now retries such a failure for a minute before giving up with a `TimedOut` naming the budget, and arms a socket read deadline at connect time so a server going silent on a healthy connection stops blocking the caller forever. Its `StreamStd` is renamed `stream::Stream` and its connects take a per-transport options struct, which is what this crate now calls.
+
+- Bumped pimalaya-stream to 0.2, whose only change here is the removal of its SASL module: this crate uses the TLS options and the blocking stream, neither of which moved.
 
 - Reworked the first-run wizard around automatic discovery, aligning it with Himalaya's requirement for requirement so both products share one onboarding model. A single opening prompt takes an email address, a server URL, or a local folder path. An email (or bare domain) feeds io-pim-discovery's parallel discovery (fixed provider rules, PACC, RFC 6764 CardDAV, RFC 8620 JMAP, refined by a `WWW-Authenticate` probe), bounded by an 8-second deadline so one unreachable endpoint cannot stall the prompt, and lists one entry per reachable service. Picking one then prompts its authentication method among those advertised, skipped when only one qualifies. A `scheme://` URL discovers from its host, its scheme narrowing the results. A filesystem path is a local vdir or pimdir store, told apart by their on-disk markers.
 

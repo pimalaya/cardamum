@@ -1,5 +1,5 @@
 //! The `text/vcard` derivations a pimdir store records for a card: its
-//! link id, its `v: 1` summary and its sort key (pimdir SPEC §9.3, §13).
+//! link id, its `v: 1` summary and its sort key (pimdir SPEC §9.3, Annex A).
 //!
 //! These MUST agree byte for byte with Neverest's `text/vcard` kind
 //! (neverest/src/kind/vcard.rs), because both write into the same store: a
@@ -16,7 +16,7 @@
 use io_replica::placement::{ReplicaLinkId, ReplicaMeta, ReplicaSortKey};
 use serde::{Deserialize, Serialize};
 
-/// The `text/vcard` meta schema version this writer emits (pimdir SPEC §13).
+/// The `text/vcard` meta schema version this writer emits (pimdir SPEC Annex A).
 const META_VERSION: u8 = 1;
 
 /// Versioned card summary persisted as the `text/vcard` [`ReplicaMeta`] blob,

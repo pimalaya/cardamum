@@ -17,4 +17,3 @@
 pub mod backend;
 pub mod card;
 pub mod client;
-pub mod hash;

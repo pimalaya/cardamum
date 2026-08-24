@@ -4,7 +4,7 @@
 //!
 //! Reads project [`io_pimdir`]'s client read API (`list_collections`,
 //! `list_items_page_asc`, `get_item`, `count_items`) plus the blob store,
-//! building cards from the stored `v: 1` summary (pimdir SPEC §13). A card
+//! building cards from the stored `v: 1` summary (pimdir SPEC Annex A). A card
 //! whose body is not local (`level < Full`) still lists; [`get_card`] reports
 //! "body not fetched" rather than an error, the cue to sync.
 //!
@@ -33,7 +33,6 @@ use crate::{
     pimdir::{
         card::{self, CardSummary},
         client::PimdirClient,
-        hash::content_hash,
     },
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
@@ -188,7 +187,7 @@ impl PimdirBackend {
 
         let (link_id, meta, sort_key) = card::derive(&contents);
         let object = ReplicaObject {
-            hash: content_hash(&contents),
+            hash: self.inner.store.hash(&contents),
             size: contents.len(),
         };
         let handle = ReplicaHandle(format!("local:{}", link_id.0));
@@ -232,7 +231,7 @@ impl PimdirBackend {
         let placement = self.synced_placement(addressbook_id, card_id)?;
         let (_, meta, sort_key) = card::derive(&contents);
         let object = ReplicaObject {
-            hash: content_hash(&contents),
+            hash: self.inner.store.hash(&contents),
             size: contents.len(),
         };
 

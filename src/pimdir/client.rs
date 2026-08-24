@@ -55,7 +55,7 @@ impl PimdirClient {
         if let Some(account) = config.account.clone() {
             store = store.for_account(account);
         }
-        let blobs = PimdirBlobs::open(&root);
+        let blobs = store.blobs();
 
         Ok(Self {
             store,

@@ -4,7 +4,7 @@ description = "CLI to manage contacts"
 version = "0.2.0"
 authors = ["Clément DOUIN (soywod) <clement.douin@posteo.net>"]
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 categories = ["command-line-utilities"]
 keywords = ["cli", "contact", "carddav", "jmap", "vdir"]
@@ -16,7 +16,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls-ring", "carddav", "jmap", "msgraph", "people", "pimdir", "vdir"]
+default = ["rustls-ring", "carddav", "jmap", "msgraph", "people", "vdir"]
 carddav = ["dep:io-webdav", "dep:getrandom"]
 jmap = ["dep:io-jmap", "dep:vcard-rs", "vcard-rs/jscontact", "dep:base64"]
 msgraph = ["dep:io-msgraph", "dep:vcard-rs"]
@@ -48,33 +48,23 @@ crossterm = { version = "0.29", default-features = false, features = ["serde"] }
 dirs = "6"
 env_logger = "0.11"
 getrandom = { version = "0.4", optional = true }
-io-http = { version = "0.3", default-features = false }
-io-jmap = { version = "0.2", default-features = false, features = ["client"], optional = true }
-io-msgraph = { version = "0.2", default-features = false, features = ["client"], optional = true }
-io-people = { version = "0.2", default-features = false, features = ["client"], optional = true }
-io-pim-discovery = { version = "0.5", default-features = false, features = ["pacc", "rfc6764", "rfc8620"] }
-io-pimdir = { version = "0.2", default-features = false, features = ["client"], optional = true }
-io-replica = { version = "0.3", default-features = false, optional = true }
-io-vdir = { version = "0.1", default-features = false, features = ["client", "serde"], optional = true }
-io-webdav = { version = "0.1", default-features = false, features = ["client"], optional = true }
+io-http = { version = "0.5", default-features = false }
+io-jmap = { version = "0.3", default-features = false, features = ["client"], optional = true }
+io-msgraph = { version = "0.3", default-features = false, features = ["client"], optional = true }
+io-people = { version = "0.3", default-features = false, features = ["client"], optional = true }
+io-pim-discovery = { version = "0.7", default-features = false, features = ["pacc", "rfc6764", "rfc8620"] }
+io-pimdir = { version = "0.3", default-features = false, features = ["client"], optional = true }
+io-replica = { version = "0.4", default-features = false, optional = true }
+io-vdir = { version = "0.2", default-features = false, features = ["client", "serde"], optional = true }
+io-webdav = { version = "0.2", default-features = false, features = ["client"], optional = true }
 log = "0.4"
 percent-encoding = "2"
 pimalaya-cli = { version = "0.2", default-features = false, features = ["carddav", "jmap", "prompt", "spinner", "table", "terminal", "wizard"] }
 pimalaya-config = { version = "0.1", default-features = false, features = ["toml", "secret"] }
-pimalaya-stream = { version = "0.1", default-features = false, features = ["std"] }
+pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
 secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 shellexpand = "3.1"
 url = { version = "2.5", features = ["serde"] }
 vcard-rs = { version = "0.2", default-features = false, features = ["parser"], optional = true }
-
-[patch.crates-io]
-io-msgraph.git = "https://github.com/pimalaya/io-msgraph"
-io-people.git = "https://github.com/pimalaya/io-people"
-io-vdir.git = "https://github.com/pimalaya/io-vdir"
-io-pimdir.git = "https://github.com/pimalaya/io-pimdir"
-io-replica.git = "https://github.com/pimalaya/io-replica"
-io-webdav.git = "https://github.com/pimalaya/io-webdav"
-pimalaya-cli.git = "https://github.com/pimalaya/cli"
-vcard-rs.git = "https://github.com/pimalaya/vcard"

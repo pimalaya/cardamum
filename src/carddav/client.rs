@@ -26,7 +26,10 @@ use io_pim_discovery::{
     rfc6764::{client::DiscoveryWebdavClientStd, service::DiscoveryDavService},
 };
 use io_webdav::{client::WebdavClientStd as Inner, rfc4918::WebdavAuth};
-use pimalaya_stream::{std::stream::StreamStd, tls::Tls};
+use pimalaya_stream::{
+    stream::{Stream, TlsConnectOptions},
+    tls::Tls,
+};
 use secrecy::ExposeSecret;
 use url::Url;
 
@@ -161,7 +164,11 @@ fn run_well_known(
     request: HttpRequest,
     tls: &Tls,
 ) -> Result<Http11WellKnownOutput> {
-    let mut stream = StreamStd::connect_tls(host, port, tls)?;
+    let opts = TlsConnectOptions {
+        tls: tls.clone(),
+        ..Default::default()
+    };
+    let mut stream = Stream::connect_tls(host, port, opts)?;
     let mut coroutine = Http11WellKnown::new(request);
     let mut buf = [0u8; 8 * 1024];
     let mut arg: Option<&[u8]> = None;

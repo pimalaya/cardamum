@@ -65,7 +65,7 @@ use crate::{
 };
 
 /// The endpoint prompt label, shared by the create flow.
-const ENDPOINT_PROMPT: &str = "Email, server or path:";
+const ENDPOINT_PROMPT: &str = "Email:";
 
 /// The documented sample configuration, shown in the welcome banner and
 /// pointed at when discovery finds nothing to configure automatically.

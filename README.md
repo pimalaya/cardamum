@@ -21,12 +21,6 @@ CLI to manage contacts, written in Rust
 
 - **Shared API**: `addressbook` and `card` work the same whichever backend serves the account.
 - **Protocol-specific APIs**: `carddav`, `jmap`, `msgraph`, `people` and `vdir` each expose what only that backend has, down to a raw request escape hatch.
-- **CardDAV**: talk to any standard address book server, with basic or bearer authentication.
-- **JMAP**: contact cards and address books over the JSON protocol, including its incremental `changes` sync.
-- **Microsoft Graph**: the native contacts API, where Microsoft offers no CardDAV, with the vCard synthesized both ways.
-- **Google People**: the native API, richer than Google's CardDAV bridge, with contact groups mapped to addressbooks.
-- **vdir**: read and write a local [vdir](https://vdirsyncer.pimutils.org/en/stable/vdir.html) home, one directory per addressbook.
-- **pimdir**: read and stage writes against a local [pimdir](https://github.com/pimalaya/pimdir) store, the offline cache a sync engine fills.
 - **Discovery**: an email address is enough to find a provider's server, through SRV records, `.well-known` and the provider configuration documents.
 - **Interactive wizard**: `cardamum configure` turns an email address into a tested account.
 - **Multi-account**: one TOML file, one block per account, several files deep-merged when you want secrets apart.

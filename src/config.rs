@@ -240,17 +240,9 @@ pub struct VdirConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PimdirConfig {
-    /// The store directory (holds `pimdir.db` and `objects/`).
+    /// The store directory (holds `pimdir.db` and `objects/`). The store
+    /// must already exist: it is the sync engine that creates one.
     pub root: PathBuf,
-    /// The replica source name this client opens the store as. Reads are
-    /// source-independent, but a staged write (create, edit, delete) is
-    /// attributed to this source, so for the change to propagate it must
-    /// match the source name the sync engine drives for this device.
-    /// Usually left unset: it is auto-detected from the store, a store
-    /// synced as a single source being opened as that source. Set it only
-    /// to disambiguate a store synced from two sources.
-    #[serde(default)]
-    pub source: Option<String>,
     /// The account the collections are grouped under, for a store shared
     /// by several accounts (or by several domains, as the mobile apps do).
     /// Unset reads every collection in the store.

@@ -55,3 +55,49 @@ cardamum's pimdir backend is an offline **cache** over a store a sync engine pop
 The pimdir backend does the cache-specific things well, and the seeded store proves the two that matter most and had never been exercised: an unhydrated card **previews from its stored summary** in a listing and refuses to be read with a message telling the user to sync, and a write against a synced collection is **staged for the next sync** as a dirty placement, a tombstone or a baseless create, exactly as an engine would expect to find it. Around that, it initialises a store, writes a Neverest-compatible `v: 1` summary, refuses what it cannot do (addressbook deletion, description, color) with messages that say why, and guards edits on a never-synced store with the clearest error in the product.
 
 Four defects, all fixed the same day and re-verified against both stores: **PD1**, where renaming an addressbook rewrote its id and quietly stranded every card under the old one, including the configured default, and **PD2 to PD4**, the same "write through without checking, then report nothing amiss" family found on vdir the same day, where it is still open. Conflict handling and the three-way merge are the sync engine's concern, not this client's.
+
+---
+
+# pimdir (local store): second run, 2026-08-28
+
+- cardamum: v0.2.0 `--features pimdir` (working tree; io-pimdir, io-replica and io-webdav at their current git revisions)
+- account: a throwaway `[accounts.posteo-local]` in a scratch config (`--config <scratch>/cardamum.toml`, never a config in `~`), `pimdir.root` pointing at the real Neverest store `~/.local/state/neverest/posteo`
+- date: 2026-08-28
+- method: **read-only against a live store**, the first run of this backend against one a sync actually populated. The store holds `carddav/default` with 155 vCards from Posteo, all hydrated at `Full`, alongside twenty-odd `message/rfc822` collections. Nothing here writes: every card verb exercised is a read, the three `addressbook` verbs refuse before touching anything, and the store's queue was confirmed empty before and after. The seeded-store harness of the first run is what covers the write paths, and it has not been re-run against the queue model yet.
+
+## Results
+
+| Command | Variants tested | Result |
+| --- | --- | --- |
+| `account check` | base | ✅ `pimdir: OK` |
+| `addressbook list` | base, `--json` | ✅ one addressbook, `carddav/default`; the mail and calendar collections are filtered out by kind |
+| `addressbook create` | base | ⛔ bails: the collection row is the sync's to write |
+| `addressbook update` | `-n` | ⛔ bails, unchanged from the first run |
+| `addressbook delete` | `-k` | ⛔ bails, unchanged from the first run |
+| `card list` | base, `--page-size`, `--page` (first, middle, last), `--json` | ✅ 155 cards in display-name order, paging total across the boundaries, the last page short |
+| `card read` | `<id>`, absent id, non-numeric id | ✅ the stored vCard byte for byte; an absent id → "Card `99999` not found in `carddav/default`"; a non-numeric one → "Invalid card id `abc` (expected a number)" |
+| `card list` / `card read` | unknown `-k` | ⛔ "Addressbook `nope` not found", the PD2 guard holding |
+| any command | `pimdir.root` naming no store | ⛔ "Open pimdir store `…`: unable to open database file", rather than the empty listing an auto-created store used to give |
+| `card list` | **run while another process holds `owner.lock`** | ✅ lists normally, which is the point of the role change |
+
+## Findings
+
+### Bugs / issues
+
+- **PD5: `card list` never showed a `TEL` whose line sat above the card's `EMAIL`: FIXED.** The shared listing's `vcard_preview` chained its three reads as `if FN … else if email.is_none() … else if tel.is_none() …`, so any line that failed the EMAIL read consumed the iteration and the TEL read was only ever reached once an EMAIL had already been found. Posteo writes `TEL` before `EMAIL`, so the column was empty for all 155 cards, and for the great majority, which carry a phone and no mail, empty on every row. This is shared code, so **every backend was affected**, not only pimdir; it went unnoticed because the earlier fixtures happen to order `EMAIL` first. The three reads are now independent.
+- **PD6: the link id disagreed with the sync engine: FIXED.** Cardamum derived `uid:<UID>` while Neverest and io-pimdir's own conventions derive the bare `UID`. The live store confirms the bare form (`018662f1-3c96-…`). A card staged by Cardamum would have linked as a second identity, stored a second body and synced as a duplicate contact. The derivations now delegate to `io_pimdir::conventions::card`, so there is one implementation rather than two agreeing by hand.
+- **PD7: the body hash was a digest of Cardamum's own choosing: FIXED.** The spec called for "the shared 128-bit FNV-1a digest rendered as 32 hex chars"; the live store names its bodies in base32 under the algorithm recorded in `store_meta.hash_algo`. A body written under the wrong name is a body no read finds. The hash now comes from the store's handle.
+- **PD8: Cardamum took the owner role: FIXED.** io-pimdir 0.3 makes the owner exclusive, so `cardamum card list` and a sync could not run at the same time, either one failing with `PimdirError::Owned`. Cardamum is a reader plus a producer, and now holds those two handles. Verified by holding `owner.lock` from another process and listing anyway.
+
+### Backend behaviour (not bugs)
+
+- **The pending overlay is on.** The reader is built `with_pending`, so a staged `update` or `remove` reads back before the sync applies it. Not exercised here: exercising it means writing.
+- **A queued create has no public id.** `create_card` reports the card's link id instead of a `seq`, the `seq` not existing until the owner applies the action. Deliberate, and recorded in the spec.
+- **A queued action carries no sort key.** io-pimdir leaves the key to the sync that pushes the create, so a card staged here sorts at the head of the list until the next sync resolves it.
+- **The queue stayed empty throughout**, checked with `pimdir queue list` before and after, which is the proof that this run wrote nothing.
+
+## Verdict
+
+The read side is correct against a real 155-card store: listing, ordering, paging, byte-faithful reads, and every error path naming what is wrong. Four defects found, all fixed, and two of them (**PD6**, **PD7**) were silent data-duplication bugs that only a live store could reveal, since both are about agreeing with what a sync engine already wrote. **PD8** is the structural one: the backend held the one handle the format says a frontend must not hold.
+
+The write paths are unexercised on this run by design, the store being a production account. Re-running the seeded-store harness of 2026-08-09 against the queue model is what would close that, and it is the outstanding work on this backend.

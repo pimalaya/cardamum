@@ -2,6 +2,8 @@
 //! addressbook and card operations onto
 //! [`io_webdav::client::WebdavClientStd`] calls (RFC 6352).
 
+use std::collections::BTreeSet;
+
 use anyhow::{Context, Result, anyhow, bail};
 use io_webdav::{
     client::{WebdavClientStd, WebdavClientStdError},
@@ -61,6 +63,7 @@ impl CarddavBackend {
             color: color.map(str::to_string),
             ctag: None,
             sync_token: None,
+            supported_reports: BTreeSet::new(),
         };
         self.inner.create_addressbook(&wire)?;
 

@@ -5,30 +5,27 @@
 //! A) plus the blob store. A card whose body is not local still lists,
 //! and reading it reports "body not fetched" rather than erroring.
 //!
-//! Writes stage io-replica [`ReplicaMutation`]s through the store's
-//! mutate seam, never raw SQL, so the next sync derives and pushes them.
-//! A write is attributed to the configured source, and fails loudly when
-//! the store was not synced as that source rather than silently staging
-//! a change no sync will carry.
+//! Writes append one action to the store's queue (pimdir SPEC §15.1)
+//! through a producer opened for that write: the body reaches the blob
+//! tree first, then the row pinning it. The store's owner, a sync,
+//! applies the action and pushes it. The same reader folds the pending
+//! queue over its reads, so a staged change shows here before that
+//! happens.
+
+use std::io::Write;
 
 use anyhow::{Result, anyhow, bail};
-use io_pimdir::PimdirItem;
-use io_replica::{
-    client::ReplicaStorage,
-    collection::ReplicaCollectionId,
-    coroutine::{ReplicaArg, ReplicaCoroutine, ReplicaCoroutineState, ReplicaYield},
-    mutate::{ReplicaMutate, ReplicaMutation},
-    object::ReplicaObject,
-    placement::{ReplicaFlags, ReplicaHandle, ReplicaPlacement},
+use io_pimdir::{
+    PimdirCollection, PimdirItem,
+    codec::PimdirAction,
+    conventions::card::{self, PimdirCardMeta},
 };
+use io_replica::{object::ReplicaHash, placement::ReplicaFlags};
 use log::warn;
 
 use crate::{
     config::PimdirConfig,
-    pimdir::{
-        card::{self, CardSummary},
-        client::PimdirClient,
-    },
+    pimdir::client::PimdirClient,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -59,9 +56,7 @@ impl PimdirBackend {
     /// legacy ones), sorted by name.
     pub fn list_addressbooks(&mut self) -> Result<Vec<Addressbook>> {
         let mut addressbooks: Vec<Addressbook> = self
-            .inner
-            .store
-            .list_collections()?
+            .collections()?
             .into_iter()
             .filter(|collection| collection.kind.is_empty() || collection.kind == CARD_KIND)
             .map(|collection| Addressbook {
@@ -80,27 +75,26 @@ impl PimdirBackend {
         Ok(addressbooks)
     }
 
-    /// Declares a local contact collection named `name`. The collection is
-    /// local until a sync carries it: pimdir stages item mutations, not
-    /// collection ones, so no remote address book is created here.
+    /// Always fails: declaring a collection is an owner write (pimdir SPEC
+    /// §8) and this backend is a producer, which appends item actions and
+    /// nothing else. A collection declared here would also be one no sync
+    /// knows about, so no address book would ever be created from it.
     pub fn create_addressbook(
         &mut self,
-        name: &str,
+        _name: &str,
         _description: Option<&str>,
         _color: Option<&str>,
     ) -> Result<String> {
-        if name.is_empty() {
-            bail!("Addressbook name cannot be empty");
-        }
-
-        self.inner.store.ensure_collection(name, CARD_KIND)?;
-        Ok(name.to_string())
+        bail!(
+            "The pimdir backend cannot create an addressbook: the collection row is \
+             the sync's to write. Create it on the server and sync"
+        )
     }
 
     /// Always fails: a collection's row (id, display name, description,
     /// colour) is what a sync writes from the server, and this backend stages
-    /// item mutations only, so every field of it is refused rather than
-    /// changed locally into something no sync would carry.
+    /// item actions only, so every field of it is refused rather than changed
+    /// locally into something no sync would carry.
     ///
     /// A rename is refused for a sharper reason too: io-pimdir's
     /// `rename_collection` renames the *identifier*, so honouring `--name`
@@ -112,9 +106,8 @@ impl PimdirBackend {
         )
     }
 
-    /// Always fails: io-pimdir exposes no collection removal, and io-replica
-    /// has no collection-level mutation to stage one either, so a delete here
-    /// would be a silent no-op.
+    /// Always fails: io-pimdir exposes no collection removal, and the queue
+    /// carries item actions only, so a delete here would be a silent no-op.
     pub fn delete_addressbook(&mut self, _id: &str) -> Result<()> {
         bail!(
             "The pimdir backend cannot delete an addressbook; \
@@ -152,11 +145,8 @@ impl PimdirBackend {
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
         self.known_collection(addressbook_id)?;
 
-        let seq = parse_id(card_id)?;
-        let Some(item) = self.inner.store.get_item(addressbook_id, seq)? else {
-            bail!("Card `{card_id}` not found in `{addressbook_id}`");
-        };
-        let Some(hash) = item.object.clone() else {
+        let item = self.item(addressbook_id, card_id)?;
+        let Some(hash) = item.object else {
             bail!(
                 "Card `{card_id}` in `{addressbook_id}` is not downloaded yet \
                  (body not fetched); run a sync to hydrate it"
@@ -175,45 +165,33 @@ impl PimdirBackend {
         })
     }
 
-    /// Adds a locally-authored card to `addressbook_id`, staged as `Add` (the
-    /// next sync uploads it). Returns the public id the store assigned.
+    /// Stages a locally-authored card as an `add` action the next sync
+    /// applies and uploads.
+    ///
+    /// Returns the card's link id, its `UID`: a queued create carries no
+    /// public `seq` until the store's owner applies it, so there is no
+    /// store-assigned id to report yet.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         self.known_collection(addressbook_id)?;
 
-        let (link_id, meta, sort_key) = card::derive(&contents);
-        let object = ReplicaObject {
-            hash: self.inner.store.hash(&contents),
-            size: contents.len(),
-        };
-        let handle = ReplicaHandle(format!("local:{}", link_id.0));
-        let link = link_id.0.clone();
+        let derived = card::derive(&contents);
+        let link_id = derived.link_id.clone();
 
-        self.run_mutation(
-            addressbook_id,
-            ReplicaMutation::Add {
-                handle,
-                link_id,
-                flags: ReplicaFlags::default(),
-                object,
-                body: contents,
-                meta: Some(meta),
-                sort_key,
-            },
-        )?;
+        self.stage(addressbook_id, &contents, |hash| PimdirAction::Add {
+            link_id: Some(derived.link_id),
+            flags: ReplicaFlags::default(),
+            object: Some(hash),
+            meta: Some(derived.meta),
+            handle: None,
+        })?;
 
-        let seq = self
-            .inner
-            .store
-            .seq_for_link(addressbook_id, &link)?
-            .ok_or_else(|| anyhow!("Added card `{link}` in `{addressbook_id}` has no public id"))?;
-
-        Ok(seq.to_string())
+        Ok(link_id.0)
     }
 
-    /// Replaces `card_id`'s body, staged as `Edit` (the next sync pushes it,
-    /// three-way merging against the stored base).
+    /// Stages a body replacement for `card_id` as an `update` action the next
+    /// sync applies and pushes, three-way merging against the stored base.
     ///
-    /// `if_match` is ignored: a staged edit is reconciled by the engine
+    /// `if_match` is ignored: the applied edit is reconciled by the engine
     /// against the base body it recorded at sync time, which is a stronger
     /// guarantee than an ETag precondition a local store cannot check.
     pub fn update_card(
@@ -223,32 +201,46 @@ impl PimdirBackend {
         contents: Vec<u8>,
         _if_match: Option<&str>,
     ) -> Result<CardUpdateOutcome> {
-        let placement = self.synced_placement(addressbook_id, card_id)?;
-        let (_, meta, sort_key) = card::derive(&contents);
-        let object = ReplicaObject {
-            hash: self.inner.store.hash(&contents),
-            size: contents.len(),
-        };
+        self.known_collection(addressbook_id)?;
 
-        self.run_mutation(
-            addressbook_id,
-            ReplicaMutation::Edit {
-                handle: placement.handle,
-                object,
-                body: contents,
-                meta: Some(meta),
-                sort_key: Some(sort_key),
-            },
-        )?;
+        let seq = self.item(addressbook_id, card_id)?.seq;
+        let derived = card::derive(&contents);
+
+        self.stage(addressbook_id, &contents, |hash| PimdirAction::Update {
+            seq,
+            object: hash,
+            meta: Some(derived.meta),
+        })?;
 
         Ok(CardUpdateOutcome::default())
     }
 
-    /// Deletes `card_id` from `addressbook_id`, staged as `Remove` (a
-    /// tombstone the next sync pushes as a server-side delete).
+    /// Stages a `remove` action for `card_id`, which the next sync applies as
+    /// a tombstone and pushes as a server-side delete.
     pub fn delete_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<()> {
-        let placement = self.synced_placement(addressbook_id, card_id)?;
-        self.run_mutation(addressbook_id, ReplicaMutation::Remove(placement.handle))
+        self.known_collection(addressbook_id)?;
+
+        let seq = self.item(addressbook_id, card_id)?.seq;
+        self.inner
+            .producer()?
+            .enqueue(addressbook_id, &PimdirAction::Remove { seq }, None, &now())
+            .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
+
+        Ok(())
+    }
+
+    /// The store's collections, narrowed to the configured account when the
+    /// store groups several (pimdir SPEC §9.2).
+    fn collections(&self) -> Result<Vec<PimdirCollection>> {
+        let collections = match self.inner.account.as_deref() {
+            Some(account) => self
+                .inner
+                .reader
+                .list_collections_by_account(Some(account))?,
+            None => self.inner.reader.list_collections()?,
+        };
+
+        Ok(collections)
     }
 
     /// Pulls every live item of a collection by keyset paging, in the
@@ -258,7 +250,7 @@ impl PimdirBackend {
         let mut cursor: Option<(String, i64)> = None;
 
         loop {
-            let page = self.inner.store.list_items_page_asc(
+            let page = self.inner.reader.list_items_page_asc(
                 addressbook_id,
                 cursor.as_ref().map(|(key, seq)| (key.as_str(), *seq)),
                 SCAN_BATCH,
@@ -319,15 +311,13 @@ impl PimdirBackend {
 
     /// Fails unless `collection` is a collection the store knows.
     ///
-    /// The store's write seam creates a collection on demand and its read seam
-    /// answers an unknown one with an empty page, so without this a typo in
-    /// `-k` would invent an addressbook on a write and read as an empty one on
-    /// a list.
+    /// The store's read seam answers an unknown collection with an empty page
+    /// and its queue accepts an action for any name, so without this a typo in
+    /// `-k` would read as an empty addressbook and stage into one nothing will
+    /// ever apply.
     fn known_collection(&self, collection: &str) -> Result<()> {
         let known = self
-            .inner
-            .store
-            .list_collections()?
+            .collections()?
             .into_iter()
             .any(|candidate| candidate.id == collection);
 
@@ -338,77 +328,58 @@ impl PimdirBackend {
         Ok(())
     }
 
-    /// The source's placement for the public id `card_id`, guaranteed to carry
-    /// a sync base.
-    ///
-    /// Resolves the public `seq` to the internal `link_id` first, then finds
-    /// the placement by link id. A change on a placement with no base would
-    /// stage as a fresh create rather than an edit and no sync would carry it,
-    /// so this is the guard that turns a misconfigured source (the store was
-    /// never synced as `self.inner.source`) into a clear error instead of a
-    /// silent no-op.
-    fn synced_placement(&self, collection: &str, card_id: &str) -> Result<ReplicaPlacement> {
-        let seq = parse_id(card_id)?;
-        let link_id = self
-            .inner
-            .store
+    /// The stored item behind a public card id, or a clear miss.
+    fn item(&self, collection: &str, card_id: &str) -> Result<PimdirItem> {
+        let seq = card_id
+            .parse::<i64>()
+            .map_err(|_| anyhow!("Invalid card id `{card_id}` (expected a number)"))?;
+
+        self.inner
+            .reader
             .get_item(collection, seq)?
-            .map(|item| item.link_id.0)
-            .ok_or_else(|| anyhow!("Card `{card_id}` not found in `{collection}`"))?;
-
-        let loaded = self
-            .inner
-            .store
-            .load(&ReplicaCollectionId(collection.to_string()))?;
-        let placement = loaded
-            .placements
-            .into_iter()
-            .find(|placement| {
-                placement.link_id.as_ref().map(|link| link.0.as_str()) == Some(link_id.as_str())
-            })
-            .ok_or_else(|| anyhow!("Card `{card_id}` not found in `{collection}`"))?;
-
-        if placement.base.is_none() {
-            bail!(
-                "`{collection}` was not synced as source `{}`, so `{card_id}` cannot be \
-                 edited here; set `pimdir.source` to the sync source and sync first",
-                self.inner.source
-            );
-        }
-
-        Ok(placement)
+            .ok_or_else(|| anyhow!("Card `{card_id}` not found in `{collection}`"))
     }
 
-    /// Drives a mutate coroutine to completion against the store: it only ever
-    /// asks to load the collection and to write the staged ops.
-    fn run_mutation(&mut self, collection: &str, mutation: ReplicaMutation) -> Result<()> {
-        let mut coroutine = ReplicaMutate::new(collection.to_string(), mutation);
-        let mut arg: Option<ReplicaArg> = None;
+    /// Writes a body into the blob tree, then appends the action naming it,
+    /// both under one producer.
+    ///
+    /// The body is durable before anything references it (pimdir SPEC §14),
+    /// and the producer is opened around the pair rather than for the enqueue
+    /// alone: its shared lock is what keeps a collector out of the window
+    /// between a body reaching the blob tree and the queue row pinning it. A
+    /// body the store already holds keeps the stored copy.
+    fn stage(
+        &self,
+        collection: &str,
+        contents: &[u8],
+        action: impl FnOnce(ReplicaHash) -> PimdirAction,
+    ) -> Result<()> {
+        let mut producer = self.inner.producer()?;
 
-        loop {
-            match coroutine.resume(arg.take()) {
-                ReplicaCoroutineState::Yielded(ReplicaYield::WantsLoad(collection)) => {
-                    let loaded = self.inner.store.load(&collection)?;
-                    arg = Some(ReplicaArg::Load(loaded));
-                }
-                ReplicaCoroutineState::Yielded(ReplicaYield::WantsWrite(ops)) => {
-                    self.inner.store.write(ops)?;
-                    arg = Some(ReplicaArg::Write);
-                }
-                ReplicaCoroutineState::Yielded(_) => {
-                    bail!("Unexpected step in the pimdir mutate coroutine");
-                }
-                ReplicaCoroutineState::Complete(result) => {
-                    return result.map_err(|err| anyhow!("Stage the pimdir mutation: {err}"));
-                }
-            }
-        }
+        // NOTE: the hash is the store's, read from `store_meta.hash_algo`,
+        // never one this crate picks: a body named under another algorithm
+        // is a body no read ever finds.
+        let hash = producer.hash(contents);
+        let mut writer = self.inner.blobs.writer()?;
+        writer.write_all(contents)?;
+        let size = writer.commit(&hash)?;
+
+        producer
+            .enqueue(collection, &action(hash), Some(size), &now())
+            .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
+
+        Ok(())
     }
+}
+
+/// The enqueue timestamp, RFC 3339 as the queue column expects.
+fn now() -> String {
+    humantime::format_rfc3339_millis(std::time::SystemTime::now()).to_string()
 }
 
 /// Reads a stored item's `v: 1` summary, falling back to an empty one when the
 /// card was never projected or the blob does not parse.
-fn summary_of(item: &PimdirItem) -> CardSummary {
+fn summary_of(item: &PimdirItem) -> PimdirCardMeta {
     item.meta
         .as_ref()
         .and_then(|meta| serde_json::from_str(&meta.0).ok())
@@ -418,13 +389,18 @@ fn summary_of(item: &PimdirItem) -> CardSummary {
 /// Renders a stored summary as a minimal vCard, the listing preview of a card
 /// whose body is not local yet. It carries only what the summary knows (`UID`,
 /// `FN`, `EMAIL`), so a contact list reads correctly before a full sync.
-fn preview_vcard(summary: &CardSummary) -> Vec<u8> {
+fn preview_vcard(summary: &PimdirCardMeta) -> Vec<u8> {
     let mut out = String::from("BEGIN:VCARD\r\nVERSION:4.0\r\n");
 
     if let Some(uid) = &summary.uid {
+        // NOTE: two rows of one listing may legitimately carry this `UID`,
+        // the store keying the second copy apart under a minted `dup:` link
+        // id (pimdir SPEC §9). It is a display value and never an address,
+        // so nothing downstream may dedupe, group or look a row up by it:
+        // the public `seq` is what names a card.
         out.push_str(&format!("UID:{uid}\r\n"));
     }
-    out.push_str(&format!("FN:{}\r\n", summary.full_name));
+    out.push_str(&format!("FN:{}\r\n", summary.fn_));
     for email in &summary.emails {
         out.push_str(&format!("EMAIL:{email}\r\n"));
     }
@@ -433,9 +409,68 @@ fn preview_vcard(summary: &CardSummary) -> Vec<u8> {
     out.into_bytes()
 }
 
-/// Parses a card id, the public per-collection `seq` (a small integer), with a
-/// clear error for a non-numeric one.
-fn parse_id(id: &str) -> Result<i64> {
-    id.parse::<i64>()
-        .map_err(|_| anyhow!("Invalid card id `{id}` (expected a number)"))
+#[cfg(test)]
+mod tests {
+    use io_replica::placement::{ReplicaLevel, ReplicaLinkId, ReplicaMeta};
+
+    use super::*;
+
+    /// RFC 6352 §5.1 requires a card's `UID` to be unique in its collection,
+    /// and servers do not always enforce it, most often after a repeated
+    /// import. A store therefore holds both copies, keying the second apart
+    /// under a minted `dup:` link id (pimdir SPEC §9), and both project as
+    /// ordinary cards: the shared `UID` tells them apart from nothing, so
+    /// what addresses them is the public `seq` each carries, and the key the
+    /// store minted never reaches the card a reader sees.
+    #[test]
+    fn two_items_sharing_a_uid_project_two_distinct_cards() {
+        let one = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:shared@example.org\r\n\
+                    FN:Jane Doe\r\nEMAIL:jane@example.org\r\nEND:VCARD\r\n";
+        let two = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:shared@example.org\r\n\
+                    FN:Jane Doh\r\nEMAIL:doh@example.org\r\nEND:VCARD\r\n";
+
+        // A derivation is what a write carries, not a lookup: both bodies
+        // derive the one bare link id, which is why the store mints.
+        let first = card::derive(one);
+        let second = card::derive(two);
+        assert_eq!(first.link_id.0, "shared@example.org");
+        assert_eq!(second.link_id.0, "shared@example.org");
+
+        let bare = item(7, "shared@example.org", first.meta);
+        let minted = item(
+            8,
+            "dup:shared@example.org#/books/contacts/copy.vcf",
+            second.meta,
+        );
+
+        let previews = [&bare, &minted]
+            .map(|item| String::from_utf8(preview_vcard(&summary_of(item))).unwrap());
+
+        // Both rows state the shared `UID` and neither is marked, so it
+        // tells them apart from nothing, and the two cards stay distinct.
+        assert!(previews[0].contains("UID:shared@example.org\r\n"));
+        assert!(previews[1].contains("UID:shared@example.org\r\n"));
+        assert!(previews[0].contains("FN:Jane Doe\r\n"));
+        assert!(previews[1].contains("FN:Jane Doh\r\n"));
+        assert_ne!(previews[0], previews[1]);
+
+        // The key the store minted is its own, and never reaches a reader.
+        assert!(!previews[1].contains("dup:"));
+    }
+
+    /// A stored item as a read hands one over: the public `seq`, the key the
+    /// store assigned it, and the `v: 1` summary a sync projected, with no
+    /// body fetched yet.
+    fn item(seq: i64, link_id: &str, meta: ReplicaMeta) -> PimdirItem {
+        PimdirItem {
+            seq,
+            link_id: ReplicaLinkId(link_id.to_string()),
+            flags: ReplicaFlags::default(),
+            meta: Some(meta),
+            sort_key: String::new(),
+            object: None,
+            level: ReplicaLevel::Meta,
+            retention: None,
+        }
+    }
 }

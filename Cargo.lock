@@ -179,6 +179,7 @@ dependencies = [
  "crossterm",
  "env_logger",
  "getrandom 0.4.3",
+ "humantime",
  "io-http",
  "io-jmap",
  "io-msgraph",
@@ -303,9 +304,9 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "combine"
-version = "4.6.7"
+version = "4.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba5a308b75df32fe02788e748662718f03fde005016435c444eea572398219fd"
+checksum = "cfc320937d09e6de266b31b9afb480f197d7a861be86be7cb2ea7e5d1bfffc5e"
 dependencies = [
  "bytes",
  "memchr",
@@ -355,9 +356,9 @@ checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
 
 [[package]]
 name = "cpufeatures"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
+checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
 dependencies = [
  "libc",
 ]
@@ -658,6 +659,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "fs4"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e72ed92b67c146290f88e9c89d60ca163ea417a446f61ffd7b72df3e7f1dfd5"
+dependencies = [
+ "rustix",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "fs_extra"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -726,6 +737,12 @@ name = "httparse"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6dbf3de79e51f3d586ab4cb9d5c3e2c14aa28ed23d180cf89b4df0454a69cc87"
+
+[[package]]
+name = "humantime"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15cdd26707701c53297e2fa6afb323d55fbc1d0810c3aec078ae3ef0424c3c15"
 
 [[package]]
 name = "hybrid-array"
@@ -958,12 +975,13 @@ dependencies = [
 [[package]]
 name = "io-pimdir"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46b3f6bacb3f603d420e682c387cd1c795480c86c964be86c46a1c0c0d17b2ce"
+source = "git+https://github.com/pimalaya/io-pimdir#92a4d437659fb21b5e5fbca4210b2d58d796d349"
 dependencies = [
  "blake3",
+ "fs4",
  "io-replica",
  "rusqlite",
+ "serde",
  "serde_json",
  "sha2",
 ]
@@ -981,9 +999,8 @@ dependencies = [
 
 [[package]]
 name = "io-replica"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a46462f7385c1f2626263e192a65f2ef08569808e0e2fbb7892282c0a64c1a1"
+version = "0.4.2"
+source = "git+https://github.com/pimalaya/io-replica#9f87264dad7e5746bca17bbb01f2e56f692eee8d"
 dependencies = [
  "log",
  "thiserror",
@@ -1004,8 +1021,7 @@ dependencies = [
 [[package]]
 name = "io-webdav"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80509bd445e4fd344e529171212058b470ec7276c5f7295ac0ef906d3fc771ad"
+source = "git+https://github.com/pimalaya/io-webdav#aefaba385a0e98432d71ff63daa8fbf831ec7ca1"
 dependencies = [
  "anyhow",
  "io-http",
@@ -1157,9 +1173,9 @@ dependencies = [
 
 [[package]]
 name = "libredox"
-version = "0.1.20"
+version = "0.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28d0a00925a9f930d679b6789b721e3a7f9ed110f41b86d2497caa780c3a070a"
+checksum = "d7955dfc218a8afb29dfeffd540e3a6e96baeb94fe7138228dd7cc6937fbbf96"
 dependencies = [
  "libc",
 ]

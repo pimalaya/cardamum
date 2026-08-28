@@ -1,64 +1,76 @@
-//! Cardamum wrapper around [`io_pimdir`]'s store and blob reader.
+//! Cardamum wrapper around [`io_pimdir`]'s reader and producer roles.
 
 use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
-use io_pimdir::{PimdirBlobs, PimdirStore};
+use io_pimdir::{PimdirBlobs, PimdirProducer, PimdirReader};
 
 use crate::config::PimdirConfig;
 
-/// Live pimdir client: an opened store (as one source) plus a connection-
-/// independent blob reader over the same directory.
+/// The process name each staged action records (pimdir SPEC §15.1),
+/// diagnostic only: it says who asked, never who applies.
+const PRODUCER: &str = "cardamum";
+
+/// Live pimdir client: a lock-free reader over the store, plus a blob reader
+/// over the same directory.
+///
+/// A write opens a producer of its own and drops it, so this handle never
+/// holds anything a sync has to wait on.
 pub struct PimdirClient {
-    pub(crate) store: PimdirStore,
+    pub(crate) reader: PimdirReader,
     pub(crate) blobs: PimdirBlobs,
-    /// The replica source this client opened the store as; a staged write is
-    /// attributed to it.
-    pub(crate) source: String,
+    /// The expanded store root, which a producer is opened against.
+    root: PathBuf,
+    /// The account the collections are grouped under, `None` in a
+    /// single-account store.
+    pub(crate) account: Option<String>,
 }
 
 impl PimdirClient {
-    /// Opens (creating if absent) the pimdir store at the configured root.
+    /// Opens the pimdir store at the configured root to read.
     ///
-    /// Reads are source-independent; the source only labels this client's
-    /// writes. When `pimdir.source` is unset, it is **auto-detected**: a store
-    /// synced as a single source (the local-sync case) has exactly one, so the
-    /// app writes as it with no configuration; otherwise it falls back to
-    /// `local`.
+    /// The store must exist: a reader creates nothing, the schema being the
+    /// owner's to write, so a root holding no store fails here rather than
+    /// listing an empty addressbook set.
+    ///
+    /// The reader folds the queue's pending actions over the committed rows
+    /// (pimdir SPEC §15.4), so a card this process staged reads back before
+    /// the store's owner applies it.
     pub fn new(config: PimdirConfig) -> Result<Self> {
         // NOTE: `root` carries a raw `~/…` verbatim, and opening it
-        // unexpanded would silently create an empty store at a literal
-        // `./~/…` relative to the cwd.
+        // unexpanded would look for a store at a literal `./~/…` relative
+        // to the cwd.
         let root = shellexpand::full(&config.root.to_string_lossy())
             .map(|expanded| PathBuf::from(expanded.into_owned()))
             .unwrap_or_else(|_| config.root.clone());
 
-        let open = |source: &str| {
-            PimdirStore::open(&root, source)
-                .map_err(|err| anyhow!("Open pimdir store `{}`: {err}", root.display()))
-        };
-
-        let source = match config.source.clone() {
-            Some(source) => source,
-            None => {
-                let probe = open("probe")?;
-                match probe.distinct_sources()?.as_slice() {
-                    [only] => only.clone(),
-                    _ => "local".to_string(),
-                }
-            }
-        };
-
-        let mut store = open(&source)?;
-        if let Some(account) = config.account.clone() {
-            store = store.for_account(account);
-        }
-        let blobs = store.blobs();
+        let reader = PimdirReader::open(&root)
+            .map(PimdirReader::with_pending)
+            .map_err(|err| anyhow!("Open pimdir store `{}`: {err}", root.display()))?;
+        let blobs = reader.blobs();
 
         Ok(Self {
-            store,
+            reader,
             blobs,
-            source,
+            root,
+            account: config.account.clone(),
+        })
+    }
+
+    /// Opens a producer for one staging window: the enqueue-only role, which
+    /// takes the store's shared lock rather than the owner's exclusive one, so
+    /// several run at once and none keeps a sync out.
+    ///
+    /// Opened per write and dropped with it, since what the lock buys is the
+    /// window between a body reaching the blob tree and the queue row pinning
+    /// it, which a collector must not run inside.
+    pub(crate) fn producer(&self) -> Result<PimdirProducer> {
+        let producer = PimdirProducer::open(&self.root, PRODUCER)
+            .map_err(|err| anyhow!("Stage into pimdir store `{}`: {err}", self.root.display()))?;
+
+        Ok(match self.account.clone() {
+            Some(account) => producer.for_account(account),
+            None => producer,
         })
     }
 }

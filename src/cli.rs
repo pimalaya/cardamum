@@ -114,8 +114,10 @@ pub enum Command {
     Configure(ConfigureCommand),
     #[command(subcommand)]
     Account(AccountCommand),
-    Completions(CompletionCommand),
-    Manuals(ManualCommand),
+    #[command(alias = "completions")]
+    Completion(CompletionCommand),
+    #[command(alias = "manuals")]
+    Manual(ManualCommand),
 }
 
 /// Welcomes, then offers to generate a first configuration. Returns
@@ -260,8 +262,8 @@ impl Command {
 
             Self::Configure(cmd) => cmd.execute(printer, config_paths),
             Self::Account(cmd) => cmd.execute(printer, config_paths, account_name, backend),
-            Self::Completions(cmd) => cmd.execute(printer, Cli::command()),
-            Self::Manuals(cmd) => cmd.execute(printer, Cli::command()),
+            Self::Completion(cmd) => cmd.execute(printer, Cli::command()),
+            Self::Manual(cmd) => cmd.execute(printer, Cli::command()),
         }
     }
 }

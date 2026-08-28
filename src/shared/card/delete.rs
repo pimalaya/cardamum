@@ -11,7 +11,8 @@ use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
 pub struct CardDeleteCommand {
     #[command(flatten)]
     pub addressbook: AddressbookIdArg,
-    /// Card UID.
+    /// Card identifier, as `card list` reports it. It is the backend's own
+    /// id, not the vCard `UID`, which names no card on its own.
     #[arg(value_name = "CARD-ID")]
     pub card_id: String,
 }

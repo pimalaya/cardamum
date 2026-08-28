@@ -129,15 +129,21 @@ fn vcard_preview(bytes: &[u8]) -> (Option<String>, Option<String>, Option<String
     let mut email = None;
     let mut tel = None;
 
+    // NOTE: the three reads are independent. Chained, a line that failed
+    // the EMAIL read never reached the TEL one, so a card writing its TEL
+    // above its EMAIL listed with an empty TEL column.
     for line in text.lines() {
         let line = line.trim();
+
         if fn_value.is_none() && line.starts_with("FN:") {
             fn_value = Some(line[3..].to_string());
-        } else if email.is_none() {
-            if let Some(rest) = pick_property(line, "EMAIL") {
-                email = Some(rest);
-            }
-        } else if tel.is_none()
+        }
+        if email.is_none()
+            && let Some(rest) = pick_property(line, "EMAIL")
+        {
+            email = Some(rest);
+        }
+        if tel.is_none()
             && let Some(rest) = pick_property(line, "TEL")
         {
             tel = Some(rest);

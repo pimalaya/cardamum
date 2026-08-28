@@ -49,7 +49,6 @@ fn detect(root: &Path) -> Option<Local> {
     if root.join("pimdir.db").is_file() {
         return Some(Local::Pimdir(PimdirConfig {
             root: root.to_path_buf(),
-            source: None,
             account: None,
         }));
     }
@@ -98,7 +97,6 @@ fn pick(root: PathBuf) -> Result<Local> {
         }),
         _ => Local::Pimdir(PimdirConfig {
             root,
-            source: None,
             account: None,
         }),
     })
@@ -115,7 +113,6 @@ fn pick(root: PathBuf) -> Result<Local> {
 fn pick(root: PathBuf) -> Result<Local> {
     Ok(Local::Pimdir(PimdirConfig {
         root,
-        source: None,
         account: None,
     }))
 }

@@ -97,13 +97,9 @@ vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
 # --------------------------------------------------------------------------------
 
 #[accounts.pimdir-example]
-# The store directory, holding `pimdir.db` and `objects/`.
+# The store directory, holding `pimdir.db` and `objects/`. It must already exist:
+# creating a store is the sync engine's job.
 #pimdir.root = "~/.local/share/pimdir"
-# The replica source a staged write is attributed to. Leave unset: a store
-# synced as a single source is opened as that source. Set it only to
-# disambiguate a store synced from two sources, and make it match the source
-# the sync engine drives for this device, or the change reaches no server.
-#pimdir.source = "personal"
 # The account the collections are grouped under, for a store shared by several
 # accounts or domains. Unset reads every collection in the store.
 #pimdir.account = "personal"

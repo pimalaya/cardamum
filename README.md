@@ -211,16 +211,16 @@ vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
 addressbook.default = "personal"
 ```
 
-A [pimdir](https://github.com/pimalaya/pimdir) store is the offline cache a sync engine fills: a SQLite index plus content-addressed bodies, shared with the other Pimalaya clients reading the same store. It is a cache, not a server, so addressbooks come from the sync and the collection verbs refuse here. Writes are staged for the next sync to push:
+A [pimdir](https://github.com/pimalaya/pimdir) store is the offline cache a sync engine fills: a SQLite index plus content-addressed bodies, shared with the other Pimalaya clients reading the same store. Cardamum reads it and stages card writes onto its queue, leaving the store to its owner, the sync, so a listing never waits on a sync in flight and never keeps one out. It is a cache, not a server, so the store must already exist, addressbooks come from the sync and the collection verbs refuse here:
 
 ```toml
 [accounts.cached]
 pimdir.root = "~/.local/state/neverest/example"
-# Usually left unset: a store synced as a single source is opened as it.
-#pimdir.source = "carddav"
+# Only for a store grouping several accounts; unset reads every collection.
+#pimdir.account = "personal"
 ```
 
-A card that is listed but not downloaded reads as "body not fetched" until a sync hydrates it.
+A card that is listed but not downloaded reads as "body not fetched" until a sync hydrates it. A staged write shows in the listing straight away and reaches the server on the next sync.
 
 ## Usage
 
@@ -238,7 +238,7 @@ cardamum -a work -b carddav card list
 cardamum carddav report sync personal
 cardamum jmap contact-card changes <SINCE-STATE>
 cardamum people connection list --sync-token <TOKEN>
-cardamum msgraph contact delta --folder contacts
+cardamum msgraph contacts delta --folder contacts
 ```
 
 Logs go to stderr, so they can be redirected to a file while the command output stays on stdout:

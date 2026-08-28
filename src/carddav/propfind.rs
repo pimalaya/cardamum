@@ -44,11 +44,12 @@ impl CarddavPropfindCommand {
             }
             Some(id) => {
                 let id_color = client.account.cards_list_table_id_color();
-                let refs = client.enum_cards(&id)?;
+                let enumerated = client.enum_cards(&id)?;
                 printer.out(CardRefsReport {
                     preset,
                     id_color,
-                    rows: refs.into_iter().map(CardRefRow::from).collect(),
+                    rows: enumerated.refs.into_iter().map(CardRefRow::from).collect(),
+                    truncated: enumerated.truncated,
                 })
             }
         }
@@ -131,6 +132,10 @@ pub struct CardRefsReport {
     pub id_color: Color,
     #[serde(rename = "cards")]
     pub rows: Vec<CardRefRow>,
+    /// Whether the server cut the listing short with a 507 row (RFC 6578
+    /// §3.6), which makes the rows a part of the addressbook rather than
+    /// the whole of it.
+    pub truncated: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -166,6 +171,9 @@ impl fmt::Display for CardRefsReport {
         writeln!(f)?;
         write!(f, "{table}")?;
         writeln!(f)?;
+        if self.truncated {
+            writeln!(f, "truncated: the server cut the listing short")?;
+        }
         Ok(())
     }
 }

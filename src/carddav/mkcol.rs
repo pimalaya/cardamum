@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use anyhow::Result;
 use clap::Parser;
 use io_webdav::rfc6352::addressbook::CarddavAddressbook;
@@ -35,6 +37,7 @@ impl CarddavMkcolCommand {
             color: self.color,
             ctag: None,
             sync_token: None,
+            supported_reports: BTreeSet::new(),
         };
 
         client.create_addressbook(&wire)?;

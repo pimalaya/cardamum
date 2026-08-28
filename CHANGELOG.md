@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added `--fallback` to `carddav report sync`, which enumerates the addressbook with a Depth 1 `PROPFIND` for a server implementing no `sync-collection` REPORT. `carddav propfind <addressbook>` also reports when the server cut its listing short, which it used to drop.
+
+### Changed
+
+- **BREAKING**: the pimdir backend no longer takes the store's owner role, and `pimdir.source` is gone from the configuration.
+
+  It reads through a lock-free reader and stages each write as one queue action through a short-lived producer, which is what the format asks of a process that is not the store's owner. A listing therefore runs beside a sync instead of failing against it, and a staged write reads back before the sync applies it. Nothing attributes a write to a replica source any more, so `pimdir.source` has no meaning and an account still carrying it is an error.
+
+  The pimdir store must now already exist: creating one is the sync engine's job, and a root naming no store says so instead of listing an empty set of addressbooks.
+
+- **BREAKING**: the pimdir backend refuses `addressbook create`, and `card create` reports the card's link id.
+
+  Declaring a collection is an owner write, and a collection no sync knows about is one no sync would carry, so all three `addressbook` writes now refuse on pimdir. A queued create has no store-assigned id until the sync applies it, so there is none to report.
+
+- **BREAKING**: renamed `completions` and `manuals` to `completion` and `manual`, the plural staying as a hidden alias.
+
+  A command mirroring a vendor API resource keeps that API's spelling, so `people contact-group members`, `jmap address-book changes` and `jmap contact-card changes` are unchanged, each gaining a hidden singular alias. The `msgraph` family, singular where Graph is plural, is aligned onto Graph: `msgraph contact-folder` and `contact` become `contact-folders` and `contacts`, joining the `child-folders` that already sat under the first. Every singular spelling stays as a hidden alias, where it used to be shown beside the plural.
+
+- Reworded the card argument of `card read`, `card update` and `card delete`, which called itself a card `UID`. It is the backend's own identifier, the one `card list` reports, and a `UID` names no card on its own.
+
+### Fixed
+
+- Fixed a card vanishing from the pimdir backend when another card of the same addressbook carried its `UID`. RFC 6352 requires that `UID` to be unique and servers hand over duplicates anyway, most often after a repeated import; the store keys the second copy apart now, so both cards list, read and act as ordinary cards under their own ids.
+- Fixed `card list` leaving the `TEL` column empty for any card writing its phone above its mail. The preview chained its three property reads, so a line that was not an `EMAIL` never reached the `TEL` read. Every backend was affected.
+- Fixed the pimdir backend linking a card it stages under `uid:<UID>` where the sync engine uses the bare `UID`, which would have stored the card twice and synced it as a duplicate contact. The derivations now come from io-pimdir's own conventions.
+- Fixed the pimdir backend naming a body it writes with a digest of its own choosing instead of the hash the store records, which put the body where no read would look for it.
+
 ## [0.2.0] - 2026-08-24
 
 ### Added

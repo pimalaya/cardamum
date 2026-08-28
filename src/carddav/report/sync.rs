@@ -3,7 +3,9 @@ use std::fmt;
 use anyhow::Result;
 use clap::Parser;
 use comfy_table::{Cell, Row, Table};
-use io_webdav::rfc6578::sync_collection::{WebdavSyncChange, WebdavSyncDelta};
+use io_webdav::rfc6578::sync_collection::{
+    WebdavSyncChange, WebdavSyncCollectionOptions, WebdavSyncDelta,
+};
 use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
@@ -25,12 +27,20 @@ pub struct CarddavReportSyncCommand {
     /// Sync token from a previous sync; omit for an initial sync.
     #[arg(long, value_name = "TOKEN")]
     pub sync_token: Option<String>,
+    /// Enumerate with a Depth 1 PROPFIND instead of the REPORT, for a
+    /// server implementing no `sync-collection`. It lists every member and
+    /// returns no token, so the result is a full snapshot to diff.
+    #[arg(long)]
+    pub fallback: bool,
 }
 
 impl CarddavReportSyncCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
         let preset = client.account.table_preset().to_string();
-        let delta = client.sync_cards(&self.addressbook_id, self.sync_token.as_deref())?;
+        let opts = WebdavSyncCollectionOptions {
+            fallback: self.fallback,
+        };
+        let delta = client.sync_cards(&self.addressbook_id, self.sync_token.as_deref(), opts)?;
 
         printer.out(SyncReport::new(preset, delta))
     }

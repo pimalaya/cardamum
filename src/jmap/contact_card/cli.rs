@@ -26,6 +26,7 @@ pub enum JmapContactCardCommand {
     Update(JmapContactCardUpdateCommand),
     #[command(visible_aliases = ["delete", "del", "rm", "remove"])]
     Destroy(JmapContactCardDestroyCommand),
+    #[command(alias = "change")]
     Changes(JmapContactCardChangesCommand),
     Copy(JmapContactCardCopyCommand),
 }

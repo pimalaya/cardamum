@@ -4,7 +4,7 @@ use pimalaya_cli::printer::Printer;
 
 use crate::msgraph::{
     client::MsgraphClient,
-    contact::{input::ContactJsonArg, render::ContactReport},
+    contacts::{input::ContactJsonArg, render::ContactReport},
 };
 
 /// Update a contact from a raw Graph contact JSON body (PATCH: only the

@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::{client::MsgraphClient, contact::render::ContactReport};
+use crate::msgraph::{client::MsgraphClient, contacts::render::ContactReport};
 
 /// GET a contact by id.
 ///

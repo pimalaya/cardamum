@@ -3,7 +3,7 @@ use clap::Parser;
 use io_msgraph::v1::rest::users::contact_folders::MsgraphContactFolder;
 use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::{client::MsgraphClient, contact_folder::render::FolderReport};
+use crate::msgraph::{client::MsgraphClient, contact_folders::render::FolderReport};
 
 /// Rename a contact folder (PATCH its `displayName`).
 ///

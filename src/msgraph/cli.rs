@@ -3,8 +3,8 @@ use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
 
 use crate::msgraph::{
-    client::MsgraphClient, contact::cli::MsgraphContactCommand,
-    contact_folder::cli::MsgraphContactFolderCommand, profile::cli::MsgraphProfileCommand,
+    client::MsgraphClient, contact_folders::cli::MsgraphContactFoldersCommand,
+    contacts::cli::MsgraphContactsCommand, profile::cli::MsgraphProfileCommand,
     request::MsgraphRequestCommand,
 };
 
@@ -17,10 +17,10 @@ use crate::msgraph::{
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum MsgraphCommand {
-    #[command(subcommand, visible_aliases = ["folder", "folders"])]
-    ContactFolder(MsgraphContactFolderCommand),
-    #[command(subcommand, visible_alias = "contacts")]
-    Contact(MsgraphContactCommand),
+    #[command(subcommand, visible_alias = "folders", aliases = ["contact-folder", "folder"])]
+    ContactFolders(MsgraphContactFoldersCommand),
+    #[command(subcommand, alias = "contact")]
+    Contacts(MsgraphContactsCommand),
     #[command(subcommand)]
     Profile(MsgraphProfileCommand),
     Request(MsgraphRequestCommand),
@@ -29,8 +29,8 @@ pub enum MsgraphCommand {
 impl MsgraphCommand {
     pub fn execute(self, printer: &mut impl Printer, client: MsgraphClient) -> Result<()> {
         match self {
-            Self::ContactFolder(cmd) => cmd.execute(printer, client),
-            Self::Contact(cmd) => cmd.execute(printer, client),
+            Self::ContactFolders(cmd) => cmd.execute(printer, client),
+            Self::Contacts(cmd) => cmd.execute(printer, client),
             Self::Profile(cmd) => cmd.execute(printer, client),
             Self::Request(cmd) => cmd.execute(printer, client),
         }

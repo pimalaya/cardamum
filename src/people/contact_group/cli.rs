@@ -22,6 +22,7 @@ pub enum PeopleContactGroupCommand {
     Update(PeopleContactGroupUpdateCommand),
     #[command(visible_aliases = ["del", "rm"])]
     Delete(PeopleContactGroupDeleteCommand),
+    #[command(alias = "member")]
     Members(PeopleContactGroupMembersCommand),
 }
 

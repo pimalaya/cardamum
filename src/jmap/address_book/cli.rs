@@ -21,6 +21,7 @@ pub enum JmapAddressBookCommand {
     Update(JmapAddressBookUpdateCommand),
     #[command(visible_aliases = ["delete", "del", "rm", "remove"])]
     Destroy(JmapAddressBookDestroyCommand),
+    #[command(alias = "change")]
     Changes(JmapAddressBookChangesCommand),
 }
 

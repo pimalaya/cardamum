@@ -4,7 +4,7 @@ use pimalaya_cli::printer::Printer;
 
 use crate::msgraph::{
     client::MsgraphClient,
-    contact::{
+    contacts::{
         create::MsgraphContactCreateCommand, delete::MsgraphContactDeleteCommand,
         delta::MsgraphContactDeltaCommand, get::MsgraphContactGetCommand,
         list::MsgraphContactListCommand, update::MsgraphContactUpdateCommand,
@@ -17,7 +17,7 @@ use crate::msgraph::{
 /// or `-` for stdin); `--json` prints the raw Graph contact.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
-pub enum MsgraphContactCommand {
+pub enum MsgraphContactsCommand {
     List(MsgraphContactListCommand),
     Get(MsgraphContactGetCommand),
     #[command(visible_aliases = ["add", "new"])]
@@ -28,7 +28,7 @@ pub enum MsgraphContactCommand {
     Delta(MsgraphContactDeltaCommand),
 }
 
-impl MsgraphContactCommand {
+impl MsgraphContactsCommand {
     pub fn execute(self, printer: &mut impl Printer, client: MsgraphClient) -> Result<()> {
         match self {
             Self::List(cmd) => cmd.execute(printer, client),

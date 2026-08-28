@@ -3,7 +3,7 @@ use clap::Parser;
 use io_msgraph::v1::rest::users::contacts::list::MsgraphContactsListParams;
 use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::{client::MsgraphClient, contact::render::ContactsReport};
+use crate::msgraph::{client::MsgraphClient, contacts::render::ContactsReport};
 
 /// List contacts of the default Contacts folder, or of `--folder` (one
 /// Graph page).

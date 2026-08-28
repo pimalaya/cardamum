@@ -8,7 +8,7 @@ use pimalaya_cli::printer::Printer;
 use serde::Serialize;
 
 use crate::{
-    msgraph::{client::MsgraphClient, contact::render::contact_name},
+    msgraph::{client::MsgraphClient, contacts::render::contact_name},
     shared::table::style_from_preset,
 };
 

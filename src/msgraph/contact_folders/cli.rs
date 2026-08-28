@@ -4,7 +4,7 @@ use pimalaya_cli::printer::Printer;
 
 use crate::msgraph::{
     client::MsgraphClient,
-    contact_folder::{
+    contact_folders::{
         child_folders::MsgraphContactFolderChildFoldersCommand,
         create::MsgraphContactFolderCreateCommand, delete::MsgraphContactFolderDeleteCommand,
         get::MsgraphContactFolderGetCommand, list::MsgraphContactFolderListCommand,
@@ -15,9 +15,9 @@ use crate::msgraph::{
 /// Manage Graph contact folders (the addressbooks).
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
-pub enum MsgraphContactFolderCommand {
+pub enum MsgraphContactFoldersCommand {
     List(MsgraphContactFolderListCommand),
-    #[command(visible_aliases = ["children", "child"])]
+    #[command(visible_alias = "children", aliases = ["child-folder", "child"])]
     ChildFolders(MsgraphContactFolderChildFoldersCommand),
     Get(MsgraphContactFolderGetCommand),
     #[command(visible_aliases = ["add", "new"])]
@@ -27,7 +27,7 @@ pub enum MsgraphContactFolderCommand {
     Delete(MsgraphContactFolderDeleteCommand),
 }
 
-impl MsgraphContactFolderCommand {
+impl MsgraphContactFoldersCommand {
     pub fn execute(self, printer: &mut impl Printer, client: MsgraphClient) -> Result<()> {
         match self {
             Self::List(cmd) => cmd.execute(printer, client),

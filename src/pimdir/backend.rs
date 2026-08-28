@@ -58,7 +58,6 @@ impl PimdirBackend {
         let mut addressbooks: Vec<Addressbook> = self
             .collections()?
             .into_iter()
-            .filter(|collection| collection.kind.is_empty() || collection.kind == CARD_KIND)
             .map(|collection| Addressbook {
                 name: if collection.name.is_empty() {
                     collection.id.clone()
@@ -229,8 +228,13 @@ impl PimdirBackend {
         Ok(())
     }
 
-    /// The store's collections, narrowed to the configured account when the
-    /// store groups several (pimdir SPEC §9.2).
+    /// The store's address book collections, narrowed to the configured
+    /// account when the store groups several (pimdir SPEC §9.2).
+    ///
+    /// One store holds the collections of every kind a sync caches, so the
+    /// kind is what separates an address book from a mailbox or a calendar.
+    /// A kind-less collection counts: a sync that created one before kinds
+    /// were declared left the column empty.
     fn collections(&self) -> Result<Vec<PimdirCollection>> {
         let collections = match self.inner.account.as_deref() {
             Some(account) => self
@@ -240,7 +244,10 @@ impl PimdirBackend {
             None => self.inner.reader.list_collections()?,
         };
 
-        Ok(collections)
+        Ok(collections
+            .into_iter()
+            .filter(|collection| collection.kind.is_empty() || collection.kind == CARD_KIND)
+            .collect())
     }
 
     /// Pulls every live item of a collection by keyset paging, in the
@@ -309,23 +316,32 @@ impl PimdirBackend {
         })
     }
 
-    /// Fails unless `collection` is a collection the store knows.
+    /// Fails unless `collection` is a collection the store knows, naming the
+    /// ones it does hold.
     ///
     /// The store's read seam answers an unknown collection with an empty page
     /// and its queue accepts an action for any name, so without this a typo in
     /// `-k` would read as an empty addressbook and stage into one nothing will
-    /// ever apply.
+    /// ever apply. An addressbook is its collection id, which carries the sync
+    /// engine's namespace and is not guessable, so the refusal shows the ids to
+    /// choose from.
     fn known_collection(&self, collection: &str) -> Result<()> {
-        let known = self
+        let mut ids: Vec<String> = self
             .collections()?
             .into_iter()
-            .any(|candidate| candidate.id == collection);
+            .map(|candidate| candidate.id)
+            .collect();
 
-        if !known {
-            bail!("Addressbook `{collection}` not found");
+        if ids.iter().any(|id| id == collection) {
+            return Ok(());
         }
 
-        Ok(())
+        ids.sort();
+
+        bail!(
+            "Addressbook `{collection}` not found; this account holds: {}",
+            ids.join(", "),
+        )
     }
 
     /// The stored item behind a public card id, or a clear miss.

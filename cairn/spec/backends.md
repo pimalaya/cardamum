@@ -34,6 +34,15 @@ vdir and pimdir SHALL adapt io-vdir and io-pimdir. vdir stores each addressbook 
 ### Requirement: A cache renames nothing it cannot push
 The pimdir backend SHALL refuse every `addressbook update` field. Its collection row (id, display name, description, colour) is written by the sync from the server, and the backend stages item actions only, so any local edit of it is a change no sync would carry. A missing body SHALL fall back to the summary preview in a listing, as an unhydrated card does, rather than render as a blank row.
 
+### Requirement: A pimdir addressbook is its collection id
+The pimdir backend SHALL show and accept an address book as the store's collection id, verbatim: the collection `carddav/default` is the address book `carddav/default`. It SHALL NOT derive, strip or accept a shortened spelling, and no configuration SHALL offer one.
+
+A sync engine binds a source's collections under a namespace, so an id carries one; the store is opaque to it, neither parsing nor validating an id (pimdir SPEC 9.2) and modelling hierarchy through `parent` rather than through a separator. Shortening is therefore a guess at the producer's convention, and one that makes a single address book answer to two spellings.
+
+An id SHALL name an address book or name nothing: one store holds the collections of every kind a sync caches, so the kind SHALL narrow them at the one seam both the listing and the id check read, never at the listing alone. A kind-less collection counts, a sync having created one before kinds were declared.
+
+An id naming no address book of the account SHALL be refused naming the ones it holds. Ids carry the sync engine's namespace and are not guessable, so an error asking for one that shows none leaves the user nothing to act on.
+
 ### Requirement: pimdir is a cache, not a server
 The pimdir backend SHALL treat the store as a possibly-partial cache. `get_card` on a card whose body is not local (`level < Full`, no stored object) SHALL report a clear "body not fetched" state, the cue to sync, rather than a data-loss error. The card still lists: `list_cards` SHALL project the stored `v: 1` summary into a minimal preview vCard (`UID`, `FN`, `EMAIL`) so a contact list reads correctly before a full sync, while `get_card` refuses outright so a preview can never be mistaken for the document of record.
 

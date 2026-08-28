@@ -31,6 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed the pimdir backend accepting a collection of any kind as an addressbook. A sync engine caches mail, calendars and contacts in one store, and only the listing narrowed them to `text/vcard`, so `card list -k imap/INBOX` printed a mailbox's messages as blank contacts and a create would have staged a vCard into it. An addressbook id now names an addressbook or nothing, and a wrong one is refused naming the addressbooks the account holds.
 - Fixed a card vanishing from the pimdir backend when another card of the same addressbook carried its `UID`. RFC 6352 requires that `UID` to be unique and servers hand over duplicates anyway, most often after a repeated import; the store keys the second copy apart now, so both cards list, read and act as ordinary cards under their own ids.
 - Fixed `card list` leaving the `TEL` column empty for any card writing its phone above its mail. The preview chained its three property reads, so a line that was not an `EMAIL` never reached the `TEL` read. Every backend was affected.
 - Fixed the pimdir backend linking a card it stages under `uid:<UID>` where the sync engine uses the bare `UID`, which would have stored the card twice and synced it as a duplicate contact. The derivations now come from io-pimdir's own conventions.

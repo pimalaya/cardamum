@@ -14,6 +14,7 @@ use io_webdav::{
         card::CarddavCardEntry,
     },
 };
+use pimalaya_config::secret::SecretResolver;
 
 use crate::{
     config::CarddavConfig,
@@ -38,7 +39,8 @@ impl CarddavBackend {
     /// Discovery runs when the block needs it, see
     /// [`open_carddav_client`](crate::carddav::client::open_carddav_client).
     pub fn new(config: CarddavConfig) -> Result<Self> {
-        let inner = crate::carddav::client::open_carddav_client(config)?;
+        let inner =
+            crate::carddav::client::open_carddav_client(config, &mut SecretResolver::new())?;
         Ok(Self { inner })
     }
 

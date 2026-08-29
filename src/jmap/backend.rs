@@ -29,6 +29,7 @@ use io_jmap::{
         },
     },
 };
+use pimalaya_config::secret::SecretResolver;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
 
@@ -52,9 +53,12 @@ pub struct JmapBackend {
 
 impl JmapBackend {
     /// Establishes the JMAP session from the account's `[jmap]` block.
-    pub fn new(config: JmapConfig) -> Result<Self> {
+    ///
+    /// The credential is resolved through `resolver`, so an account naming
+    /// one credential command from several of its backends spawns it once.
+    pub fn new(config: JmapConfig, resolver: &mut SecretResolver) -> Result<Self> {
         let tls = config.tls.into_tls(config.alpn);
-        let http_auth = jmap_http_auth(config.auth)?;
+        let http_auth = jmap_http_auth(config.auth, resolver)?;
         let url = parse_server(&config.server, "https", &["http", "https", "jmap", "jmaps"])?;
 
         let mut inner = JmapClientStd::connect(&url, &tls, http_auth)?;
@@ -294,15 +298,22 @@ impl JmapBackend {
 }
 
 /// Renders a [`JmapAuthConfig`] as the `Authorization` header value.
-pub fn jmap_http_auth(config: JmapAuthConfig) -> Result<SecretString> {
+///
+/// The credential goes through `resolver`, so a command it already
+/// spawned for this account is not run again.
+pub fn jmap_http_auth(
+    config: JmapAuthConfig,
+    resolver: &mut SecretResolver,
+) -> Result<SecretString> {
     match config {
-        JmapAuthConfig::Header(header) => Ok(header.get()?),
+        JmapAuthConfig::Header(header) => Ok(resolver.resolve(header)?),
         JmapAuthConfig::Bearer { token } => {
-            let token = token.get()?;
+            let token = resolver.resolve(token)?;
             Ok(format!("Bearer {}", token.expose_secret()).into())
         }
         JmapAuthConfig::Basic { username, password } => {
-            let creds = format!("{}:{}", username, password.get()?.expose_secret());
+            let password = resolver.resolve(password)?;
+            let creds = format!("{}:{}", username, password.expose_secret());
             let encoded = BASE64_STANDARD.encode(creds.into_bytes());
             Ok(format!("Basic {encoded}").into())
         }

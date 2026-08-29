@@ -29,6 +29,7 @@ use io_pim_discovery::{
     rfc6764::{client::DiscoveryWebdavClientStd, service::DiscoveryDavService},
 };
 use io_webdav::{client::WebdavClientStd as Inner, rfc4918::WebdavAuth};
+use pimalaya_config::secret::SecretResolver;
 use pimalaya_stream::{
     stream::{Stream, TlsConnectOptions},
     tls::Tls,
@@ -92,17 +93,19 @@ pub fn build_carddav_client(
         .take()
         .ok_or_else(|| anyhow!("CardDAV config is missing for account `{name}`"))?;
     let account = Account::from(config).merge(Account::from(account_config));
-    let inner = open_carddav_client(carddav_config)?;
+    let inner = open_carddav_client(carddav_config, &mut SecretResolver::new())?;
     Ok(CarddavClient::new(inner, account))
 }
 
-/// Opens a [`WebdavClientStd`](io_webdav::client::WebdavClientStd) from
-/// a [`CarddavConfig`].
+/// Opens a [`WebdavClientStd`](io_webdav::client::WebdavClientStd) from a
+/// [`CarddavConfig`], resolving its credential through `resolver`, so an
+/// account naming one credential command from several of its backends
+/// spawns it once.
 ///
 /// `home` skips every discovery step; `server` resolves the principal
 /// and addressbook-home-set from the given context root; `discover`
 /// resolves a bare domain to that root through io-pim-discovery first.
-pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
+pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver) -> Result<Inner> {
     let CarddavConfig {
         discover,
         server,
@@ -112,7 +115,7 @@ pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
     } = config;
 
     let tls = tls_with_http_alpn(tls);
-    let auth = build_auth(auth)?;
+    let auth = build_auth(auth, resolver)?;
 
     if let Some(home) = home {
         let mut client = Inner::connect(&home, &tls, auth)?;
@@ -291,14 +294,17 @@ pub fn tls_with_http_alpn(config: TlsConfig) -> Tls {
 }
 
 /// Resolves the configured credential into a WebDAV auth scheme.
-fn build_auth(auth: CarddavAuthConfig) -> Result<WebdavAuth> {
+///
+/// The credential goes through `resolver`, so a command it already
+/// spawned for this account is not run again.
+fn build_auth(auth: CarddavAuthConfig, resolver: &mut SecretResolver) -> Result<WebdavAuth> {
     Ok(match auth {
         CarddavAuthConfig::Basic { username, password } => {
-            let password = password.get()?;
+            let password = resolver.resolve(password)?;
             WebdavAuth::Basic(HttpAuthBasic::new(username, password.expose_secret()))
         }
         CarddavAuthConfig::Bearer { token } => {
-            let token = token.get()?;
+            let token = resolver.resolve(token)?;
             WebdavAuth::Bearer(HttpAuthBearer::new(token.expose_secret()))
         }
     })

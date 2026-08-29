@@ -263,7 +263,7 @@ mod tests {
 
     use super::*;
 
-    #[cfg(feature = "vdir")]
+    #[cfg(any(feature = "vdir", feature = "carddav"))]
     use crate::config::AccountConfig;
 
     static NEXT_CONFIG: AtomicUsize = AtomicUsize::new(0);
@@ -314,14 +314,9 @@ mod tests {
     #[cfg(feature = "carddav")]
     #[test]
     fn the_endpoint_reads_before_its_credentials() {
-        use std::process::Command;
-
-        use pimalaya_config::secret::Secret;
+        use pimalaya_config::{command::CommandConfig, secret::Secret};
 
         use crate::config::{CarddavAuthConfig, CarddavConfig};
-
-        let mut password = Command::new("pass");
-        password.args(["show", "cardamum/example"]);
 
         let account = AccountConfig {
             carddav: Some(CarddavConfig {
@@ -331,7 +326,10 @@ mod tests {
                 tls: Default::default(),
                 auth: CarddavAuthConfig::Basic {
                     username: String::from("alice@example.org"),
-                    password: Secret::Command(password),
+                    password: Secret::Command(CommandConfig::Argv {
+                        program: String::from("pass"),
+                        args: vec![String::from("show"), String::from("cardamum/example")],
+                    }),
                 },
             }),
             ..Default::default()

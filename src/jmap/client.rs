@@ -7,6 +7,7 @@ use std::ops::{Deref, DerefMut};
 
 use anyhow::{Result, anyhow};
 use io_jmap::client::JmapClientStd;
+use pimalaya_config::secret::SecretResolver;
 
 use crate::{
     account::context::Account,
@@ -49,7 +50,7 @@ pub fn build_jmap_client(
         .ok_or_else(|| anyhow!("JMAP config is missing for account `{name}`"))?;
 
     let tls = jmap_config.tls.into_tls(jmap_config.alpn);
-    let http_auth = jmap_http_auth(jmap_config.auth)?;
+    let http_auth = jmap_http_auth(jmap_config.auth, &mut SecretResolver::new())?;
     let url = parse_server(
         &jmap_config.server,
         "https",

@@ -8,6 +8,7 @@
 //! of each protocol module.
 
 use anyhow::{Result, bail};
+use pimalaya_config::secret::SecretResolver;
 
 use crate::{
     account::context::Account,
@@ -93,7 +94,7 @@ impl AddressbookClient {
             && let Some(jmap_config) = account_config.jmap.take()
         {
             use crate::jmap::backend::JmapBackend;
-            let client = JmapBackend::new(jmap_config)?;
+            let client = JmapBackend::new(jmap_config, &mut SecretResolver::new())?;
             inner = Some(BackendClient::Jmap(Box::new(client)));
         }
 
@@ -103,7 +104,7 @@ impl AddressbookClient {
             && let Some(msgraph_config) = account_config.msgraph.take()
         {
             use crate::msgraph::backend::MsgraphBackend;
-            let client = MsgraphBackend::new(msgraph_config)?;
+            let client = MsgraphBackend::new(msgraph_config, &mut SecretResolver::new())?;
             inner = Some(BackendClient::Msgraph(Box::new(client)));
         }
 
@@ -113,7 +114,7 @@ impl AddressbookClient {
             && let Some(people_config) = account_config.people.take()
         {
             use crate::people::backend::PeopleBackend;
-            let client = PeopleBackend::new(people_config)?;
+            let client = PeopleBackend::new(people_config, &mut SecretResolver::new())?;
             inner = Some(BackendClient::People(Box::new(client)));
         }
 

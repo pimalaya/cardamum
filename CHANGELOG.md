@@ -32,6 +32,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   The `msgraph` family, singular where Graph is plural, is aligned onto Graph: `msgraph contact-folder` and `contact` become `contact-folders` and `contacts`, joining the `child-folders` that already sat under the first. Every singular spelling stays as a hidden alias, where it used to be shown beside the plural.
 
+- Resolved an account's credentials once, so a command two of its backends name is spawned once.
+
+  `account check` and the wizard's connection test reach every backend the account configures, and each of them used to spawn its own credential command: an account naming one `pass` entry from its `carddav` and `jmap` tables paid two key unlocks for one entry. Both now resolve the whole account through one resolver, which spawns each distinct command once and hands its value to every backend naming it. A command is compared as the configuration wrote it, so a shell line and its argv spelling stay two commands.
+
 - Reworded the card argument of `card read`, `card update` and `card delete`, which called itself a card `UID`.
 
   It is the backend's own identifier, the one `card list` reports, and a `UID` names no card on its own.

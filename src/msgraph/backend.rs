@@ -18,6 +18,7 @@ use io_msgraph::v1::{
     },
     send::MsgraphSend,
 };
+use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 use url::Url;
 
@@ -42,8 +43,11 @@ pub struct MsgraphBackend {
 
 impl MsgraphBackend {
     /// Connects to the Graph API from the account's `[msgraph]` block.
-    pub fn new(config: MsgraphConfig) -> Result<Self> {
-        let token = config.auth.token.get()?;
+    ///
+    /// The credential is resolved through `resolver`, so an account naming
+    /// one credential command from several of its backends spawns it once.
+    pub fn new(config: MsgraphConfig, resolver: &mut SecretResolver) -> Result<Self> {
+        let token = resolver.resolve(config.auth.token)?;
         let options = MsgraphClientStdConnectOptions {
             tls: config.tls.into_tls(config.alpn),
             user_id: config.user_id,

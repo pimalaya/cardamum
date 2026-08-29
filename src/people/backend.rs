@@ -20,6 +20,7 @@ use io_people::v1::{
         people::{PeoplePerson, PeoplePersonField, connections::list::PeopleConnectionsListParams},
     },
 };
+use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 
 use crate::{
@@ -42,8 +43,11 @@ pub struct PeopleBackend {
 
 impl PeopleBackend {
     /// Connects to the People API from the account's `[people]` block.
-    pub fn new(config: PeopleConfig) -> Result<Self> {
-        let token = config.auth.token.get()?;
+    ///
+    /// The credential is resolved through `resolver`, so an account naming
+    /// one credential command from several of its backends spawns it once.
+    pub fn new(config: PeopleConfig, resolver: &mut SecretResolver) -> Result<Self> {
+        let token = resolver.resolve(config.auth.token)?;
         let options = PeopleClientStdConnectOptions {
             tls: config.tls.into_tls(config.alpn),
         };

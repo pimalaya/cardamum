@@ -2,12 +2,22 @@
 //!
 //! Reaches every backend the account configures and reports, one by one,
 //! whether it answered.
+//!
+//! The backends of one account resolve their credentials through the
+//! same secret resolver, so a command two of them name is spawned once.
 
 use std::{fmt, path::PathBuf};
 
 use anyhow::{Result, bail};
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "people"
+))]
+use pimalaya_config::secret::SecretResolver;
 use pimalaya_config::toml::TomlConfig;
 use serde::Serialize;
 
@@ -56,6 +66,14 @@ impl AccountCheckCommand {
             backends: Vec::new(),
         };
 
+        #[cfg(any(
+            feature = "carddav",
+            feature = "jmap",
+            feature = "msgraph",
+            feature = "people"
+        ))]
+        let mut resolver = SecretResolver::new();
+
         #[cfg(feature = "vdir")]
         if backend.allows_vdir()
             && let Some(vdir_config) = &account_config.vdir
@@ -80,7 +98,7 @@ impl AccountCheckCommand {
         {
             report.backends.push(BackendCheck::from(
                 "carddav",
-                connect_carddav(carddav_config),
+                connect_carddav(carddav_config, &mut resolver),
             ));
         }
 
@@ -88,9 +106,10 @@ impl AccountCheckCommand {
         if backend.allows_jmap()
             && let Some(jmap_config) = &account_config.jmap
         {
-            report
-                .backends
-                .push(BackendCheck::from("jmap", connect_jmap(jmap_config)));
+            report.backends.push(BackendCheck::from(
+                "jmap",
+                connect_jmap(jmap_config, &mut resolver),
+            ));
         }
 
         #[cfg(feature = "msgraph")]
@@ -99,7 +118,7 @@ impl AccountCheckCommand {
         {
             report.backends.push(BackendCheck::from(
                 "msgraph",
-                connect_msgraph(msgraph_config),
+                connect_msgraph(msgraph_config, &mut resolver),
             ));
         }
 
@@ -107,9 +126,10 @@ impl AccountCheckCommand {
         if backend.allows_people()
             && let Some(people_config) = &account_config.people
         {
-            report
-                .backends
-                .push(BackendCheck::from("people", connect_people(people_config)));
+            report.backends.push(BackendCheck::from(
+                "people",
+                connect_people(people_config, &mut resolver),
+            ));
         }
 
         if report.backends.is_empty() {
@@ -126,6 +146,14 @@ impl AccountCheckCommand {
 /// or endpoint stops the process instead of yielding a configuration
 /// that cannot connect.
 pub fn test_account(account_config: &AccountConfig) -> Result<()> {
+    #[cfg(any(
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "people"
+    ))]
+    let mut resolver = SecretResolver::new();
+
     #[cfg(feature = "vdir")]
     if let Some(vdir_config) = &account_config.vdir {
         connect_vdir(vdir_config)?;
@@ -138,22 +166,22 @@ pub fn test_account(account_config: &AccountConfig) -> Result<()> {
 
     #[cfg(feature = "carddav")]
     if let Some(carddav_config) = &account_config.carddav {
-        connect_carddav(carddav_config)?;
+        connect_carddav(carddav_config, &mut resolver)?;
     }
 
     #[cfg(feature = "jmap")]
     if let Some(jmap_config) = &account_config.jmap {
-        connect_jmap(jmap_config)?;
+        connect_jmap(jmap_config, &mut resolver)?;
     }
 
     #[cfg(feature = "msgraph")]
     if let Some(msgraph_config) = &account_config.msgraph {
-        connect_msgraph(msgraph_config)?;
+        connect_msgraph(msgraph_config, &mut resolver)?;
     }
 
     #[cfg(feature = "people")]
     if let Some(people_config) = &account_config.people {
-        connect_people(people_config)?;
+        connect_people(people_config, &mut resolver)?;
     }
 
     Ok(())
@@ -191,10 +219,13 @@ fn connect_pimdir(pimdir_config: &crate::config::PimdirConfig) -> Result<()> {
 /// Resolves the CardDAV context root, then walks the principal and the
 /// addressbook home set, proving address, TLS and authentication work.
 #[cfg(feature = "carddav")]
-fn connect_carddav(carddav_config: &crate::config::CarddavConfig) -> Result<()> {
+fn connect_carddav(
+    carddav_config: &crate::config::CarddavConfig,
+    resolver: &mut SecretResolver,
+) -> Result<()> {
     use crate::carddav::client::open_carddav_client;
 
-    open_carddav_client(carddav_config.clone())?;
+    open_carddav_client(carddav_config.clone(), resolver)?;
 
     Ok(())
 }
@@ -202,10 +233,13 @@ fn connect_carddav(carddav_config: &crate::config::CarddavConfig) -> Result<()> 
 /// Establishes the JMAP session, proving address, TLS and authentication
 /// work.
 #[cfg(feature = "jmap")]
-fn connect_jmap(jmap_config: &crate::config::JmapConfig) -> Result<()> {
+fn connect_jmap(
+    jmap_config: &crate::config::JmapConfig,
+    resolver: &mut SecretResolver,
+) -> Result<()> {
     use crate::jmap::backend::JmapBackend;
 
-    JmapBackend::new(jmap_config.clone())?;
+    JmapBackend::new(jmap_config.clone(), resolver)?;
 
     Ok(())
 }
@@ -213,10 +247,13 @@ fn connect_jmap(jmap_config: &crate::config::JmapConfig) -> Result<()> {
 /// Lists the Graph contact folders, proving the token grants access to
 /// the contacts API.
 #[cfg(feature = "msgraph")]
-fn connect_msgraph(msgraph_config: &crate::config::MsgraphConfig) -> Result<()> {
+fn connect_msgraph(
+    msgraph_config: &crate::config::MsgraphConfig,
+    resolver: &mut SecretResolver,
+) -> Result<()> {
     use crate::msgraph::backend::MsgraphBackend;
 
-    let mut client = MsgraphBackend::new(msgraph_config.clone())?;
+    let mut client = MsgraphBackend::new(msgraph_config.clone(), resolver)?;
     client.list_addressbooks()?;
 
     Ok(())
@@ -225,10 +262,13 @@ fn connect_msgraph(msgraph_config: &crate::config::MsgraphConfig) -> Result<()> 
 /// Lists the People contact groups, proving the token grants access to
 /// the contacts API.
 #[cfg(feature = "people")]
-fn connect_people(people_config: &crate::config::PeopleConfig) -> Result<()> {
+fn connect_people(
+    people_config: &crate::config::PeopleConfig,
+    resolver: &mut SecretResolver,
+) -> Result<()> {
     use crate::people::backend::PeopleBackend;
 
-    let mut client = PeopleBackend::new(people_config.clone())?;
+    let mut client = PeopleBackend::new(people_config.clone(), resolver)?;
     client.list_addressbooks()?;
 
     Ok(())

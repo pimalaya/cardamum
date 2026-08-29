@@ -60,7 +60,7 @@ io-webdav = { version = "0.2", default-features = false, features = ["client"], 
 log = "0.4"
 percent-encoding = "2"
 pimalaya-cli = { version = "0.2", default-features = false, features = ["carddav", "jmap", "prompt", "spinner", "table", "terminal", "wizard"] }
-pimalaya-config = { version = "0.1", default-features = false, features = ["toml", "secret"] }
+pimalaya-config = { version = "0.2", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
 secrecy = "0.10"
 serde = { version = "1", features = ["derive"] }

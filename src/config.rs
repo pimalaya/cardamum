@@ -1,3 +1,12 @@
+//! # Configuration
+//!
+//! The TOML configuration file: the options shared by every account, the
+//! accounts themselves and their per-backend blocks.
+//!
+//! It also renders an account back to TOML, which is how the wizard
+//! writes what it discovered. The reference document, key by key, is
+//! config.sample.toml.
+
 use std::collections::HashMap;
 #[cfg(any(
     feature = "carddav",
@@ -40,8 +49,8 @@ fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     *value == T::default()
 }
 
-/// The whole TOML configuration file: the options shared by every
-/// account, then the accounts themselves.
+/// The whole configuration file: the options shared by every account,
+/// then the accounts themselves.
 ///
 /// `deny_unknown_fields` is omitted so a neighbouring tool can share the
 /// same file without bouncing off an unknown top-level key.
@@ -57,8 +66,8 @@ pub struct Config {
     /// Card options, overridable per account.
     #[serde(default)]
     pub card: CardConfig,
-    /// `account list` rendering options, global only: the listing of
-    /// accounts stands outside any one account.
+    /// `account list` rendering options, global only since the listing
+    /// stands outside any one account.
     #[serde(default)]
     pub account: AccountListingConfig,
     /// The accounts, keyed by their `[accounts.<name>]` table name.
@@ -86,13 +95,12 @@ impl TomlConfig for Config {
     }
 }
 
-/// The order the rendered account groups its keys in, most defining
-/// first: what the account is, then the backend it reads contacts from,
-/// and last the rendering options.
+/// The order a rendered account groups its keys in, most defining
+/// first: what the account is, its backend, then the rendering options.
 ///
-/// A key outside this list still renders, after the ones listed, so a
+/// A key outside this list still renders, after the listed ones, so a
 /// field added to [`AccountConfig`] can never go missing from a
-/// generated document just because nobody updated this table.
+/// generated document because nobody updated this table.
 const RENDER_ORDER: [&str; 10] = [
     "default",
     "vdir",
@@ -107,19 +115,19 @@ const RENDER_ORDER: [&str; 10] = [
 ];
 
 /// The keys naming what a backend group points at, lifted to the top of
-/// their group. Serialized alphabetically, `carddav.server` would read
-/// under the `carddav.auth` credential authenticating against it.
+/// their group.
+///
+/// Serialized alphabetically, `carddav.server` would read under the
+/// `carddav.auth` credential authenticating against it.
 const ENDPOINT_KEYS: [&str; 5] = ["discover", "server", "home", "home-dir", "root"];
 
 impl AccountConfig {
     /// Renders this account as an `[accounts.<name>]` block, ready to be
     /// written to a configuration file or appended to one.
     ///
-    /// The serializer decides what is written, so a defaulted field is
-    /// omitted and nothing is listed here twice. What this adds is
-    /// reading order, the flattened dotted keys coming out alphabetically
-    /// and running every group together: the groups are reordered
-    /// ([`RENDER_ORDER`]), the endpoint is lifted to the top of its own
+    /// What it adds to the serializer is reading order, dotted keys
+    /// coming out alphabetically: groups are reordered
+    /// ([`RENDER_ORDER`]), each endpoint is lifted to the top of its own
     /// ([`ENDPOINT_KEYS`]), and a blank line separates them.
     pub fn render(&self, name: &str) -> Result<String> {
         // NOTE: borrowed rather than built into a `Config`, which would
@@ -191,8 +199,7 @@ impl AccountConfig {
 #[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct AccountConfig {
-    /// Whether the commands passing no `-a <NAME>` run against this
-    /// account.
+    /// Whether a command passing no `-a <NAME>` runs against it.
     #[serde(default, skip_serializing_if = "is_default")]
     pub default: bool,
     /// Table rendering options, overriding the global ones.
@@ -229,8 +236,8 @@ pub struct AccountConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct VdirConfig {
-    /// Directory holding every collection of the account; each
-    /// immediate subdirectory is one addressbook.
+    /// Directory holding the account's collections, one addressbook per
+    /// immediate subdirectory.
     #[serde(deserialize_with = "shell_expanded_string")]
     pub home_dir: String,
 }
@@ -240,11 +247,13 @@ pub struct VdirConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PimdirConfig {
-    /// The store directory (holds `pimdir.db` and `objects/`). The store
-    /// must already exist: it is the sync engine that creates one.
+    /// The store directory, holding `pimdir.db` and `objects/`.
+    ///
+    /// It must already exist: creating one is the sync engine's job.
     pub root: PathBuf,
     /// The account the collections are grouped under, for a store shared
-    /// by several accounts (or by several domains, as the mobile apps do).
+    /// by several accounts or domains, as the mobile apps do.
+    ///
     /// Unset reads every collection in the store.
     #[serde(default)]
     pub account: Option<String>,
@@ -255,19 +264,19 @@ pub struct PimdirConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CarddavConfig {
-    /// Bare domain resolved to a server URL at runtime: PACC first,
-    /// then RFC 6764 (SRV record, its TXT `path`, then `.well-known`);
-    /// Google domains use an authenticated `.well-known` probe.
-    /// Convenient but adds DNS + HTTP round-trips on every run; `server`
-    /// or `home` win when set and skip this.
+    /// Bare domain resolved to a server URL on every run.
+    ///
+    /// PACC first, then RFC 6764: SRV record, its TXT `path`, then
+    /// `.well-known`, which a Google domain probes authenticated. It
+    /// costs DNS and HTTP round-trips, and `server` or `home` skip it.
     pub discover: Option<String>,
-    /// DAV context root. Principal + addressbook-home-set discovery
-    /// start from this URL; the `.well-known` step is skipped. Accepts
-    /// a full URL, a bare domain, or `domain:port`; bare authorities
-    /// default to `https://`.
+    /// DAV context root, where principal and home set discovery start.
+    ///
+    /// The `.well-known` step is skipped. Accepts a full URL, a bare
+    /// domain or `domain:port`, a bare authority defaulting to `https`.
     pub server: Option<String>,
-    /// Pre-resolved addressbook home-set URL. Skips every discovery
-    /// step; the client lists addressbooks at this URL.
+    /// Pre-resolved addressbook home set URL, where the client lists
+    /// addressbooks, skipping every discovery step.
     pub home: Option<Url>,
     /// TLS configuration.
     #[serde(default)]
@@ -281,13 +290,15 @@ pub struct CarddavConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CarddavAuthConfig {
-    /// HTTP Basic authentication (RFC 7617).
+    /// HTTP Basic authentication, per RFC 7617.
     Basic {
+        /// The username the server knows the principal by.
         #[serde(deserialize_with = "shell_expanded_string")]
         username: String,
+        /// The matching password, read from the configured secret.
         password: Secret,
     },
-    /// HTTP Bearer authentication (RFC 6750).
+    /// HTTP Bearer authentication, per RFC 6750.
     Bearer { token: Secret },
 }
 
@@ -298,20 +309,19 @@ pub enum CarddavAuthConfig {
 pub struct JmapConfig {
     /// The JMAP server address.
     ///
-    /// Accepts either a bare authority (`fastmail.com`,
-    /// `mail.example.com:8080`) for automatic discovery via
-    /// `GET /.well-known/jmap`, or a full URL
-    /// (`https://api.fastmail.com/jmap/session`) to connect directly
-    /// to the session endpoint. Supported schemes: `http`, `https`,
-    /// `jmap` (mapped to http), `jmaps` (mapped to https).
+    /// A bare authority (`fastmail.com`, `mail.example.com:8080`) is
+    /// discovered through `GET /.well-known/jmap`, a full URL reaches the
+    /// session endpoint directly. Schemes: `http`, `https`, `jmap` and
+    /// `jmaps`, the last two mapping to the first two.
     pub server: String,
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
-    /// ALPN protocol identifiers offered during the TLS handshake.
-    /// Defaults to `["http/1.1"]` (JMAP rides on HTTP/1.1). Set to
-    /// `[]` to skip ALPN negotiation entirely. Only relevant for the
-    /// rustls provider; `native-tls` ignores ALPN.
+    /// ALPN identifiers offered during the TLS handshake, `["http/1.1"]`
+    /// by default since JMAP rides on HTTP/1.1.
+    ///
+    /// An empty list skips ALPN negotiation. Only rustls reads it,
+    /// `native-tls` ignores ALPN.
     #[serde(default = "io_jmap::client::JmapClientStd::default_alpn")]
     pub alpn: Vec<String>,
     /// Authentication configuration.
@@ -323,14 +333,16 @@ pub struct JmapConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum JmapAuthConfig {
-    /// Full raw Authorization header value, sent verbatim.
+    /// A whole Authorization header value, sent verbatim.
     Header(Secret),
-    /// Bearer token (OAuth 2.0 access token or provider API token).
+    /// A bearer token, OAuth 2.0 access token or provider API token.
     Bearer { token: Secret },
-    /// HTTP Basic authentication (username + password).
+    /// HTTP Basic authentication.
     Basic {
+        /// The username the server knows the account by.
         #[serde(deserialize_with = "shell_expanded_string")]
         username: String,
+        /// The matching password, read from the configured secret.
         password: Secret,
     },
 }
@@ -340,18 +352,19 @@ pub enum JmapAuthConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct MsgraphConfig {
-    /// Graph user id (the contacts owner). Defaults to `me`, the
-    /// authenticated user; set it to a user id or principal name to
-    /// target another mailbox.
+    /// Graph user id owning the contacts, `me` by default.
+    ///
+    /// A user id or a principal name targets another mailbox.
     #[serde(default = "default_msgraph_user_id")]
     pub user_id: String,
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
-    /// ALPN protocol identifiers offered during the TLS handshake.
-    /// Defaults to `["http/1.1"]` (the Graph API rides on HTTP/1.1).
-    /// Set to `[]` to skip ALPN negotiation entirely. Only relevant
-    /// for the rustls provider; `native-tls` ignores ALPN.
+    /// ALPN identifiers offered during the TLS handshake, `["http/1.1"]`
+    /// by default since the Graph API rides on HTTP/1.1.
+    ///
+    /// An empty list skips ALPN negotiation. Only rustls reads it,
+    /// `native-tls` ignores ALPN.
     #[serde(default = "default_http_alpn")]
     pub alpn: Vec<String>,
     /// Authentication configuration.
@@ -363,8 +376,8 @@ pub struct MsgraphConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct MsgraphAuthConfig {
-    /// OAuth 2.0 bearer access token; sent as `Bearer <token>`. It is
-    /// the only authorization the Graph API accepts.
+    /// OAuth 2.0 access token sent as `Bearer <token>`, the only
+    /// authorization the Graph API accepts.
     pub token: Secret,
 }
 
@@ -381,10 +394,11 @@ pub struct PeopleConfig {
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
-    /// ALPN protocol identifiers offered during the TLS handshake.
-    /// Defaults to `["http/1.1"]` (the People API rides on HTTP/1.1).
-    /// Set to `[]` to skip ALPN negotiation entirely. Only relevant
-    /// for the rustls provider; `native-tls` ignores ALPN.
+    /// ALPN identifiers offered during the TLS handshake, `["http/1.1"]`
+    /// by default since the People API rides on HTTP/1.1.
+    ///
+    /// An empty list skips ALPN negotiation. Only rustls reads it,
+    /// `native-tls` ignores ALPN.
     #[serde(default = "default_http_alpn")]
     pub alpn: Vec<String>,
     /// Authentication configuration.
@@ -396,8 +410,8 @@ pub struct PeopleConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PeopleAuthConfig {
-    /// OAuth 2.0 bearer access token; sent as `Bearer <token>`. It is
-    /// the only authorization the People API accepts.
+    /// OAuth 2.0 access token sent as `Bearer <token>`, the only
+    /// authorization the People API accepts.
     pub token: Secret,
 }
 
@@ -410,26 +424,34 @@ fn default_http_alpn() -> Vec<String> {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AddressbookConfig {
-    /// Addressbook id used by `card` commands when their
+    /// Addressbook id the `card` commands take when their
     /// `-k/--addressbook` flag is omitted.
     pub default: Option<String>,
+    /// `addressbook list` options.
     #[serde(default)]
     pub list: AddressbookListConfig,
 }
 
+/// `addressbook list` options.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AddressbookListConfig {
+    /// Colors of the `addressbook list` table.
     #[serde(default)]
     pub table: AddressbookListTableConfig,
 }
 
+/// Colors of the `addressbook list` table.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AddressbookListTableConfig {
+    /// Color of the ID column.
     pub id_color: Option<Color>,
+    /// Color of the NAME column.
     pub name_color: Option<Color>,
+    /// Color of the DESC column.
     pub description_color: Option<Color>,
+    /// Color of the COLOR column.
     pub color_color: Option<Color>,
 }
 
@@ -437,71 +459,89 @@ pub struct AddressbookListTableConfig {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CardConfig {
+    /// `card list` options.
     #[serde(default)]
     pub list: CardListConfig,
 }
 
+/// `card list` options.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CardListConfig {
-    /// Default `-s/--page-size` value for `cards list`. The CLI flag
-    /// wins when passed; otherwise the merged account/global value
-    /// wins; otherwise the hard fallback (25) is used.
+    /// Default `-s/--page-size` value.
+    ///
+    /// The flag wins when passed, then this value, then the hard
+    /// fallback of 25.
     pub page_size: Option<u32>,
+    /// Colors of the `card list` table.
     #[serde(default)]
     pub table: CardListTableConfig,
 }
 
+/// Colors of the `card list` table.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CardListTableConfig {
+    /// Color of the ID column.
     pub id_color: Option<Color>,
+    /// Color of the FN column.
     pub fn_color: Option<Color>,
+    /// Color of the EMAIL column.
     pub email_color: Option<Color>,
+    /// Color of the TEL column.
     pub tel_color: Option<Color>,
 }
 
-/// `account list` rendering options. Top-level only; there is no
-/// per-account override.
+/// `account list` rendering options, top-level only.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AccountListingConfig {
+    /// `account list` options.
     #[serde(default)]
     pub list: AccountListingListConfig,
 }
 
+/// `account list` options.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AccountListingListConfig {
+    /// Colors of the `account list` table.
     #[serde(default)]
     pub table: AccountListingTableConfig,
 }
 
+/// Colors of the `account list` table.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AccountListingTableConfig {
+    /// Color of the NAME column.
     pub name_color: Option<Color>,
+    /// Color of the BACKENDS column.
     pub backends_color: Option<Color>,
+    /// Color of the DEFAULT column.
     pub default_color: Option<Color>,
 }
 
-/// Global / per-account table rendering options shared across every
-/// list command.
+/// Table rendering options shared by every list command.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TableConfig {
-    /// `comfy_table` preset string. Defaults to `UTF8_FULL_CONDENSED`.
+    /// `comfy_table` preset string, `UTF8_FULL_CONDENSED` by default.
     pub preset: Option<String>,
-    /// Column-arrangement strategy. Defaults to `Dynamic`.
+    /// Column arrangement strategy, `dynamic` by default.
     pub arrangement: Option<TableArrangementConfig>,
 }
 
+/// How a table arranges its columns.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum TableArrangementConfig {
+    /// Fit the columns to the terminal width.
     #[default]
     Dynamic,
+    /// Fit the columns and stretch the table to the full width.
     DynamicFullWidth,
+    /// Let each column take the width of its content.
     Disabled,
 }
 
@@ -525,9 +565,12 @@ impl From<TableArrangementConfig> for ContentArrangement {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TlsConfig {
+    /// The TLS implementation the connection uses.
     pub provider: Option<TlsProviderConfig>,
+    /// Rustls-only options.
     #[serde(default)]
     pub rustls: RustlsConfig,
+    /// Path to an additional PEM certificate to trust.
     pub cert: Option<PathBuf>,
 }
 
@@ -541,7 +584,9 @@ pub struct TlsConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum TlsProviderConfig {
+    /// The pure-Rust rustls stack.
     Rustls,
+    /// The platform TLS stack, through native-tls.
     NativeTls,
 }
 
@@ -555,6 +600,7 @@ pub enum TlsProviderConfig {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RustlsConfig {
+    /// The crypto provider rustls builds on.
     pub crypto: Option<RustlsCryptoConfig>,
 }
 
@@ -568,7 +614,9 @@ pub struct RustlsConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum RustlsCryptoConfig {
+    /// aws-lc-rs.
     Aws,
+    /// ring.
     Ring,
 }
 
@@ -599,9 +647,10 @@ impl TlsConfig {
     }
 }
 
-/// Parses a `server` config string into a [`Url`]: a full URL is used
-/// verbatim, a bare `host[:port]` defaults to `default_scheme`;
-/// schemes outside `allowed` are rejected.
+/// Parses a `server` config string into a URL.
+///
+/// A full URL is taken verbatim, a bare `host[:port]` takes
+/// `default_scheme`, and a scheme outside `allowed` is rejected.
 #[cfg(feature = "jmap")]
 pub fn parse_server(server: &str, default_scheme: &str, allowed: &[&str]) -> Result<url::Url> {
     let url = if server.contains("://") {

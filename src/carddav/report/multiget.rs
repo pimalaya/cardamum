@@ -1,3 +1,8 @@
+//! # Multiget report command
+//!
+//! Runs the RFC 6352 `addressbook-multiget` REPORT and renders the
+//! fetched cards.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
@@ -7,8 +12,10 @@ use crate::carddav::{
     report::entries::{CardEntriesReport, EntryRow},
 };
 
-/// `addressbook-multiget` REPORT: batch-fetch the named cards in one
-/// round-trip (RFC 6352 §8.7).
+/// Fetch the named cards in one round-trip (RFC 6352 §8.7).
+///
+/// The `addressbook-multiget` REPORT: one request brings back the body
+/// and ETag of every id given.
 ///
 /// JSON output: `{"cards": [{"id", "etag", "contents"}]}`.
 #[derive(Debug, Parser)]

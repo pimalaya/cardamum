@@ -1,3 +1,8 @@
+//! # JMAP renderers
+//!
+//! The output types of the `jmap` commands: a table or a summary block
+//! on a terminal, the raw JMAP objects under `--json`.
+
 use core::fmt;
 
 use comfy_table::{Cell, Color, Row, Table};
@@ -131,10 +136,11 @@ impl fmt::Display for CardsReport {
 pub struct CardReport(pub JmapContactCard);
 
 impl CardReport {
-    /// Whether the report has nothing to show: the card carries none of
-    /// the three fields [`fmt::Display`] renders. A `set` response often
-    /// lands here, carrying only server bookkeeping such as `updated`,
-    /// which is the caller's cue to confirm in words instead.
+    /// Whether the card carries nothing [`fmt::Display`] would render.
+    ///
+    /// A `set` response often lands here, carrying only server
+    /// bookkeeping such as `updated`, which is the caller's cue to
+    /// confirm in words instead.
     pub fn is_empty(&self) -> bool {
         let card = &self.0;
         card.id.is_none() && card_name(card).is_empty() && card_books(card).is_empty()
@@ -165,8 +171,7 @@ impl fmt::Display for CardReport {
     }
 }
 
-/// The result of a `/changes` call: created / updated / destroyed ids
-/// since a state, plus the new state to sync from next.
+/// The ids a `/changes` call reports, plus the state to sync from next.
 #[derive(Clone, Debug, Serialize)]
 pub struct ChangesReport {
     #[serde(skip)]

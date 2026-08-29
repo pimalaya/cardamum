@@ -1,3 +1,8 @@
+//! # Google People
+//!
+//! Google People support: the protocol-specific command tree, the
+//! shared-API backend, and the person to vCard projection they share.
+
 pub mod backend;
 pub mod cli;
 pub mod client;

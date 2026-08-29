@@ -1,3 +1,8 @@
+//! # AddressBook changes command
+//!
+//! Lists the AddressBooks created, updated and destroyed since a state
+//! token.
+
 use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::address_book::changes::JmapAddressBookChangesOptions;

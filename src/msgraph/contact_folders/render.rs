@@ -1,3 +1,7 @@
+//! # Folder rendering
+//!
+//! Table and JSON shapes of the contact folder commands.
+
 use core::fmt;
 
 use comfy_table::{Cell, Color, Row, Table};
@@ -6,8 +10,10 @@ use serde::Serialize;
 
 use crate::shared::table::style_from_preset;
 
-/// A page of contact folders. The table shows ID / NAME / PARENT;
-/// `--json` emits the raw Graph folder objects plus any next-page link.
+/// A page of contact folders.
+///
+/// The table shows ID, NAME and PARENT, while `--json` emits the raw Graph
+/// folder objects plus any next-page link.
 #[derive(Clone, Debug, Serialize)]
 pub struct FoldersReport {
     #[serde(skip)]
@@ -50,7 +56,7 @@ impl fmt::Display for FoldersReport {
     }
 }
 
-/// A single contact folder; `--json` emits the raw Graph object.
+/// A single contact folder, emitted verbatim by `--json`.
 #[derive(Clone, Debug, Serialize)]
 #[serde(transparent)]
 pub struct FolderReport(pub MsgraphContactFolder);

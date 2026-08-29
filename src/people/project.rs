@@ -1,16 +1,19 @@
-//! Google People person to vCard projection, and back.
+//! # Person projection
 //!
-//! The People API exposes no vCard representation of a contact (the
-//! people endpoints only speak the JSON person resource), so the Google
-//! spoke synthesizes the vCard document of record itself: [`to_vcard`]
-//! projects an io-people person onto a fresh vCard 4.0 document,
-//! and [`to_person`] projects a vCard back onto a person. Per the
-//! custom property policy of cairn/spec/projection.md only fields with
-//! a well-defined vCard slot are projected; People-only fields
-//! (fileAses, memberships, events, photos, ...) stay out of the managed
-//! set ([`READ_FIELDS`]), out of every update mask, and survive updates
-//! untouched. Unlike Graph's fixed slots, People fields are true
-//! lists, so every vCard property projects without truncation.
+//! Projects a Google People person onto a vCard document, and back.
+//!
+//! The people endpoints only speak the JSON person resource, so the
+//! Google spoke synthesizes the vCard document of record itself:
+//! [`to_vcard`] builds a fresh vCard 4.0 document from a person,
+//! [`to_person`] reads one back.
+//!
+//! Per the custom property policy of cairn/spec/projection.md only
+//! fields with a well-defined vCard slot project: People-only fields
+//! (fileAses, memberships, events, photos) stay out of the managed set
+//! ([`READ_FIELDS`]) and of every update mask, and survive untouched.
+//!
+//! Unlike Graph's fixed slots, People fields are true lists, so every
+//! vCard property projects without truncation.
 
 use core::str::FromStr;
 use std::borrow::Cow;
@@ -46,9 +49,11 @@ use vcard::{
 
 use crate::project::{MAX_STASH_LINE, escape_text, full_date, splice_props, text_prop};
 
-/// Person fields the projection reads: the managed set plus the
-/// Google-scoped fields minted as X-GOOGLE-* properties, read-only
-/// projections that stay out of every update mask.
+/// Person fields the projection reads.
+///
+/// The managed set, plus the Google-scoped fields minted as X-GOOGLE-*
+/// properties, read-only projections that stay out of every update
+/// mask.
 pub const READ_FIELDS: &[PeoplePersonField] = &[
     PeoplePersonField::Addresses,
     PeoplePersonField::Biographies,
@@ -69,16 +74,17 @@ pub const READ_FIELDS: &[PeoplePersonField] = &[
     PeoplePersonField::Urls,
 ];
 
-/// clientData key of the entry stashing the vCard remainder: every
-/// property the projection neither manages nor mints, preserved
-/// verbatim through Google (cairn/spec/projection.md).
+/// clientData key of the entry stashing the vCard remainder.
+///
+/// Every property the projection neither manages nor mints is preserved
+/// verbatim there (cairn/spec/projection.md).
 pub const CLIENT_DATA_KEY: &str = "cardamum.vcard";
 
-/// Property names minted by [`to_vcard`] from the Google-scoped person
-/// fields; [`to_person`] consumes (drops) them, the server value being
-/// authoritative. X-GOOGLE-MEMBERSHIP is no longer minted (memberships
-/// became structural addressbook data) but stays consumed, so lines
-/// from earlier projections are dropped rather than stashed.
+/// Property names [`to_vcard`] mints from the Google-scoped fields.
+///
+/// [`to_person`] drops them, the server value being authoritative.
+/// X-GOOGLE-MEMBERSHIP is no longer minted, memberships having become
+/// structural, but stays consumed so older lines are dropped.
 const MINTED_PROPS: &[&str] = &[
     "X-GOOGLE-MEMBERSHIP",
     "X-GOOGLE-EXTERNAL-ID",
@@ -86,8 +92,7 @@ const MINTED_PROPS: &[&str] = &[
     "X-GOOGLE-LOCATION",
 ];
 
-/// The bare person id behind a `people/<id>` resource name, the
-/// JNI-facing addressing key.
+/// The bare person id behind a `people/<id>` resource name.
 pub fn person_id(resource_name: &str) -> &str {
     resource_name
         .strip_prefix("people/")
@@ -96,9 +101,9 @@ pub fn person_id(resource_name: &str) -> &str {
 
 /// Projects an io-people person onto a fresh vCard 4.0 document.
 ///
-/// The person id (resource name minus the `people/` prefix) becomes the
-/// UID, typed fields carry their home/work TYPE (phones also mobile as
-/// cell), and spouse and children relations become RELATED names.
+/// The person id becomes the UID, typed fields carry their home/work
+/// TYPE (phones also mobile as cell), and spouse and children relations
+/// become RELATED names.
 pub fn to_vcard(person: &PeoplePerson) -> String {
     let mut card = VcardCst::v4();
 
@@ -259,18 +264,11 @@ pub fn to_vcard(person: &PeoplePerson) -> String {
     splice_props(vcard, &extra)
 }
 
-/// Projects a vCard onto an io-people person, the full-state
-/// projection: every managed field carries the vCard's values (empty
-/// when the vCard drops the property, which clears the masked field on
-/// update), while unmanaged People fields stay out of the body. Every
-/// line that does not project (unknown and X-* properties, standard
-/// properties without a People slot, values past a single-instance
-/// slot, partial birthdays) is stashed verbatim into the cardamum
-/// clientData entry, so it survives on Google and restores on read.
-/// The UID is not read back (the resource name addresses the person
-/// through the request path, filled by the caller) and the minted
-/// X-GOOGLE-* properties are consumed, the server value being
-/// authoritative.
+/// Projects a vCard onto an io-people person, in full state.
+///
+/// Every managed field carries the vCard's values, empty when the vCard
+/// drops the property, which clears the masked field on update. Lines
+/// that do not project are stashed in clientData and restore on read.
 pub fn to_person(vcard: &str) -> Result<PeoplePerson, String> {
     let card = VcardCst::parse(vcard).map_err(|err| format!("Invalid vCard: {err}"))?;
     let version = card.version();
@@ -569,13 +567,11 @@ pub fn to_person(vcard: &str) -> Result<PeoplePerson, String> {
     Ok(person)
 }
 
-/// The names of the stashed vCard properties `base` carries and
-/// `person` drops, which an update cannot actually remove.
+/// The stashed properties `base` carries and `person` cannot remove.
 ///
-/// The stash is a `clientData` entry, and People refuses to empty
-/// `clientData`: an update carrying a new value replaces the entry, one
-/// carrying none leaves the old value standing, whatever the update mask
-/// says. Naming them is all a client can do about it.
+/// The stash is a `clientData` entry People refuses to empty: an update
+/// with a new value replaces it, one without leaves the old value
+/// standing, whatever the mask says. Naming them is all a client can do.
 pub fn unremovable_properties(base: &PeoplePerson, person: &PeoplePerson) -> Vec<String> {
     let kept: Vec<String> = stash_lines(person)
         .iter()
@@ -589,16 +585,15 @@ pub fn unremovable_properties(base: &PeoplePerson, person: &PeoplePerson) -> Vec
         .collect()
 }
 
-/// The property name of a stashed vCard line: what precedes the first
-/// parameter or value separator.
+/// The property name of a stashed vCard line, up to its first `;` or `:`.
 fn property_name(line: &str) -> String {
     let end = line.find([';', ':']).unwrap_or(line.len());
     line[..end].to_uppercase()
 }
 
-/// The managed fields whose projection differs between the edited
-/// person and the base one (the state last synced with the server):
-/// the update mask shrinks to them, so unchanged fields are neither
+/// The managed fields whose projection differs from the base person.
+///
+/// The update mask shrinks to them, so unchanged fields are neither
 /// replaced nor clobbered by a concurrent edit.
 pub fn changed_fields(person: &PeoplePerson, base: &PeoplePerson) -> Vec<PeoplePersonField> {
     let mut fields = Vec::new();
@@ -630,8 +625,10 @@ pub fn changed_fields(person: &PeoplePerson, base: &PeoplePerson) -> Vec<PeopleP
     fields
 }
 
-/// The person's display name: the server-formatted one, the
-/// unstructured name, or composed from the parts.
+/// The person's display name.
+///
+/// The server-formatted one, else the unstructured one, else the name
+/// parts joined.
 fn display_name(person: &PeoplePerson) -> String {
     let Some(name) = person.names.first() else {
         return String::new();
@@ -651,9 +648,10 @@ fn display_name(person: &PeoplePerson) -> String {
     composed.join(" ")
 }
 
-/// An ADR property from a People address, or None when every component
-/// is empty. People's street is one multiline field, so each of its
-/// lines becomes a vCard street component.
+/// An ADR property from a People address, None when it is empty.
+///
+/// People's street is one multiline field, so each of its lines becomes
+/// a vCard street component.
 fn adr_prop(address: &PeopleAddress) -> Option<VcardProp<'static>> {
     let street = address.street_address.as_deref().unwrap_or("");
     let value = VcardAdr {
@@ -693,8 +691,10 @@ fn adr_prop(address: &PeopleAddress) -> Option<VcardProp<'static>> {
     })
 }
 
-/// A RELATED name property (spouse, child): free-form text, hence the
-/// explicit VALUE=text (RELATED defaults to a URI).
+/// A RELATED name property (spouse, child).
+///
+/// The names are free-form text, hence the explicit VALUE=text:
+/// RELATED defaults to a URI.
 fn related_prop(r#type: &'static str, name: &str) -> VcardProp<'static> {
     VcardProp {
         name: VcardPropName::Kind(VcardPropKind::Related),
@@ -770,8 +770,7 @@ fn option_component(field: &Option<String>) -> Vec<Cow<'static, str>> {
     component(field)
 }
 
-/// Fills a single-instance People field, first non-empty value wins;
-/// true when this value took the slot.
+/// Fills a single-instance People field, true when it took the slot.
 fn set_first(slot: &mut Option<String>, value: impl AsRef<str>) -> bool {
     let value = value.as_ref().trim();
     if slot.is_none() && !value.is_empty() {
@@ -782,13 +781,11 @@ fn set_first(slot: &mut Option<String>, value: impl AsRef<str>) -> bool {
     }
 }
 
-/// X-GOOGLE-* lines minted from the Google-scoped person fields the
-/// projection exposes read-only: external ids, miscellaneous keywords
-/// and locations mean nothing outside the account they came from, so
-/// they ride the vCard as vendor properties (cairn/spec/projection.md) and
-/// are consumed on the way back. Group memberships are NOT minted:
-/// they are the card's addressbook memberships (cairn/spec/addressbooks.md),
-/// surfaced structurally on the JNI card instead.
+/// X-GOOGLE-* lines minted from the read-only Google-scoped fields.
+///
+/// External ids, keywords and locations mean nothing outside their
+/// account, so they ride as vendor properties (cairn/spec/projection.md).
+/// Memberships are addressbook data (cairn/spec/addressbooks.md), not minted.
 fn minted_props(person: &PeoplePerson) -> Vec<String> {
     let mut lines = Vec::new();
 
@@ -823,8 +820,10 @@ fn minted_props(person: &PeoplePerson) -> Vec<String> {
     lines
 }
 
-/// A minted line with an optional TYPE parameter, carried only when
-/// the type is a plain token a parameter value holds unquoted.
+/// A minted line with an optional TYPE parameter.
+///
+/// The type rides along only when it is a plain token a parameter value
+/// holds unquoted.
 fn typed_line(name: &str, r#type: &Option<String>, value: &str) -> String {
     let value = escape_text(value);
     let token = opt(r#type).filter(|t| {
@@ -838,8 +837,7 @@ fn typed_line(name: &str, r#type: &Option<String>, value: &str) -> String {
     }
 }
 
-/// The stashed vCard remainder lines behind the person's cardamum
-/// clientData entry.
+/// The stashed vCard lines behind the cardamum clientData entry.
 fn stash_lines(person: &PeoplePerson) -> Vec<String> {
     person
         .client_data
@@ -852,8 +850,7 @@ fn stash_lines(person: &PeoplePerson) -> Vec<String> {
         .collect()
 }
 
-/// The structured-value components joined into one People field, None
-/// when nothing remains.
+/// The structured-value components joined into one People field.
 fn joined(components: &[Cow<'_, str>]) -> Option<String> {
     let joined = components
         .iter()

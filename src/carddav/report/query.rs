@@ -1,3 +1,8 @@
+//! # Query report command
+//!
+//! Runs the RFC 6352 `addressbook-query` REPORT and renders the
+//! matching cards.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
@@ -7,8 +12,10 @@ use crate::carddav::{
     report::entries::{CardEntriesReport, EntryRow},
 };
 
-/// `addressbook-query` REPORT: the cards matching a match-all filter,
-/// with their ETags and bodies (RFC 6352 §8.6).
+/// Fetch every card of an addressbook (RFC 6352 §8.6).
+///
+/// The `addressbook-query` REPORT, run with a match-all filter, so
+/// every card comes back with its ETag and body.
 ///
 /// JSON output: `{"cards": [{"id", "etag", "contents"}]}`.
 #[derive(Debug, Parser)]

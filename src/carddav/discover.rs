@@ -1,3 +1,8 @@
+//! # Discover command
+//!
+//! Reports the CardDAV endpoints the client resolved at connection
+//! time.
+
 use std::fmt;
 
 use anyhow::Result;
@@ -9,11 +14,11 @@ use crate::carddav::client::CarddavClient;
 
 /// Report the resolved CardDAV endpoints for the active account.
 ///
-/// The client resolves its server URL (RFC 6764), `current-user-principal`
-/// (RFC 5397) and `addressbook-home-set` (RFC 6352) at connection time.
-/// Each endpoint is reported best-effort: a `home`-configured account
-/// skips the principal walk, so `principal` is shown as unresolved
-/// rather than failing the whole command.
+/// The client resolves its server URL (RFC 6764),
+/// `current-user-principal` (RFC 5397) and `addressbook-home-set` (RFC
+/// 6352) at connection time. A `home`-configured account skips the
+/// principal walk, so `principal` shows as unresolved rather than
+/// failing the command.
 ///
 /// JSON output: `{"server", "principal", "addressbook_home_set"}`, with
 /// unresolved endpoints as `null`.
@@ -40,6 +45,7 @@ impl CarddavDiscoverCommand {
     }
 }
 
+/// The endpoints a CardDAV session runs against, `None` when unresolved.
 #[derive(Clone, Debug, Serialize)]
 pub struct DiscoveryReport {
     pub server: String,

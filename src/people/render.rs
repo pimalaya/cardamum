@@ -1,3 +1,9 @@
+//! # People rendering
+//!
+//! The reports the People commands print: people and contact groups as
+//! tables, single objects as key/value lines, the raw People JSON under
+//! `--json`.
+
 use core::fmt;
 
 use comfy_table::{Cell, Color, Row, Table};
@@ -37,9 +43,10 @@ pub fn person_phone(person: &PeoplePerson) -> &str {
         .unwrap_or("")
 }
 
-/// A list of people (connections, other contacts, search results). The
-/// table shows ID / NAME / EMAIL / PHONE; `--json` emits the raw People
-/// person objects, plus any page and sync tokens.
+/// A list of people: connections, other contacts or search results.
+///
+/// The table shows ID / NAME / EMAIL / PHONE; `--json` emits the raw
+/// People person objects, plus any page and sync tokens.
 #[derive(Clone, Debug, Serialize)]
 pub struct PersonsReport {
     #[serde(skip)]
@@ -123,8 +130,10 @@ pub fn group_name(group: &PeopleContactGroup) -> &str {
         .unwrap_or(&group.resource_name)
 }
 
-/// A list of contact groups. The table shows ID / NAME / TYPE / MEMBERS;
-/// `--json` emits the raw People group objects, plus any tokens.
+/// A list of contact groups.
+///
+/// The table shows ID / NAME / TYPE / MEMBERS; `--json` emits the raw
+/// People group objects, plus any tokens.
 #[derive(Clone, Debug, Serialize)]
 pub struct GroupsReport {
     #[serde(skip)]
@@ -191,8 +200,7 @@ impl fmt::Display for GroupReport {
     }
 }
 
-/// The group's member count as the server reports it, blank when it was
-/// not asked for.
+/// The group's member count as the server reports it, else blank.
 ///
 /// `memberResourceNames` is not it: People fills that only on a `get`,
 /// and even then only up to the requested maximum, so counting it reads

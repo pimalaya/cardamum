@@ -1,3 +1,8 @@
+//! # Addressbook update command
+//!
+//! Turns the given flags into a partial update and applies it to an
+//! existing addressbook.
+
 use anyhow::{Result, bail};
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
@@ -8,22 +13,22 @@ use crate::shared::{
 
 /// Update an existing addressbook.
 ///
-/// Each `--*` flag is optional and only updates the corresponding field; unset
-/// fields are left untouched. To clear an optional field, pass an empty value
-/// (e.g. `--description ""`).
+/// Each flag updates its own field and leaves the others untouched. To
+/// clear an optional field, pass an empty value, as in `--description ""`.
 ///
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct AddressbookUpdateCommand {
+    /// Addressbook to update.
     #[command(flatten)]
     pub addressbook: AddressbookIdArg,
-    /// New human-readable name.
+    /// New display name.
     #[arg(long, short, value_name = "TEXT")]
     pub name: Option<String>,
-    /// New free-form description; pass `""` to clear.
+    /// New free-form description, `""` to clear it.
     #[arg(long, short, alias = "desc", value_name = "TEXT")]
     pub description: Option<String>,
-    /// New ASCII `#RRGGBB` color marker; pass `""` to clear.
+    /// New ASCII `#RRGGBB` color marker, `""` to clear it.
     #[arg(long, short = 'C', value_name = "HEX")]
     pub color: Option<String>,
 }

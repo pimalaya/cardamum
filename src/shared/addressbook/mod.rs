@@ -1,3 +1,7 @@
+//! # Addressbook
+//!
+//! The shared addressbook types and the commands operating on them.
+
 mod types;
 
 pub mod cli;

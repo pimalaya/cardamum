@@ -1,3 +1,7 @@
+//! # Item move command
+//!
+//! Moves an item file from one collection into another.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};

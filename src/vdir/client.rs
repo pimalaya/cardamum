@@ -1,5 +1,7 @@
-//! Cardamum wrapper around [`io_vdir::client::VdirClient`] that
-//! bundles the merged [`Account`] alongside the vdir client.
+//! # Vdir client
+//!
+//! Wraps [`io_vdir::client::VdirClient`] and carries the merged [`Account`]
+//! alongside it, which is what the commands render from.
 
 use std::{
     ops::{Deref, DerefMut},
@@ -14,20 +16,23 @@ use crate::{
     config::{AccountConfig, Config, VdirConfig},
 };
 
+/// The vdir client a command runs against, plus its account.
 pub struct VdirClient {
     inner: Inner,
     pub account: Account,
 }
 
 impl VdirClient {
+    /// Opens the client rooted at the configured home directory.
     pub fn new(config: VdirConfig, account: Account) -> Self {
         let inner = Inner::new(config.home_dir);
         Self { inner, account }
     }
 
-    /// Resolves a collection name to its path under the vdir root,
-    /// bailing with a friendly message when the directory is absent
-    /// (io-vdir would otherwise surface a raw OS error).
+    /// Resolves a collection name to its path under the vdir root.
+    ///
+    /// A missing directory is rejected here, io-vdir would otherwise
+    /// surface a raw OS error.
     pub fn collection_path(&self, name: &str) -> Result<VdirPath> {
         let path = self.root().join(name);
         if !Path::new(path.as_str()).is_dir() {
@@ -51,9 +56,9 @@ impl DerefMut for VdirClient {
     }
 }
 
-/// Builds the merged [`Account`] from the already-resolved config and
-/// account, then opens the vdir client. Bails when the account has no
-/// `[vdir]` block.
+/// Merges the global and account configs, then opens the vdir client.
+///
+/// Bails when the account declares no `[vdir]` block.
 pub fn build_vdir_client(
     config: Config,
     name: String,

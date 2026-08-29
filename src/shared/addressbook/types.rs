@@ -1,19 +1,19 @@
-//! Addressbook types shared across every backend.
+//! # Addressbook types
+//!
+//! The addressbook shape shared across every backend, and the partial
+//! update applied to it.
 
 use serde::{Deserialize, Serialize};
 
-/// An addressbook collection.
+/// A collection of cards.
 ///
-/// Strict least-common-denominator shape across the backends the CLI
-/// targets (vdir, CardDAV, JMAP, Microsoft Graph, Google People).
-/// Partial-coverage fields (description, color) remain optional and
-/// are populated by the backends that know them.
+/// Strict least common denominator across the backends the CLI targets:
+/// a field only some of them expose stays optional, and is filled in by
+/// the ones that know it.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Addressbook {
-    /// Backend-specific identifier: collection directory name (vdir),
-    /// last URL segment (CardDAV), AddressBook id (JMAP), contact
-    /// folder id (Graph) or contact group id (Google).
+    /// Backend-specific identifier of the collection.
     pub id: String,
     /// Human-readable display name.
     pub name: String,
@@ -27,16 +27,18 @@ pub struct Addressbook {
 
 /// Partial update applied to an [`Addressbook`].
 ///
-/// Every field is optional: `None` means "leave untouched", `Some`
-/// means "replace with this value" (including `Some(None)` to clear an
-/// optional field).
+/// `None` leaves the field untouched, `Some` replaces it, and
+/// `Some(None)` clears an optional field.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct AddressbookDiff {
+    /// New display name.
     #[serde(default)]
     pub name: Option<String>,
+    /// New description, `Some(None)` to clear it.
     #[serde(default)]
     pub description: Option<Option<String>>,
+    /// New color marker, `Some(None)` to clear it.
     #[serde(default)]
     pub color: Option<Option<String>>,
 }

@@ -1,20 +1,19 @@
-//! Command generating an account.
+//! # Configure command
 //!
-//! The wizard generates, it never edits: it discovers an account from
-//! one prompt ([`super::discover`]), tests it, then hands the resulting
-//! `[accounts.<name>]` table back as a file to create, a block to
-//! append, or a document on stdout.
+//! The wizard generates, it never edits: it discovers an account from one
+//! prompt (see [`super::discover`]), tests it, then hands the resulting
+//! `[accounts.<name>]` table back as a file to create, a block to append,
+//! or a document on stdout.
 //!
 //! It runs from `cardamum configure`, and from the offer a bare
 //! `cardamum` or a command needing an account raises. That offer is the
-//! only place the wizard introduces itself: the command asked for by
-//! name goes straight to the prompts.
+//! only place the wizard introduces itself: the command asked for by name
+//! goes straight to the prompts.
 //!
 //! Appending is a plain text append rather than a re-serialization, so
-//! comments, ordering and hand-written formatting come out untouched.
-//! Two rules guard it: the account name must be free, since two
-//! `[accounts.<name>]` tables make the whole document fail to parse, and
-//! the generated account claims the default only when no other does.
+//! comments, ordering and hand-written formatting come out untouched. The
+//! account name must be free, two `[accounts.<name>]` tables failing the
+//! whole document, and the default is claimed only when no other does.
 
 use std::{
     fmt,
@@ -36,23 +35,21 @@ use crate::{
 
 /// Configure an account interactively.
 ///
-/// This command discovers a provider's settings from an email address
-/// (or a server URL, or a local folder path), tests the connection, then
-/// saves the resulting account to the configuration file, appends it to
-/// the one already there, or prints it for you to place by hand.
-/// Anything discovery does not cover is written by hand.
+/// Discovers a provider's settings from an email address (or a server URL,
+/// or a local folder path), tests the connection, then saves the resulting
+/// account to the configuration file, appends it to the one already there,
+/// or prints it for you to place by hand. Anything discovery does not
+/// cover is added afterwards.
 #[derive(Debug, Parser)]
 pub struct ConfigureCommand;
 
 impl ConfigureCommand {
     /// Runs the wizard, then saves, appends or prints the account.
     ///
-    /// No welcome: whoever typed the command knows what it does. The
-    /// account name is not asked either, being only the TOML table key.
-    ///
-    /// A redirected stdout and the JSON output both stay
-    /// non-interactive: the document goes to stdout and no file is
-    /// touched. The prompts render on stderr, so they stay out of it.
+    /// The account name is not asked, being only the TOML table key. A
+    /// redirected stdout or the JSON output stays non-interactive: the
+    /// prompts render on stderr, the document goes to stdout, and no file
+    /// is touched.
     pub fn execute(self, printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
         if !stdin().is_terminal() {
             bail!(
@@ -89,19 +86,18 @@ impl ConfigureCommand {
     }
 }
 
-/// What a configuration already on disk constrains in the generated
-/// account: the names it takes, and whether one of its accounts claims
-/// the default.
+/// What a configuration already on disk constrains in the new account.
 struct ExistingConfig {
     names: Vec<String>,
     has_default: bool,
 }
 
 impl ExistingConfig {
-    /// Reads the configuration at the given path, or `None` when no file
-    /// is there. A file that fails to parse is an error rather than a
-    /// `None`, since appending to a broken document would bury the
-    /// actual problem under a second one.
+    /// Reads the configuration at `path`, or `None` when no file is there.
+    ///
+    /// A file that fails to parse is an error rather than a `None`, since
+    /// appending to a broken document would bury the actual problem under
+    /// a second one.
     fn read(path: &Path) -> Result<Option<Self>> {
         if !path.exists() {
             return Ok(None);
@@ -136,8 +132,8 @@ impl fmt::Display for GeneratedConfig {
     }
 }
 
-/// Frames Cardamum, names the configuration file that is missing, and
-/// points at the sample for everything the wizard does not cover.
+/// Frames Cardamum, names the missing configuration file, and points at
+/// the sample for everything the wizard does not cover.
 ///
 /// Printed before the offer, so the wizard introduces itself to someone
 /// who did not ask for it; `configure` skips it. On stderr, so a
@@ -164,12 +160,12 @@ pub fn print_welcome(path: &Path) {
     eprintln!();
 }
 
-/// The name discovery proposes, suffixed until the configuration does
-/// not already hold it.
+/// The name discovery proposes, suffixed until the configuration does not
+/// already hold it.
 ///
 /// Not prompted: the name is only the TOML table key. It still has to be
-/// free, a second `[accounts.<name>]` table making the whole document
-/// fail to parse, and taking the working accounts down with it.
+/// free, a second `[accounts.<name>]` table making the whole document fail
+/// to parse and taking the working accounts down with it.
 fn account_name(base: &str, existing: Option<&ExistingConfig>) -> String {
     let taken = existing
         .map(|config| config.names.as_slice())
@@ -241,9 +237,10 @@ fn append_or_print(printer: &mut impl Printer, path: &Path, config: GeneratedCon
     Ok(())
 }
 
-/// Tells where the account landed, under which name, and what to run
-/// next. The name matters because it was never asked for: an account
-/// that did not claim the default is only reachable through `-a`.
+/// Tells where the account landed, under which name, and what to run next.
+///
+/// The name matters because it was never asked for: an account that did
+/// not claim the default is only reachable through `-a`.
 fn print_saved(path: &Path, config: &GeneratedConfig) {
     let name = &config.name;
 

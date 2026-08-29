@@ -1,3 +1,8 @@
+//! # Raw report command
+//!
+//! Sends an arbitrary XML REPORT body to an addressbook and renders the
+//! multistatus it answers.
+
 use std::{
     fmt, fs,
     io::{Read, Write, stdin},
@@ -19,10 +24,10 @@ use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
 
 /// Run a REPORT with an arbitrary XML body against an addressbook.
 ///
-/// The escape hatch for custom `addressbook-query` / `-multiget` /
-/// `sync-collection` (or any) REPORTs the typed subcommands don't cover.
-/// The XML body comes from a file, inline, or `-` for stdin; the parsed
-/// multistatus is printed.
+/// The escape hatch for the `addressbook-query`,
+/// `addressbook-multiget` and `sync-collection` variants the typed
+/// subcommands do not cover. The XML body comes from a file, inline, or
+/// `-` for stdin, and the parsed multistatus is printed.
 ///
 /// JSON output: `{"responses": [{"href", "status", "etag",
 /// "data_bytes"}], "sync_token"}`.
@@ -68,8 +73,10 @@ impl CarddavReportRawCommand {
     }
 }
 
-/// Reads the XML body: `-` reads stdin, an existing file is read,
-/// otherwise a value starting with `<` is treated as inline XML.
+/// Reads the XML body from stdin (`-`), a file, or the value itself.
+///
+/// An existing path is read from disk, otherwise a value starting with
+/// `<` is taken as inline XML.
 fn read_xml(source: &str) -> Result<Vec<u8>> {
     if source == "-" {
         let mut buf = Vec::new();
@@ -92,7 +99,7 @@ fn read_xml(source: &str) -> Result<Vec<u8>> {
     bail!("Source `{source}` is neither a readable file nor XML");
 }
 
-/// Pumps a [`WebdavReport`] coroutine against the client's connected stream.
+/// Pumps a [`WebdavReport`] coroutine over the client's stream.
 fn run_report(
     client: &mut CarddavClient,
     mut coroutine: WebdavReport,
@@ -114,6 +121,7 @@ fn run_report(
     }
 }
 
+/// Multistatus a raw REPORT answered.
 #[derive(Clone, Debug, Serialize)]
 pub struct RawReport {
     #[serde(skip)]
@@ -123,6 +131,7 @@ pub struct RawReport {
     pub sync_token: Option<String>,
 }
 
+/// One multistatus response: href, status, ETag and body size.
 #[derive(Clone, Debug, Serialize)]
 pub struct EntryRow {
     pub href: String,

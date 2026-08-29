@@ -1,30 +1,28 @@
-//! Rendering of the JMAP `*/set` item errors as prose.
+//! # Set error rendering
 //!
-//! A JMAP write reports each rejected item with its own typed error
-//! (RFC 8620 §5.3), which carries an optional server description and,
-//! for `invalidProperties`, the property names at fault. This module
-//! renders that as a message a user can read, rather than the `Debug`
-//! shape of the error value. It mirrors himalaya's jmap/error.rs.
+//! Renders the per-item errors of a JMAP write (RFC 8620 §5.3) as prose
+//! a user can read, rather than as the `Debug` shape of the error value.
+//!
+//! Each rejected item carries its own typed error, with an optional
+//! server description and, for `invalidProperties`, the property names
+//! at fault. Mirrors himalaya's jmap/error.rs.
 
 use io_jmap::rfc9610::{
     address_book::set::JmapAddressBookSetItemError,
     contact_card::{copy::JmapContactCardCopyItemError, set::JmapContactCardSetItemError},
 };
 
-/// The parts of a JMAP set error worth showing: what the server called
-/// it, what it said, and which properties it named.
+/// The parts of a JMAP set error worth showing.
 pub trait JmapSetError {
     /// The error type as JMAP spells it, e.g. `invalidProperties`.
     fn type_name(&self) -> &'static str;
     /// The optional human-readable detail the server sent along.
     fn description(&self) -> Option<&str>;
-    /// The property names the server rejected, empty for every error
-    /// type but `invalidProperties`.
+    /// The property names at fault, empty outside `invalidProperties`.
     fn properties(&self) -> &[String];
 }
 
-/// Renders a JMAP set error as a suffix, e.g.
-/// `: invalidProperties (`vCardProps`): unknown property`.
+/// Renders a set error as the suffix of a rejection message.
 pub fn format_set_error<E: JmapSetError>(err: &E) -> String {
     let mut msg = format!(": {}", err.type_name());
 

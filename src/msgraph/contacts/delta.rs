@@ -1,3 +1,8 @@
+//! # Contact delta command
+//!
+//! Runs the Graph incremental sync over contacts and renders one page of
+//! changes.
+
 use core::fmt;
 
 use anyhow::Result;
@@ -12,14 +17,14 @@ use crate::{
     shared::table::style_from_preset,
 };
 
-/// One page of the contacts delta (Graph incremental sync): the
-/// contacts changed or removed since the last round.
+/// List one page of the contacts changed or removed since the last round
+/// (the Graph incremental sync).
 ///
-/// Without `--delta-link` this opens a fresh round, enumerating
-/// everything and ending with an `@odata.deltaLink`. Feed that link back
-/// through `--delta-link` for the next round, which returns only what
-/// changed since; a page ending with an `@odata.nextLink` was truncated,
-/// and that link goes back through the same flag to drain the rest.
+/// Without `--delta-link` this opens a fresh round, enumerating everything
+/// and ending with an `@odata.deltaLink`. Feed that link back through
+/// `--delta-link` for the next round, which returns only what changed
+/// since. A page ending with an `@odata.nextLink` was truncated, and that
+/// link goes back through the same flag to drain the rest.
 ///
 /// JSON output: `{"contacts": [<raw Graph delta>...], "@odata.nextLink",
 /// "@odata.deltaLink"}`.
@@ -36,10 +41,11 @@ pub struct MsgraphContactDeltaCommand {
     /// Comma-separated properties to return (`$select`).
     #[arg(long, value_name = "CSV", conflicts_with = "delta_link")]
     pub select: Option<String>,
-    /// `@odata.deltaLink` or `@odata.nextLink` from a previous page, to
-    /// continue that round instead of opening a new one. The link
-    /// already carries the folder and the properties, so neither is
-    /// passed again.
+    /// Continue a round from a previous page instead of opening a new one.
+    ///
+    /// Takes the `@odata.deltaLink` or `@odata.nextLink` that page
+    /// returned. The link already carries the folder and the properties,
+    /// so neither is passed again.
     #[arg(long, value_name = "URL")]
     pub delta_link: Option<String>,
 }
@@ -65,6 +71,7 @@ impl MsgraphContactDeltaCommand {
     }
 }
 
+/// A page of the contacts delta, with the links continuing the round.
 #[derive(Clone, Debug, Serialize)]
 pub struct DeltaReport {
     #[serde(skip)]

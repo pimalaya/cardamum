@@ -1,11 +1,12 @@
-//! CardDAV wizard.
+//! # CardDAV wizard
 //!
 //! A discovery entry pins the context root, the HTTP authentication
 //! scheme is picked among the advertised ones (skipped when only one
-//! qualifies), then its credentials are prompted. It does not connect;
-//! the wizard validates the whole account once at the end (see
-//! [`crate::account::check`]), and the runtime walks the principal and
-//! the addressbook-home-set from the stored `server`.
+//! qualifies), then its credentials are prompted.
+//!
+//! It does not connect: the wizard validates the whole account once at
+//! the end (see [`crate::account::check`]), and the runtime walks the
+//! principal and the addressbook-home-set from the stored `server`.
 
 use anyhow::Result;
 use pimalaya_cli::prompt;
@@ -22,9 +23,7 @@ use crate::{
 const BASIC: &str = "Basic (username + password)";
 const BEARER: &str = "Bearer (API token)";
 
-/// Configures CardDAV from a discovered entry: the context root is
-/// pinned, the authentication scheme is picked among those advertised,
-/// and only its credentials are prompted.
+/// Configures CardDAV from a discovered entry, prompting credentials.
 pub fn configure_discovered(
     account_name: &str,
     email: &str,
@@ -46,9 +45,10 @@ pub fn configure_discovered(
     })
 }
 
-/// Prompts the HTTP authentication scheme from `caps` (both offered when
-/// none was advertised), then its credentials. The Bearer token flow shows
-/// the OAuth brokers only when a grant was advertised.
+/// Prompts the authentication scheme from `caps`, then its credentials.
+///
+/// Both schemes are offered when none was advertised, and the token flow
+/// shows the OAuth brokers only when a grant was.
 fn prompt_auth(
     account_name: &str,
     login_hint: Option<&str>,

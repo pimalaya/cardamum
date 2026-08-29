@@ -1,3 +1,8 @@
+//! # Raw request command
+//!
+//! Sends an arbitrary Microsoft Graph request and prints the JSON response,
+//! the escape hatch for the endpoints no command covers.
+
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use io_msgraph::v1::send::{MSGRAPH_API_BASE, MsgraphSend, MsgraphSendOutput};
@@ -42,10 +47,13 @@ impl MsgraphRequestCommand {
     }
 }
 
+/// Parses the raw body argument, an absent body meaning JSON `null`.
 fn parse_body(body: Option<&str>) -> Result<Value> {
     serde_json::from_str(body.unwrap_or("null")).context("Parse request body JSON error")
 }
 
+/// Resolves a Graph path onto the `v1.0/` base, a full URL being taken
+/// as-is.
 fn resolve_url(path: &str) -> Result<Url> {
     if path.starts_with("http") {
         Ok(Url::parse(path)?)

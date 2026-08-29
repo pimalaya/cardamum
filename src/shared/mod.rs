@@ -1,3 +1,8 @@
+//! # Shared API
+//!
+//! Protocol-agnostic addressbook and card commands, run against whichever
+//! backend the active account defines.
+
 pub mod addressbook;
 pub mod arg;
 pub mod card;

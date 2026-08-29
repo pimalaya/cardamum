@@ -1,3 +1,7 @@
+//! # AddressBook get command
+//!
+//! Fetches AddressBooks by id, or every one of them.
+
 use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::address_book::get::JmapAddressBookGetOptions;

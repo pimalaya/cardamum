@@ -1,3 +1,8 @@
+//! # Connection list command
+//!
+//! Lists one page of the signed-in user's contacts
+//! (`people.connections.list`).
+
 use anyhow::Result;
 use clap::Parser;
 use io_people::v1::rest::people::connections::list::PeopleConnectionsListParams;
@@ -5,8 +10,9 @@ use pimalaya_cli::printer::Printer;
 
 use crate::people::{client::PeopleClient, project, render::PersonsReport};
 
-/// List the signed-in user's contacts (one People page). Pass a
-/// `--sync-token` from a previous list for incremental sync.
+/// List the signed-in user's contacts (one People page).
+///
+/// Pass a `--sync-token` from a previous list for incremental sync.
 ///
 /// JSON output: `{"people": [<raw People person>...]}`.
 #[derive(Debug, Parser)]

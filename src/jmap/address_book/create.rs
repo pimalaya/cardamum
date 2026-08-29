@@ -1,3 +1,7 @@
+//! # AddressBook create command
+//!
+//! Creates an AddressBook and renders the object the server returned.
+
 use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};

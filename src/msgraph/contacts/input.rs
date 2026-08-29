@@ -1,3 +1,7 @@
+//! # Contact JSON input
+//!
+//! The raw Graph contact body shared by the create and update commands.
+
 use std::{
     fs,
     io::{Read, stdin},
@@ -17,8 +21,10 @@ pub struct ContactJsonArg {
 }
 
 impl ContactJsonArg {
-    /// Reads the source and parses it into a Graph contact: `-` reads
-    /// stdin, an existing file is read, otherwise the value is the JSON.
+    /// Reads the source and parses it into a Graph contact.
+    ///
+    /// A `-` reads stdin, an existing path is read as a file, and anything
+    /// else is the JSON itself.
     pub fn read(self) -> Result<MsgraphContact> {
         let raw = if self.body == "-" {
             let mut buf = String::new();

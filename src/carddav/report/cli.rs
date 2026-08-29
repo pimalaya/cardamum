@@ -1,3 +1,7 @@
+//! # REPORT command
+//!
+//! Dispatches the typed CardDAV REPORTs and the raw escape hatch.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
@@ -11,6 +15,9 @@ use crate::carddav::{
 };
 
 /// Run a CardDAV REPORT (RFC 6352 §8, RFC 6578).
+///
+/// The typed subcommands cover the three standard reports; `raw` sends
+/// an arbitrary XML body for anything else.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum CarddavReportCommand {

@@ -1,3 +1,7 @@
+//! # AddressBook update command
+//!
+//! Renames an AddressBook or changes its description.
+
 use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};

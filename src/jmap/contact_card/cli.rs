@@ -1,3 +1,7 @@
+//! # ContactCard command tree
+//!
+//! Dispatches the `ContactCard` methods against the connected client.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

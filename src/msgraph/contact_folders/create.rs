@@ -1,3 +1,7 @@
+//! # Folder create command
+//!
+//! Creates a contact folder from its display name.
+
 use anyhow::Result;
 use clap::Parser;
 use io_msgraph::v1::rest::users::contact_folders::MsgraphContactFolder;

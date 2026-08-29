@@ -1,3 +1,7 @@
+//! # ContactCard create command
+//!
+//! Creates a ContactCard from a raw JSContact body.
+
 use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};
@@ -9,8 +13,7 @@ use crate::jmap::{
     client::JmapClient, error::format_set_error, input::JsonArg, render::CardReport,
 };
 
-/// Create a ContactCard from a raw JSContact JSON body
-/// (`ContactCard/set` create).
+/// Create a ContactCard from a raw JSContact body (`ContactCard/set`).
 ///
 /// JSON output: the raw JMAP ContactCard the server created.
 #[derive(Debug, Parser)]

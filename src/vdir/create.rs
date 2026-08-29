@@ -1,3 +1,8 @@
+//! # Collection create command
+//!
+//! Creates a collection directory under the vdir root, with the metadata
+//! files describing it.
+
 use anyhow::Result;
 use clap::Parser;
 use io_vdir::collection::VdirCollection;
@@ -10,8 +15,10 @@ use crate::vdir::client::VdirClient;
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct VdirCollectionCreateCommand {
-    /// Name of the collection. Used both as on-disk directory name and
-    /// as the `displayname` metadata file content.
+    /// Name of the collection.
+    ///
+    /// Used both as the on-disk directory name and as the content of the
+    /// `displayname` metadata file.
     #[arg(value_name = "NAME")]
     pub name: String,
     /// Optional free-form description (`description` metadata file).

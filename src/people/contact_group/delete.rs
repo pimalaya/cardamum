@@ -1,11 +1,17 @@
+//! # Contact group delete command
+//!
+//! Deletes a contact group (`contactGroups.delete`).
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
 
 use crate::people::client::PeopleClient;
 
-/// Delete a contact group. Its member contacts stay in `myContacts`
-/// unless `--delete-contacts` is set.
+/// Delete a contact group.
+///
+/// Its member contacts stay in `myContacts` unless `--delete-contacts`
+/// is set.
 ///
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]

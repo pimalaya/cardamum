@@ -1,3 +1,7 @@
+//! # Collection list command
+//!
+//! Lists the collections under the vdir root, as a table or as JSON.
+
 use std::fmt;
 
 use anyhow::Result;
@@ -30,6 +34,7 @@ impl VdirCollectionListCommand {
     }
 }
 
+/// The collection listing, as the table and the JSON both render it.
 #[derive(Clone, Debug, Serialize)]
 pub struct CollectionsTable {
     #[serde(skip)]
@@ -40,6 +45,7 @@ pub struct CollectionsTable {
     pub rows: Vec<CollectionRow>,
 }
 
+/// One listed collection: its id, its metadata and its path on disk.
 #[derive(Clone, Debug, Serialize)]
 pub struct CollectionRow {
     pub id: String,

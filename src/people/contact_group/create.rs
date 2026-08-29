@@ -1,3 +1,7 @@
+//! # Contact group create command
+//!
+//! Creates a contact group (`contactGroups.create`).
+
 use anyhow::Result;
 use clap::Parser;
 use io_people::v1::rest::contact_groups::PeopleContactGroup;

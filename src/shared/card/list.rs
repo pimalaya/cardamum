@@ -1,3 +1,8 @@
+//! # Card list command
+//!
+//! Lists a page of cards as a colored table or as JSON, previewing the
+//! main vCard properties of each.
+
 use std::fmt;
 
 use anyhow::Result;
@@ -16,12 +21,16 @@ use crate::shared::{
 /// "email", "tel"}]}`.
 #[derive(Debug, Parser)]
 pub struct CardListCommand {
+    /// Addressbook to list the cards of.
     #[command(flatten)]
     pub addressbook: AddressbookIdArg,
     /// 1-indexed page number to fetch.
     #[arg(short, long, value_name = "N", default_value_t = 1)]
     pub page: u32,
-    /// Maximum number of cards returned per page.
+    /// Maximum number of cards per page.
+    ///
+    /// Falls back to the `card.list.page-size` config when omitted, then
+    /// to 25.
     #[arg(short = 's', long, value_name = "N")]
     pub page_size: Option<u32>,
 }
@@ -47,6 +56,7 @@ impl CardListCommand {
     }
 }
 
+/// Table of cards, and the JSON shape the command prints.
 #[derive(Clone, Debug, Serialize)]
 pub struct CardsTable {
     #[serde(skip)]
@@ -63,6 +73,7 @@ pub struct CardsTable {
     pub rows: Vec<CardRow>,
 }
 
+/// One card, previewed as rendered by [`CardsTable`].
 #[derive(Clone, Debug, Serialize)]
 pub struct CardRow {
     pub id: String,
@@ -116,9 +127,10 @@ impl fmt::Display for CardsTable {
     }
 }
 
-/// Quick-and-dirty vCard preview: pulls the first `FN`, `EMAIL` and
-/// `TEL` line out of the raw bytes for the cards listing. Avoids
-/// parsing the whole vCard just to render three columns.
+/// Pulls the first `FN`, `EMAIL` and `TEL` value out of the raw bytes.
+///
+/// A scan rather than a parse: the listing renders three columns, which
+/// does not justify parsing every vCard in the page.
 fn vcard_preview(bytes: &[u8]) -> (Option<String>, Option<String>, Option<String>) {
     let text = match std::str::from_utf8(bytes) {
         Ok(s) => s,
@@ -153,6 +165,7 @@ fn vcard_preview(bytes: &[u8]) -> (Option<String>, Option<String>, Option<String
     (fn_value, email, tel)
 }
 
+/// Returns the value of a property line, skipping over its parameters.
 fn pick_property(line: &str, key: &str) -> Option<String> {
     if !line.starts_with(key) {
         return None;

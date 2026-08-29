@@ -1,3 +1,7 @@
+//! # Contact folder commands
+//!
+//! Dispatches the contact folder subtree.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

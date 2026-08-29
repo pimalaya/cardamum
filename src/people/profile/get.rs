@@ -1,10 +1,14 @@
+//! # Profile get command
+//!
+//! Reads the signed-in user's own person (`people/me`).
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
 use crate::people::{client::PeopleClient, project, render::PersonReport};
 
-/// GET the signed-in user (People `people/me`).
+/// GET the signed-in user (`people/me`).
 ///
 /// JSON output: the raw People person object.
 #[derive(Debug, Parser)]

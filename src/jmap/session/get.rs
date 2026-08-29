@@ -1,3 +1,7 @@
+//! # Session get command
+//!
+//! Prints the JMAP session object cached when the client connected.
+
 use core::fmt;
 
 use anyhow::{Result, anyhow};
@@ -25,6 +29,7 @@ impl JmapSessionGetCommand {
     }
 }
 
+/// The JMAP session, as a summary block or as the raw object.
 #[derive(Clone, Debug, Serialize)]
 #[serde(transparent)]
 pub struct SessionReport(pub JmapSession);

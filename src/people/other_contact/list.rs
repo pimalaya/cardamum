@@ -1,3 +1,7 @@
+//! # Other contact list command
+//!
+//! Lists one page of other contacts (`otherContacts.list`).
+
 use anyhow::Result;
 use clap::Parser;
 use io_people::v1::rest::other_contacts::list::PeopleOtherContactsListParams;
@@ -7,8 +11,9 @@ use crate::people::{
     client::PeopleClient, other_contact::fields::OTHER_CONTACT_FIELDS, render::PersonsReport,
 };
 
-/// List the "other contacts" (one People page). Pass a `--sync-token`
-/// from a previous list for incremental sync.
+/// List the "other contacts" (one People page).
+///
+/// Pass a `--sync-token` from a previous list for incremental sync.
 ///
 /// JSON output: `{"people": [<raw People person>...]}`.
 #[derive(Debug, Parser)]

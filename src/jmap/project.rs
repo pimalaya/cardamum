@@ -1,13 +1,16 @@
-//! JMAP ContactCard (RFC 9610) to vCard projection and back, via
-//! vcard-rs's JSContact conversion (RFC 9555). The ContactCard's
-//! JSContact payload (RFC 9553) converts losslessly: vCard properties
-//! with no JSContact counterpart ride the standard `vCardProps` escape
-//! hatch both ways, so the vCard document of record round-trips.
+//! # JSContact projection
 //!
-//! JMAP has no per-card ETag; the revision surfaced by [`to_card`] is
-//! a hash of the card's JSON, which only drives display and manual
-//! If-Match checks. Updates carry no If-Match equivalent and are
-//! last-write-wins, like Microsoft Graph.
+//! Projects a JMAP ContactCard (RFC 9610) onto a vCard document and
+//! back, through vcard-rs's JSContact conversion (RFC 9555).
+//!
+//! The ContactCard's JSContact payload (RFC 9553) converts losslessly:
+//! a vCard property with no JSContact counterpart rides the standard
+//! `vCardProps` escape hatch both ways, so the vCard document of record
+//! round-trips.
+//!
+//! JMAP has no per-card ETag, so the revision [`to_card`] surfaces is a
+//! hash of the card's JSON, driving display and manual If-Match checks
+//! only. Updates are last-write-wins, like Microsoft Graph.
 
 use std::{
     collections::BTreeMap,
@@ -20,9 +23,10 @@ use vcard::{tree::cst::VcardCst, vcard::Vcard};
 
 use crate::shared::card::Card;
 
-/// JMAP ContactCard to the shared card shape: the projected vCard
-/// document as contents, the ContactCard id as id and the JSON hash as
-/// ETag.
+/// Projects a ContactCard onto the shared card shape.
+///
+/// The vCard document becomes the contents, the ContactCard id the id,
+/// and the hash of its JSON the ETag.
 pub fn to_card(addressbook_id: &str, card: JmapContactCard) -> Result<Card, String> {
     let etag = etag(&card);
     let vcard = to_vcard(&card.card)?;
@@ -47,8 +51,7 @@ pub fn to_vcard(card: &Map<String, Value>) -> Result<String, String> {
     Ok(vcard.to_string())
 }
 
-/// Projects a vCard document onto JSContact Card properties, the
-/// create payload of `ContactCard/set`.
+/// Projects a vCard document onto JSContact Card properties.
 pub fn to_jscontact(vcard: &str) -> Result<Map<String, Value>, String> {
     let cst = VcardCst::parse(vcard).map_err(|err| format!("Invalid vCard: {err}"))?;
 
@@ -58,10 +61,11 @@ pub fn to_jscontact(vcard: &str) -> Result<Map<String, Value>, String> {
     }
 }
 
-/// `ContactCard/set` update patch from the edited vCard: each
-/// top-level JSContact property that differs from the base vCard (the
-/// state last synced with the server), plus a null for every property
-/// the edit removed. Without a base the patch carries every property,
+/// The `ContactCard/set` update patch derived from the edited vCard.
+///
+/// It carries each top-level JSContact property differing from the base
+/// vCard, the state last synced with the server, plus a null for every
+/// property the edit removed. Without a base it carries every property,
 /// which cannot clear server-side ones the vCard lost track of.
 pub fn to_patch(vcard: &str, base_vcard: Option<&str>) -> Result<BTreeMap<String, Value>, String> {
     let new = to_jscontact(vcard)?;
@@ -96,9 +100,10 @@ pub fn to_patch(vcard: &str, base_vcard: Option<&str>) -> Result<BTreeMap<String
     Ok(patch)
 }
 
-/// Revision token of a ContactCard: a hash of its JSON. serde_json
-/// maps are key-sorted, so the hash is independent of the property
-/// order the server picked.
+/// Revision token of a ContactCard: a hash of its JSON.
+///
+/// serde_json maps are key-sorted, so the hash is independent of the
+/// property order the server picked.
 fn etag(card: &JmapContactCard) -> Option<String> {
     let json = to_string(card).ok()?;
     let mut hasher = DefaultHasher::new();

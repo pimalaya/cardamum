@@ -1,3 +1,8 @@
+//! # Vdir item command
+//!
+//! Declares the item command tree and dispatches each verb against the
+//! account's vdir client.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
@@ -11,11 +16,11 @@ use crate::vdir::{
     },
 };
 
-/// Manage raw vdir items (the files inside a collection).
+/// Manage raw vdir items, the files inside a collection.
 ///
-/// Unlike the shared `card` API, these operate on the raw filesystem
-/// items byte-for-byte and of any kind (vCard *or* iCalendar), surfacing
-/// the on-disk id and kind.
+/// Unlike the shared `card` API, these operate on the filesystem items
+/// byte for byte and of any kind, vCard or iCalendar, surfacing the
+/// on-disk id and kind.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum VdirItemCommand {

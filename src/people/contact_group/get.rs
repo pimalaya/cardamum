@@ -1,3 +1,7 @@
+//! # Contact group get command
+//!
+//! Reads one contact group by id (`contactGroups.get`).
+
 use anyhow::Result;
 use clap::Parser;
 use io_people::v1::rest::contact_groups::PeopleGroupField;
@@ -21,7 +25,8 @@ pub struct PeopleContactGroupGetCommand {
 impl PeopleContactGroupGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: PeopleClient) -> Result<()> {
         let resource_name = format!("contactGroups/{}", self.group_id);
-        // NOTE: the count is only returned when the mask asks for it.
+        // NOTE: People returns the member count only when the mask asks
+        // for it.
         let fields = [
             PeopleGroupField::Name,
             PeopleGroupField::GroupType,

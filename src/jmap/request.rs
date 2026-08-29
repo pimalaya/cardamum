@@ -1,3 +1,8 @@
+//! # Request command
+//!
+//! Sends a caller-supplied JMAP request object and prints the raw
+//! response.
+
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use io_jmap::rfc8620::request::JmapRequest;
@@ -12,9 +17,11 @@ use crate::{
 /// Send a raw JMAP request and print the raw JMAP response.
 ///
 /// The body is a JMAP request object (`{"using": [...], "methodCalls":
-/// [...]}`), letting you drive any method with custom `using`
-/// capabilities. `using` defaults to the core + contacts capabilities
-/// when omitted. JSON output: the raw JMAP response.
+/// [...]}`), so any method can be driven with custom `using`
+/// capabilities. `using` defaults to the core and contacts capabilities
+/// when omitted.
+///
+/// JSON output: the raw JMAP response.
 #[derive(Debug, Parser)]
 pub struct JmapRequestCommand {
     #[command(flatten)]

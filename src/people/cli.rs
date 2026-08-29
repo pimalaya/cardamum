@@ -1,3 +1,8 @@
+//! # Google People commands
+//!
+//! Dispatches the People command tree to the resource module owning
+//! each command.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

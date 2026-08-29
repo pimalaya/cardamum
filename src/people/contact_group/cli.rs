@@ -1,3 +1,8 @@
+//! # Contact group commands
+//!
+//! Dispatches the contact group commands to the People operation each
+//! runs.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

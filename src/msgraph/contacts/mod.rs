@@ -1,3 +1,7 @@
+//! # Contacts
+//!
+//! The Graph contact resource, which the shared API surfaces as cards.
+
 pub mod cli;
 pub mod create;
 pub mod delete;

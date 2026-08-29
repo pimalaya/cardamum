@@ -1,3 +1,8 @@
+//! # Item input
+//!
+//! The item source shared by the create and update commands, plus the kind
+//! selector and the sniffing that infers a kind from the bytes.
+
 use std::{
     fs,
     io::{Read, stdin},
@@ -8,7 +13,7 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, ValueEnum};
 use io_vdir::item::VdirItemKind;
 
-/// Positional raw-item source shared by `item create` / `item update`.
+/// Positional item source shared by `item create` and `item update`.
 #[derive(Debug, Parser)]
 pub struct ItemInputArg {
     /// A path to an item file, raw item contents, or `-` for stdin.
@@ -17,8 +22,10 @@ pub struct ItemInputArg {
 }
 
 impl ItemInputArg {
-    /// Resolves the source into raw bytes: `-` reads stdin, an existing
-    /// file is read, otherwise the value is treated as literal contents.
+    /// Resolves the source into raw bytes.
+    ///
+    /// `-` reads stdin, an existing path is read, and anything else is
+    /// taken as literal item contents.
     pub fn read(self) -> Result<Vec<u8>> {
         if self.input == "-" {
             let mut buf = Vec::new();
@@ -49,7 +56,9 @@ impl ItemInputArg {
 #[derive(Clone, Copy, Debug, ValueEnum)]
 #[value(rename_all = "kebab-case")]
 pub enum ItemKindArg {
+    /// A vCard item, stored with the `.vcf` extension.
     Vcard,
+    /// An iCalendar item, stored with the `.ics` extension.
     Ical,
 }
 
@@ -70,8 +79,9 @@ pub fn kind_str(kind: VdirItemKind) -> &'static str {
     }
 }
 
-/// Sniffs the item kind from its bytes: a `BEGIN:VCALENDAR` head is
-/// iCalendar, everything else vCard.
+/// Sniffs the item kind from its bytes.
+///
+/// A `BEGIN:VCALENDAR` head is iCalendar, everything else vCard.
 pub fn sniff_kind(contents: &[u8]) -> VdirItemKind {
     let head = contents.get(..contents.len().min(64)).unwrap_or(contents);
     if String::from_utf8_lossy(head)

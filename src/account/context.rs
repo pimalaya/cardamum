@@ -1,8 +1,10 @@
-//! Merged runtime account: the DTO every command consumes.
+//! # Account context
+//!
+//! The merged runtime account every command consumes.
 //!
 //! The dispatch layer builds it by folding the global [`Config`] onto a
 //! defaulted account, then the selected `[accounts.<name>]` block onto
-//! that, so the narrower value always wins ([`Account::merge`]).
+//! that, so the narrower value always wins.
 
 use anyhow::{Result, bail};
 use comfy_table::{Color as TableColor, ContentArrangement};
@@ -16,12 +18,17 @@ use crate::{
     shared::table::DEFAULT_PRESET,
 };
 
+/// Page size a `card list` falls back to when nothing sets one.
 const DEFAULT_CARDS_LIST_PAGE_SIZE: u32 = 25;
 
+/// The configuration values a command resolves its defaults from.
 #[derive(Debug, Default)]
 pub struct Account {
+    /// `comfy_table` preset string the tables are drawn with.
     pub table_preset: Option<String>,
+    /// How the tables arrange their content in the available width.
     pub table_arrangement: Option<TableArrangementConfig>,
+    /// Default page size of `card list`.
     pub cards_list_page_size: Option<u32>,
     /// Fallback addressbook id for `card` commands when their
     /// `-k/--addressbook` flag is omitted.
@@ -51,14 +58,12 @@ impl Account {
         }
     }
 
-    /// Effective `comfy_table` preset string. Defaults to
-    /// `UTF8_FULL_CONDENSED`.
+    /// Effective preset string, falling back to full condensed borders.
     pub fn table_preset(&self) -> &str {
         self.table_preset.as_deref().unwrap_or(DEFAULT_PRESET)
     }
 
-    /// Effective `comfy_table` content arrangement. Defaults to
-    /// `Dynamic`.
+    /// Effective content arrangement, falling back to dynamic.
     #[allow(dead_code)]
     pub fn table_arrangement(&self) -> ContentArrangement {
         self.table_arrangement
@@ -67,22 +72,17 @@ impl Account {
             .into()
     }
 
-    /// Effective default page size for `cards list` when the
-    /// `-s/--page-size` flag is not passed. Defaults to 25.
+    /// Effective page size of `card list`, falling back to 25.
     pub fn cards_list_page_size(&self) -> u32 {
         self.cards_list_page_size
             .unwrap_or(DEFAULT_CARDS_LIST_PAGE_SIZE)
     }
 
-    /// Resolves the addressbook id a shared-API command operates on: the
-    /// `-k/--addressbook` flag wins; otherwise the `addressbook.default`
-    /// config is used; otherwise the command bails.
+    /// Resolves the addressbook id a command operates on.
     ///
-    /// An empty id bails too: backends build a path from it, where an
-    /// empty segment silently addresses the parent collection instead of
-    /// a member, and the server's answer to that explains nothing
-    /// (Microsoft Graph replies `405 The OData request is not
-    /// supported`).
+    /// The flag wins, then the `addressbook.default` config, otherwise
+    /// this bails. An empty id bails too: a backend builds a path from
+    /// it, where an empty segment addresses the parent collection.
     pub fn addressbook_id(&self, flag: Option<String>) -> Result<String> {
         let Some(id) = flag.or_else(|| self.addressbook_default.clone()) else {
             bail!("Missing addressbook id; pass -k/--addressbook or set addressbook.default")
@@ -107,13 +107,11 @@ impl Account {
     pub fn addressbooks_list_table_name_color(&self) -> TableColor {
         map_color_or(self.addressbooks_list_table.name_color, Color::Green)
     }
-    /// Color of the addressbook description column. Defaults to the
-    /// terminal default.
+    /// Color of the addressbook description column. Defaults to reset.
     pub fn addressbooks_list_table_description_color(&self) -> TableColor {
         map_color_or(self.addressbooks_list_table.description_color, Color::Reset)
     }
-    /// Color of the addressbook color-marker column. Defaults to the
-    /// terminal default.
+    /// Color of the addressbook color-marker column. Defaults to reset.
     pub fn addressbooks_list_table_color_color(&self) -> TableColor {
         map_color_or(self.addressbooks_list_table.color_color, Color::Reset)
     }
@@ -166,9 +164,9 @@ impl From<AccountConfig> for Account {
     }
 }
 
-/// Maps a [`crossterm::style::Color`] (deserialized from TOML) into a
-/// [`comfy_table::Color`] used by the renderers, substituting
-/// `fallback` when the TOML field is unset.
+/// Maps a configured [`Color`] onto the one the renderers use.
+///
+/// Substitutes `fallback` when the configuration leaves the field unset.
 pub(crate) fn map_color_or(color: Option<Color>, fallback: Color) -> TableColor {
     match color.unwrap_or(fallback) {
         Color::Reset => TableColor::Reset,

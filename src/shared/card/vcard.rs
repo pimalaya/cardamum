@@ -1,3 +1,8 @@
+//! # vCard argument
+//!
+//! The positional vCard source shared by the card create and update
+//! commands.
+
 use std::{
     fs,
     io::{Read, stdin},
@@ -16,9 +21,10 @@ pub struct VcardArg {
 }
 
 impl VcardArg {
-    /// Resolves the source into raw vCard bytes: `-` reads stdin, an
-    /// existing file is read, otherwise the value is treated as literal
-    /// vCard contents.
+    /// Resolves the source into raw vCard bytes.
+    ///
+    /// `-` reads stdin and an existing path is read from disk, otherwise
+    /// the value is taken as literal vCard contents.
     pub fn read(self) -> Result<Vec<u8>> {
         if self.vcard == "-" {
             let mut buf = Vec::new();

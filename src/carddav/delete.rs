@@ -1,3 +1,8 @@
+//! # DELETE command
+//!
+//! Runs a WebDAV `DELETE` against a card or a whole addressbook
+//! collection.
+
 use anyhow::{Result, bail};
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
@@ -6,8 +11,9 @@ use crate::carddav::client::CarddavClient;
 
 /// DELETE a card, or a whole addressbook collection.
 ///
-/// With a card id, deletes that card (gate on `--if-match`); without
+/// With a card id, deletes that card, gated on `--if-match`; without
 /// one, deletes the addressbook collection and every card it contains.
+///
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct CarddavDeleteCommand {

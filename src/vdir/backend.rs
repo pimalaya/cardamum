@@ -1,6 +1,8 @@
-//! Vdir arm of the shared-API client: thin glue mapping the shared
-//! addressbook and card operations onto [`io_vdir::client::VdirClient`]
-//! calls against the configured home directory.
+//! # Vdir backend
+//!
+//! Vdir arm of the shared-API client, mapping the shared addressbook and
+//! card operations onto [`io_vdir::client::VdirClient`] calls against the
+//! configured home directory.
 
 use std::path::Path;
 
@@ -16,13 +18,13 @@ use crate::{
     },
 };
 
-/// Vdir backend of the shared-API client, wrapping the io-vdir
-/// filesystem client rooted at the account's home directory.
+/// Vdir backend of the shared-API client, rooted at the home directory.
 pub struct VdirBackend {
     pub inner: VdirClient,
 }
 
 impl VdirBackend {
+    /// Opens the backend against the configured home directory.
     pub fn new(config: VdirConfig) -> Self {
         Self {
             inner: VdirClient::new(config.home_dir),
@@ -35,8 +37,9 @@ impl VdirBackend {
         Ok(collections.into_iter().map(into_addressbook).collect())
     }
 
-    /// Creates a collection named after `name` under the home
-    /// directory. Returns the new addressbook id (its directory name).
+    /// Creates a collection named after `name` under the home directory.
+    ///
+    /// Returns the new addressbook id, which is its directory name.
     pub fn create_addressbook(
         &mut self,
         name: &str,
@@ -58,8 +61,7 @@ impl VdirBackend {
         Ok(name.to_string())
     }
 
-    /// Applies `patch` to the collection identified by `id`, merging it
-    /// against the current collection metadata.
+    /// Applies `patch` to the collection `id`, over its current metadata.
     pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
         let collections = self.inner.list_collections()?;
         let current = collections
@@ -94,8 +96,7 @@ impl VdirBackend {
         Ok(())
     }
 
-    /// Lists the vCard items inside `addressbook_id`, applying
-    /// 1-indexed pagination.
+    /// Lists the vCard items inside `addressbook_id`, 1-indexed paging.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
@@ -135,8 +136,7 @@ impl VdirBackend {
         })
     }
 
-    /// Stores a new vCard inside `addressbook_id`. Returns its assigned
-    /// id.
+    /// Stores a new vCard inside `addressbook_id`, returning its id.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let path = self.addressbook_path(addressbook_id)?;
         let (id, _) = self
@@ -149,8 +149,7 @@ impl VdirBackend {
     ///
     /// The item is located first: storing by id writes whatever file name it
     /// is given, so an unknown id would be created rather than rejected.
-    /// `if_match` is refused rather than ignored, vdir having no entity tag to
-    /// check it against, as on the other backends without one.
+    /// `if_match` is refused, vdir having no entity tag to check it against.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
@@ -183,10 +182,9 @@ impl VdirBackend {
 
     /// Resolves `addressbook_id` to an existing collection directory.
     ///
-    /// A write to a vdir collection creates whatever directory it is handed,
-    /// and a read of a missing one lists nothing, so a path built without
-    /// looking would let a typo in `-k` invent an addressbook on a create and
-    /// read as an empty one on a list.
+    /// A write creates whatever directory it is handed and a read of a
+    /// missing one lists nothing, so a path built without looking would let
+    /// a typo in `-k` invent an addressbook, then list it as empty.
     fn addressbook_path(&self, addressbook_id: &str) -> Result<VdirPath> {
         if addressbook_id.is_empty() {
             bail!("Addressbook id cannot be empty");
@@ -201,8 +199,9 @@ impl VdirBackend {
     }
 }
 
-/// Maps a vdir [`VdirCollection`] to a shared [`Addressbook`]: the final
-/// path segment is the id and the display name falls back to it.
+/// Maps a [`VdirCollection`] to a shared [`Addressbook`].
+///
+/// The final path segment is the id, which the display name falls back to.
 fn into_addressbook(collection: VdirCollection) -> Addressbook {
     let id = collection.id().to_string();
     let name = collection.display_name.unwrap_or_else(|| id.clone());

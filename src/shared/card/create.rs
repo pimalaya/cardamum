@@ -1,3 +1,8 @@
+//! # Card create command
+//!
+//! Reads a vCard from a file or from stdin and appends it to an
+//! addressbook.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
@@ -9,8 +14,10 @@ use crate::shared::{arg::AddressbookIdArg, card::vcard::VcardArg, client::Addres
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct CardCreateCommand {
+    /// Addressbook the card is appended to.
     #[command(flatten)]
     pub addressbook: AddressbookIdArg,
+    /// vCard to append.
     #[command(flatten)]
     pub vcard: VcardArg,
 }

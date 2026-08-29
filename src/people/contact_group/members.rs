@@ -1,12 +1,17 @@
+//! # Contact group members command
+//!
+//! Adds and removes members of a contact group
+//! (`contactGroups.members.modify`).
+
 use anyhow::{Result, bail};
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
 
 use crate::people::client::PeopleClient;
 
-/// Add and/or remove members of a contact group
-/// (`contactGroups.members.modify`). Members are person resource names
-/// (`people/<id>`).
+/// Add and/or remove members of a contact group.
+///
+/// Members are person resource names (`people/<id>`).
 ///
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]

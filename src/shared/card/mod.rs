@@ -1,3 +1,7 @@
+//! # Card
+//!
+//! The shared card types and the commands operating on them.
+
 mod types;
 
 pub mod cli;

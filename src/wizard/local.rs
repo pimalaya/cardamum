@@ -1,11 +1,12 @@
-//! Local backend wizard.
+//! # Local backend wizard
 //!
-//! A typed path pointing at an existing folder configures a local
-//! store. The backend kind is auto-detected from the directory's on-disk
-//! markers: a `pimdir.db` index (with its `objects/` blob directory) means
-//! pimdir, a subdirectory holding `.vcf` files means vdir. When detection
-//! is inconclusive (an empty or ambiguous directory) and both backends are
-//! compiled in, the user picks; otherwise the sole compiled backend is used.
+//! A typed path pointing at an existing folder configures a local store,
+//! its kind auto-detected from the directory's on-disk markers.
+//!
+//! A `pimdir.db` index means pimdir, a subdirectory holding `.vcf` files
+//! means vdir. When detection is inconclusive and both backends are
+//! compiled in, the user picks; otherwise the sole compiled backend is
+//! used.
 
 #[cfg(feature = "vdir")]
 use std::fs;
@@ -20,14 +21,15 @@ use crate::config::VdirConfig;
 
 /// A configured local backend.
 pub enum Local {
+    /// A vdir home holding one directory of cards per collection.
     #[cfg(feature = "vdir")]
     Vdir(VdirConfig),
+    /// A pimdir store, its index and blobs under one root.
     #[cfg(feature = "pimdir")]
     Pimdir(PimdirConfig),
 }
 
-/// Configures a local backend rooted at `root`, auto-detecting its kind
-/// from the on-disk markers and only prompting when that is inconclusive.
+/// Configures the local backend at `root`, detecting its kind first.
 pub fn configure(root: PathBuf) -> Result<Local> {
     if let Some(local) = detect(&root) {
         return Ok(local);
@@ -36,10 +38,11 @@ pub fn configure(root: PathBuf) -> Result<Local> {
     pick(root)
 }
 
-/// Detects the backend kind from `root`'s markers: the pimdir `pimdir.db`
-/// index, or a vdir tree (an immediate subdirectory holding at least one
-/// `.vcf` card). Returns `None` when no marker of a compiled-in backend is
-/// present, leaving the choice to [`pick`].
+/// Detects the backend kind from `root`'s markers: a `pimdir.db` index,
+/// or a subdirectory holding at least one `.vcf` card.
+///
+/// Returns `None` when no compiled-in backend left a marker, leaving the
+/// choice to [`pick`].
 #[cfg_attr(
     not(all(feature = "vdir", feature = "pimdir")),
     allow(unused_variables)
@@ -64,8 +67,10 @@ fn detect(root: &Path) -> Option<Local> {
 }
 
 /// Whether `root` looks like a vdir home: at least one immediate
-/// subdirectory holding a `.vcf` card. An empty home is inconclusive rather
-/// than a match, since a fresh pimdir store looks the same from outside.
+/// subdirectory holding a `.vcf` card.
+///
+/// An empty home is inconclusive rather than a match, since a fresh
+/// pimdir store looks the same from outside.
 #[cfg(feature = "vdir")]
 fn holds_a_collection(root: &Path) -> bool {
     let Ok(entries) = fs::read_dir(root) else {
@@ -82,6 +87,8 @@ fn holds_a_collection(root: &Path) -> bool {
     })
 }
 
+/// Prompts the backend kind, both being compiled in and no marker having
+/// decided it.
 #[cfg(all(feature = "vdir", feature = "pimdir"))]
 fn pick(root: PathBuf) -> Result<Local> {
     use pimalaya_cli::prompt;
@@ -102,6 +109,7 @@ fn pick(root: PathBuf) -> Result<Local> {
     })
 }
 
+/// Takes vdir, the only backend compiled in.
 #[cfg(all(feature = "vdir", not(feature = "pimdir")))]
 fn pick(root: PathBuf) -> Result<Local> {
     Ok(Local::Vdir(VdirConfig {
@@ -109,6 +117,7 @@ fn pick(root: PathBuf) -> Result<Local> {
     }))
 }
 
+/// Takes pimdir, the only backend compiled in.
 #[cfg(all(feature = "pimdir", not(feature = "vdir")))]
 fn pick(root: PathBuf) -> Result<Local> {
     Ok(Local::Pimdir(PimdirConfig {

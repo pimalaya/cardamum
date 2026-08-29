@@ -1,3 +1,8 @@
+//! # ContactCard query command
+//!
+//! Searches the ContactCards of the account, then fetches the ones the
+//! search matched.
+
 use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::query::{JmapContactCardFilter, JmapContactCardQueryOptions};

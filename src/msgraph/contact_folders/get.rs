@@ -1,3 +1,7 @@
+//! # Folder get command
+//!
+//! Reads a single contact folder by id.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;

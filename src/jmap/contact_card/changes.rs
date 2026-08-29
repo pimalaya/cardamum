@@ -1,3 +1,8 @@
+//! # ContactCard changes command
+//!
+//! Lists the ContactCards created, updated and destroyed since a state
+//! token.
+
 use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::changes::JmapContactCardChangesOptions;
@@ -11,8 +16,7 @@ use crate::jmap::{client::JmapClient, render::ChangesReport};
 /// "has_more_changes"}`.
 #[derive(Debug, Parser)]
 pub struct JmapContactCardChangesCommand {
-    /// State token from a previous `get` / `query` (its `state`) or
-    /// `changes`.
+    /// State token from a previous `get`, `query` or `changes`.
     #[arg(value_name = "SINCE-STATE")]
     pub since_state: String,
 }

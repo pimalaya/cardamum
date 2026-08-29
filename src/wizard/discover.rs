@@ -1,26 +1,17 @@
-//! Account discovery, the half of the wizard that decides what the
-//! account is.
+//! # Account discovery
+//!
+//! The half of the wizard that decides what the account is: one prompt
+//! takes an email address, a server URL or a local folder path, and its
+//! shape orients the setup.
+//!
+//! An email, a bare domain or a server URL runs io-pim-discovery's
+//! parallel discovery (see [`super::search`]) and every reachable service
+//! becomes one selectable configuration, whose authentication method is
+//! prompted next. A folder is a local vdir or pimdir store.
 //!
 //! What becomes of the discovered account, a file to create, a block to
-//! append or a document on stdout, belongs to [`super::configure`],
-//! which is also where the welcome and the prompts around this one live.
-//!
-//! One prompt takes an email address, a server URL, or a local folder
-//! path, and its shape orients the setup, mirroring the cardamum-android
-//! onboarding:
-//!
-//! - an email (or bare domain) runs io-pim-discovery's parallel
-//!   discovery (see [`super::search`]) and every reachable service
-//!   becomes one selectable configuration; picking one then prompts its
-//!   authentication method among those advertised; a detected Google or
-//!   Microsoft account collapses to its dedicated contacts API;
-//! - a `scheme://` URL discovers from its host, its scheme narrowing the
-//!   results (`carddav(s)` to CardDAV, `jmap(s)` to JMAP);
-//! - an existing folder is a local vdir or pimdir store.
-//!
-//! The wizard only configures what it can discover automatically. When
-//! discovery finds nothing for the given input it stops and points at the
-//! documented sample, rather than prompting for a hand-entered config.
+//! append or a document on stdout, belongs to [`super::configure`], which
+//! is also where the welcome and the prompts around this one live.
 //!
 //! Cardamum runs no OAuth 2.0 grant itself: a grant only unlocks the
 //! external token brokers (Ortie, pizauth, oama) behind the API token
@@ -60,7 +51,7 @@ use crate::{
     wizard::search::{self, Discovered, DiscoveredKind},
 };
 
-/// The endpoint prompt label, shared by the create flow.
+/// The label of the single wizard prompt.
 const ENDPOINT_PROMPT: &str = "Email:";
 
 /// The documented sample configuration, shown in the welcome banner and
@@ -87,10 +78,6 @@ enum Chosen {
 
 /// Discovers one account from a single prompt, tests it, and hands back
 /// the name it proposes with the account itself.
-///
-/// What happens to that account, written to a file, appended to one or
-/// printed, belongs to [`super::configure`], which is also where the
-/// welcome lives: this is the discovery half alone.
 pub fn run() -> Result<(String, AccountConfig)> {
     let input = prompt::text::<&str>(ENDPOINT_PROMPT, None)?;
     let input = input.trim();
@@ -101,9 +88,8 @@ pub fn run() -> Result<(String, AccountConfig)> {
     let account_name = default_account_name(input);
     let (account, tested) = build_account(&account_name, input)?;
 
-    // NOTE: testing here stops a bad credential or endpoint from
-    // yielding an account that cannot connect. A flow validating its
-    // connection inline skips the redundant round-trip.
+    // NOTE: testing here stops a bad credential or endpoint from yielding
+    // an account that cannot connect.
     if !tested {
         let spinner = Spinner::start("Testing account configuration");
         if let Err(err) = check::test_account(&account) {
@@ -116,17 +102,16 @@ pub fn run() -> Result<(String, AccountConfig)> {
     Ok((account_name, account))
 }
 
-/// The result of a configure flow: the chosen backend, and whether it
-/// already validated its connection (so the caller skips the final
-/// account test).
+/// The chosen backend, and whether the flow already validated its
+/// connection so the caller can skip the final account test.
 struct Outcome {
     chosen: Chosen,
     tested: bool,
 }
 
 impl Outcome {
-    /// A not-yet-tested outcome, for the flows that defer validation to
-    /// the final account test (every backend today).
+    /// A not-yet-tested outcome, for the flows deferring validation to the
+    /// final account test (every backend today).
     fn untested(chosen: Chosen) -> Self {
         Self {
             chosen,
@@ -135,14 +120,13 @@ impl Outcome {
     }
 }
 
-/// Orients the setup from the input shape, then folds the chosen
-/// backend into a fresh [`AccountConfig`]. The returned flag reports
-/// whether the flow already validated its connection, so the caller can
-/// skip the final account test.
+/// Orients the setup from the input shape, then folds the chosen backend
+/// into a fresh [`AccountConfig`].
 ///
-/// The account is left non-default here: whether it claims the default
-/// depends on the configuration it lands in, which is
-/// [`super::configure`]'s business.
+/// The returned flag tells whether the flow already validated its
+/// connection. The account is left non-default here: claiming the default
+/// depends on the configuration it lands in, [`super::configure`]'s
+/// business.
 fn build_account(account_name: &str, input: &str) -> Result<(AccountConfig, bool)> {
     let Outcome { chosen, tested } = if is_path(input) {
         Outcome::untested(configure_local(input)?)
@@ -173,13 +157,12 @@ fn build_account(account_name: &str, input: &str) -> Result<(AccountConfig, bool
     Ok((account, tested))
 }
 
-/// Runs the discovery flow for an email, a bare domain, or a
-/// `scheme://` server URL: search the services reachable from it, keep
-/// only those supported by this build (and matching the URL scheme when
-/// one was given), let the user pick one, then configure its backend
-/// (the authentication method is picked in a second, service-specific
-/// prompt). When nothing is discovered the wizard stops rather than
-/// prompting for a hand-entered config (see [`stop_undiscovered`]).
+/// Runs the discovery flow for an email, a bare domain or a `scheme://`
+/// server URL, then configures the picked service.
+///
+/// Only the services supported by this build, and matching the URL scheme
+/// when one was given, are offered. Discovering nothing stops the wizard
+/// (see [`stop_undiscovered`]).
 fn configure_discovery(account_name: &str, input: &str) -> Result<Outcome> {
     let (email, scheme) = if input.contains("://") {
         let url = Url::parse(input).with_context(|| format!("Invalid server URL `{input}`"))?;
@@ -210,11 +193,11 @@ fn configure_discovery(account_name: &str, input: &str) -> Result<Outcome> {
     dispatch(account_name, &email, choice)
 }
 
-/// Keeps only the discovered entries a `scheme://` URL asked for:
-/// `carddav`, `carddavs` and the HTTP-family schemes keep CardDAV, and
-/// `jmap` / `jmaps` keep JMAP. A proprietary entry (Graph, People) is
-/// dropped, since the user named an open protocol. An unknown scheme is
-/// rejected outright.
+/// Keeps only the discovered entries a `scheme://` URL asked for.
+///
+/// The HTTP family and `carddav(s)` keep CardDAV, `jmap(s)` keeps JMAP. A
+/// proprietary entry is dropped since the user named an open protocol, and
+/// an unknown scheme is rejected outright.
 fn retain_scheme(found: &mut Vec<Discovered>, scheme: &str) -> Result<()> {
     match scheme {
         "carddav" | "carddavs" | "http" | "https" => {
@@ -229,10 +212,10 @@ fn retain_scheme(found: &mut Vec<Discovered>, scheme: &str) -> Result<()> {
     Ok(())
 }
 
-/// Stops the wizard when discovery found nothing to configure for
-/// `input`: it prints where to go next (a hand-written config, seeded
-/// from the documented sample) and errors out, rather than dropping into
-/// a hand-entry flow. Cardamum's wizard only ever configures what it can
+/// Stops the wizard when discovery found nothing to configure for `input`.
+///
+/// It points at the documented sample and errors out rather than dropping
+/// into a hand-entry flow: the wizard only ever configures what it can
 /// discover automatically.
 fn stop_undiscovered(input: &str) -> Result<Outcome> {
     bail!(
@@ -242,9 +225,10 @@ fn stop_undiscovered(input: &str) -> Result<Outcome> {
     )
 }
 
-/// Configures the backend behind a discovered entry. None of them
-/// validates its connection inline, so every outcome defers to the final
-/// account test.
+/// Configures the backend behind a discovered entry.
+///
+/// None of them validates its connection inline, so every outcome defers
+/// to the final account test.
 #[cfg_attr(
     all(
         feature = "carddav",
@@ -297,6 +281,7 @@ fn configure_local(input: &str) -> Result<Chosen> {
     })
 }
 
+/// Rejects a typed folder path, no local backend being compiled in.
 #[cfg(not(any(feature = "vdir", feature = "pimdir")))]
 fn configure_local(input: &str) -> Result<Chosen> {
     bail!("`{input}` looks like a folder path, but no local backend is compiled in")
@@ -312,9 +297,8 @@ fn retain_supported(found: &mut Vec<Discovered>) {
     });
 }
 
-/// Proposes a default account name from the input shape: the first
-/// label of the domain (of an email, host, or bare domain), or the
-/// folder name of a local path.
+/// Proposes a default account name from the input shape: the first label
+/// of the domain, or the folder name of a local path.
 fn default_account_name(input: &str) -> String {
     if is_path(input) {
         let raw = input.strip_prefix("file://").unwrap_or(input);
@@ -343,8 +327,7 @@ fn first_label(host: &str) -> String {
 }
 
 /// Whether the input names a filesystem path (absolute, home-relative,
-/// explicitly relative, or a `file://` URL) rather than a network
-/// endpoint.
+/// explicitly relative, or a `file://` URL) rather than an endpoint.
 fn is_path(input: &str) -> bool {
     input.starts_with("file://")
         || input.starts_with('/')

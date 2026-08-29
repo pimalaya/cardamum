@@ -1,3 +1,8 @@
+//! # Other contact copy command
+//!
+//! Copies an other contact into the user's contacts
+//! (`otherContacts.copyOtherContactToMyContactsGroup`).
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
@@ -7,8 +12,7 @@ use crate::people::{
     render::PersonReport,
 };
 
-/// Copy an other contact into the user's contacts
-/// (`otherContacts.copyOtherContactToMyContactsGroup`).
+/// Copy an other contact into the user's contacts.
 ///
 /// JSON output: the raw People person now in `myContacts`.
 #[derive(Debug, Parser)]

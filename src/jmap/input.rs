@@ -1,3 +1,8 @@
+//! # JSON input
+//!
+//! The positional JSON body shared by the commands taking one: a
+//! JSContact card, or a raw JMAP request object.
+
 use std::{
     fs,
     io::{Read, stdin},
@@ -8,9 +13,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use serde_json::{Map, Value};
 
-/// Positional raw JSON source, shared by the commands that take a JSON
-/// body: a JSContact card for `contact-card create` / `update`, a JMAP
-/// request object for `request`.
+/// Positional raw JSON source of a command taking a JSON body.
 #[derive(Debug, Parser)]
 pub struct JsonArg {
     /// A path to a JSON file, raw JSON, or `-` for stdin.
@@ -19,8 +22,10 @@ pub struct JsonArg {
 }
 
 impl JsonArg {
-    /// Reads the source into a JSON object: `-` reads stdin, an existing
-    /// file is read, otherwise the value is the JSON itself.
+    /// Reads the source into a JSON object.
+    ///
+    /// `-` reads stdin, an existing file is read, otherwise the value is
+    /// the JSON itself.
     pub fn read(self) -> Result<Map<String, Value>> {
         let raw = if self.body == "-" {
             let mut buf = String::new();

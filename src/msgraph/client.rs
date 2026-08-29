@@ -1,5 +1,7 @@
-//! Cardamum wrapper around [`io_msgraph::v1::client::MsgraphClientStd`]
-//! that bundles the merged [`Account`] alongside the connected client.
+//! # Microsoft Graph client
+//!
+//! Wraps [`io_msgraph::v1::client::MsgraphClientStd`] with the merged
+//! [`Account`], which every Graph command reads for its rendering options.
 
 use std::ops::{Deref, DerefMut};
 
@@ -12,6 +14,7 @@ use crate::{
     config::{AccountConfig, Config},
 };
 
+/// The connected Graph client, plus the account it runs for.
 pub struct MsgraphClient {
     inner: MsgraphClientStd,
     pub account: Account,
@@ -31,9 +34,10 @@ impl DerefMut for MsgraphClient {
     }
 }
 
-/// Builds the merged [`Account`] from the already-resolved config and
-/// account, then opens the Graph client. Bails when the account has no
-/// `[msgraph]` block.
+/// Builds the merged [`Account`] from the resolved config and account,
+/// then opens the Graph client.
+///
+/// Bails when the account declares no `[msgraph]` block.
 pub fn build_msgraph_client(
     config: Config,
     name: String,

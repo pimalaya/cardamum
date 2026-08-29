@@ -1,11 +1,11 @@
-//! Helpers shared by the vCard projections of the API backends
-//! (Microsoft Graph, Google People), ported from cardamum-android.
+//! # vCard projection helpers
 //!
-//! The API backends expose no vCard representation of a contact, so
-//! their projections synthesize the vCard document of record
-//! themselves; these helpers cover the pieces every projection needs
-//! (canonical text properties, date normalization, stash splicing and
-//! RFC 6350 text escaping).
+//! The pieces every provider projection needs: canonical text
+//! properties, date normalization, stash splicing and RFC 6350 escaping.
+//!
+//! Microsoft Graph and Google People expose no vCard of their own, so
+//! their projections synthesize the document of record here. Ported from
+//! cardamum-android, so both products treat the same quirks identically.
 
 use std::borrow::Cow;
 
@@ -16,9 +16,10 @@ use vcard::{
 };
 
 /// Longest raw property line the provider backends stash server-side.
-/// Longer lines (base64 PHOTO blobs, essentially) stay only in the
-/// local document of record instead of risking the whole write against
-/// undocumented provider size limits.
+///
+/// A longer line, a base64 PHOTO blob essentially, stays in the local
+/// document of record rather than risking the whole write against an
+/// undocumented provider size limit.
 pub const MAX_STASH_LINE: usize = 8 * 1024;
 
 /// A canonical text property built from an owned value.
@@ -34,8 +35,9 @@ pub fn text_prop(
     }
 }
 
-/// Normalizes a BDAY value to `yyyy-mm-dd`, or None for anything partial
-/// (year-less dates have no standard vCard 3 form, so they do not sync).
+/// Normalizes a BDAY value to `yyyy-mm-dd`, `None` when partial.
+///
+/// A year-less date has no standard vCard 3 form, so it does not sync.
 pub fn full_date(raw: &str) -> Option<String> {
     let date = raw.trim();
     let digits = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
@@ -59,8 +61,8 @@ pub fn full_date(raw: &str) -> Option<String> {
     None
 }
 
-/// Splices raw property lines (logical lines without their ending)
-/// into a serialized vCard, right before its END:VCARD line.
+/// Splices raw logical property lines, endings excluded, into a
+/// serialized vCard right before its END:VCARD line.
 pub fn splice_props(vcard: String, lines: &[String]) -> String {
     if lines.is_empty() {
         return vcard;
@@ -79,8 +81,8 @@ pub fn splice_props(vcard: String, lines: &[String]) -> String {
     }
 }
 
-/// Escapes a text value for a minted property line (RFC 6350 3.4:
-/// backslash, comma, semicolon and newline).
+/// Escapes a text value for a minted property line, per RFC 6350
+/// section 3.4: backslash, comma, semicolon and newline.
 pub fn escape_text(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for character in value.chars() {

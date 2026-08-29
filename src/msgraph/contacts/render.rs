@@ -1,3 +1,7 @@
+//! # Contact rendering
+//!
+//! Table and JSON shapes of the contact commands.
+
 use core::fmt;
 
 use comfy_table::{Cell, Color, Row, Table};
@@ -26,8 +30,10 @@ pub fn contact_phone(contact: &MsgraphContact) -> &str {
     contact.mobile_phone.as_deref().unwrap_or("")
 }
 
-/// A page of contacts. The table shows ID / NAME / EMAIL / PHONE;
-/// `--json` emits the raw Graph contact objects plus any next-page link.
+/// A page of contacts.
+///
+/// The table shows ID, NAME, EMAIL and PHONE, while `--json` emits the raw
+/// Graph contact objects plus any next-page link.
 #[derive(Clone, Debug, Serialize)]
 pub struct ContactsReport {
     #[serde(skip)]
@@ -72,7 +78,7 @@ impl fmt::Display for ContactsReport {
     }
 }
 
-/// A single contact; `--json` emits the raw Graph object.
+/// A single contact, emitted verbatim by `--json`.
 #[derive(Clone, Debug, Serialize)]
 #[serde(transparent)]
 pub struct ContactReport(pub MsgraphContact);

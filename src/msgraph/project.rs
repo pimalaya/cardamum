@@ -1,19 +1,21 @@
-//! Microsoft Graph contact to vCard projection, and back.
+//! # Contact projection
 //!
-//! Microsoft Graph exposes no vCard representation of a contact (the
-//! contacts endpoints only speak the JSON contact resource), so the
-//! Graph spoke synthesizes the vCard document of record itself:
-//! [`to_vcard`] projects an io-msgraph contact onto a fresh vCard 4.0
-//! document, and [`to_contact`] projects a vCard back onto a contact.
-//! Per the custom property policy of cairn/spec/projection.md only
-//! fields with a well-defined vCard slot are projected. [`to_contact`]
-//! builds a full-state projection: every managed field is Set (or Set
-//! empty) when the vCard carries it and Null when it does not;
-//! Graph-only fields (fileAs, officeLocation, assistantName, manager)
-//! stay Unset, out of the body, and survive updates untouched. Wire
-//! bodies refine it: [`to_new_contact`] shapes the create body and
-//! [`to_contact_delta`] the update body, both stripping the gratuitous
-//! nulls the Outlook backend rejects with HTTP 500.
+//! Projects a Microsoft Graph contact onto a vCard document
+//! ([`to_vcard`]), and a vCard back onto a contact ([`to_contact`]).
+//!
+//! Graph exposes no vCard representation of a contact, its endpoints only
+//! speaking the JSON contact resource, so the Graph spoke synthesizes the
+//! document of record itself. Only fields with a well-defined vCard slot
+//! are projected, per the policy of cairn/spec/projection.md.
+//!
+//! [`to_contact`] is the full-state projection: every managed field is Set
+//! when the vCard carries it and Null when it does not, while Graph-only
+//! fields (fileAs, officeLocation, assistantName, manager) stay Unset and
+//! survive updates untouched.
+//!
+//! [`to_new_contact`] shapes the create body and [`to_contact_delta`] the
+//! update body, both stripping the gratuitous nulls the Outlook backend
+//! rejects with HTTP 500.
 
 use core::str::FromStr;
 use std::borrow::Cow;
@@ -51,16 +53,19 @@ use vcard::{
 
 use crate::project::{MAX_STASH_LINE, escape_text, full_date, splice_props, text_prop};
 
-/// Extended-property id under which the vCard remainder is stashed on
-/// the Graph contact (a fixed app GUID plus a name, the String MAPI
-/// form); it rides inline in create and update bodies and reads back
-/// through a filtered `$expand` (cairn/spec/projection.md).
+/// Extended-property id under which the vCard remainder is stashed on the
+/// Graph contact, a fixed app GUID plus a name (the String MAPI form).
+///
+/// It rides inline in create and update bodies and reads back through a
+/// filtered `$expand` (cairn/spec/projection.md).
 pub const EXTENDED_PROP_ID: &str =
     "String {c8e5e5cf-3f6c-4f0a-9d4e-52f1e7b2a9d3} Name cardamum-vcard";
 
 /// Property names minted by [`to_vcard`] from the Graph-only contact
-/// fields; [`to_contact`] consumes (drops) them, the server value
-/// being authoritative (the fields stay Unset, out of every body).
+/// fields.
+///
+/// [`to_contact`] consumes them, the server value being authoritative: the
+/// fields stay Unset, out of every body.
 const MINTED_PROPS: &[&str] = &[
     "X-MSGRAPH-FILE-AS",
     "X-MSGRAPH-OFFICE-LOCATION",
@@ -70,10 +75,10 @@ const MINTED_PROPS: &[&str] = &[
 
 /// Projects an io-msgraph contact onto a fresh vCard 4.0 document.
 ///
-/// The Graph id becomes the UID, the three phone slots become typed
-/// TEL properties (business work, home home, mobile cell), the three
-/// address slots become typed ADR properties, and spouse and children
-/// become RELATED names (their types are standard in vCard 4.0).
+/// The Graph id becomes the UID, the phone and address slots become typed
+/// TEL and ADR properties (business work, home home, mobile cell), and
+/// spouse and children become RELATED names, their types being standard in
+/// vCard 4.0.
 pub fn to_vcard(contact: &MsgraphContact) -> String {
     let mut card = VcardCst::v4();
 
@@ -265,19 +270,14 @@ pub fn to_vcard(contact: &MsgraphContact) -> String {
     splice_props(vcard, &extra)
 }
 
-/// Projects a vCard onto an io-msgraph contact, the full-state
-/// projection: every managed field is Set from the vCard or Null
-/// (collections: Set empty) when absent, while unmanaged Graph fields
-/// stay Unset. Wire bodies refine it through [`to_new_contact`]
-/// (create) and [`to_contact_delta`] (update).
+/// Projects a vCard onto an io-msgraph contact, in full state: each managed
+/// field is Set from the vCard or Null when absent (collections clear
+/// through an empty Set), while unmanaged Graph fields stay Unset.
 ///
-/// Graph stores fixed slots, even behind its collection-typed
-/// properties: one mobile phone, one home, business and other address,
-/// three email addresses, three IM addresses, two business and two
-/// home phones. The first matching vCard property fills a slot and the
-/// extras are dropped (never misfiled into another slot). The UID is
-/// not read back: the Graph id addresses the resource through the
-/// request path.
+/// Graph keeps fixed slots even behind its collection-typed properties, so
+/// the first matching vCard property fills a slot and the extras fall to
+/// the stash rather than into another slot. The UID is not read back: the
+/// Graph id addresses the resource through the request path.
 pub fn to_contact(vcard: &str) -> Result<MsgraphContact, String> {
     let card = VcardCst::parse(vcard).map_err(|err| format!("Invalid vCard: {err}"))?;
     let version = card.version();
@@ -310,12 +310,11 @@ pub fn to_contact(vcard: &str) -> Result<MsgraphContact, String> {
     let mut name_seen = false;
 
     // NOTE: Outlook stores fixed slots behind the Graph collections:
-    // three email addresses (primary/secondary/tertiary), two business
-    // and two home phones (Business/Business 2, Home/Home 2), three IM
-    // addresses (Graph rejects bodies overflowing a slot set). The
-    // first properties win; extras land in the stash remainder like
-    // every other line that does not project, so they survive on the
-    // server and restore on read (cairn/spec/projection.md).
+    // three email addresses, three IM addresses, two business and two
+    // home phones (Graph rejects bodies overflowing a slot set). The
+    // first properties win, and the extras land in the stash remainder
+    // like every other line that does not project, so they survive on
+    // the server and restore on read (cairn/spec/projection.md).
     for line in &card.props {
         let consumed = match VcardPropKind::from_str(line.name.get()) {
             // NOTE: the VERSION line is structural and the minted
@@ -597,14 +596,14 @@ pub fn to_contact(vcard: &str) -> Result<MsgraphContact, String> {
     })
 }
 
-/// Projects a vCard onto an io-msgraph contact for an update body,
-/// reduced to the fields that differ from the base vCard (the state
-/// last synced with the server): unchanged fields turn Unset and stay
-/// out of the PATCH. The full-state body nulls every absent field and
-/// the Outlook backend rejects such gratuitous nulls with an internal
-/// server error (HTTP 500); here a Null only survives when the edit
-/// actually cleared a field the base carried (collections clear
-/// through an explicit empty Set instead).
+/// Projects a vCard onto an update body: the fields differing from the base
+/// vCard (the state last synced with the server), the unchanged ones
+/// turning Unset and staying out of the PATCH.
+///
+/// The Outlook backend rejects the gratuitous nulls of a full-state body
+/// with an internal server error (HTTP 500), so a Null survives only when
+/// the edit cleared a field the base carried (collections clear through an
+/// explicit empty Set instead).
 pub fn to_contact_delta(vcard: &str, base_vcard: &str) -> Result<MsgraphContact, String> {
     let mut contact = to_contact(vcard)?;
     let base = to_contact(base_vcard)?;
@@ -648,11 +647,11 @@ pub fn to_contact_delta(vcard: &str, base_vcard: &str) -> Result<MsgraphContact,
     Ok(contact)
 }
 
-/// Projects a vCard onto an io-msgraph contact for a create body: the
-/// full-state projection minus the explicit nulls and empty
-/// collections. They are no-ops on a fresh resource, and the Outlook
-/// backend rejects null complex properties on POST with an internal
-/// server error (HTTP 500).
+/// Projects a vCard onto a create body: the full-state projection minus the
+/// explicit nulls and empty collections.
+///
+/// They are no-ops on a fresh resource, and the Outlook backend rejects null
+/// complex properties on POST with an internal server error (HTTP 500).
 pub fn to_new_contact(vcard: &str) -> Result<MsgraphContact, String> {
     let mut contact = to_contact(vcard)?;
 
@@ -689,9 +688,11 @@ fn display_name(contact: &MsgraphContact) -> String {
     opt(&contact.file_as).unwrap_or_default().to_string()
 }
 
-/// An ADR property from a Graph physical address, or None when every
-/// component is empty. Graph's street is one multiline field, so each
-/// of its lines becomes a vCard street component.
+/// An ADR property from a Graph physical address, None when every component
+/// is empty.
+///
+/// Graph's street is one multiline field, so each of its lines becomes a
+/// vCard street component.
 fn adr_prop(
     address: Option<&MsgraphPhysicalAddress>,
     r#type: Option<&'static str>,

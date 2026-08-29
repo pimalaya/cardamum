@@ -1,3 +1,8 @@
+//! # Account check command
+//!
+//! Reaches every backend the account configures and reports, one by one,
+//! whether it answered.
+
 use std::{fmt, path::PathBuf};
 
 use anyhow::{Result, bail};
@@ -13,11 +18,10 @@ use crate::{
 
 /// Validate the account configuration.
 ///
-/// Loads the TOML configuration, picks the active account (via the
-/// global `--account` flag or the default), and checks each backend
-/// allowed by `--backend`. The check tries to reach each backend, which
-/// exercises the same handshake / authentication paths the other
-/// commands would take.
+/// Picks the active account, from the global `--account` flag or from
+/// the default, then reaches every backend `--backend` allows. Each
+/// check walks the same handshake and authentication path the other
+/// commands take, so a bad credential surfaces here.
 ///
 /// JSON output: `{"account", "backends": [{"backend", "ok", "error"}]}`.
 #[derive(Debug, Parser)]
@@ -116,10 +120,11 @@ impl AccountCheckCommand {
     }
 }
 
-/// Tests every backend the account has configured, failing on the first
-/// error. Used by the wizard to validate a freshly-built account before
-/// printing it, so a bad credential or endpoint stops the process
-/// instead of yielding a config that cannot connect.
+/// Tests every backend the account configures, failing on the first error.
+///
+/// The wizard runs it over a freshly built account, so a bad credential
+/// or endpoint stops the process instead of yielding a configuration
+/// that cannot connect.
 pub fn test_account(account_config: &AccountConfig) -> Result<()> {
     #[cfg(feature = "vdir")]
     if let Some(vdir_config) = &account_config.vdir {
@@ -154,6 +159,8 @@ pub fn test_account(account_config: &AccountConfig) -> Result<()> {
     Ok(())
 }
 
+/// Checks the vdir home is a directory, a local tree having nothing to
+/// connect to.
 #[cfg(feature = "vdir")]
 fn connect_vdir(vdir_config: &crate::config::VdirConfig) -> Result<()> {
     use std::path::Path;
@@ -169,9 +176,10 @@ fn connect_vdir(vdir_config: &crate::config::VdirConfig) -> Result<()> {
     Ok(())
 }
 
-/// Opens the pimdir store and reads its collection list, which exercises
-/// the SQLite index the shared commands read through. It is a local store,
-/// so there is no handshake nor authentication to check.
+/// Opens the pimdir store and reads its collection list.
+///
+/// That exercises the index the shared commands read through, a local
+/// store having no handshake nor authentication to check.
 #[cfg(feature = "pimdir")]
 fn connect_pimdir(pimdir_config: &crate::config::PimdirConfig) -> Result<()> {
     use crate::pimdir::backend::PimdirBackend;
@@ -180,9 +188,8 @@ fn connect_pimdir(pimdir_config: &crate::config::PimdirConfig) -> Result<()> {
     Ok(())
 }
 
-/// Resolves the CardDAV context root and walks the principal +
-/// addressbook-home-set, proving the server address, TLS and
-/// authentication all work.
+/// Resolves the CardDAV context root, then walks the principal and the
+/// addressbook home set, proving address, TLS and authentication work.
 #[cfg(feature = "carddav")]
 fn connect_carddav(carddav_config: &crate::config::CarddavConfig) -> Result<()> {
     use crate::carddav::client::open_carddav_client;
@@ -192,8 +199,8 @@ fn connect_carddav(carddav_config: &crate::config::CarddavConfig) -> Result<()> 
     Ok(())
 }
 
-/// Establishes the JMAP session, proving the server address, TLS and
-/// authentication all work.
+/// Establishes the JMAP session, proving address, TLS and authentication
+/// work.
 #[cfg(feature = "jmap")]
 fn connect_jmap(jmap_config: &crate::config::JmapConfig) -> Result<()> {
     use crate::jmap::backend::JmapBackend;
@@ -227,14 +234,14 @@ fn connect_people(people_config: &crate::config::PeopleConfig) -> Result<()> {
     Ok(())
 }
 
-/// Aggregated account check result: one outcome per backend.
+/// Result of a check: one outcome per configured backend.
 #[derive(Clone, Debug, Serialize)]
 pub struct CheckReport {
     pub account: String,
     pub backends: Vec<BackendCheck>,
 }
 
-/// Outcome of checking a single backend's connection.
+/// Outcome of checking a single backend.
 #[derive(Clone, Debug, Serialize)]
 pub struct BackendCheck {
     pub backend: &'static str,

@@ -1,3 +1,8 @@
+//! # Contact folders
+//!
+//! The Graph contact folder resource, which the shared API surfaces as
+//! addressbooks.
+
 pub mod child_folders;
 pub mod cli;
 pub mod create;

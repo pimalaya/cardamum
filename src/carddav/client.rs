@@ -1,10 +1,13 @@
-//! Cardamum wrapper around [`io_webdav::client::WebdavClientStd`].
+//! # CardDAV client
 //!
-//! Builds the CardDAV client from the account's `[carddav]` block via
-//! one of three routes: `home` short-circuits every discovery step,
-//! `server` runs only the principal + addressbook-home-set walk, and
-//! `discover` resolves a bare domain to a server URL (PACC first, then
-//! RFC 6764: SRV, its TXT `path`, then `.well-known`) before that walk.
+//! Wraps [`io_webdav::client::WebdavClientStd`], built from the
+//! account's `[carddav]` block.
+//!
+//! The block picks one of three routes: `home` short-circuits every
+//! discovery step, `server` runs only the principal and
+//! addressbook-home-set walk, and `discover` resolves a bare domain to
+//! a server URL (PACC, then RFC 6764) before that walk.
+//!
 //! Google domains take a dedicated authenticated `.well-known` path,
 //! since Google publishes nothing discoverable on `gmail.com`.
 
@@ -38,6 +41,7 @@ use crate::{
     config::{AccountConfig, CarddavAuthConfig, CarddavConfig, Config, TlsConfig},
 };
 
+/// DNS resolver the discovery mechanisms query.
 const DEFAULT_RESOLVER: &str = "tcp://1.1.1.1:53";
 
 /// Host of [`GOOGLE_API_ORIGIN`], used to open the TLS stream.
@@ -45,12 +49,17 @@ const GOOGLE_API_HOST: &str = "www.googleapis.com";
 /// Origin hosting Google's CardDAV `.well-known` entry point.
 const GOOGLE_API_ORIGIN: &str = "https://www.googleapis.com/";
 
+/// CardDAV client the protocol-specific commands run against.
+///
+/// Derefs to the io-webdav client, and carries the merged account so
+/// commands can reach its display settings.
 pub struct CarddavClient {
     inner: Inner,
     pub account: Account,
 }
 
 impl CarddavClient {
+    /// Pairs a connected io-webdav client with its account.
     pub fn new(inner: Inner, account: Account) -> Self {
         Self { inner, account }
     }
@@ -70,9 +79,9 @@ impl DerefMut for CarddavClient {
     }
 }
 
-/// Builds the merged [`Account`] from the already-resolved config and
-/// account, then opens the CardDAV client. Bails when the account has
-/// no `[carddav]` block.
+/// Merges the resolved config and account, then opens the client.
+///
+/// Bails when the account carries no `[carddav]` block.
 pub fn build_carddav_client(
     config: Config,
     name: String,
@@ -90,10 +99,9 @@ pub fn build_carddav_client(
 /// Opens a [`WebdavClientStd`](io_webdav::client::WebdavClientStd) from
 /// a [`CarddavConfig`].
 ///
-/// `home` skips every discovery step; `server` resolves principal +
-/// addressbook-home-set from the given context root; `discover`
-/// resolves a bare domain to that context root through io-pim-discovery
-/// first.
+/// `home` skips every discovery step; `server` resolves the principal
+/// and addressbook-home-set from the given context root; `discover`
+/// resolves a bare domain to that root through io-pim-discovery first.
 pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
     let CarddavConfig {
         discover,
@@ -129,8 +137,7 @@ pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
     // NOTE: a bare origin is not necessarily the DAV context root.
     // Discovery hands back `https://carddav.fastmail.com/`, yet Fastmail
     // 404s everything outside `/dav/*`, so probe `.well-known/carddav`
-    // and follow its redirect. No redirect keeps the origin, which
-    // plenty of servers serve the walk from directly.
+    // and follow its redirect.
     let server = match server.path() {
         "" | "/" => probe_carddav_context_root(&server, &tls).unwrap_or(server),
         _ => server,
@@ -143,10 +150,11 @@ pub fn open_carddav_client(config: CarddavConfig) -> Result<Inner> {
     Ok(client)
 }
 
-/// Probes `.well-known/carddav` on a bare-origin `server` with an
-/// unauthenticated GET, returning the context-root redirect target when
-/// the server publishes one. Silent: a failed probe or a plain response
-/// (no redirect) yields `None`, leaving the origin as-is.
+/// Probes `.well-known/carddav` on a bare-origin `server` with a GET.
+///
+/// Returns the context-root redirect target when the server publishes
+/// one. Silent: a failed probe or a response without a redirect leaves
+/// the origin as-is.
 fn probe_carddav_context_root(server: &Url, tls: &Tls) -> Option<Url> {
     let host = server.host_str()?;
     let port = server.port_or_known_default()?;
@@ -155,8 +163,7 @@ fn probe_carddav_context_root(server: &Url, tls: &Tls) -> Option<Url> {
     output.redirect_url
 }
 
-/// Runs a prepared `.well-known` request to completion over a fresh TLS
-/// stream to `host:port`, returning the coroutine output.
+/// Runs a prepared `.well-known` request over a fresh TLS stream.
 fn run_well_known(
     host: &str,
     port: u16,
@@ -187,16 +194,15 @@ fn run_well_known(
     }
 }
 
-/// Discovers a CardDAV server URL for `domain`, trying each mechanism
-/// in turn and returning the first hit: PACC, then the RFC 6764 chain
-/// (SRV, its TXT `path`, then `.well-known`). Silent; the wizard wraps
-/// the individual mechanisms with its own spinners.
+/// Discovers a CardDAV server URL for `domain`, first hit winning.
+///
+/// Tries PACC, then the RFC 6764 chain. Silent: the wizard wraps the
+/// individual mechanisms with its own spinners.
 pub fn discover_server(domain: &str, tls: &Tls) -> Option<Url> {
     discover_via_pacc(domain, tls).or_else(|| discover_via_rfc6764(domain, tls))
 }
 
-/// PACC discovery (draft-ietf-mailmaint-pacc): returns the advertised
-/// CardDAV URL when the provider publishes one.
+/// PACC discovery of the CardDAV URL (draft-ietf-mailmaint-pacc).
 pub fn discover_via_pacc(domain: &str, tls: &Tls) -> Option<Url> {
     let resolver = Url::parse(DEFAULT_RESOLVER).expect("DEFAULT_RESOLVER must be a valid URL");
     let mut client = DiscoveryPaccClientStd::new(resolver).with_tls(tls.clone());
@@ -205,20 +211,21 @@ pub fn discover_via_pacc(domain: &str, tls: &Tls) -> Option<Url> {
     Url::parse(&carddav.url).ok()
 }
 
-/// RFC 6764 §6 discovery: resolves the SRV record (secure first), its
-/// TXT `path` context, then `.well-known` on the resolved host, falling
-/// back to `https://<domain>` when the domain publishes nothing. Wraps
-/// io-pim-discovery's `resolve`, which performs the steps in the RFC's
-/// order.
+/// RFC 6764 §6 discovery of the CardDAV URL.
+///
+/// Resolves the SRV record (secure first), its TXT `path` context, then
+/// `.well-known` on the resolved host, falling back to
+/// `https://<domain>` when the domain publishes nothing.
 pub fn discover_via_rfc6764(domain: &str, tls: &Tls) -> Option<Url> {
     let resolver = Url::parse(DEFAULT_RESOLVER).expect("DEFAULT_RESOLVER must be a valid URL");
     let mut client = DiscoveryWebdavClientStd::new(resolver).with_tls(tls.clone());
     client.resolve(domain, DiscoveryDavService::Carddav).ok()
 }
 
-/// Whether `domain` is a Google consumer mail domain, which serves
-/// CardDAV behind a non-standard authenticated entry point rather than
-/// the discoverable records RFC 6764 relies on.
+/// Whether `domain` is a Google consumer mail domain.
+///
+/// Google serves CardDAV behind a non-standard authenticated entry
+/// point rather than the records RFC 6764 relies on.
 pub fn is_google(domain: &str) -> bool {
     matches!(
         domain.to_ascii_lowercase().as_str(),
@@ -226,15 +233,12 @@ pub fn is_google(domain: &str) -> bool {
     )
 }
 
-/// Resolves the Google CardDAV context root via an authenticated
-/// PROPFIND to `https://www.googleapis.com/.well-known/carddav`.
+/// Resolves the Google CardDAV context root with a PROPFIND probe.
 ///
-/// Google publishes no SRV/`.well-known` records on `gmail.com`, and
-/// its `.well-known` endpoint only 301-redirects for an authenticated
-/// PROPFIND (a plain GET 404s). So this reuses the HTTP well-known
-/// request builder, swaps the method to PROPFIND, and adds the OAuth
-/// 2.0 bearer; the surfaced redirect target is the context root the
-/// principal walk then runs against.
+/// Google publishes neither SRV nor `.well-known` records on
+/// `gmail.com`, and its `.well-known` endpoint only 301-redirects for
+/// an authenticated PROPFIND (a plain GET 404s), so the well-known
+/// builder is reused with its method swapped and a bearer added.
 fn google_carddav_server(auth: &WebdavAuth, tls: &Tls) -> Result<Url> {
     let WebdavAuth::Bearer(bearer) = auth else {
         bail!("Google CardDAV requires OAuth 2.0 bearer authentication");
@@ -269,7 +273,7 @@ fn google_carddav_server(auth: &WebdavAuth, tls: &Tls) -> Result<Url> {
 /// Parses a `server` config string into a [`Url`].
 ///
 /// Accepts a full URL, a bare domain, or `domain:port`; anything
-/// without an explicit `http`/`https` scheme defaults to `https://`,
+/// without an explicit `http` or `https` scheme defaults to `https://`,
 /// since `url` would otherwise read the leading label of `domain:port`
 /// as the scheme.
 pub fn parse_carddav_server(server: &str) -> Result<Url> {
@@ -281,10 +285,12 @@ pub fn parse_carddav_server(server: &str) -> Result<Url> {
     Ok(url)
 }
 
+/// Builds the TLS configuration, negotiating HTTP/1.1 through ALPN.
 pub fn tls_with_http_alpn(config: TlsConfig) -> Tls {
     config.into_tls(vec!["http/1.1".into()])
 }
 
+/// Resolves the configured credential into a WebDAV auth scheme.
 fn build_auth(auth: CarddavAuthConfig) -> Result<WebdavAuth> {
     Ok(match auth {
         CarddavAuthConfig::Basic { username, password } => {

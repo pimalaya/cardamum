@@ -1,10 +1,11 @@
-//! Microsoft Graph API wizard (Microsoft accounts).
+//! # Microsoft Graph wizard
 //!
-//! The Graph API is bearer-token-only: the wizard collects the user id
+//! The Graph API is bearer-token-only, so the wizard collects the user id
 //! and the token secret, typically read from an external broker such as
-//! Ortie since tokens expire and need refreshing. It does not connect;
-//! the wizard validates the whole account once at the end (see
-//! [`crate::account::check`]).
+//! Ortie since tokens expire and need refreshing.
+//!
+//! It does not connect: the wizard validates the whole account once at
+//! the end (see [`crate::account::check`]).
 
 use anyhow::Result;
 use pimalaya_cli::prompt;

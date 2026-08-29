@@ -1,3 +1,8 @@
+//! # Other contact commands
+//!
+//! Dispatches the other contact commands to the People operation each
+//! runs.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
@@ -10,8 +15,10 @@ use crate::people::{
     },
 };
 
-/// The "other contacts": people the user has interacted with but not
-/// added to their contacts (`otherContacts`). Read-only, except `copy`.
+/// The "other contacts": people interacted with but never added
+/// (`otherContacts`).
+///
+/// Read-only, except `copy`.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum PeopleOtherContactCommand {

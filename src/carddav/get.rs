@@ -1,3 +1,7 @@
+//! # GET command
+//!
+//! Fetches the raw vCard bytes of one card with a WebDAV `GET`.
+
 use core::fmt;
 
 use anyhow::Result;
@@ -34,6 +38,7 @@ impl CarddavGetCommand {
     }
 }
 
+/// A fetched card: its raw vCard bytes and the server ETag.
 #[derive(Clone, Debug, Serialize)]
 pub struct Card {
     pub id: String,

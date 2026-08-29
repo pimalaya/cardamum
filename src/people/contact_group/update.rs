@@ -1,3 +1,7 @@
+//! # Contact group update command
+//!
+//! Renames a contact group (`contactGroups.update`).
+
 use anyhow::Result;
 use clap::Parser;
 use io_people::v1::rest::contact_groups::PeopleContactGroup;
@@ -5,8 +9,10 @@ use pimalaya_cli::printer::Printer;
 
 use crate::people::{client::PeopleClient, render::GroupReport};
 
-/// Rename a contact group. The People API guards the update on the
-/// group's current etag, fetched first.
+/// Rename a contact group.
+///
+/// The People API guards the update on the group's current etag,
+/// fetched first.
 ///
 /// JSON output: the raw People group after the update.
 #[derive(Debug, Parser)]

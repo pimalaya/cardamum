@@ -1,3 +1,7 @@
+//! # Addressbook commands
+//!
+//! Dispatches the shared API addressbook subcommands to the account client.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
@@ -12,8 +16,8 @@ use crate::shared::{
 
 /// Manage addressbooks using the shared API.
 ///
-/// Behind the scene, uses the first backend defined for the default account (or
-/// for the account specified by --account).
+/// Runs against the first backend defined for the default account, or for
+/// the account named by `--account`.
 #[derive(Debug, Subcommand)]
 pub enum AddressbookCommand {
     #[command(visible_alias = "ls")]

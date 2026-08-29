@@ -1,3 +1,7 @@
+//! # Connection commands
+//!
+//! Dispatches the contact commands to the People operation each runs.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

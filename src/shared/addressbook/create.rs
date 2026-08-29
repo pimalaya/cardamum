@@ -1,3 +1,8 @@
+//! # Addressbook create command
+//!
+//! Creates an addressbook on the account backend and prints its new
+//! identifier.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
@@ -9,13 +14,13 @@ use crate::shared::client::AddressbookClient;
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct AddressbookCreateCommand {
-    /// Human-readable name of the addressbook to create.
+    /// Display name of the addressbook to create.
     #[arg(value_name = "NAME")]
     pub name: String,
-    /// Optional free-form description.
+    /// Free-form description of the addressbook.
     #[arg(short, long, value_name = "TEXT")]
     pub description: Option<String>,
-    /// Optional ASCII `#RRGGBB` color marker.
+    /// ASCII `#RRGGBB` color marker of the addressbook.
     #[arg(short = 'C', long, value_name = "HEX")]
     pub color: Option<String>,
 }

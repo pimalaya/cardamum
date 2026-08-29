@@ -1,3 +1,7 @@
+//! # Connection delete command
+//!
+//! Deletes a contact by id (`people.deleteContact`).
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};

@@ -1,3 +1,8 @@
+//! # Addressbook list command
+//!
+//! Lists the addressbooks the account exposes, as a colored table or as
+//! JSON.
+
 use std::fmt;
 
 use anyhow::Result;
@@ -34,6 +39,7 @@ impl AddressbookListCommand {
     }
 }
 
+/// Table of addressbooks, and the JSON shape the command prints.
 #[derive(Clone, Debug, Serialize)]
 pub struct AddressbooksTable {
     #[serde(skip)]
@@ -50,6 +56,7 @@ pub struct AddressbooksTable {
     pub rows: Vec<AddressbookRow>,
 }
 
+/// One addressbook, as rendered by [`AddressbooksTable`].
 #[derive(Clone, Debug, Serialize)]
 pub struct AddressbookRow {
     pub id: String,

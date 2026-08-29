@@ -1,3 +1,7 @@
+//! # Card read command
+//!
+//! Fetches a single card and prints its raw vCard.
+
 use core::fmt;
 
 use anyhow::Result;
@@ -13,10 +17,13 @@ use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
 /// `contents`.
 #[derive(Debug, Parser)]
 pub struct CardReadCommand {
+    /// Addressbook holding the card.
     #[command(flatten)]
     pub addressbook: AddressbookIdArg,
-    /// Card identifier, as `card list` reports it. It is the backend's own
-    /// id, not the vCard `UID`, which names no card on its own.
+    /// Card to read, as `card list` reports it.
+    ///
+    /// This is the backend's own id, not the vCard `UID`, which names no
+    /// card on its own.
     #[arg(value_name = "CARD-ID")]
     pub card_id: String,
 }
@@ -35,6 +42,7 @@ impl CardReadCommand {
     }
 }
 
+/// The card the command prints, with its vCard as text.
 #[derive(Clone, Debug, Serialize)]
 pub struct Card {
     pub id: String,

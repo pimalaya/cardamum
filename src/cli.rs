@@ -1,3 +1,8 @@
+//! # Command-line interface
+//!
+//! The clap parser: the global flags, the top-level command tree and the
+//! account resolution every command runs through.
+
 use std::{
     io::{IsTerminal, stdin},
     path::{Path, PathBuf},
@@ -60,24 +65,22 @@ pub struct Cli {
     pub cmd: Option<Command>,
     /// Override the default configuration file path.
     ///
-    /// The given paths are shell-expanded then canonicalized (if
-    /// applicable). Other paths are merged with the first one, which
-    /// allows you to separate your public config from your private
-    /// one(s). Multiple paths can also be given at once, delimited by
-    /// `:` like `$PATH` in a POSIX shell.
+    /// Paths are shell-expanded then canonicalized. Several can be given
+    /// at once, delimited by `:` like `$PATH` in a POSIX shell: the first
+    /// one is the base and the rest are merged on top of it, which keeps
+    /// a public configuration apart from the private ones.
     #[arg(short, long = "config", global = true, env = "CARDAMUM_CONFIG")]
     #[arg(value_name = "PATH", value_parser = path_parser, value_delimiter = ':')]
     pub config_paths: Vec<PathBuf>,
     #[command(flatten)]
     pub account: AccountFlag,
-    /// Force a specific backend for cross-protocol commands.
+    /// Force a specific backend for the shared commands.
     ///
-    /// Only consumed by the shared commands (`addressbook`, `card`); the
-    /// protocol-specific subcommands ignore it and always use their own
-    /// backend. With `auto` (the default) the shared command picks the
-    /// first configured backend it supports; with an explicit value it
-    /// uses only that one, and bails when the account declares no
-    /// matching block or the operation has no arm for it.
+    /// Only the shared commands `addressbook` and `card` consume it, the
+    /// protocol-specific ones always use their own backend. The default
+    /// `auto` picks the first configured backend they support, an
+    /// explicit value uses that one alone and bails when the account
+    /// declares no matching block or the operation has no arm for it.
     #[arg(short, long, global = true, default_value_t)]
     pub backend: Backend,
     #[command(flatten)]
@@ -86,8 +89,8 @@ pub struct Cli {
     pub log: LogFlags,
 }
 
-/// Top-level subcommands: the shared API, one family per protocol, then
-/// the meta commands.
+/// The top-level commands: the shared API, one family per protocol,
+/// then the meta commands.
 #[derive(Debug, Subcommand)]
 pub enum Command {
     #[command(subcommand, alias = "addressbooks", visible_alias = "abook")]

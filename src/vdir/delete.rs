@@ -1,3 +1,7 @@
+//! # Collection delete command
+//!
+//! Recursively removes a collection directory under the vdir root.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};

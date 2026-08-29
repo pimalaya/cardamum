@@ -1,11 +1,15 @@
+//! # Connection search command
+//!
+//! Searches the signed-in user's contacts by query string
+//! (`people.searchContacts`).
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
 use crate::people::{client::PeopleClient, project, render::PersonsReport};
 
-/// Search the signed-in user's contacts by query string
-/// (`people.searchContacts`).
+/// Search the signed-in user's contacts by query string.
 ///
 /// JSON output: `{"people": [<raw People person>...]}`.
 #[derive(Debug, Parser)]

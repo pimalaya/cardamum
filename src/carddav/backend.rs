@@ -1,5 +1,6 @@
-//! CardDAV arm of the shared-API client: thin glue mapping the shared
-//! addressbook and card operations onto
+//! # CardDAV backend
+//!
+//! Maps the shared addressbook and card operations onto
 //! [`io_webdav::client::WebdavClientStd`] calls (RFC 6352).
 
 use std::collections::BTreeSet;
@@ -23,16 +24,19 @@ use crate::{
     },
 };
 
-/// CardDAV backend of the shared-API client, wrapping a connected
-/// io-webdav client with its addressbook home-set resolved.
+/// CardDAV arm of the shared-API client.
+///
+/// Wraps a connected io-webdav client whose addressbook home-set is
+/// already resolved.
 pub struct CarddavBackend {
     pub inner: WebdavClientStd,
 }
 
 impl CarddavBackend {
-    /// Opens the client from the account's `[carddav]` block, running
-    /// discovery when needed (see
-    /// [`open_carddav_client`](crate::carddav::client::open_carddav_client)).
+    /// Opens the client from the account's `[carddav]` block.
+    ///
+    /// Discovery runs when the block needs it, see
+    /// [`open_carddav_client`](crate::carddav::client::open_carddav_client).
     pub fn new(config: CarddavConfig) -> Result<Self> {
         let inner = crate::carddav::client::open_carddav_client(config)?;
         Ok(Self { inner })
@@ -44,8 +48,10 @@ impl CarddavBackend {
         Ok(addressbooks.into_iter().map(into_addressbook).collect())
     }
 
-    /// Creates an addressbook collection named `name` (also used as its
-    /// URL segment) under the home-set. Returns the new addressbook id.
+    /// Creates an addressbook collection under the home-set.
+    ///
+    /// The given name doubles as the URL segment, and comes back as the
+    /// new addressbook id.
     pub fn create_addressbook(
         &mut self,
         name: &str,
@@ -93,8 +99,7 @@ impl CarddavBackend {
         Ok(())
     }
 
-    /// Lists the cards inside `addressbook_id`, applying 1-indexed
-    /// pagination.
+    /// Lists the cards inside `addressbook_id`, paginated 1-indexed.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
@@ -121,8 +126,7 @@ impl CarddavBackend {
         })
     }
 
-    /// Creates a new card inside `addressbook_id` under a fresh UUID
-    /// resource name. Returns the assigned id.
+    /// Creates a card inside `addressbook_id` under a fresh UUID name.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let id = fresh_card_id()?;
         let created = self
@@ -132,16 +136,12 @@ impl CarddavBackend {
         Ok(created.id)
     }
 
-    /// Overwrites `card_id` inside `addressbook_id`, gating on
-    /// `if_match` when present (RFC 9110 If-Match).
+    /// Overwrites `card_id` inside `addressbook_id`, gated on `if_match`.
     ///
-    /// A WebDAV `PUT` is create-or-replace, so without a precondition an
-    /// unknown id would quietly create a card instead of failing. The
-    /// caller's ETag guards against that on its own; without one, the
-    /// card's current version is read first and its ETag stands in, so
-    /// an unknown id fails on the read rather than creating anything.
-    /// `If-Match: *` would say the same in one request, but iCloud
-    /// answers 412 to the wildcard even for a card that is right there.
+    /// A `PUT` is create-or-replace, so without a precondition an
+    /// unknown id quietly creates a card. A missing ETag is filled from
+    /// a read, since iCloud 412s the `If-Match: *` that would say the
+    /// same in one request.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
@@ -174,8 +174,7 @@ impl CarddavBackend {
     }
 }
 
-/// Maps a WebDAV wire addressbook to the shared shape: the display
-/// name falls back to the id.
+/// Maps a wire addressbook to the shared shape, id as fallback name.
 fn into_addressbook(wire: CarddavAddressbook) -> Addressbook {
     let name = wire.display_name.unwrap_or_else(|| wire.id.clone());
 
@@ -197,13 +196,11 @@ fn into_card(addressbook_id: &str, entry: CarddavCardEntry) -> Card {
     }
 }
 
-/// Adds an actionable hint when a card write is rejected because the
-/// server considers the vCard invalid (the CardDAV `valid-address-data`
-/// precondition, RFC 6352 §6.3.2.1). cardamum forwards the vCard
-/// unchanged and never inspects it; this only surfaces the server's own
-/// rejection, since providers disagree on what they accept: most
-/// require a `UID`, and some (e.g. iCloud) also require an `N`. Every
-/// other error passes through untouched.
+/// Adds a hint when the server rejects a card as an invalid vCard.
+///
+/// The CardDAV `valid-address-data` precondition (RFC 6352 §6.3.2.1).
+/// cardamum forwards the vCard unchanged, and providers disagree on
+/// what they accept: most require a `UID`, some (iCloud) also an `N`.
 fn card_write_error(err: WebdavClientStdError) -> anyhow::Error {
     let WebdavClientStdError::Send(WebdavSendError::HttpStatus { status: 403, body }) = &err else {
         return err.into();
@@ -223,11 +220,11 @@ fn card_write_error(err: WebdavClientStdError) -> anyhow::Error {
     )
 }
 
-/// Generates a fresh CardDAV card resource name (a random UUIDv4 plus
-/// the conventional `.vcf` extension) from the system entropy source.
-/// CardDAV requires the caller to name the resource, and io-webdav uses
-/// the name verbatim (it never adds nor strips an extension), so the
-/// caller owns the whole name.
+/// Generates a fresh card resource name, a random UUIDv4 plus `.vcf`.
+///
+/// CardDAV makes the caller name the resource, and io-webdav uses that
+/// name verbatim (it never adds nor strips an extension), so the caller
+/// owns the whole of it.
 fn fresh_card_id() -> Result<String> {
     let mut bytes = [0u8; 16];
     getrandom::fill(&mut bytes).map_err(|err| anyhow::anyhow!("Gather randomness error: {err}"))?;

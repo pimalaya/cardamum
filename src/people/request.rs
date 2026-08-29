@@ -1,3 +1,8 @@
+//! # Raw request command
+//!
+//! Sends an arbitrary Google People API request and prints the JSON
+//! response.
+
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use io_people::v1::send::{PEOPLE_API_BASE, PeopleSend, PeopleSendOutput};
@@ -43,10 +48,12 @@ impl PeopleRequestCommand {
     }
 }
 
+/// Parses the optional raw body, an absent one meaning JSON null.
 fn parse_body(body: Option<&str>) -> Result<Value> {
     serde_json::from_str(body.unwrap_or("null")).context("Parse request body JSON error")
 }
 
+/// The request URL: a full URL as-is, else joined onto the People base.
 fn resolve_url(path: &str) -> Result<Url> {
     if path.starts_with("http") {
         Ok(Url::parse(path)?)

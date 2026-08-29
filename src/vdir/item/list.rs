@@ -1,3 +1,7 @@
+//! # Item list command
+//!
+//! Lists the raw items of a collection, of any kind, as a table or JSON.
+
 use std::fmt;
 
 use anyhow::Result;
@@ -15,8 +19,7 @@ use crate::{
 /// List every item in the given collection, of any kind.
 ///
 /// Unlike `card list`, this includes iCalendar items and surfaces each
-/// item's kind. JSON output: `{"items": [{"id", "kind", "size",
-/// "path"}]}`.
+/// item's kind. JSON output: `{"items": [{"id", "kind", "size", "path"}]}`.
 #[derive(Debug, Parser)]
 pub struct VdirItemListCommand {
     /// Collection the items live in (final path segment under the root).
@@ -39,6 +42,7 @@ impl VdirItemListCommand {
     }
 }
 
+/// The item listing, as the table and the JSON both render it.
 #[derive(Clone, Debug, Serialize)]
 pub struct ItemsTable {
     #[serde(skip)]
@@ -49,6 +53,7 @@ pub struct ItemsTable {
     pub rows: Vec<ItemRow>,
 }
 
+/// One listed item: its id, kind, size and path on disk.
 #[derive(Clone, Debug, Serialize)]
 pub struct ItemRow {
     pub id: String,

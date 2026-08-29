@@ -1,3 +1,8 @@
+//! # Other contact search command
+//!
+//! Searches the other contacts by query string
+//! (`otherContacts.search`).
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
@@ -6,8 +11,7 @@ use crate::people::{
     client::PeopleClient, other_contact::fields::OTHER_CONTACT_FIELDS, render::PersonsReport,
 };
 
-/// Search the "other contacts" by query string
-/// (`otherContacts.search`).
+/// Search the "other contacts" by query string.
 ///
 /// JSON output: `{"people": [<raw People person>...]}`.
 #[derive(Debug, Parser)]

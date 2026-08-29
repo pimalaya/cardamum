@@ -1,3 +1,7 @@
+//! # Contact list command
+//!
+//! Lists one page of contacts of a folder.
+
 use anyhow::Result;
 use clap::Parser;
 use io_msgraph::v1::rest::users::contacts::list::MsgraphContactsListParams;

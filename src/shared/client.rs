@@ -1,9 +1,11 @@
-//! Cross-protocol [`AddressbookClient`] for the shared `addressbook`
-//! and `card` commands.
+//! # Addressbook client
 //!
-//! One variant per compiled-in backend, a value always holding exactly
-//! one. Each shared-API method dispatches to the active backend, the
-//! glue living in each protocol module's backend submodule.
+//! The cross-protocol client behind the shared addressbook and card
+//! commands.
+//!
+//! It holds exactly one of the compiled-in backends and dispatches every
+//! shared method to it, the glue itself living in the backend submodule
+//! of each protocol module.
 
 use anyhow::{Result, bail};
 
@@ -17,15 +19,17 @@ use crate::{
     },
 };
 
-/// Cross-protocol addressbook client bundling the active backend and
-/// the merged runtime [`Account`].
+/// Cross-protocol addressbook client.
+///
+/// Bundles the active backend with the merged runtime [`Account`], which
+/// carries the defaults a command falls back to.
 pub struct AddressbookClient {
     inner: BackendClient,
+    /// Runtime account the commands read their defaults from.
     pub account: Account,
 }
 
-/// The active backend of an [`AddressbookClient`]: exactly one of the
-/// compiled-in per-backend glue clients.
+/// The active backend of an [`AddressbookClient`].
 enum BackendClient {
     #[cfg(feature = "vdir")]
     Vdir(crate::vdir::backend::VdirBackend),
@@ -42,8 +46,10 @@ enum BackendClient {
 }
 
 impl AddressbookClient {
-    /// Builds the client from the account configuration: the first
-    /// configured backend allowed by `backend` wins.
+    /// Builds the client from the account configuration.
+    ///
+    /// The first configured backend that `backend` allows wins, and the
+    /// call bails when the account configures none of them.
     pub fn new(
         config: Config,
         #[allow(unused_mut)] mut account_config: AccountConfig,
@@ -138,8 +144,7 @@ impl AddressbookClient {
         }
     }
 
-    /// Creates an addressbook named `name`, optionally carrying a
-    /// description and a color. Returns the backend-assigned id.
+    /// Creates an addressbook and returns the id the backend assigned.
     pub fn create_addressbook(
         &mut self,
         name: &str,
@@ -163,7 +168,6 @@ impl AddressbookClient {
     }
 
     /// Applies a partial update to the addressbook identified by `id`.
-    /// Fields left as `None` in `patch` are preserved.
     pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
@@ -200,9 +204,10 @@ impl AddressbookClient {
         }
     }
 
-    /// Lists cards inside `addressbook_id`. `page` is 1-indexed; pass
-    /// `None` to default to page 1. `page_size = None` returns the full
-    /// window.
+    /// Lists a page of cards inside `addressbook_id`.
+    ///
+    /// The 1-indexed `page` defaults to the first one, and a `page_size`
+    /// of `None` returns every card.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
@@ -243,8 +248,7 @@ impl AddressbookClient {
         }
     }
 
-    /// Appends a raw vCard to `addressbook_id`. Returns the identifier
-    /// the backend assigned to the stored card.
+    /// Appends a raw vCard and returns the id the backend assigned.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         match &mut self.inner {
             #[cfg(feature = "vdir")]
@@ -264,9 +268,9 @@ impl AddressbookClient {
 
     /// Replaces the contents of `card_id` inside `addressbook_id`.
     ///
-    /// `if_match` is the entity tag to gate the update on; pass `None`
-    /// to overwrite unconditionally. Backends without a guard concept
-    /// either ignore it (vdir) or bail (JMAP, Microsoft Graph).
+    /// The `if_match` entity tag gates the update, `None` overwriting
+    /// unconditionally. A backend with no such guard either ignores the
+    /// tag or bails, rather than pretending the check happened.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
@@ -321,9 +325,10 @@ impl AddressbookClient {
     }
 }
 
-/// 1-indexed pagination on an in-memory list. `page_size = None`
-/// returns the full slice; `page_size = 0` or a page past the end
-/// returns an empty vector.
+/// Applies 1-indexed pagination to an in-memory list.
+///
+/// A `page_size` of `None` returns every item, while a size of zero or a
+/// page past the end returns nothing.
 pub fn paginate<T>(items: Vec<T>, page: Option<u32>, page_size: Option<u32>) -> Vec<T> {
     let Some(size) = page_size else {
         return items;

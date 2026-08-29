@@ -1,3 +1,8 @@
+//! # PROPPATCH command
+//!
+//! Sets the DAV properties of an addressbook collection with a
+//! `PROPPATCH`.
+
 use anyhow::{Result, bail};
 use clap::Parser;
 use io_webdav::rfc6352::addressbook::CarddavAddressbookPatch;
@@ -9,6 +14,7 @@ use crate::carddav::client::CarddavClient;
 ///
 /// Only the flags you pass are sent (a PROPPATCH `set`), so unset
 /// properties are left untouched; clearing a property is not exposed.
+///
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct CarddavProppatchCommand {

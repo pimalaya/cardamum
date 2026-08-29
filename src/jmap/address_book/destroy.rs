@@ -1,3 +1,7 @@
+//! # AddressBook destroy command
+//!
+//! Destroys an AddressBook, optionally with the cards it holds.
+
 use anyhow::{Result, bail};
 use clap::Parser;
 use io_jmap::rfc9610::address_book::set::JmapAddressBookSetArgs;

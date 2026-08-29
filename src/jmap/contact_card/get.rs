@@ -1,3 +1,7 @@
+//! # ContactCard get command
+//!
+//! Fetches ContactCards by id.
+
 use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::get::JmapContactCardGetOptions;

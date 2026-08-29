@@ -1,3 +1,7 @@
+//! # Item delete command
+//!
+//! Removes one item file from a collection.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};

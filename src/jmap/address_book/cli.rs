@@ -1,3 +1,7 @@
+//! # AddressBook command tree
+//!
+//! Dispatches the `AddressBook` methods against the connected client.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

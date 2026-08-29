@@ -1,3 +1,7 @@
+//! # Contact create command
+//!
+//! Posts a raw Graph contact body to a contact folder.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
@@ -15,6 +19,7 @@ pub struct MsgraphContactCreateCommand {
     /// Contact folder id; omit for the default Contacts folder.
     #[arg(short = 'f', long, value_name = "FOLDER-ID")]
     pub folder: Option<String>,
+    /// The raw Graph contact JSON body.
     #[command(flatten)]
     pub json: ContactJsonArg,
 }

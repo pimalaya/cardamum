@@ -1,3 +1,7 @@
+//! # Collection rename command
+//!
+//! Renames a collection directory under the vdir root.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
@@ -5,6 +9,8 @@ use pimalaya_cli::printer::{Message, Printer};
 use crate::vdir::client::VdirClient;
 
 /// Rename the given vdir collection.
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct VdirCollectionRenameCommand {
     /// Name of the source collection (final path segment).

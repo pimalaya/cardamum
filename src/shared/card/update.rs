@@ -1,3 +1,8 @@
+//! # Card update command
+//!
+//! Replaces the vCard of an existing card, and reports the properties the
+//! server would not let go.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
@@ -9,16 +14,22 @@ use crate::shared::{arg::AddressbookIdArg, card::vcard::VcardArg, client::Addres
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct CardUpdateCommand {
+    /// Addressbook holding the card.
     #[command(flatten)]
     pub addressbook: AddressbookIdArg,
-    /// ETag returned by the previous read; when set, the update is
-    /// gated on a server-side match (RFC 9110 If-Match).
+    /// Gate the update on this ETag, as returned by a previous read.
+    ///
+    /// The update only lands if the server still holds that version (RFC
+    /// 9110 `If-Match`), which is how a concurrent write is caught.
     #[arg(long, value_name = "ETAG")]
     pub if_match: Option<String>,
-    /// Card identifier, as `card list` reports it. It is the backend's own
-    /// id, not the vCard `UID`, which names no card on its own.
+    /// Card to update, as `card list` reports it.
+    ///
+    /// This is the backend's own id, not the vCard `UID`, which names no
+    /// card on its own.
     #[arg(value_name = "CARD-ID")]
     pub card_id: String,
+    /// vCard replacing the current contents.
     #[command(flatten)]
     pub vcard: VcardArg,
 }

@@ -1,3 +1,7 @@
+//! # Card entries
+//!
+//! The card table the `query` and `multiget` REPORT commands print.
+
 use std::fmt;
 
 use comfy_table::{Cell, Color, Row, Table};
@@ -6,8 +10,10 @@ use serde::Serialize;
 
 use crate::shared::table::style_from_preset;
 
-/// Cards returned by a `query` / `multiget` REPORT. The table shows id +
-/// ETag; the raw vCard body rides in `contents` for `--json`.
+/// Cards returned by a `query` or `multiget` REPORT.
+///
+/// The table shows ids and ETags; the raw vCard body rides in
+/// `contents` for `--json`.
 #[derive(Clone, Debug, Serialize)]
 pub struct CardEntriesReport {
     #[serde(skip)]
@@ -18,6 +24,7 @@ pub struct CardEntriesReport {
     pub rows: Vec<EntryRow>,
 }
 
+/// One returned card: its id, ETag and raw vCard body.
 #[derive(Clone, Debug, Serialize)]
 pub struct EntryRow {
     pub id: String,

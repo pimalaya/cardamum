@@ -1,3 +1,8 @@
+//! # JMAP command tree
+//!
+//! Nests the JMAP commands by object type and dispatches them against a
+//! connected [`JmapClient`].
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

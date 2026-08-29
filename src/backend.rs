@@ -1,31 +1,40 @@
+//! # Backend selector
+//!
+//! The value of the global `--backend` flag, naming which backend a
+//! shared command runs against.
+//!
+//! `Auto` takes the first configured backend in the command's own
+//! priority order, a named value pins that one and bails when the
+//! account declares no matching block. Protocol-specific commands
+//! ignore the flag, since their backend is their name.
+
 use std::{fmt, str::FromStr};
 
 use anyhow::{Error, bail};
 use clap::Parser;
 
-/// Selects which backend a cross-protocol command should target.
-///
-/// `Auto` lets the command pick the first configured-and-supported
-/// backend in its own priority order. The named variants pin the
-/// command to that backend; the command bails if it cannot be served
-/// (config missing, or the operation has no arm for that backend).
-///
-/// The protocol-specific subcommands (vdir, carddav) ignore this arg
-/// entirely.
+/// The backend a shared command targets.
 #[derive(Clone, Copy, Debug, Default, Parser, PartialEq, Eq)]
 pub enum Backend {
+    /// The first backend the account configures, in priority order.
     #[default]
     Auto,
+    /// CardDAV, over io-webdav.
     #[cfg(feature = "carddav")]
     Carddav,
+    /// JMAP for contacts, over io-jmap.
     #[cfg(feature = "jmap")]
     Jmap,
+    /// Microsoft Graph, over io-msgraph.
     #[cfg(feature = "msgraph")]
     Msgraph,
+    /// Google People, over io-people.
     #[cfg(feature = "people")]
     People,
+    /// A local pimdir store, over io-pimdir.
     #[cfg(feature = "pimdir")]
     Pimdir,
+    /// A local vdir folder, over io-vdir.
     #[cfg(feature = "vdir")]
     Vdir,
 }
@@ -44,15 +53,13 @@ impl Backend {
         matches!(self, Self::Auto | Self::Jmap)
     }
 
-    /// Whether the Microsoft Graph arm of a shared command is allowed
-    /// to run.
+    /// Whether the Microsoft Graph arm of a shared command may run.
     #[cfg(feature = "msgraph")]
     pub fn allows_msgraph(self) -> bool {
         matches!(self, Self::Auto | Self::Msgraph)
     }
 
-    /// Whether the Google People arm of a shared command is allowed to
-    /// run.
+    /// Whether the Google People arm of a shared command may run.
     #[cfg(feature = "people")]
     pub fn allows_people(self) -> bool {
         matches!(self, Self::Auto | Self::People)

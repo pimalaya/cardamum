@@ -1,3 +1,7 @@
+//! # Profile commands
+//!
+//! Dispatches the commands reading the signed-in user.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

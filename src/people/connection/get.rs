@@ -1,10 +1,14 @@
+//! # Connection get command
+//!
+//! Reads one contact by id (`people.get`).
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
 use crate::people::{client::PeopleClient, project, render::PersonReport};
 
-/// GET a contact by id (People `people.get`).
+/// GET a contact by id.
 ///
 /// JSON output: the raw People person object.
 #[derive(Debug, Parser)]

@@ -1,3 +1,8 @@
+//! # Person JSON input
+//!
+//! Reads the raw People person JSON body the connection `create` and
+//! `update` commands take, and derives the update mask from its keys.
+
 use std::{
     fs,
     io::{Read, stdin},
@@ -9,8 +14,8 @@ use clap::Parser;
 use io_people::v1::rest::people::PeoplePersonField;
 use serde_json::Value;
 
-/// Positional raw People-person JSON source for `connection create` /
-/// `update`.
+/// Positional raw People person JSON source, read by `connection
+/// create` and `connection update`.
 #[derive(Debug, Parser)]
 pub struct PersonJsonArg {
     /// A path to a JSON file, raw People person JSON, or `-` for stdin.
@@ -19,8 +24,10 @@ pub struct PersonJsonArg {
 }
 
 impl PersonJsonArg {
-    /// Reads the source into a raw JSON value: `-` reads stdin, an
-    /// existing file is read, otherwise the value is the JSON itself.
+    /// Reads the source into a raw JSON value.
+    ///
+    /// `-` reads stdin, an existing path is read, otherwise the value
+    /// is the JSON itself.
     pub fn read(self) -> Result<Value> {
         let raw = if self.body == "-" {
             let mut buf = String::new();
@@ -42,10 +49,11 @@ impl PersonJsonArg {
     }
 }
 
-/// The People `updatePersonFields` mask derived from the top-level keys
-/// of the edit JSON: each key that names a person field (`names`,
-/// `emailAddresses`, …) becomes one mask entry; unknown keys (`etag`,
-/// `resourceName`) are ignored.
+/// The People `updatePersonFields` mask derived from the edit JSON.
+///
+/// Each top-level key naming a person field (`names`, `emailAddresses`,
+/// …) becomes one mask entry; unknown keys (`etag`, `resourceName`) are
+/// ignored.
 pub fn update_fields_from_json(value: &Value) -> Vec<PeoplePersonField> {
     value
         .as_object()

@@ -1,3 +1,8 @@
+//! # PUT command
+//!
+//! Creates or replaces the raw vCard bytes of a card with a WebDAV
+//! `PUT`.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
@@ -7,9 +12,11 @@ use crate::{carddav::client::CarddavClient, shared::card::vcard::VcardArg};
 /// PUT a card: create or replace its raw vCard bytes.
 ///
 /// A plain PUT creates or overwrites unconditionally. `--if-none-match
-/// '*'` makes it a create-only PUT (fails if the resource exists);
-/// `--if-match <ETAG>` gates the replace on the resource being unchanged
-/// (RFC 9110). JSON output: `{"message": "..."}`.
+/// '*'` makes it a create-only PUT, failing when the resource exists,
+/// and `--if-match <ETAG>` gates the replace on the resource being
+/// unchanged (RFC 9110).
+///
+/// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct CarddavPutCommand {
     /// Identifier of the parent addressbook.
@@ -18,6 +25,7 @@ pub struct CarddavPutCommand {
     /// Card resource id (its href last path segment).
     #[arg(value_name = "CARD-ID")]
     pub card_id: String,
+    /// vCard written to the card resource.
     #[command(flatten)]
     pub vcard: VcardArg,
     /// Gate the replace on the resource being unchanged (If-Match).

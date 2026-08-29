@@ -1,3 +1,8 @@
+//! # PROPFIND command
+//!
+//! Enumerates the addressbook collections, or the card resources of
+//! one, with a WebDAV `PROPFIND`.
+
 use std::fmt;
 
 use anyhow::Result;
@@ -12,9 +17,9 @@ use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
 /// PROPFIND the home-set or an addressbook.
 ///
 /// Without an addressbook, lists the addressbook collections with their
-/// DAV properties, including the **CTag** and **sync-token** the shared
+/// DAV properties, including the CTag and sync token the shared
 /// `addressbook list` hides. With one, enumerates its card resources
-/// (id + ETag, no bodies): the lightweight `getetag` PROPFIND.
+/// with ids and ETags but no bodies: the lightweight `getetag` PROPFIND.
 ///
 /// JSON output: `{"addressbooks": [...]}` (no arg) or `{"cards":
 /// [{"id", "etag"}]}` (with arg).
@@ -56,6 +61,7 @@ impl CarddavPropfindCommand {
     }
 }
 
+/// Addressbook collections listed by a home-set PROPFIND.
 #[derive(Clone, Debug, Serialize)]
 pub struct AddressbooksReport {
     #[serde(skip)]
@@ -68,6 +74,7 @@ pub struct AddressbooksReport {
     pub rows: Vec<AddressbookRow>,
 }
 
+/// One addressbook collection with its DAV properties.
 #[derive(Clone, Debug, Serialize)]
 pub struct AddressbookRow {
     pub id: String,
@@ -124,6 +131,7 @@ impl fmt::Display for AddressbooksReport {
     }
 }
 
+/// Card references listed by an addressbook PROPFIND.
 #[derive(Clone, Debug, Serialize)]
 pub struct CardRefsReport {
     #[serde(skip)]
@@ -132,12 +140,14 @@ pub struct CardRefsReport {
     pub id_color: Color,
     #[serde(rename = "cards")]
     pub rows: Vec<CardRefRow>,
-    /// Whether the server cut the listing short with a 507 row (RFC 6578
-    /// §3.6), which makes the rows a part of the addressbook rather than
-    /// the whole of it.
+    /// Whether the server cut the listing short with a 507 row.
+    ///
+    /// Such a listing (RFC 6578 §3.6) is a part of the addressbook
+    /// rather than the whole of it.
     pub truncated: bool,
 }
 
+/// One card resource: its id and ETag, never its body.
 #[derive(Clone, Debug, Serialize)]
 pub struct CardRefRow {
     pub id: String,

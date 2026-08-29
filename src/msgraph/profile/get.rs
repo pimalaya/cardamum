@@ -1,3 +1,7 @@
+//! # Profile get command
+//!
+//! Reads the signed-in user and renders it.
+
 use core::fmt;
 
 use anyhow::Result;
@@ -21,6 +25,7 @@ impl MsgraphProfileGetCommand {
     }
 }
 
+/// The signed-in user, emitted verbatim by `--json`.
 #[derive(Clone, Debug, Serialize)]
 #[serde(transparent)]
 pub struct ProfileReport(pub MsgraphUser);

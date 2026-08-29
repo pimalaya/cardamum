@@ -1,3 +1,8 @@
+//! # Account list command
+//!
+//! Lists the configured accounts as a colored table or as JSON, without
+//! reaching any backend.
+
 use std::{fmt, path::PathBuf};
 
 use anyhow::Result;
@@ -16,8 +21,9 @@ use crate::{
 
 /// List all accounts declared in the configuration.
 ///
-/// Each row shows the account name, the backends with a config block,
-/// and whether it is the default account.
+/// Each row names the account, the backends it declares a config block
+/// for, and whether it is the default one. Nothing is reached: this
+/// reads the configuration only.
 ///
 /// JSON output: `{"accounts": [{"name", "default", "backends"}]}`.
 #[derive(Debug, Parser)]
@@ -64,6 +70,7 @@ impl AccountListCommand {
     }
 }
 
+/// Effective color of each column of the table.
 #[derive(Clone, Copy, Debug)]
 struct AccountColors {
     name: Color,
@@ -71,6 +78,7 @@ struct AccountColors {
     default: Color,
 }
 
+/// Loads the configuration, pointing at the wizard when none exists.
 fn load_config(paths: &[PathBuf]) -> Result<Config> {
     match Config::from_paths_or_default(paths)? {
         Some(config) => Ok(config),
@@ -81,6 +89,7 @@ fn load_config(paths: &[PathBuf]) -> Result<Config> {
     }
 }
 
+/// One account, as rendered by [`AccountsTable`].
 #[derive(Clone, Debug, Serialize)]
 pub struct AccountRow {
     pub name: String,
@@ -124,6 +133,7 @@ impl AccountRow {
     }
 }
 
+/// Table of accounts, and the JSON shape the command prints.
 #[derive(Clone, Debug, Serialize)]
 pub struct AccountsTable {
     #[serde(skip)]

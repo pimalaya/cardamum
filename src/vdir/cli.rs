@@ -1,3 +1,8 @@
+//! # Vdir command
+//!
+//! Declares the vdir command tree and dispatches each subcommand against
+//! the account's vdir client.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
@@ -8,11 +13,11 @@ use crate::vdir::{
     rename::VdirCollectionRenameCommand,
 };
 
-/// Vdir-specific API.
+/// Manage vdir collections and items on the filesystem.
 ///
-/// Gives access to the raw vdir filesystem API on the active
-/// account's `vdir.home-dir`. The flat verbs operate on collections
-/// (directories); `item` operates on the raw item files inside them.
+/// Operates on the raw vdir API rooted at the active account's
+/// `vdir.home-dir`. The flat verbs act on collections, which are
+/// directories, and `item` on the raw item files inside them.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum VdirCommand {

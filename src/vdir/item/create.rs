@@ -1,3 +1,8 @@
+//! # Item create command
+//!
+//! Stores a new item file in a collection, inferring its kind when the
+//! command does not give one.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
@@ -9,9 +14,9 @@ use crate::vdir::{
 
 /// Store a new item in the given collection.
 ///
-/// The kind (file extension) defaults to sniffing the input
-/// (`BEGIN:VCALENDAR` is iCalendar, everything else vCard); override it
-/// with `--kind`. JSON output: `{"message": "..."}`.
+/// The kind, which is the file extension, defaults to sniffing the input:
+/// a `BEGIN:VCALENDAR` head is iCalendar, everything else vCard. Override
+/// it with `--kind`. JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct VdirItemCreateCommand {
     /// Collection to store the item in.

@@ -1,3 +1,7 @@
+//! # Addressbook delete command
+//!
+//! Deletes an addressbook and every card it contains.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
@@ -9,9 +13,10 @@ use crate::shared::client::AddressbookClient;
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct AddressbookDeleteCommand {
-    /// Addressbook to delete. Mandatory: unlike the other shared-API
-    /// commands, deletion never falls back to the `addressbook.default`
-    /// config.
+    /// Addressbook to delete.
+    ///
+    /// Mandatory: unlike the other shared commands, a deletion never falls
+    /// back to the `addressbook.default` config.
     #[arg(short = 'k', long = "addressbook", value_name = "ADDRESSBOOK-ID")]
     pub id: String,
 }

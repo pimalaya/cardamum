@@ -1,3 +1,8 @@
+//! # Microsoft Graph commands
+//!
+//! Dispatches the Graph-specific command tree, one subtree per Graph
+//! resource.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

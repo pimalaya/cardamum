@@ -1,3 +1,7 @@
+//! # ContactCard destroy command
+//!
+//! Destroys a ContactCard.
+
 use anyhow::{Result, bail};
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::set::JmapContactCardSetArgs;

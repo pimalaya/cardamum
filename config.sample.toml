@@ -10,9 +10,9 @@
 # can be passed at once, separated by `:`; the first one is the base and the
 # rest are deep-merged on top of it.
 #
-# `cardamum configure` generates an account from your email address: it
-# discovers the contacts services your provider publishes, asks which one to use
-# and how to authenticate, tests the connection, and writes the account here.
+# `cardamum configure` discovers the contacts services your provider publishes,
+# asks how to authenticate, tests the connection and writes the account here.
+#
 # Everything it does not cover is written by hand, which is what this file
 # documents: keep the backend you need and delete the rest. Ready-made blocks
 # for named providers live in the README.
@@ -22,25 +22,28 @@
 # Global config
 # --------------------------------------------------------------------------------
 
-# https://docs.rs/comfy-table/latest/comfy_table/presets/index.html
+# Borders of every table, `UTF8_FULL_CONDENSED` by default. Presets are listed
+# at https://docs.rs/comfy-table/latest/comfy_table/presets/index.html
 #table.preset = "││──╞═╪╡┆    ┬┴┌┐└┘"
 
+# How columns are sized, `dynamic` by default. See
 # https://docs.rs/comfy-table/latest/comfy_table/enum.ContentArrangement.html
 #table.arrangement = "dynamic"
 #table.arrangement = "dynamic-full-width"
 #table.arrangement = "disabled"
 
-# Default page size for `cards list`. The `-s/--page-size` CLI flag wins
-# when passed; otherwise the merged account/global value wins; otherwise
-# the hard fallback is 25.
+# Default page size for `card list`. The `-s/--page-size` flag wins when
+# passed, then this value, then the hard fallback of 25.
 #card.list.page-size = 50
 
-# Addressbook id used by `card` commands when their `-k/--addressbook` flag
+# Addressbook the `card` commands act on when their `-k/--addressbook` flag
 # is omitted.
 #addressbook.default = "Contacts"
 
 # --------------------------------------------------------------------------------
 # Table rendering: addressbooks list
+#
+# One color per column of `addressbook list`, `reset` taking the terminal's own.
 # --------------------------------------------------------------------------------
 
 #addressbook.list.table.id-color = "red"
@@ -50,6 +53,8 @@
 
 # --------------------------------------------------------------------------------
 # Table rendering: cards list
+#
+# One color per column of `card list`.
 # --------------------------------------------------------------------------------
 
 #card.list.table.id-color = "red"
@@ -59,6 +64,8 @@
 
 # --------------------------------------------------------------------------------
 # Table rendering: account list
+#
+# One color per column of `account list`, which has no per-account override.
 # --------------------------------------------------------------------------------
 
 #account.list.table.name-color = "green"
@@ -107,12 +114,13 @@ vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
 # --------------------------------------------------------------------------------
 # CardDAV backend
 #
-# The addressbook home set is resolved from the first field that is set, each
-# skipping more work than the next: `home` is the pre-resolved home set URL and
-# skips every step, `server` is the context root the principal walk starts from,
-# and `discover` is a bare domain resolved at runtime (PACC, `.well-known`, then
-# RFC 6764 SRV) at the cost of DNS and HTTP round-trips on every run. `server`
-# accepts a full URL, a bare domain or `domain:port`, defaulting to `https://`.
+# The addressbook home set is resolved from the first field set, each skipping
+# more work than the next: `home` is the pre-resolved home set URL, `server` the
+# context root the principal walk starts from, and `discover` a bare domain
+# resolved at runtime through PACC, `.well-known` then RFC 6764 SRV.
+#
+# Discovery costs DNS and HTTP round-trips on every run. `server` accepts a full
+# URL, a bare domain or `domain:port`, a bare authority defaulting to `https`.
 # --------------------------------------------------------------------------------
 
 [accounts.carddav-example]
@@ -152,6 +160,7 @@ jmap.auth.bearer.token.command = "ortie token show"
 #jmap.auth.basic.username = "username"
 #jmap.auth.basic.password.command = "pass show example"
 
+# TLS configuration.
 #jmap.tls.provider = "rustls"
 #jmap.tls.rustls.crypto = "ring"
 
@@ -171,6 +180,8 @@ jmap.auth.bearer.token.command = "ortie token show"
 msgraph.auth.token.command = "ortie token show"
 #msgraph.auth.token.raw = "oauth2-token"
 
+# TLS configuration, and the ALPN identifiers offered during the handshake,
+# `[]` skipping the negotiation. Rustls only; native-tls ignores them.
 #msgraph.tls.provider = "rustls"
 #msgraph.alpn = ["http/1.1"]
 
@@ -184,5 +195,7 @@ msgraph.auth.token.command = "ortie token show"
 people.auth.token.command = "ortie token show"
 #people.auth.token.raw = "oauth2-token"
 
+# TLS configuration, and the ALPN identifiers offered during the handshake,
+# `[]` skipping the negotiation. Rustls only; native-tls ignores them.
 #people.tls.provider = "rustls"
 #people.alpn = ["http/1.1"]

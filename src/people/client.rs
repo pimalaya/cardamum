@@ -1,5 +1,7 @@
-//! Cardamum wrapper around [`io_people::v1::client::PeopleClientStd`]
-//! that bundles the merged [`Account`] alongside the connected client.
+//! # People client
+//!
+//! Wraps [`io_people::v1::client::PeopleClientStd`] with the merged
+//! [`Account`] the commands render through.
 
 use std::ops::{Deref, DerefMut};
 
@@ -12,8 +14,10 @@ use crate::{
     config::{AccountConfig, Config},
 };
 
+/// The connected People client and the account it runs for.
 pub struct PeopleClient {
     inner: PeopleClientStd,
+    /// The merged account config the command runs against.
     pub account: Account,
 }
 
@@ -31,9 +35,9 @@ impl DerefMut for PeopleClient {
     }
 }
 
-/// Builds the merged [`Account`] from the already-resolved config and
-/// account, then opens the People client. Bails when the account has no
-/// `[people]` block.
+/// Opens the People client of the account, alongside its merged config.
+///
+/// Bails when the account has no `[people]` block.
 pub fn build_people_client(
     config: Config,
     name: String,

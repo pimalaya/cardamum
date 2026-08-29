@@ -49,7 +49,9 @@ As a regular user:
 curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | PREFIX=~/.local sh
 ```
 
-These commands install the latest binary from the GitHub [releases](https://github.com/pimalaya/cardamum/releases) section. For a more up-to-date version, check the [releases](https://github.com/pimalaya/cardamum/actions/workflows/releases.yml) workflow and look for the *Artifacts* section: those are built from `master`, with the default cargo features.
+These commands install the latest binary from the GitHub [releases](https://github.com/pimalaya/cardamum/releases) section.
+
+For a more up-to-date version, check the [releases](https://github.com/pimalaya/cardamum/actions/workflows/releases.yml) workflow and look for the *Artifacts* section: those are built from `master`, with the default cargo features.
 
 ### Cargo
 
@@ -97,7 +99,9 @@ The configuration is loaded from the first existing path among:
 
 Override the path with `cardamum -c <PATH>` or `CARDAMUM_CONFIG=<PATH>`, `:`-separated to deep-merge several files on top of the first. The full field reference lives in [config.sample.toml](./config.sample.toml).
 
-`cardamum configure` generates an account, and a bare `cardamum` offers it when it finds no configuration. It asks one question, taking an email address, a server URL or a local folder path, discovers what it can, tests the account, then writes it here, appending an `[accounts.<name>]` block when one is already there. What it cannot discover it does not ask for: a self-hosted server publishing no discovery record is written by hand.
+`cardamum configure` generates an account, and a bare `cardamum` offers it when it finds no configuration. It asks one question, taking an email address, a server URL or a local folder path, discovers what it can, tests the account, then writes it here.
+
+An `[accounts.<name>]` block is appended when the file already exists. What discovery cannot find it does not ask for: a self-hosted server publishing no discovery record is written by hand.
 
 Secrets come from an OS keyring, a token broker such as [Ortie](https://github.com/pimalaya/ortie), any command or a raw value. Cardamum reads them but never issues or refreshes them, so a provider on OAuth 2.0 needs a broker. Ready-made blocks for common providers follow.
 
@@ -120,7 +124,9 @@ addressbook.default = "card"
 
 ### Google
 
-Use the `people` backend, which speaks the [People API](https://developers.google.com/people) directly and is richer than Google's CardDAV bridge. Both routes need [OAuth 2.0](https://developers.google.com/identity/protocols/oauth2), and an access token expires within the hour, so point the token at a broker rather than pasting one in. Contact groups map to addressbooks, the `myContacts` group listing as Contacts:
+Use the `people` backend, which speaks the [People API](https://developers.google.com/people) directly and is richer than Google's CardDAV bridge. Contact groups map to addressbooks, the `myContacts` group listing as Contacts.
+
+Both routes need [OAuth 2.0](https://developers.google.com/identity/protocols/oauth2), and an access token expires within the hour, so point the token at a broker rather than pasting one in:
 
 ```toml
 [accounts.example]
@@ -128,7 +134,9 @@ people.auth.token.command = ["ortie", "token", "show"]
 addressbook.default = "myContacts"
 ```
 
-Google models contacts as JSON and exposes no vCard representation, so cardamum synthesizes the document you read and re-projects what you write. Properties with a well-defined vCard slot are authoritative in both directions, and everything else is stashed verbatim on the server so it round-trips instead of being dropped on the next write.
+Google models contacts as JSON and exposes no vCard representation, so cardamum synthesizes the document you read and re-projects what you write.
+
+Properties with a well-defined vCard slot are authoritative in both directions, and everything else is stashed verbatim on the server so it round-trips instead of being dropped on the next write.
 
 CardDAV works too, with a bearer token and the address book home addressed by hand, its discovery entry point being off-spec:
 
@@ -211,7 +219,11 @@ vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
 addressbook.default = "personal"
 ```
 
-A [pimdir](https://github.com/pimalaya/pimdir) store is the offline cache a sync engine fills: a SQLite index plus content-addressed bodies, shared with the other Pimalaya clients reading the same store. Cardamum reads it and stages card writes onto its queue, leaving the store to its owner, the sync, so a listing never waits on a sync in flight and never keeps one out. It is a cache, not a server, so the store must already exist, addressbooks come from the sync and the collection verbs refuse here:
+A [pimdir](https://github.com/pimalaya/pimdir) store is the offline cache a sync engine fills: a SQLite index plus content-addressed bodies, shared with the other Pimalaya clients reading the same store.
+
+Cardamum reads it and stages card writes onto its queue, leaving the store to its owner, the sync, so a listing never waits on a sync in flight and never keeps one out.
+
+It is a cache, not a server, so the store must already exist, addressbooks come from the sync and the collection verbs refuse here:
 
 ```toml
 [accounts.cached]

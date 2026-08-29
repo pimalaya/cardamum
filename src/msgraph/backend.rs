@@ -1,12 +1,13 @@
-//! Microsoft Graph arm of the shared-API client: thin glue mapping the
-//! shared addressbook and card operations onto
-//! [`io_msgraph::v1::client::MsgraphClientStd`] calls, projecting Graph
-//! contacts onto vCard documents (see [`crate::msgraph::project`]).
+//! # Microsoft Graph backend
 //!
-//! Graph contact folders are the addressbooks; the default Contacts
-//! folder is not listed by the folders endpoint, so it is surfaced
-//! under the [`CONTACTS_FOLDER`] sentinel id. Card updates carry no
-//! If-Match guard server-side (last-write-wins), so passing one bails.
+//! The Graph arm of the shared-API client, mapping the addressbook and card
+//! operations onto [`io_msgraph::v1::client::MsgraphClientStd`] calls and
+//! projecting contacts onto vCard documents ([`crate::msgraph::project`]).
+//!
+//! Graph contact folders are the addressbooks, except the default Contacts
+//! folder, which the folders endpoint does not list: it is surfaced under
+//! the [`CONTACTS_FOLDER`] sentinel id. Updates carry no If-Match guard
+//! server-side (last-write-wins), so passing one bails.
 
 use anyhow::{Error, Result, bail};
 use io_msgraph::v1::{
@@ -93,8 +94,10 @@ impl MsgraphBackend {
         Ok(books)
     }
 
-    /// Creates a contact folder named `name`. Graph folders carry no
-    /// description nor color, so passing either bails.
+    /// Creates a contact folder named `name`.
+    ///
+    /// Graph folders carry no description nor color, so passing either
+    /// bails.
     pub fn create_addressbook(
         &mut self,
         name: &str,
@@ -114,8 +117,10 @@ impl MsgraphBackend {
         Ok(created.id)
     }
 
-    /// Renames the contact folder identified by `id`. Graph folders
-    /// carry no description nor color, so patching either bails.
+    /// Renames the contact folder identified by `id`.
+    ///
+    /// Graph folders carry no description nor color, so patching either
+    /// bails.
     pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
         if patch.description.is_some() || patch.color.is_some() {
             bail!("Microsoft Graph contact folders support neither description nor color");
@@ -197,8 +202,9 @@ impl MsgraphBackend {
         Ok(into_card(addressbook_id, contact))
     }
 
-    /// Creates the vCard as a Graph contact in the folder. Graph names
-    /// the resource, so the returned id is server-assigned.
+    /// Creates the vCard as a Graph contact in the folder.
+    ///
+    /// Graph names the resource, so the returned id is server-assigned.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let vcard = into_vcard_text(contents)?;
         let contact = project::to_new_contact(&vcard).map_err(Error::msg)?;
@@ -211,11 +217,11 @@ impl MsgraphBackend {
         Ok(created.id)
     }
 
-    /// Updates the contact `card_id` from the vCard. The current server
-    /// contact serves as delta base, so the PATCH body shrinks to the
-    /// changed fields, plus nulls for the removed ones. Graph has no
-    /// If-Match guard (updates are last-write-wins), so passing one
-    /// bails instead of pretending to honor it.
+    /// Updates the contact `card_id` from the vCard.
+    ///
+    /// The server contact serves as delta base, so the PATCH body shrinks
+    /// to the changed fields plus nulls for the removed ones. Graph updates
+    /// are last-write-wins, so passing an If-Match guard bails.
     pub fn update_card(
         &mut self,
         _addressbook_id: &str,

@@ -1,3 +1,7 @@
+//! # Session command tree
+//!
+//! Dispatches the JMAP session commands.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

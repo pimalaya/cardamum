@@ -1,3 +1,7 @@
+//! # Contact update command
+//!
+//! Patches a contact from a raw Graph contact body.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
@@ -16,6 +20,7 @@ pub struct MsgraphContactUpdateCommand {
     /// Contact id.
     #[arg(value_name = "CONTACT-ID")]
     pub contact_id: String,
+    /// The raw Graph contact JSON body.
     #[command(flatten)]
     pub json: ContactJsonArg,
 }

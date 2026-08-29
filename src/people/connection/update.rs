@@ -1,3 +1,8 @@
+//! # Connection update command
+//!
+//! Updates a contact from a raw People person JSON body
+//! (`people.updateContact`).
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use io_people::v1::rest::people::PeoplePerson;
@@ -10,9 +15,10 @@ use crate::people::{
     render::PersonReport,
 };
 
-/// Update a contact from a raw People person JSON body
-/// (`people.updateContact`). The update mask is derived from the JSON's
-/// top-level keys, and the current etag is fetched to guard the write.
+/// Update a contact from a raw People person JSON body.
+///
+/// The update mask is derived from the JSON's top-level keys, and the
+/// current etag is fetched to guard the write.
 ///
 /// JSON output: the raw People person after the update.
 #[derive(Debug, Parser)]
@@ -20,6 +26,7 @@ pub struct PeopleConnectionUpdateCommand {
     /// Person id (the segment after `people/`).
     #[arg(value_name = "PERSON-ID")]
     pub person_id: String,
+    /// The person JSON body: a file path, inline JSON, or `-`.
     #[command(flatten)]
     pub json: PersonJsonArg,
 }

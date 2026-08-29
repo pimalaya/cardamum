@@ -1,3 +1,7 @@
+//! # Folder list command
+//!
+//! Lists the contact folders of the mailbox.
+
 use anyhow::Result;
 use clap::Parser;
 use io_msgraph::v1::rest::users::contact_folders::list::MsgraphContactFoldersListParams;

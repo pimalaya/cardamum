@@ -1,16 +1,16 @@
-//! pimdir arm of the shared-API client: glue mapping the shared
-//! addressbook and card operations onto a local pimdir store.
+//! # Pimdir backend
 //!
-//! Reads build cards from the stored `v: 1` summary (pimdir SPEC Annex
-//! A) plus the blob store. A card whose body is not local still lists,
-//! and reading it reports "body not fetched" rather than erroring.
+//! Pimdir arm of the shared-API client, mapping the shared addressbook
+//! and card operations onto a local pimdir store.
+//!
+//! Reads build cards from the stored `v: 1` summary (pimdir SPEC Annex A)
+//! plus the blob store: a card whose body is not local still lists, and
+//! reading it reports "body not fetched" rather than erroring.
 //!
 //! Writes append one action to the store's queue (pimdir SPEC §15.1)
-//! through a producer opened for that write: the body reaches the blob
-//! tree first, then the row pinning it. The store's owner, a sync,
-//! applies the action and pushes it. The same reader folds the pending
-//! queue over its reads, so a staged change shows here before that
-//! happens.
+//! through a producer opened for that write, the body first, then the row
+//! pinning it. The store's owner, a sync, applies and pushes it, and the
+//! reader folds the pending queue so a staged change shows here at once.
 
 use std::io::Write;
 
@@ -39,7 +39,7 @@ const CARD_KIND: &str = "text/vcard";
 /// How many items to pull per keyset page when scanning a whole collection.
 const SCAN_BATCH: usize = 500;
 
-/// pimdir backend of the shared-API client, wrapping an opened local store.
+/// Pimdir backend of the shared-API client, over an opened local store.
 pub struct PimdirBackend {
     inner: PimdirClient,
 }
@@ -52,8 +52,7 @@ impl PimdirBackend {
         })
     }
 
-    /// Lists the contact collections (declared `text/vcard`, or kind-less
-    /// legacy ones), sorted by name.
+    /// Lists the contact collections as addressbooks, sorted by name.
     pub fn list_addressbooks(&mut self) -> Result<Vec<Addressbook>> {
         let mut addressbooks: Vec<Addressbook> = self
             .collections()?
@@ -74,10 +73,11 @@ impl PimdirBackend {
         Ok(addressbooks)
     }
 
-    /// Always fails: declaring a collection is an owner write (pimdir SPEC
-    /// §8) and this backend is a producer, which appends item actions and
-    /// nothing else. A collection declared here would also be one no sync
-    /// knows about, so no address book would ever be created from it.
+    /// Always fails, a collection being the store owner's to declare.
+    ///
+    /// This backend is a producer (pimdir SPEC §8), which appends item
+    /// actions and nothing else, and a collection declared here would be
+    /// one no sync knows about, so no address book would come of it.
     pub fn create_addressbook(
         &mut self,
         _name: &str,
@@ -90,14 +90,12 @@ impl PimdirBackend {
         )
     }
 
-    /// Always fails: a collection's row (id, display name, description,
-    /// colour) is what a sync writes from the server, and this backend stages
-    /// item actions only, so every field of it is refused rather than changed
-    /// locally into something no sync would carry.
+    /// Always fails, a collection's row being what a sync writes.
     ///
-    /// A rename is refused for a sharper reason too: io-pimdir's
-    /// `rename_collection` renames the *identifier*, so honouring `--name`
-    /// here would move every card under an id nobody asked for.
+    /// This backend stages item actions only, so name, description and
+    /// colour are refused rather than changed into something no sync would
+    /// carry. A rename is worse still: io-pimdir renames the identifier, so
+    /// `--name` would move every card under an id nobody asked for.
     pub fn update_addressbook(&mut self, _id: &str, _patch: AddressbookDiff) -> Result<()> {
         bail!(
             "The pimdir backend cannot update an addressbook: its name, description \
@@ -105,8 +103,10 @@ impl PimdirBackend {
         )
     }
 
-    /// Always fails: io-pimdir exposes no collection removal, and the queue
-    /// carries item actions only, so a delete here would be a silent no-op.
+    /// Always fails, io-pimdir exposing no collection removal.
+    ///
+    /// The queue carries item actions only, so a delete here would be a
+    /// silent no-op.
     pub fn delete_addressbook(&mut self, _id: &str) -> Result<()> {
         bail!(
             "The pimdir backend cannot delete an addressbook; \
@@ -114,12 +114,11 @@ impl PimdirBackend {
         )
     }
 
-    /// Lists the cards inside `addressbook_id` in the store's own contacts
-    /// order (display name ascending), applying 1-indexed pagination.
+    /// Lists the cards inside `addressbook_id`, 1-indexed paging.
     ///
+    /// The order is the store's own contacts one, display name ascending.
     /// An unhydrated card lists as a preview projected from its stored
-    /// summary; [`get_card`](Self::get_card) is where the absence is
-    /// reported.
+    /// summary, [`get_card`](Self::get_card) reporting the absence.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
@@ -137,10 +136,11 @@ impl PimdirBackend {
         Ok(paginate(cards, page, page_size))
     }
 
-    /// Fetches `card_id` from `addressbook_id`, reading its content-addressed
-    /// blob. Fails with a clear "body not fetched" when the card is not
-    /// hydrated to `Full` (no local body), the cue to sync rather than a
-    /// data-loss error.
+    /// Fetches `card_id` from `addressbook_id`, reading its blob.
+    ///
+    /// A card not hydrated to `Full` has no local body, and fails with a
+    /// clear "body not fetched", the cue to sync rather than a data-loss
+    /// error.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
         self.known_collection(addressbook_id)?;
 
@@ -187,12 +187,11 @@ impl PimdirBackend {
         Ok(link_id.0)
     }
 
-    /// Stages a body replacement for `card_id` as an `update` action the next
-    /// sync applies and pushes, three-way merging against the stored base.
+    /// Stages a body replacement for `card_id` as an `update` action.
     ///
-    /// `if_match` is ignored: the applied edit is reconciled by the engine
-    /// against the base body it recorded at sync time, which is a stronger
-    /// guarantee than an ETag precondition a local store cannot check.
+    /// The next sync applies and pushes it, three-way merging against the
+    /// stored base. `if_match` is ignored: reconciling against that base is
+    /// stronger than an ETag precondition a local store cannot check.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
@@ -214,8 +213,10 @@ impl PimdirBackend {
         Ok(CardUpdateOutcome::default())
     }
 
-    /// Stages a `remove` action for `card_id`, which the next sync applies as
-    /// a tombstone and pushes as a server-side delete.
+    /// Stages a `remove` action for `card_id`.
+    ///
+    /// The next sync applies it as a tombstone and pushes a server-side
+    /// delete.
     pub fn delete_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<()> {
         self.known_collection(addressbook_id)?;
 
@@ -228,13 +229,11 @@ impl PimdirBackend {
         Ok(())
     }
 
-    /// The store's address book collections, narrowed to the configured
-    /// account when the store groups several (pimdir SPEC §9.2).
+    /// The address book collections of the configured account.
     ///
-    /// One store holds the collections of every kind a sync caches, so the
-    /// kind is what separates an address book from a mailbox or a calendar.
-    /// A kind-less collection counts: a sync that created one before kinds
-    /// were declared left the column empty.
+    /// One store holds every kind a sync caches (pimdir SPEC §9.2), so the
+    /// kind separates an address book from a mailbox or a calendar. A
+    /// kind-less one counts: a sync predating kinds left the column empty.
     fn collections(&self) -> Result<Vec<PimdirCollection>> {
         let collections = match self.inner.account.as_deref() {
             Some(account) => self
@@ -250,8 +249,10 @@ impl PimdirBackend {
             .collect())
     }
 
-    /// Pulls every live item of a collection by keyset paging, in the
-    /// contacts order the store maintains (display name ascending).
+    /// Pulls every live item of a collection by keyset paging.
+    ///
+    /// The order is the contacts one the store maintains, display name
+    /// ascending.
     fn scan_items(&self, addressbook_id: &str) -> Result<Vec<PimdirItem>> {
         let mut all: Vec<PimdirItem> = Vec::new();
         let mut cursor: Option<(String, i64)> = None;
@@ -275,14 +276,12 @@ impl PimdirBackend {
         Ok(all)
     }
 
-    /// Builds a shared [`Card`] from a stored item: the real body when it is
-    /// local, else a preview synthesized from the stored `v: 1` summary, so a
-    /// listing stays useful on a partially synced store.
+    /// Builds a shared [`Card`] from a stored item.
     ///
-    /// NOTE: the preview is a projection of the summary, never the document of
-    /// record. [`get_card`](Self::get_card) refuses an unhydrated card outright
-    /// rather than handing the preview back, so nothing downstream can mistake
-    /// one for a real card.
+    /// The real body when it is local, else a preview projected from the
+    /// `v: 1` summary, which keeps a listing useful on a partly synced
+    /// store. The preview is never the record: [`get_card`](Self::get_card)
+    /// refuses an unhydrated card outright.
     fn card_from_item(&self, addressbook_id: &str, item: PimdirItem) -> Result<Card> {
         let stored = match &item.object {
             Some(hash) => self.inner.blobs.get(hash)?,
@@ -292,10 +291,9 @@ impl PimdirBackend {
         let contents = match stored {
             Some(contents) => contents,
             None => {
-                // NOTE: no body to show, either because the card was never
-                // hydrated or because its blob is gone from an inconsistent
-                // store. The preview keeps the row readable; the second case
-                // is worth a word, since `get_card` will refuse outright.
+                // NOTE: the blob may be gone from an inconsistent store
+                // rather than never fetched, which is worth a word since
+                // `get_card` refuses outright.
                 if item.object.is_some() {
                     warn!(
                         "body blob missing for card `{}` in `{addressbook_id}`, \
@@ -316,15 +314,12 @@ impl PimdirBackend {
         })
     }
 
-    /// Fails unless `collection` is a collection the store knows, naming the
-    /// ones it does hold.
+    /// Fails unless the store knows `collection`, naming those it holds.
     ///
-    /// The store's read seam answers an unknown collection with an empty page
-    /// and its queue accepts an action for any name, so without this a typo in
-    /// `-k` would read as an empty addressbook and stage into one nothing will
-    /// ever apply. An addressbook is its collection id, which carries the sync
-    /// engine's namespace and is not guessable, so the refusal shows the ids to
-    /// choose from.
+    /// The read seam answers an unknown collection with an empty page and
+    /// the queue accepts any name, so without this a typo in `-k` would read
+    /// as an empty addressbook and stage what nothing will ever apply. The
+    /// ids carry the sync engine's namespace, so the refusal lists them.
     fn known_collection(&self, collection: &str) -> Result<()> {
         let mut ids: Vec<String> = self
             .collections()?
@@ -356,14 +351,12 @@ impl PimdirBackend {
             .ok_or_else(|| anyhow!("Card `{card_id}` not found in `{collection}`"))
     }
 
-    /// Writes a body into the blob tree, then appends the action naming it,
-    /// both under one producer.
+    /// Writes a body into the blob tree, then the action naming it.
     ///
     /// The body is durable before anything references it (pimdir SPEC §14),
-    /// and the producer is opened around the pair rather than for the enqueue
-    /// alone: its shared lock is what keeps a collector out of the window
-    /// between a body reaching the blob tree and the queue row pinning it. A
-    /// body the store already holds keeps the stored copy.
+    /// and one producer wraps the pair rather than the enqueue alone: its
+    /// shared lock is what keeps a collector out of the window between the
+    /// two. A body the store already holds keeps the stored copy.
     fn stage(
         &self,
         collection: &str,
@@ -372,9 +365,8 @@ impl PimdirBackend {
     ) -> Result<()> {
         let mut producer = self.inner.producer()?;
 
-        // NOTE: the hash is the store's, read from `store_meta.hash_algo`,
-        // never one this crate picks: a body named under another algorithm
-        // is a body no read ever finds.
+        // NOTE: the hash is the store's, read from `store_meta.hash_algo`:
+        // a body named under another algorithm is one no read ever finds.
         let hash = producer.hash(contents);
         let mut writer = self.inner.blobs.writer()?;
         writer.write_all(contents)?;
@@ -393,8 +385,10 @@ fn now() -> String {
     humantime::format_rfc3339_millis(std::time::SystemTime::now()).to_string()
 }
 
-/// Reads a stored item's `v: 1` summary, falling back to an empty one when the
-/// card was never projected or the blob does not parse.
+/// Reads a stored item's `v: 1` summary.
+///
+/// Falls back to an empty one when the card was never projected or its
+/// summary does not parse.
 fn summary_of(item: &PimdirItem) -> PimdirCardMeta {
     item.meta
         .as_ref()
@@ -402,9 +396,10 @@ fn summary_of(item: &PimdirItem) -> PimdirCardMeta {
         .unwrap_or_default()
 }
 
-/// Renders a stored summary as a minimal vCard, the listing preview of a card
-/// whose body is not local yet. It carries only what the summary knows (`UID`,
-/// `FN`, `EMAIL`), so a contact list reads correctly before a full sync.
+/// Renders a stored summary as the listing preview of a card.
+///
+/// It carries only what the summary knows (`UID`, `FN`, `EMAIL`), which is
+/// what makes a contact list readable before the bodies are synced.
 fn preview_vcard(summary: &PimdirCardMeta) -> Vec<u8> {
     let mut out = String::from("BEGIN:VCARD\r\nVERSION:4.0\r\n");
 
@@ -412,8 +407,8 @@ fn preview_vcard(summary: &PimdirCardMeta) -> Vec<u8> {
         // NOTE: two rows of one listing may legitimately carry this `UID`,
         // the store keying the second copy apart under a minted `dup:` link
         // id (pimdir SPEC §9). It is a display value and never an address,
-        // so nothing downstream may dedupe, group or look a row up by it:
-        // the public `seq` is what names a card.
+        // so nothing downstream may dedupe or group by it: the public `seq`
+        // is what names a card.
         out.push_str(&format!("UID:{uid}\r\n"));
     }
     out.push_str(&format!("FN:{}\r\n", summary.fn_));
@@ -431,13 +426,12 @@ mod tests {
 
     use super::*;
 
-    /// RFC 6352 §5.1 requires a card's `UID` to be unique in its collection,
-    /// and servers do not always enforce it, most often after a repeated
-    /// import. A store therefore holds both copies, keying the second apart
-    /// under a minted `dup:` link id (pimdir SPEC §9), and both project as
-    /// ordinary cards: the shared `UID` tells them apart from nothing, so
-    /// what addresses them is the public `seq` each carries, and the key the
-    /// store minted never reaches the card a reader sees.
+    /// RFC 6352 §5.1 requires a `UID` unique per collection, which servers
+    /// do not always enforce, most often after a repeated import.
+    ///
+    /// A store holds both copies, keying the second apart under a minted
+    /// `dup:` link id (pimdir SPEC §9). Both project as ordinary cards
+    /// addressed by their `seq`, the minted key never reaching a reader.
     #[test]
     fn two_items_sharing_a_uid_project_two_distinct_cards() {
         let one = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:shared@example.org\r\n\
@@ -445,8 +439,8 @@ mod tests {
         let two = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:shared@example.org\r\n\
                     FN:Jane Doh\r\nEMAIL:doh@example.org\r\nEND:VCARD\r\n";
 
-        // A derivation is what a write carries, not a lookup: both bodies
-        // derive the one bare link id, which is why the store mints.
+        // NOTE: a derivation is what a write carries, not a lookup: both
+        // bodies derive the one bare link id, which is why the store mints.
         let first = card::derive(one);
         let second = card::derive(two);
         assert_eq!(first.link_id.0, "shared@example.org");
@@ -462,21 +456,18 @@ mod tests {
         let previews = [&bare, &minted]
             .map(|item| String::from_utf8(preview_vcard(&summary_of(item))).unwrap());
 
-        // Both rows state the shared `UID` and neither is marked, so it
-        // tells them apart from nothing, and the two cards stay distinct.
+        // NOTE: both rows state the shared `UID` and neither is marked, so
+        // it tells them apart from nothing.
         assert!(previews[0].contains("UID:shared@example.org\r\n"));
         assert!(previews[1].contains("UID:shared@example.org\r\n"));
         assert!(previews[0].contains("FN:Jane Doe\r\n"));
         assert!(previews[1].contains("FN:Jane Doh\r\n"));
         assert_ne!(previews[0], previews[1]);
 
-        // The key the store minted is its own, and never reaches a reader.
         assert!(!previews[1].contains("dup:"));
     }
 
-    /// A stored item as a read hands one over: the public `seq`, the key the
-    /// store assigned it, and the `v: 1` summary a sync projected, with no
-    /// body fetched yet.
+    /// A stored item as a read hands one over, with no body fetched yet.
     fn item(seq: i64, link_id: &str, meta: ReplicaMeta) -> PimdirItem {
         PimdirItem {
             seq,

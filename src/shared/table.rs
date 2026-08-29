@@ -1,22 +1,20 @@
-//! Shared `comfy_table` preset mapper.
+//! # Table preset
 //!
-//! `comfy_table` v8 dropped the positional preset string in favour of
-//! the typed [`TableStyle`] builder. The `table.preset` config option
-//! keeps accepting the v7 string so existing configs stay valid; this
-//! module maps one onto the other.
+//! Maps the positional preset string of `comfy_table` v7 onto the typed
+//! [`TableStyle`] builder of v8.
+//!
+//! The v8 release dropped that string, but the `table.preset` config
+//! option keeps accepting it so existing configs stay valid.
 
 use comfy_table::{ContentLineStyle, LineStyle, TableStyle};
 
-/// Default preset, equivalent to `comfy_table` v7's
-/// `presets::UTF8_FULL_CONDENSED`: full UTF8 borders, no divider
-/// between rows.
+/// Default preset: full UTF-8 borders, no divider between rows.
 pub const DEFAULT_PRESET: &str = "││──╞═╪╡┆    ┬┴┌┐└┘";
 
 /// Number of table components a preset string can style.
 const COMPONENTS: usize = 19;
 
-/// Maps a `comfy_table` v7 positional preset string onto a
-/// [`TableStyle`].
+/// Maps a v7 positional preset string onto a [`TableStyle`].
 ///
 /// Each character styles one component, in the order of the v7
 /// `TableComponent` enum:
@@ -31,9 +29,9 @@ const COMPONENTS: usize = 19;
 ///  6 middle header inters. 13 top border inters.
 /// ```
 ///
-/// A space means "don't draw this component", and so does a component
-/// left out of a short string, both matching v7 where an unset
-/// component rendered blank. Characters past the 19th are ignored.
+/// A space draws nothing, and so does a component left out of a short
+/// string, both matching v7 where an unset component rendered blank.
+/// Characters past the 19th are ignored.
 pub fn style_from_preset(preset: &str) -> TableStyle {
     let mut chars = [None; COMPONENTS];
 

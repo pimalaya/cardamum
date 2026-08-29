@@ -1,3 +1,7 @@
+//! # Contact group list command
+//!
+//! Lists one page of contact groups (`contactGroups.list`).
+
 use anyhow::Result;
 use clap::Parser;
 use io_people::v1::rest::contact_groups::{PeopleGroupField, list::PeopleContactGroupsListParams};

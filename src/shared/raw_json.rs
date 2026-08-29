@@ -1,10 +1,14 @@
+//! # Raw JSON
+//!
+//! The output type of the protocol `request` passthroughs, printing the
+//! payload a backend answered as is.
+
 use core::fmt;
 
 use serde::Serialize;
 use serde_json::Value;
 
-/// A raw JSON payload from a protocol `request` passthrough: pretty on
-/// stdout, verbatim with `--json`.
+/// A raw JSON payload: pretty on stdout, verbatim with `--json`.
 #[derive(Clone, Debug, Serialize)]
 #[serde(transparent)]
 pub struct RawJson(pub Value);

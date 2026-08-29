@@ -1,3 +1,7 @@
+//! # ContactCard update command
+//!
+//! Updates a ContactCard from a raw JSContact patch.
+
 use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};
@@ -9,9 +13,10 @@ use crate::jmap::{
     client::JmapClient, error::format_set_error, input::JsonArg, render::CardReport,
 };
 
-/// Update a ContactCard from a raw JSContact patch (`ContactCard/set`
-/// update). The JSON's top-level keys are the patch (JSON pointers are
-/// supported by JMAP as dotted keys).
+/// Update a ContactCard from a raw JSContact patch (`ContactCard/set`).
+///
+/// The JSON's top-level keys are the patch; JMAP spells JSON pointers
+/// as dotted keys.
 ///
 /// JSON output: the raw JMAP ContactCard after the update, or
 /// `{"message": "..."}` when the server returns nothing to show (most

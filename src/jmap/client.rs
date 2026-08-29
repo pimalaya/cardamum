@@ -1,6 +1,7 @@
-//! Cardamum wrapper around [`io_jmap::client::JmapClientStd`] that
-//! bundles the merged [`Account`] alongside the connected client (its
-//! JMAP session already discovered).
+//! # JMAP client
+//!
+//! Wraps [`JmapClientStd`] with the merged [`Account`] the commands read
+//! their rendering options from, its JMAP session already discovered.
 
 use std::ops::{Deref, DerefMut};
 
@@ -13,8 +14,10 @@ use crate::{
     jmap::backend::jmap_http_auth,
 };
 
+/// A connected io-jmap client paired with the account it runs for.
 pub struct JmapClient {
     inner: JmapClientStd,
+    /// The merged account, source of the table and color options.
     pub account: Account,
 }
 
@@ -32,9 +35,9 @@ impl DerefMut for JmapClient {
     }
 }
 
-/// Builds the merged [`Account`] from the already-resolved config and
-/// account, then opens the JMAP client and fetches its session. Bails
-/// when the account has no `[jmap]` block.
+/// Opens the JMAP client, fetches its session and merges the [`Account`].
+///
+/// Bails when the account declares no `[jmap]` block.
 pub fn build_jmap_client(
     config: Config,
     name: String,

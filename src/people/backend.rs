@@ -1,13 +1,14 @@
-//! Google People arm of the shared-API client: thin glue mapping the
-//! shared addressbook and card operations onto
-//! [`io_people::v1::client::PeopleClientStd`] calls, projecting
-//! People persons onto vCard documents (see [`crate::people::project`]).
+//! # Google People backend
 //!
-//! Contact groups are the addressbooks: the myContacts system group
-//! (the group every contact belongs to) is surfaced first as Contacts,
-//! then the user's own groups. Memberships are m:n labels, so one card
-//! can appear under several books; the shared API narrows each listing
-//! to the requested group.
+//! The People arm of the shared-API client: thin glue mapping the shared
+//! addressbook and card operations onto
+//! [`io_people::v1::client::PeopleClientStd`] calls, projecting persons
+//! onto vCard documents (see [`crate::people::project`]).
+//!
+//! Contact groups are the addressbooks: the myContacts system group, the
+//! one every contact belongs to, comes first as Contacts, then the
+//! user's own groups. Memberships are m:n labels, so one card can appear
+//! under several books and each listing is narrowed to its group.
 
 use anyhow::{Error, Result, bail};
 use io_people::v1::{
@@ -31,8 +32,7 @@ use crate::{
     },
 };
 
-/// Contact group id of the myContacts system group, the container
-/// every Google contact belongs to.
+/// Contact group id of myContacts, the group every contact belongs to.
 pub const MY_CONTACTS_GROUP: &str = "myContacts";
 
 /// Google People backend of the shared-API client.
@@ -51,9 +51,10 @@ impl PeopleBackend {
         Ok(Self { inner })
     }
 
-    /// Lists the account's contact groups as addressbooks: the
-    /// myContacts system group first (as Contacts), then the user's own
-    /// groups.
+    /// Lists the account's contact groups as addressbooks.
+    ///
+    /// The myContacts system group comes first, as Contacts, then the
+    /// user's own groups.
     pub fn list_addressbooks(&mut self) -> Result<Vec<Addressbook>> {
         let mut books = Vec::new();
         let mut page_token: Option<String> = None;
@@ -76,8 +77,8 @@ impl PeopleBackend {
                 }
 
                 // NOTE: of the system groups, only myContacts is a
-                // container (starred, blocked and friends-style legacy
-                // groups are not addressbooks).
+                // container: starred, blocked and the legacy ones are
+                // not addressbooks.
                 if id == MY_CONTACTS_GROUP {
                     books.insert(
                         0,
@@ -111,8 +112,9 @@ impl PeopleBackend {
         Ok(books)
     }
 
-    /// Creates a user contact group named `name`. Groups carry no
-    /// description nor color, so passing either bails.
+    /// Creates a user contact group named `name`.
+    ///
+    /// Groups carry no description nor color, so passing either bails.
     pub fn create_addressbook(
         &mut self,
         name: &str,
@@ -132,9 +134,10 @@ impl PeopleBackend {
         Ok(group_id(&created.resource_name).to_string())
     }
 
-    /// Renames the user contact group identified by `id`. Groups carry
-    /// no description nor color, so patching either bails. The update
-    /// is guarded by the group's current etag, fetched first.
+    /// Renames the user contact group identified by `id`.
+    ///
+    /// Groups carry no description nor color, so patching either bails.
+    /// The update is guarded by the group's current etag, fetched first.
     pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
         if patch.description.is_some() || patch.color.is_some() {
             bail!("Google contact groups support neither description nor color");
@@ -164,8 +167,9 @@ impl PeopleBackend {
         Ok(())
     }
 
-    /// Deletes the user contact group identified by `id`; its contacts
-    /// stay in myContacts.
+    /// Deletes the user contact group identified by `id`.
+    ///
+    /// Its contacts stay in myContacts.
     pub fn delete_addressbook(&mut self, id: &str) -> Result<()> {
         if id == MY_CONTACTS_GROUP {
             bail!("The Contacts system group cannot be deleted");
@@ -176,8 +180,7 @@ impl PeopleBackend {
         Ok(())
     }
 
-    /// Lists the contacts of the group, each projected onto a vCard
-    /// document, applying 1-indexed pagination.
+    /// Lists the contacts of the group, each projected onto a vCard.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
@@ -225,9 +228,10 @@ impl PeopleBackend {
         Ok(into_card(addressbook_id, person))
     }
 
-    /// Creates the vCard as a People contact; creates always land in
-    /// myContacts, so a user group target adds the membership right
-    /// after. Returns the server-assigned id.
+    /// Creates the vCard as a People contact, returning its new id.
+    ///
+    /// Creates always land in myContacts, so a user group target adds
+    /// the membership right after.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let vcard = into_vcard_text(contents)?;
         let person = project::to_person(&vcard).map_err(Error::msg)?;
@@ -259,17 +263,11 @@ impl PeopleBackend {
         Ok(id)
     }
 
-    /// Updates the contact `card_id` from the vCard. The current server
-    /// person serves as delta base, so the update mask shrinks to the
-    /// changed fields. People requires the person's current etag on
-    /// updates; `if_match` supplies it, otherwise the fetched one is
-    /// used. A stash write (clientData in the mask) merges the server's
-    /// foreign clientData entries under the same guard.
+    /// Updates the contact `card_id` from the vCard.
     ///
-    /// Returns the properties the update dropped and Google kept: the
-    /// API refuses to empty `clientData`, so a stashed property can be
-    /// changed but never removed (verified down to a raw PATCH sending
-    /// an explicit empty list). The write itself lands either way.
+    /// The mask shrinks to the fields differing from the server person,
+    /// whose etag guards the write unless `if_match` gives one. The
+    /// returned properties are stash entries Google refuses to drop.
     pub fn update_card(
         &mut self,
         _addressbook_id: &str,
@@ -296,15 +294,13 @@ impl PeopleBackend {
 
         let fields = project::changed_fields(&person, &base_person);
         if fields.is_empty() {
-            // NOTE: nothing differs from the server state, no request
-            // to send.
             return Ok(outcome);
         }
 
         // NOTE: a masked update replaces the whole clientData list and
         // other clients may own entries there, so a stash write merges
-        // the server's foreign entries first (the etag guard turns a
-        // lost-update race into a clean rejection).
+        // the server's foreign entries first; the etag guard turns a
+        // lost-update race into a clean rejection.
         if fields.contains(&PeoplePersonField::ClientData) {
             let mut merged: Vec<_> = current
                 .client_data
@@ -349,9 +345,10 @@ fn in_group(person: &PeoplePerson, id: &str) -> bool {
         .any(|group| group == id)
 }
 
-/// io-people person to the shared card shape: the projected
-/// vCard document as contents, the person id as id and the person etag
-/// as ETag.
+/// The io-people person as a shared card.
+///
+/// The projected vCard document is the contents, the person id the id
+/// and the person etag the ETag.
 fn into_card(addressbook_id: &str, person: PeoplePerson) -> Card {
     let vcard = project::to_vcard(&person);
     let etag = (!person.etag.is_empty()).then(|| person.etag.clone());

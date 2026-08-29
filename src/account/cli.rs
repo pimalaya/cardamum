@@ -1,3 +1,8 @@
+//! # Account commands
+//!
+//! Dispatches the account subcommands, which read the configuration
+//! rather than an already built client.
+
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -11,9 +16,8 @@ use crate::{
 
 /// Manage accounts defined in the TOML configuration file.
 ///
-/// An account is a named group of backend settings (vdir, carddav,
-/// jmap, msgraph, people). Use these subcommands to inspect them or
-/// validate their connection. To create a new account, run bare
+/// An account is a named group of backend settings, which these
+/// subcommands inspect or validate. To create a new one, run bare
 /// `cardamum`.
 #[derive(Debug, Subcommand)]
 pub enum AccountCommand {

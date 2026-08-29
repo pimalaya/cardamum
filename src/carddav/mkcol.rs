@@ -1,3 +1,7 @@
+//! # MKCOL command
+//!
+//! Creates an addressbook collection with an RFC 5689 extended `MKCOL`.
+
 use std::collections::BTreeSet;
 
 use anyhow::Result;
@@ -7,8 +11,7 @@ use pimalaya_cli::printer::{Message, Printer};
 
 use crate::carddav::client::CarddavClient;
 
-/// MKCOL: create an addressbook collection on the server (RFC 5689
-/// extended MKCOL).
+/// MKCOL: create an addressbook collection (RFC 5689 extended MKCOL).
 ///
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]

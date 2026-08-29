@@ -1,3 +1,7 @@
+//! # Card delete command
+//!
+//! Permanently deletes a card from an addressbook.
+
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
@@ -9,10 +13,13 @@ use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]
 pub struct CardDeleteCommand {
+    /// Addressbook holding the card.
     #[command(flatten)]
     pub addressbook: AddressbookIdArg,
-    /// Card identifier, as `card list` reports it. It is the backend's own
-    /// id, not the vCard `UID`, which names no card on its own.
+    /// Card to delete, as `card list` reports it.
+    ///
+    /// This is the backend's own id, not the vCard `UID`, which names no
+    /// card on its own.
     #[arg(value_name = "CARD-ID")]
     pub card_id: String,
 }

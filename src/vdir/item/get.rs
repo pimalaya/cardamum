@@ -1,3 +1,7 @@
+//! # Item get command
+//!
+//! Reads one item and prints its bytes as they are stored.
+
 use core::fmt;
 
 use anyhow::Result;
@@ -36,6 +40,7 @@ impl VdirItemGetCommand {
     }
 }
 
+/// One fetched item: its id, its kind and its raw contents.
 #[derive(Clone, Debug, Serialize)]
 pub struct Item {
     pub id: String,

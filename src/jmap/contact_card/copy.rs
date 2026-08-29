@@ -1,3 +1,7 @@
+//! # ContactCard copy command
+//!
+//! Copies ContactCards from another account of the same JMAP server.
+
 use std::collections::BTreeMap;
 
 use anyhow::{Result, bail};
@@ -7,8 +11,10 @@ use pimalaya_cli::printer::{Message, Printer};
 
 use crate::jmap::{client::JmapClient, error::format_set_error};
 
-/// Copy ContactCards from another JMAP account into AddressBooks of
-/// this one (`ContactCard/copy`).
+/// Copy ContactCards from another JMAP account (`ContactCard/copy`).
+///
+/// The cards land in the AddressBooks of this account that
+/// `--to-address-book` names.
 ///
 /// JSON output: `{"message": "..."}`.
 #[derive(Debug, Parser)]

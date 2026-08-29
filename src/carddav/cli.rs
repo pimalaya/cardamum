@@ -1,3 +1,8 @@
+//! # CardDAV command
+//!
+//! Dispatches the CardDAV-specific subcommands against the connected
+//! client.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
@@ -10,11 +15,11 @@ use crate::carddav::{
 
 /// CardDAV-specific API.
 ///
-/// A flat list of WebDAV / CardDAV methods (RFC 4918 / 5689 / 6352 /
+/// A flat list of WebDAV and CardDAV methods (RFC 4918, 5689, 6352,
 /// 6578) run directly against the active account's endpoint, plus the
 /// discovery chain. Each command is named after its protocol
-/// counterpart and surfaces the native ids, ETags, CTags and
-/// sync-tokens the shared `addressbook` / `card` API hides.
+/// counterpart and surfaces the native ids, ETags, CTags and sync
+/// tokens the shared `addressbook` and `card` API hides.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum CarddavCommand {

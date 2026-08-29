@@ -1,8 +1,8 @@
-//! JMAP arm of the shared-API client: thin glue mapping the shared
-//! addressbook and card operations onto
-//! [`io_jmap::client::JmapClientStd`] calls (RFC 9610), converting
-//! ContactCards to vCard documents through vcard-rs's JSContact codec
-//! (see [`crate::jmap::project`]).
+//! # JMAP backend
+//!
+//! The JMAP arm of the shared-API client: maps the shared addressbook
+//! and card operations onto io-jmap calls (RFC 9610), converting
+//! ContactCards to vCard documents through [`project`].
 //!
 //! JMAP AddressBooks are the addressbooks; ContactCards are
 //! account-level with m:n memberships, so each listing queries the
@@ -45,15 +45,13 @@ use crate::{
     },
 };
 
-/// JMAP backend of the shared-API client, wrapping a connected
-/// io-jmap client with its session discovered.
+/// The shared-API backend, over an io-jmap client with a live session.
 pub struct JmapBackend {
     pub inner: JmapClientStd,
 }
 
 impl JmapBackend {
-    /// Establishes the JMAP session (TLS, `/.well-known/jmap`
-    /// discovery) from the account's `[jmap]` block.
+    /// Establishes the JMAP session from the account's `[jmap]` block.
     pub fn new(config: JmapConfig) -> Result<Self> {
         let tls = config.tls.into_tls(config.alpn);
         let http_auth = jmap_http_auth(config.auth)?;
@@ -78,8 +76,9 @@ impl JmapBackend {
             .collect())
     }
 
-    /// Creates an AddressBook named `name`. JMAP AddressBooks carry no
-    /// color, so passing one bails. Returns the server-assigned id.
+    /// Creates an AddressBook and returns its server-assigned id.
+    ///
+    /// JMAP AddressBooks carry no color, so passing one bails.
     pub fn create_addressbook(
         &mut self,
         name: &str,
@@ -115,8 +114,9 @@ impl JmapBackend {
             .ok_or_else(|| anyhow!("JMAP create response is missing the AddressBook id"))
     }
 
-    /// Applies `patch` to the AddressBook identified by `id`. JMAP
-    /// AddressBooks carry no color, so patching one bails.
+    /// Applies `patch` to the AddressBook identified by `id`.
+    ///
+    /// JMAP AddressBooks carry no color, so patching one bails.
     pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
         if patch.color.is_some() {
             bail!("JMAP AddressBooks do not support color");
@@ -143,8 +143,7 @@ impl JmapBackend {
         Ok(())
     }
 
-    /// Destroys the AddressBook identified by `id` along with the
-    /// ContactCards it exclusively contains (RFC 9610 §2.3).
+    /// Destroys the AddressBook with its exclusive cards (RFC 9610 §2.3).
     pub fn delete_addressbook(&mut self, id: &str) -> Result<()> {
         let args = JmapAddressBookSetArgs {
             destroy: Some(vec![id.to_string()]),
@@ -163,8 +162,7 @@ impl JmapBackend {
         Ok(())
     }
 
-    /// Lists the ContactCards of the AddressBook, each converted to a
-    /// vCard document, applying 1-indexed pagination.
+    /// Lists the AddressBook's cards as vCard documents, 1-indexed pages.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
@@ -207,8 +205,7 @@ impl JmapBackend {
         project::to_card(addressbook_id, card).map_err(Error::msg)
     }
 
-    /// Creates the vCard as a ContactCard in the AddressBook. The
-    /// server names the card, so the returned id is server-assigned.
+    /// Creates the vCard as a ContactCard, returning the id the server minted.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let vcard = into_vcard_text(contents)?;
         let card = project::to_jscontact(&vcard).map_err(Error::msg)?;
@@ -239,11 +236,12 @@ impl JmapBackend {
             .ok_or_else(|| anyhow!("JMAP create response is missing the card id"))
     }
 
-    /// Updates the ContactCard `card_id` from the vCard. The current
-    /// server card serves as patch base, so the patch shrinks to the
-    /// changed properties, plus nulls for the removed ones. JMAP has
-    /// no If-Match guard (updates are last-write-wins), so passing one
-    /// bails instead of pretending to honor it.
+    /// Updates the ContactCard `card_id` from the vCard.
+    ///
+    /// The current server card serves as patch base, so the patch
+    /// shrinks to the changed properties, plus nulls for the removed
+    /// ones. JMAP has no If-Match guard (updates are last-write-wins),
+    /// so passing one bails instead of pretending to honor it.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
@@ -295,8 +293,7 @@ impl JmapBackend {
     }
 }
 
-/// Converts a [`JmapAuthConfig`] into the pre-formatted HTTP
-/// `Authorization` header value [`JmapClientStd::connect`] expects.
+/// Renders a [`JmapAuthConfig`] as the `Authorization` header value.
 pub fn jmap_http_auth(config: JmapAuthConfig) -> Result<SecretString> {
     match config {
         JmapAuthConfig::Header(header) => Ok(header.get()?),
@@ -312,8 +309,7 @@ pub fn jmap_http_auth(config: JmapAuthConfig) -> Result<SecretString> {
     }
 }
 
-/// Maps a JMAP [`JmapAddressBook`] to the shared shape: the name falls
-/// back to the id.
+/// Maps a [`JmapAddressBook`] to the shared shape, id as name fallback.
 fn into_addressbook(book: JmapAddressBook) -> Addressbook {
     let id = book.id.unwrap_or_default();
     let name = book.name.filter(|name| !name.is_empty());
@@ -331,8 +327,9 @@ fn into_vcard_text(contents: Vec<u8>) -> Result<String> {
     String::from_utf8(contents).map_err(|_| anyhow::anyhow!("Card contents are not valid UTF-8"))
 }
 
-/// The vCard property names carried by a JSContact `vCardProps` member,
-/// which holds each unmappable property in jCard syntax (RFC 9555
+/// The vCard property names carried by a JSContact `vCardProps` member.
+///
+/// That member holds each unmappable property in jCard syntax (RFC 9555
 /// §2.15), the name being the first element of its array.
 fn unmapped_properties(vcard_props: Option<&Value>) -> Vec<String> {
     let Some(Value::Array(props)) = vcard_props else {
@@ -346,8 +343,7 @@ fn unmapped_properties(vcard_props: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
-/// A rejected card write, rendered as prose, naming the properties
-/// behind a `vCardProps` rejection.
+/// A rejected card write, rendered as prose.
 ///
 /// A vCard property JSContact cannot model travels in the standard
 /// `vCardProps` member, which some servers (Fastmail) refuse outright,

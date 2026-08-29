@@ -1,3 +1,7 @@
+//! # Profile commands
+//!
+//! Dispatches the profile subtree.
+
 use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;

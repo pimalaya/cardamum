@@ -1,3 +1,8 @@
+//! # Sync report command
+//!
+//! Runs the RFC 6578 `sync-collection` REPORT and renders the changed
+//! and vanished hrefs.
+
 use std::fmt;
 
 use anyhow::Result;
@@ -11,11 +16,11 @@ use serde::Serialize;
 
 use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
 
-/// `sync-collection` REPORT: the incremental changes since a sync-token
-/// (RFC 6578). Omit `--sync-token` for an initial sync; feed the
-/// returned token back to the next call. Bodies are not fetched
-/// (getetag only): pair with `report multiget` to pull the changed
-/// cards.
+/// Report the changes since a sync token (RFC 6578).
+///
+/// Omit `--sync-token` for an initial sync, then feed the returned
+/// token back to the next call. Only ETags are fetched, so pair with
+/// `report multiget` to pull the changed cards.
 ///
 /// JSON output: `{"changed": [{"href", "etag"}], "vanished": [...],
 /// "sync_token", "truncated"}`.
@@ -27,9 +32,11 @@ pub struct CarddavReportSyncCommand {
     /// Sync token from a previous sync; omit for an initial sync.
     #[arg(long, value_name = "TOKEN")]
     pub sync_token: Option<String>,
-    /// Enumerate with a Depth 1 PROPFIND instead of the REPORT, for a
-    /// server implementing no `sync-collection`. It lists every member and
-    /// returns no token, so the result is a full snapshot to diff.
+    /// Enumerate with a Depth 1 PROPFIND instead of the REPORT.
+    ///
+    /// For a server implementing no `sync-collection`: it lists every
+    /// member and returns no token, so the result is a full snapshot to
+    /// diff.
     #[arg(long)]
     pub fallback: bool,
 }
@@ -46,6 +53,7 @@ impl CarddavReportSyncCommand {
     }
 }
 
+/// Changes a `sync-collection` REPORT reported for one addressbook.
 #[derive(Clone, Debug, Serialize)]
 pub struct SyncReport {
     #[serde(skip)]
@@ -56,6 +64,7 @@ pub struct SyncReport {
     pub truncated: bool,
 }
 
+/// One created or updated resource: its href and ETag.
 #[derive(Clone, Debug, Serialize)]
 pub struct ChangeRow {
     pub href: String,

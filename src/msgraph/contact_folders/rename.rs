@@ -1,3 +1,7 @@
+//! # Folder rename command
+//!
+//! Patches the display name of a contact folder.
+
 use anyhow::Result;
 use clap::Parser;
 use io_msgraph::v1::rest::users::contact_folders::MsgraphContactFolder;

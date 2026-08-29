@@ -13,56 +13,59 @@
 //!
 //! The command tree splits in three. The shared API (`addressbook`,
 //! `card`) is the cross-protocol least-common-denominator surface,
-//! behaving the same whatever backend serves the account. The
-//! protocol-specific APIs (`carddav`, `jmap`, `msgraph`, `people`,
-//! `vdir`) each expose the full surface of one backend, including the
-//! operations the shared API cannot model. The meta commands
-//! (`configure`, `account`, `completions`, `manuals`) cover account
-//! generation, inspection and the generated files. pimdir has no
-//! protocol-specific surface by design: it is a store rather than a
-//! protocol, and its operator commands ship as the separate pimdir
-//! binary.
+//! behaving the same whatever backend serves the account.
+//!
+//! The protocol-specific APIs (`carddav`, `jmap`, `msgraph`, `people`,
+//! `vdir`) each expose the full surface of one backend, including what
+//! the shared API cannot model. The meta commands (`configure`,
+//! `account`, `completions`, `manuals`) cover the rest.
+//!
+//! pimdir has no protocol-specific surface by design: it is a store
+//! rather than a protocol, and its operator commands ship as the
+//! separate pimdir binary.
 //!
 //! The shared commands run over [`shared::client`]'s
-//! `AddressbookClient`, which owns one `BackendClient` variant per
-//! compiled-in backend. The global `--backend` flag ([`backend`]) picks
-//! it: `auto` takes the first configured backend in priority order, a
-//! named value pins that one and bails when the account declares no
-//! matching block. Each shared method matches the active backend and
-//! calls its per-protocol backend.rs adapter, which maps the shared
+//! `AddressbookClient`, one `BackendClient` variant per compiled-in
+//! backend. The global `--backend` flag ([`backend`]) picks it: `auto`
+//! takes the first configured one, a named value bails without it.
+//!
+//! Each shared method matches the active backend and calls its
+//! per-protocol backend.rs adapter, which maps the shared
 //! [`shared::addressbook`] and [`shared::card`] types onto that protocol
 //! crate's client.
 //!
 //! The backends: carddav over io-webdav, jmap over io-jmap, msgraph over
 //! io-msgraph, people over io-people, vdir over io-vdir and pimdir over
-//! io-pimdir, each behind its own cargo feature. The cross-backend layer
-//! is owned here rather than by a per-domain aggregator crate, per the
-//! org's aggregator-retirement decision: the interface aggregates, the
-//! protocol crates stay leaf libraries, and a partial-coverage concept
-//! lives in a protocol-specific command instead of being ejected from an
-//! ownerless shared API.
+//! io-pimdir, each behind its own cargo feature.
 //!
-//! CardDAV, vdir and pimdir speak vCard natively; JMAP, Graph and People
-//! do not. For those three, the shared card contents is a vCard this
-//! crate synthesizes and re-projects on the way back
-//! ([`project`] and the per-backend project.rs): JMAP converts through
-//! vcard-rs's JSContact codec, Graph and People project field by field
-//! with a provider-side stash for the properties that have no slot. The
-//! modules are ported from cardamum-android, so both products treat the
-//! same quirks identically.
+//! The cross-backend layer is owned here, not by a per-domain
+//! aggregator crate, per the org's aggregator-retirement decision: the
+//! interface aggregates, the protocol crates stay leaf libraries, and a
+//! partial concept lives in a protocol command, not an ownerless API.
+//!
+//! CardDAV, vdir and pimdir speak vCard natively, JMAP, Graph and People
+//! do not. For those three the shared card contents is a vCard this
+//! crate synthesizes and re-projects on the way back, in [`project`] and
+//! the per-backend project.rs.
+//!
+//! JMAP converts through vcard-rs's JSContact codec, Graph and People
+//! project field by field with a provider-side stash for the properties
+//! that have no slot. Those modules are ported from cardamum-android, so
+//! both products treat the same quirks identically.
 //!
 //! The [`wizard`]: one prompt takes an email address, a server URL or a
-//! folder path, io-pim-discovery turns it into the services reachable
-//! from it, and the module of the chosen backend prompts its credential.
-//! What is then done with the account, a file to create, a block to
-//! append or a document on stdout, is configure's.
+//! folder path, io-pim-discovery turns it into the reachable services,
+//! and the chosen backend's module prompts its credential. A file, an
+//! appended block or a document on stdout is then configure's call.
 //!
 //! Output follows the Pimalaya rule: data and errors go to stdout
-//! through the printer (`--json` switches every command to JSON), stderr
-//! carries logs only. Each command's doc comment is its `--help` text
-//! and ends with its JSON output shape, so `cardamum <command> --help`
-//! is the canonical per-command reference. The behavioural truth behind
-//! this header lives under cairn/spec, one file per capability.
+//! through the printer, `--json` switching every command to JSON, and
+//! stderr carries logs only.
+//!
+//! Each command's doc comment is its `--help` text and ends with its
+//! JSON output shape, so `cardamum <command> --help` is the canonical
+//! per-command reference. The behavioural truth behind this header lives
+//! under cairn/spec, one file per capability.
 
 mod account;
 mod backend;
@@ -119,12 +122,10 @@ fn execute(cli: Cli, printer: &mut StdoutPrinter) -> Result<()> {
 
 /// Meets a bare `cardamum`, which is where a newcomer lands.
 ///
-/// A missing configuration raises the offer, and everything else gets
-/// the help: an existing configuration, a script, a JSON caller, and
-/// `--account`, which names an account to act on and so reads as a
-/// half-typed command rather than a first run. A file that exists but
-/// fails to parse counts as a configuration, so the offer never proposes
-/// to write over a broken one.
+/// A missing configuration raises the offer, everything else gets the
+/// help: a script, a JSON caller, `--account`, which reads as a
+/// half-typed command, and a file that fails to parse, which counts as a
+/// configuration so the offer never writes over a broken one.
 fn meet_bare_invocation(
     printer: &mut StdoutPrinter,
     config_paths: &[PathBuf],

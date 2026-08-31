@@ -1,0 +1,49 @@
+---
+cairn: log
+change: card-composer
+landed: 2026-08-31
+---
+
+# A card is written from flags and refined in a command of your choosing
+
+Cardamum could read a vCard and write a vCard, and had no way to make one. It now builds one from flags and hands it to a command the configuration names, which is the composer Himalaya reverted in [662bd26](https://github.com/pimalaya/himalaya/commit/662bd26), taken again with the one thing that commit message identified and did not do.
+
+**The handoff is a file, not a pipe** (shared/card/composer.rs): cardamum writes the vCard to `$TMPDIR/cardamum-<uuid>.vcf`, spawns the command on that path with stdin, stdout and stderr all inherited, and reads the file back when the command exits. Himalaya captured the composer's stdout, so a composer spawning `$EDITOR` handed it a pipe instead of the terminal and the editor either hung or wrote where nothing read. Capturing nothing removes the whole class of failure, and it is why the three `Stdio::inherit()` calls are written out rather than left to the default.
+
+The path is appended as the last argument. An argv command takes it through `Command::arg`; a shell line takes it interpolated into the line, single-quoted, because `sh -c <line> <path>` binds the path to `$0` and never passes it on. That trap is the one implementation detail worth remembering here.
+
+**`card.composer`** (config.rs, account/context.rs) is a pimalaya-config `CommandConfig` at the top level and per account, so `composer = "tcard edit"` and `composer = ["tcard", "edit", "-V", "3.0"]` both work, and a work account can be edited with something else. `--composer <COMMAND>` overrides it for one invocation.
+
+**One pipeline, on the two verbs that already write** (shared/card/create.rs, update.rs). `card create` and `card update` each take a vCard source, the field flags and `-i/--interactive`, applied in that order: the source is the card to start from, the flags set the properties they name on it, and `-i` opens the result in the composer. Both positionals became optional, and every combination falls out of that one pipeline.
+
+A first draft of this change put the flags on a third verb, `card compose`, mirroring Himalaya's `message compose`, with the composer running by default and a `--no-composer` to turn it off. Folding it into `create` and `update` is smaller in every dimension: one verb fewer, one flag fewer, and no rule about which of the three verbs a given combination belongs to. Making the composer opt-in through `-i` is what removed `--no-composer` along with the caveat that a script silently stops being non-interactive the day someone configures a composer.
+
+**A create with no source mints its card** (shared/card/vcard.rs), carrying a `UID` and a `VERSION` and no more. Handing a composer an empty file was tried and does not hold: tCard seeds an identity for a blank template but preserves what a file already holds, so an empty file comes back as a card with neither `UID` nor `VERSION`, and the pimdir link id derives from that `UID`. Seeding the identity and letting the composer fill the rest is the only shape that works for every composer, and it is what makes `--vcard-version` mean something on every invocation.
+
+**An update with no source starts from the stored card** and sends the ETag it read as `If-Match`. `update` had no base to guard against, so an edit taking a minute could silently overwrite a write that landed in that minute. `--if-match` still wins, and a source given on the command line is a rewrite that was asked for and carries no guard of its own.
+
+**A flag sets its property** (shared/card/fields.rs): every instance the card carried is dropped and the flag's own is written, a repeated flag writing one instance per value, and every other line keeps the card's own bytes. That is a real edge worth stating, since `--email` on a card holding three addresses leaves one. Adding rather than setting is what the composer is for.
+
+`N` is the exception, being one property holding several names. `--given-name` and `--family-name` are read against the card's existing `N` and merged into it, because silently clearing someone's given name while setting their family name is not an edge, it is a bug. The other three components are carried through untouched. Both repeat, each component of `N` being a comma-separated list per RFC 6350 section 6.2.2, and both are named for the role rather than the position: which of the two is written first is what varies between cultures.
+
+**The composer hands back to a menu, not to a write.** When the editor closes, the reader is asked what to do with the card: `Save`, `Preview`, `Edit again` or `Abort`. Previewing prints the vCard and asks again, so the decision is taken in one place however many times it is deferred. A non-zero exit and an emptied file abandon the edit without asking, both being a person who has already said no.
+
+**What the composer wrote is checked before the menu** (shared/card/vcard.rs), through vcard-rs's validator rather than a look at the first line. A card that does not pass has its violations printed and offers to re-open the editor, so `Save` is offered only for a card that would be accepted. That caught a real bug: `card create --given-name Jane --family-name Doe` used to create a card with no `FN`, which 3.0 and 4.0 both require, and which `card list` renders as a blank name. The same check refuses a card built from flags with no source; a vCard given on the command line goes through as written, which is the promise the specific commands already make.
+
+Saving an unchanged card is allowed: choosing `Save` is an explicit decision, and the earlier byte comparison against the seed second-guessed it. That comparison is gone from both verbs, which is a simplification the menu paid for.
+
+**The connection is opened by the call that needs it** (shared/client.rs). `AddressbookClient` now selects a `BackendConfig` without connecting and opens on first use, which is a bug fix rather than an optimization: `WebdavClientStd` owns one stream, opened when the client is built and discovery runs, and a server closes it while an editor is up. A create landing after a long edit read the end of a dead socket and reported `unexpected end of file` for a card that was perfectly good, keeping the draft and failing. `card create -i` now connects for the first time when it creates, after the editor and after the menu. `card update -i` has to read the card before the editor, so it drops that connection before spawning the composer and the write opens a fresh one.
+
+**Nothing typed is lost** (`CardDraft`): the temporary file outlives the composer and the caller settles it with `finish`, which drops it on a write that landed and keeps it, naming the path in the error, on one that did not. Aborting keeps it too, unless the composer handed back the seed untouched, since a card nobody worked on is nothing to lose and removing it keeps the temporary directory clear of every abandoned run.
+
+Both verbs answer an untagged output over the write and the abandoned edit, so `{"id"}` and `{"id", "keptProperties"}` serialize exactly as before. The second shape is reachable through `-i` alone, which `--json` refuses to run, so no consumer meets it.
+
+**vcard-rs and getrandom are unconditional now** (Cargo.toml). Cardamum needed a real vCard writer, and hand-rolling one gets RFC 6350 section 3.4 escaping or 75-octet folding wrong in the way that silently corrupts a name holding a comma. vcard-rs was already in the tree for three backends. The UUIDv4 generator moved out of the CardDAV backend into shared/uuid.rs, now that a minted `UID` needs one too. `VcardArg` is gone, its two users taking a plain positional over the shared `read_source`.
+
+**Two repairs the build uncovered**, both older than this change and both in the working tree rather than in a release: Cargo.lock still pinned the git sources and vcard-rs 0.2.1 while Cargo.toml already asked for the published io-pimdir 0.4, io-replica 0.5, io-webdav 0.3 and vcard-rs 0.3, so the manifest and the lock could not both be satisfied. Refreshing the lock surfaced 27 errors in msgraph/project.rs and people/project.rs, where the property markers still lived at `vcard::tree::prop::<name>` and 0.3 moved them to `vcard::prop::<name>`. `VcardPropLens` stays in `tree`, being the read side.
+
+Both card variants are boxed: clap accepts `Box<T>` in a subcommand variant, and the flag-rich structs trip `large_enum_variant` on this enum and on the top-level one.
+
+Verified: 70 unit tests green with every feature, seven of them new over the flag application (replacement, byte-preserved neighbours, the `N` merge, escaping, an untyped flag); `clippy --all-targets` warning-free on the full set and on each backend alone; and the full round trip against a vdir store with the real tCard binary as the composer, creating from flags, creating through the composer, updating by flag with the `N` merge landing correctly, and updating with a flag and the composer in one write. The refusals were exercised too: no source and no flag and no `-i`, a non-zero composer, a composer leaving the card untouched on both verbs, one writing something that is not a vCard, `-i` with no composer configured, `--composer` without `-i`, and `--json` refusing to spawn.
+
+Spec updated: `commands` (ADDED: "A card is edited through a command, never through a pipe", "The composer hands back to a menu, not to a write", "An edit is never lost", "A composer is not spawned under --json", "A source, the field flags and the composer stack", "A minted card carries an identity", "The field flags are a convenience, not the surface", "A field flag sets its property and touches nothing else", "An update guards on the version it read"), `config` (ADDED: "The composer is a command, not a library"), `backends` (ADDED: "The connection is opened by the call that needs it").

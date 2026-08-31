@@ -38,3 +38,8 @@ A configuration field naming a filesystem path SHALL expand `~` and environment 
 
 ### Requirement: Table rendering is configurable
 The `table.preset` option SHALL accept a `comfy-table` v7 positional preset string, one character per component, mapped onto the v8 typed style builder by [shared/table.rs](../../src/shared/table.rs). Keeping the v7 spelling means an existing configuration stays valid across the v8 upgrade. A character position left out, or set to a space, draws nothing.
+
+### Requirement: The composer is a command, not a library
+`card.composer` SHALL name a command, at the top level and per account, rather than cardamum linking one editor in. What crosses the boundary is a path to a file holding vCard bytes, so the value can be tCard today and a graphical editor tomorrow, and cardamum learns no projection, no TOML and no editor.
+
+It SHALL be a pimalaya-config `CommandConfig`, taking the shell line and the argv list every other command field takes. The command must block until the edit is done, which the documentation SHALL say, since a graphical editor returning immediately is the way this fails in practice.

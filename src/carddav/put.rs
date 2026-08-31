@@ -7,7 +7,7 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
 
-use crate::{carddav::client::CarddavClient, shared::card::vcard::VcardArg};
+use crate::{carddav::client::CarddavClient, shared::card::vcard::read_source};
 
 /// PUT a card: create or replace its raw vCard bytes.
 ///
@@ -25,9 +25,10 @@ pub struct CarddavPutCommand {
     /// Card resource id (its href last path segment).
     #[arg(value_name = "CARD-ID")]
     pub card_id: String,
-    /// vCard written to the card resource.
-    #[command(flatten)]
-    pub vcard: VcardArg,
+    /// vCard written to the card resource: a path to a file, raw vCard
+    /// contents, or `-` for stdin.
+    #[arg(value_name = "VCARD")]
+    pub vcard: String,
     /// Gate the replace on the resource being unchanged (If-Match).
     #[arg(long, value_name = "ETAG", conflicts_with = "if_none_match")]
     pub if_match: Option<String>,
@@ -38,7 +39,7 @@ pub struct CarddavPutCommand {
 
 impl CarddavPutCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
-        let contents = self.vcard.read()?;
+        let contents = read_source(&self.vcard)?;
 
         let etag = if self.if_none_match.is_some() {
             client

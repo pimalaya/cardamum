@@ -29,7 +29,6 @@ use pimalaya_cli::table::ContentArrangement;
     feature = "people"
 ))]
 use pimalaya_config::secret::Secret;
-use pimalaya_config::toml::TomlConfig;
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -40,6 +39,7 @@ use pimalaya_config::toml::TomlConfig;
 use pimalaya_config::toml::shell_expanded_path;
 #[cfg(any(feature = "vdir", feature = "carddav", feature = "jmap"))]
 use pimalaya_config::toml::shell_expanded_string;
+use pimalaya_config::{command::CommandConfig, toml::TomlConfig};
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -493,10 +493,16 @@ pub struct AddressbookListTableConfig {
     pub color_color: Option<Color>,
 }
 
-/// Card-level rendering options.
+/// Card-level options.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CardConfig {
+    /// Command a card is edited through, spawned on the path of a
+    /// temporary vCard file it edits in place.
+    ///
+    /// A shell line or an argv list, the path appended as its last
+    /// argument: `composer = "tcard edit"` runs `tcard edit <PATH>`.
+    pub composer: Option<CommandConfig>,
     /// `card list` options.
     #[serde(default)]
     pub list: CardListConfig,

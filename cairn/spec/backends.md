@@ -86,3 +86,10 @@ The `[carddav]` block SHALL resolve the addressbook home set through one of thre
 
 ### Requirement: CardDAV probes a bare origin before walking
 Because PACC and RFC 6764 can hand back a bare origin rather than the real context root (Fastmail serves contacts under `/dav/` and 404s everything else), the `server` and `discover` routes SHALL probe `.well-known/carddav` and follow its redirect before the principal walk whenever the resolved path is `/`.
+
+### Requirement: The connection is opened by the call that needs it
+`AddressbookClient` SHALL select its backend from the configuration without connecting, and open the connection on the first call that needs one. A command that never reaches the network therefore never opens a socket, and a command that runs a composer holds none open while the editor is up.
+
+That last case is why the rule exists rather than being an optimization. A server closes an idle connection, and an editor session lasts minutes: a write landing after one reads the end of a socket whose far side is gone, and reports `unexpected end of file` for a card that is perfectly good. `card create -i` connects for the first time when it creates, after the editor and after the menu.
+
+A command that must read before the editor SHALL drop that connection before spawning the composer, so the write after it opens a fresh one. `card update -i` is the only such command: it reads the card to seed the editor with it.

@@ -24,8 +24,8 @@ pub enum CardCommand {
     List(CardListCommand),
     Read(CardReadCommand),
     #[command(visible_alias = "new")]
-    Create(CardCreateCommand),
-    Update(CardUpdateCommand),
+    Create(Box<CardCreateCommand>),
+    Update(Box<CardUpdateCommand>),
     #[command(visible_alias = "rm")]
     Delete(CardDeleteCommand),
 }

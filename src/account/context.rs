@@ -9,6 +9,7 @@
 use anyhow::{Result, bail};
 use crossterm::style::Color;
 use pimalaya_cli::table::{Color as TableColor, ContentArrangement};
+use pimalaya_config::command::CommandConfig;
 
 use crate::{
     config::{
@@ -33,6 +34,9 @@ pub struct Account {
     /// Fallback addressbook id for `card` commands when their
     /// `-k/--addressbook` flag is omitted.
     pub addressbook_default: Option<String>,
+    /// Command a card is edited through, spawned on the path of a
+    /// temporary vCard file.
+    pub card_composer: Option<CommandConfig>,
     /// Per-column color overrides for `addressbooks list`.
     pub addressbooks_list_table: AddressbookListTableConfig,
     /// Per-column color overrides for `cards list`.
@@ -49,6 +53,7 @@ impl Account {
             cards_list_page_size: other.cards_list_page_size.or(self.cards_list_page_size),
 
             addressbook_default: other.addressbook_default.or(self.addressbook_default),
+            card_composer: other.card_composer.or(self.card_composer),
 
             addressbooks_list_table: merge_addressbook_table(
                 self.addressbooks_list_table,
@@ -93,6 +98,25 @@ impl Account {
         }
 
         Ok(id)
+    }
+
+    /// Resolves the composer a card is edited through.
+    ///
+    /// The flag wins, taken as a shell line, then the `card.composer`
+    /// config, otherwise this bails naming both ways of setting one.
+    pub fn card_composer(&self, flag: Option<String>) -> Result<CommandConfig> {
+        if let Some(line) = flag {
+            return Ok(CommandConfig::Shell(line));
+        }
+
+        let Some(composer) = self.card_composer.clone() else {
+            bail!(
+                "No composer configured; set card.composer or pass --composer <COMMAND>, \
+                 which is spawned on the path of the vCard to edit"
+            )
+        };
+
+        Ok(composer)
     }
 }
 
@@ -145,6 +169,7 @@ impl From<Config> for Account {
             table_arrangement: config.table.arrangement,
             cards_list_page_size: config.card.list.page_size,
             addressbook_default: config.addressbook.default,
+            card_composer: config.card.composer,
             addressbooks_list_table: config.addressbook.list.table,
             cards_list_table: config.card.list.table,
         }
@@ -158,6 +183,7 @@ impl From<AccountConfig> for Account {
             table_arrangement: config.table.arrangement,
             cards_list_page_size: config.card.list.page_size,
             addressbook_default: config.addressbook.default,
+            card_composer: config.card.composer,
             addressbooks_list_table: config.addressbook.list.table,
             cards_list_table: config.card.list.table,
         }

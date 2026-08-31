@@ -8,6 +8,7 @@
 //! of each protocol module.
 
 use anyhow::{Result, bail};
+use log::debug;
 #[cfg(any(feature = "jmap", feature = "msgraph", feature = "people"))]
 use pimalaya_config::secret::SecretResolver;
 
@@ -25,10 +26,35 @@ use crate::{
 ///
 /// Bundles the active backend with the merged runtime [`Account`], which
 /// carries the defaults a command falls back to.
+///
+/// The connection is opened on the first call that needs it and can be
+/// dropped again with [`disconnect`](Self::disconnect). A command running
+/// a composer holds none open while the editor is up: a server closes an
+/// idle connection, and the write landing after a long edit would read
+/// the end of a socket nobody is on the other end of any more.
 pub struct AddressbookClient {
-    inner: BackendClient,
+    /// What it takes to open the backend, kept so it can be reopened.
+    config: BackendConfig,
+    /// The open backend, `None` until something needs it.
+    inner: Option<BackendClient>,
     /// Runtime account the commands read their defaults from.
     pub account: Account,
+}
+
+/// The configuration of the backend an [`AddressbookClient`] speaks to.
+enum BackendConfig {
+    #[cfg(feature = "vdir")]
+    Vdir(crate::config::VdirConfig),
+    #[cfg(feature = "pimdir")]
+    Pimdir(crate::config::PimdirConfig),
+    #[cfg(feature = "carddav")]
+    Carddav(Box<crate::config::CarddavConfig>),
+    #[cfg(feature = "jmap")]
+    Jmap(Box<crate::config::JmapConfig>),
+    #[cfg(feature = "msgraph")]
+    Msgraph(Box<crate::config::MsgraphConfig>),
+    #[cfg(feature = "people")]
+    People(Box<crate::config::PeopleConfig>),
 }
 
 /// The active backend of an [`AddressbookClient`].
@@ -48,25 +74,25 @@ enum BackendClient {
 }
 
 impl AddressbookClient {
-    /// Builds the client from the account configuration.
+    /// Selects the backend from the account configuration.
     ///
     /// The first configured backend that `backend` allows wins, and the
-    /// call bails when the account configures none of them.
+    /// call bails when the account configures none of them. Nothing is
+    /// connected here: the first call that needs the network opens it.
     pub fn new(
         config: Config,
         #[allow(unused_mut)] mut account_config: AccountConfig,
         backend: Backend,
     ) -> Result<Self> {
         #[allow(unused_mut)]
-        let mut inner: Option<BackendClient> = None;
+        let mut inner: Option<BackendConfig> = None;
 
         #[cfg(feature = "vdir")]
         if inner.is_none()
             && backend.allows_vdir()
             && let Some(vdir_config) = account_config.vdir.take()
         {
-            use crate::vdir::backend::VdirBackend;
-            inner = Some(BackendClient::Vdir(VdirBackend::new(vdir_config)));
+            inner = Some(BackendConfig::Vdir(vdir_config));
         }
 
         #[cfg(feature = "pimdir")]
@@ -74,9 +100,7 @@ impl AddressbookClient {
             && backend.allows_pimdir()
             && let Some(pimdir_config) = account_config.pimdir.take()
         {
-            use crate::pimdir::backend::PimdirBackend;
-            let client = PimdirBackend::new(pimdir_config)?;
-            inner = Some(BackendClient::Pimdir(Box::new(client)));
+            inner = Some(BackendConfig::Pimdir(pimdir_config));
         }
 
         #[cfg(feature = "carddav")]
@@ -84,9 +108,7 @@ impl AddressbookClient {
             && backend.allows_carddav()
             && let Some(carddav_config) = account_config.carddav.take()
         {
-            use crate::carddav::backend::CarddavBackend;
-            let client = CarddavBackend::new(carddav_config)?;
-            inner = Some(BackendClient::Carddav(Box::new(client)));
+            inner = Some(BackendConfig::Carddav(Box::new(carddav_config)));
         }
 
         #[cfg(feature = "jmap")]
@@ -94,9 +116,7 @@ impl AddressbookClient {
             && backend.allows_jmap()
             && let Some(jmap_config) = account_config.jmap.take()
         {
-            use crate::jmap::backend::JmapBackend;
-            let client = JmapBackend::new(jmap_config, &mut SecretResolver::new())?;
-            inner = Some(BackendClient::Jmap(Box::new(client)));
+            inner = Some(BackendConfig::Jmap(Box::new(jmap_config)));
         }
 
         #[cfg(feature = "msgraph")]
@@ -104,9 +124,7 @@ impl AddressbookClient {
             && backend.allows_msgraph()
             && let Some(msgraph_config) = account_config.msgraph.take()
         {
-            use crate::msgraph::backend::MsgraphBackend;
-            let client = MsgraphBackend::new(msgraph_config, &mut SecretResolver::new())?;
-            inner = Some(BackendClient::Msgraph(Box::new(client)));
+            inner = Some(BackendConfig::Msgraph(Box::new(msgraph_config)));
         }
 
         #[cfg(feature = "people")]
@@ -114,23 +132,93 @@ impl AddressbookClient {
             && backend.allows_people()
             && let Some(people_config) = account_config.people.take()
         {
-            use crate::people::backend::PeopleBackend;
-            let client = PeopleBackend::new(people_config, &mut SecretResolver::new())?;
-            inner = Some(BackendClient::People(Box::new(client)));
+            inner = Some(BackendConfig::People(Box::new(people_config)));
         }
 
-        let Some(inner) = inner else {
+        let Some(config_) = inner else {
             bail!("No backend matching `{backend}` is configured for this account");
         };
 
         let account = Account::from(config).merge(Account::from(account_config));
 
-        Ok(Self { inner, account })
+        Ok(Self {
+            config: config_,
+            inner: None,
+            account,
+        })
     }
 
+    /// Drops the connection, so the next call opens a fresh one.
+    ///
+    /// Called before a composer runs: an editor session lasts minutes,
+    /// and a server that closed the idle connection meanwhile would fail
+    /// the write that comes after it.
+    pub fn disconnect(&mut self) {
+        if self.inner.take().is_some() {
+            debug!("closing the backend connection");
+        }
+    }
+
+    /// The open backend, opening it when it is not.
+    fn open(&mut self) -> Result<&mut BackendClient> {
+        if self.inner.is_none() {
+            debug!("opening the backend connection");
+            self.inner = Some(self.config.open()?);
+        }
+
+        Ok(self.inner.as_mut().expect("just opened"))
+    }
+}
+
+impl BackendConfig {
+    /// Opens the backend this configuration describes.
+    fn open(&self) -> Result<BackendClient> {
+        match self {
+            #[cfg(feature = "vdir")]
+            Self::Vdir(config) => {
+                use crate::vdir::backend::VdirBackend;
+                Ok(BackendClient::Vdir(VdirBackend::new(config.clone())))
+            }
+            #[cfg(feature = "pimdir")]
+            Self::Pimdir(config) => {
+                use crate::pimdir::backend::PimdirBackend;
+                let client = PimdirBackend::new(config.clone())?;
+                Ok(BackendClient::Pimdir(Box::new(client)))
+            }
+            #[cfg(feature = "carddav")]
+            Self::Carddav(config) => {
+                use crate::carddav::backend::CarddavBackend;
+                let client = CarddavBackend::new(config.as_ref().clone())?;
+                Ok(BackendClient::Carddav(Box::new(client)))
+            }
+            #[cfg(feature = "jmap")]
+            Self::Jmap(config) => {
+                use crate::jmap::backend::JmapBackend;
+                let client = JmapBackend::new(config.as_ref().clone(), &mut SecretResolver::new())?;
+                Ok(BackendClient::Jmap(Box::new(client)))
+            }
+            #[cfg(feature = "msgraph")]
+            Self::Msgraph(config) => {
+                use crate::msgraph::backend::MsgraphBackend;
+                let client =
+                    MsgraphBackend::new(config.as_ref().clone(), &mut SecretResolver::new())?;
+                Ok(BackendClient::Msgraph(Box::new(client)))
+            }
+            #[cfg(feature = "people")]
+            Self::People(config) => {
+                use crate::people::backend::PeopleBackend;
+                let client =
+                    PeopleBackend::new(config.as_ref().clone(), &mut SecretResolver::new())?;
+                Ok(BackendClient::People(Box::new(client)))
+            }
+        }
+    }
+}
+
+impl AddressbookClient {
     /// Lists every addressbook available to the active account.
     pub fn list_addressbooks(&mut self) -> Result<Vec<Addressbook>> {
-        match &mut self.inner {
+        match self.open()? {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.list_addressbooks(),
             #[cfg(feature = "pimdir")]
@@ -153,7 +241,7 @@ impl AddressbookClient {
         description: Option<&str>,
         color: Option<&str>,
     ) -> Result<String> {
-        match &mut self.inner {
+        match self.open()? {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.create_addressbook(name, description, color),
             #[cfg(feature = "pimdir")]
@@ -171,7 +259,7 @@ impl AddressbookClient {
 
     /// Applies a partial update to the addressbook identified by `id`.
     pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
-        match &mut self.inner {
+        match self.open()? {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.update_addressbook(id, patch),
             #[cfg(feature = "pimdir")]
@@ -190,7 +278,7 @@ impl AddressbookClient {
     /// Deletes the addressbook identified by `id` and every card it
     /// exclusively contains.
     pub fn delete_addressbook(&mut self, id: &str) -> Result<()> {
-        match &mut self.inner {
+        match self.open()? {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.delete_addressbook(id),
             #[cfg(feature = "pimdir")]
@@ -216,7 +304,7 @@ impl AddressbookClient {
         page: Option<u32>,
         page_size: Option<u32>,
     ) -> Result<Vec<Card>> {
-        match &mut self.inner {
+        match self.open()? {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.list_cards(addressbook_id, page, page_size),
             #[cfg(feature = "pimdir")]
@@ -234,7 +322,7 @@ impl AddressbookClient {
 
     /// Fetches the card `card_id` from `addressbook_id`.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
-        match &mut self.inner {
+        match self.open()? {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.get_card(addressbook_id, card_id),
             #[cfg(feature = "pimdir")]
@@ -252,7 +340,7 @@ impl AddressbookClient {
 
     /// Appends a raw vCard and returns the id the backend assigned.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
-        match &mut self.inner {
+        match self.open()? {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.create_card(addressbook_id, contents),
             #[cfg(feature = "pimdir")]
@@ -280,7 +368,7 @@ impl AddressbookClient {
         contents: Vec<u8>,
         if_match: Option<&str>,
     ) -> Result<CardUpdateOutcome> {
-        match &mut self.inner {
+        match self.open()? {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => {
                 client.update_card(addressbook_id, card_id, contents, if_match)
@@ -310,7 +398,7 @@ impl AddressbookClient {
 
     /// Permanently deletes `card_id` from `addressbook_id`.
     pub fn delete_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<()> {
-        match &mut self.inner {
+        match self.open()? {
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.delete_card(addressbook_id, card_id),
             #[cfg(feature = "pimdir")]

@@ -32,6 +32,26 @@
 #table.arrangement = "dynamic-full-width"
 #table.arrangement = "disabled"
 
+# Command a card is edited through, spawned on the path of a temporary vCard
+# file it edits in place, with every stream inherited. `card create -i` and
+# `card update -i` both go through it, and `--composer <COMMAND>` overrides it
+# for one invocation.
+#
+# The path is appended as the last argument, so a shell line takes it there
+# too. The command must block until the edit is done: use `code --wait`, not
+# `code`.
+#
+# tCard (https://github.com/pimalaya/tcard) projects the card as a TOML form,
+# opens $VISUAL or $EDITOR on it and folds the edits back onto the card's own
+# bytes. It reads no configuration file of its own, so set $VISUAL or $EDITOR
+# in your shell. Its --version flag does not apply here: cardamum hands it a
+# card that already declares one, picked by `card create --vcard-version`.
+#card.composer = "tcard edit"
+#card.composer = ["tcard", "edit"]
+#
+# Any editor works, the card then being raw vCard rather than a form.
+#card.composer = "nvim"
+
 # Default page size for `card list`. The `-s/--page-size` flag wins when
 # passed, then this value, then the hard fallback of 25.
 #card.list.page-size = 50

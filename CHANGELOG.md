@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `card.composer`, at the top level and per account: the command a card is edited through.
+
+  It is spawned on the path of a temporary vCard file it edits in place, with stdin, stdout and stderr all inherited and nothing captured, so a terminal editor gets a real terminal. The path is appended as the last argument, so `card.composer = "tcard edit"` runs `tcard edit <PATH>`. Any command works as long as it blocks until the edit is done: use `code --wait`, not `code`.
+
+- Added `-i/--interactive` to `card create` and `card update`, which opens the card in that composer before writing it, and `--composer <COMMAND>` to override the configured one for a single invocation.
+
+  What the composer wrote is checked against its version's RFC contract first: a card that does not pass has its violations printed and offers a re-edit. Then a menu asks what to do with the card: `Save`, `Preview`, `Edit again` or `Abort`. Aborting keeps the file and names it unless nothing was typed. A card the composer left without a `BEGIN:VCARD` line is reported and the menu drops `Save`.
+
+  On an update with no vCard source the card is read first, and the version the backend answered is sent as `If-Match`, so an edit that took a minute no longer silently overwrites a write that landed during it. An explicit `--if-match` still wins.
+
+- Added the vCard field flags to `card create` and `card update`: `--full-name`, `--given-name`, `--family-name`, `--middle-name`, `--name-prefix`, `--name-suffix`, `--nickname`, `--organization`, `--title`, `--birthday`, `--email work:a@b`, `--phone cell:+1-555-0100`, `--url`, `--note` and `--uid`.
+
+  A flag sets the property it names, replacing every instance the card carried, and leaves every other line byte for byte. `--given-name` and `--family-name` repeat, each component of `N` being a comma-separated list per RFC 6350 section 6.2.2, and merge into the card's existing `N` rather than clearing its other components. They are named for the role rather than the position: which of the two is written first is what varies between cultures. They are a convenience over the common fields rather than the whole of vCard: the composer is the complete surface, and `ADR` is deliberately not a flag.
+
+  The source, the flags and `-i` stack in that order, so `card create --full-name "Jane Doe" -i` opens the composer on a card already carrying the name. `card create` no longer requires a vCard: with none it mints one carrying a fresh `UID`, at `--vcard-version`.
+
 - Added the `json-schema` command, aliased `json-schemas`, which prints the JSON Schema of a command's `--json` output or writes one file per command into a directory.
 
   Every command returning data now hands the printer a named output type describing what it emits, so a script consuming `--json` has a schema rather than the prose in a help page. A command only confirming a write still prints a plain message, and none is registered.
@@ -19,6 +35,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added `--fallback` to `carddav report sync`, which enumerates the addressbook with a Depth 1 `PROPFIND` for a server implementing no `sync-collection` REPORT.
 - Added the truncation report to `carddav propfind <addressbook>`, which used to drop the fact that the server cut its listing short.
+
+### Fixed
+
+- The backend connection is opened by the call that needs it, instead of when the client is built.
+
+  A command that never reaches the network no longer opens a socket, and, more to the point, an interactive edit holds none open while the editor is up. A server closes an idle connection, so a write landing after a long edit used to fail with `unexpected end of file` for a card that was perfectly good.
 
 ### Changed
 

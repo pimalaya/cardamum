@@ -22,6 +22,7 @@ use crate::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
         client::paginate,
+        uuid::uuid_v4,
     },
 };
 
@@ -228,26 +229,5 @@ fn card_write_error(err: WebdavClientStdError) -> anyhow::Error {
 /// name verbatim (it never adds nor strips an extension), so the caller
 /// owns the whole of it.
 fn fresh_card_id() -> Result<String> {
-    let mut bytes = [0u8; 16];
-    getrandom::fill(&mut bytes).map_err(|err| anyhow::anyhow!("Gather randomness error: {err}"))?;
-
-    // NOTE: RFC 4122 4.4 stamps version 4 and variant 10xx.
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = [0u8; 36];
-    let mut cursor = 0;
-    for (i, byte) in bytes.iter().enumerate() {
-        if matches!(i, 4 | 6 | 8 | 10) {
-            out[cursor] = b'-';
-            cursor += 1;
-        }
-        out[cursor] = HEX[(byte >> 4) as usize];
-        out[cursor + 1] = HEX[(byte & 0x0f) as usize];
-        cursor += 2;
-    }
-
-    let uuid = String::from_utf8(out.to_vec()).expect("ASCII hex is always valid UTF-8");
-    Ok(format!("{uuid}.vcf"))
+    Ok(format!("{}.vcf", uuid_v4()?))
 }

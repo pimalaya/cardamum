@@ -70,7 +70,4 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 shellexpand = "3.1"
 url = { version = "2.5", features = ["serde"] }
-vcard-rs = { version = "0.3", default-features = false, features = ["parser"] }
-
-[patch.crates-io]
-vcard-rs.git = "https://github.com/pimalaya/vcard"
+vcard-rs = { version = "0.4", default-features = false, features = ["parser"] }

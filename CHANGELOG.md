@@ -9,9 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added `card build`, which builds a vCard from the same source and the same field flags as `card create` and prints it instead of sending it anywhere.
+- Added `card build`, which builds a vCard from the same source, the same field flags and the same composer as `card create`, and prints it instead of sending it anywhere.
 
-  It reaches no backend and resolves no account, so it runs on a machine holding no configuration: `cardamum card build --full-name "Jane Doe" --email work:jane@corp.example` shows what those flags produce. Both write verbs take `-` as a source, so it pipes into them, and `cardamum card read <ID> | cardamum card build --title CTO -` previews an update. It checks what `card create` checks: a card built from flags with no source is refused when it is not a valid vCard, a vCard given as a source passes through untouched.
+  It reaches no backend, and reads no configuration unless `-i` needs the composer named there, so it runs on a machine holding none: `cardamum card build --full-name "Jane Doe" --email work:jane@corp.example` shows what those flags produce. Both write verbs take `-` as a source, so it pipes into them, and `cardamum card read <ID> | cardamum card build --title CTO -` previews an update. It checks what `card create` checks: a card built from flags with no source is refused when it is not a valid vCard, a vCard given as a source passes through untouched.
+
+  `-i` opens the card in the composer and prints what comes back, which is how a card is judged before it is sent: `card build -i -o card.vcf`, read it, then `card create -k <AB> card.vcf`. `-o/--output <PATH>` writes the card to a file rather than to stdout, and it exists for that pairing: the composer inherits stdout, so `card build -i > card.vcf` would hand the editor the file as its terminal. An abandoned interactive build prints nothing and exits 0.
 
 - Added `card.composer`, at the top level and per account: the command a card is edited through.
 
@@ -19,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added `-i/--interactive` to `card create` and `card update`, which opens the card in that composer before writing it, and `--composer <COMMAND>` to override the configured one for a single invocation.
 
-  What the composer wrote is checked against its version's RFC contract first: a card that does not pass has its violations printed and offers a re-edit. Then a menu asks what to do with the card: `Save`, `Preview`, `Edit again` or `Abort`. Aborting keeps the file and names it unless nothing was typed. A card the composer left without a `BEGIN:VCARD` line is reported and the menu drops `Save`.
+  The composer's own exit is the decision, and nothing is asked after it: a file that came back changed is the card and gets written, a file it emptied or handed back untouched is an edit given up on, and a non-zero exit is a failure. That is the whole protocol, so an editor with its own save and discard is not second-guessed by a prompt it cannot see, and `nvim` says no with `:q!`. What comes back is still checked against its version's RFC contract, and a card that does not pass has its violations printed and offers a re-edit: `nvim` will happily hand back a card missing its `FN`, and something has to refuse it. A failed write keeps the temporary file and names it; an abandoned edit drops it.
 
   On an update with no vCard source the card is read first, and the version the backend answered is sent as `If-Match`, so an edit that took a minute no longer silently overwrites a write that landed during it. An explicit `--if-match` still wins.
 
@@ -41,6 +43,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the truncation report to `carddav propfind <addressbook>`, which used to drop the fact that the server cut its listing short.
 
 ### Fixed
+
+- A vCard source carrying nothing but whitespace is refused instead of read as a card.
+
+  `printf '' | cardamum card create -k <AB> -` used to hand the backend an empty body and report a clean success. An empty file does the same, and both now name what they could not read from.
+
+- A source holding several vCards is refused when a field flag is set, instead of keeping the first card and dropping the rest.
+
+  A flag rewrites the card the parser reads first, so `card create --title CTO two-cards.vcf` used to write one card and lose the other, silently and with exit 0. With no flag the source still passes through as it was written, several cards included.
 
 - The backend connection is opened by the call that needs it, instead of when the client is built.
 

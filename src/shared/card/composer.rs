@@ -9,8 +9,6 @@
 //! composer spawning an editor would otherwise hand it a pipe instead of
 //! the terminal, and the editor hangs or writes where nothing reads.
 
-use core::fmt;
-
 use std::{
     env::temp_dir,
     fs,
@@ -32,12 +30,14 @@ pub struct CardComposer {
 }
 
 impl CardComposer {
-    /// Edits `seed` in the composer, then asks what to do with the result.
+    /// Edits `seed` in the composer and hands back what it wrote.
     ///
-    /// The editor and the menu loop until the card is written or the edit
-    /// is abandoned, so reviewing, re-editing and giving up are all one
-    /// decision taken in one place. `None` means abandoned, whether the
-    /// command emptied the file or the reader chose to abort.
+    /// The editor is the decision: a card that came back changed is the
+    /// card, and one the composer emptied or handed back untouched is an
+    /// edit given up on, which `None` reports. Nothing is asked after it,
+    /// so a composer owning its own save and discard is not second-
+    /// guessed by a menu, and a plain editor keeps the meaning its own
+    /// quit already has.
     ///
     /// Nothing is written here: the draft comes back for the caller to
     /// write, which is what keeps the network out of the editor's way.
@@ -78,11 +78,20 @@ impl CardComposer {
                 return Ok(None);
             }
 
+            if contents == seed {
+                // NOTE: a composer handing back the bytes it was given is
+                // a person who quit without writing, which is the only
+                // way a plain editor has of saying no.
+                debug!("composer left the card untouched");
+                draft.remove();
+                return Ok(None);
+            }
+
             draft.contents = contents;
 
-            // NOTE: checked before the menu rather than in it, so `Save`
-            // is offered only for a card that would actually be accepted,
-            // and a broken one leads straight back to the editor.
+            // NOTE: cardamum checks what it is about to write, whichever
+            // composer wrote it: a plain editor happily hands back a card
+            // missing its `FN`, and something has to refuse it.
             let violations = check(&draft.contents);
 
             if !violations.is_empty() {
@@ -101,50 +110,7 @@ impl CardComposer {
                 }
             }
 
-            match self.review(&draft)? {
-                CardChoice::Save => return Ok(Some(draft)),
-                CardChoice::Edit => continue,
-                // NOTE: review loops on a preview, so it only ever hands
-                // back one of the three decisions.
-                CardChoice::Preview | CardChoice::Abort => {
-                    // NOTE: a card nobody touched is nothing to lose, so it
-                    // goes. One that was worked on is kept and named:
-                    // aborting is a decision, but so is ten minutes of
-                    // typing, and only one of the two is expensive to get
-                    // wrong.
-                    if draft.contents == seed {
-                        draft.remove();
-                    } else {
-                        println!("Card left at {:?}", draft.path);
-                    }
-
-                    return Ok(None);
-                }
-            }
-        }
-    }
-
-    /// Asks what to do with the card the composer wrote.
-    ///
-    /// Previewing prints it and asks again, so the menu is the one place
-    /// the decision is taken. The card has already been checked, so
-    /// saving is always one of the answers.
-    fn review(&self, draft: &CardDraft) -> Result<CardChoice> {
-        loop {
-            let choices = vec![
-                CardChoice::Save,
-                CardChoice::Preview,
-                CardChoice::Edit,
-                CardChoice::Abort,
-            ];
-
-            match prompt::item("Pick an action:", choices, None) {
-                Ok(CardChoice::Preview) => {
-                    println!("{}", String::from_utf8_lossy(&draft.contents))
-                }
-                Ok(choice) => return Ok(choice),
-                Err(err) => return Err(draft.keep(err.into())),
-            }
+            return Ok(Some(draft));
         }
     }
 
@@ -174,37 +140,6 @@ impl CardComposer {
             .stderr(Stdio::inherit());
 
         command.status().context("Cannot spawn composer")
-    }
-}
-
-/// What to do with the card a composer wrote.
-///
-/// Saving is spelled the same on a create and on an update: at this point
-/// the card is written or it is not, and which verb asked is already on
-/// the command line.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum CardChoice {
-    /// Hand it back to the command, which writes it.
-    Save,
-    /// Print it, then ask again.
-    Preview,
-    /// Open the composer on it once more.
-    Edit,
-    /// Abandon it, the file staying where it is.
-    Abort,
-}
-
-impl fmt::Display for CardChoice {
-    /// The menu entry, which is what the prompt lists.
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let label = match self {
-            Self::Save => "Save",
-            Self::Preview => "Preview",
-            Self::Edit => "Edit again",
-            Self::Abort => "Abort",
-        };
-
-        write!(f, "{label}")
     }
 }
 

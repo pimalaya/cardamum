@@ -33,13 +33,18 @@
 #table.arrangement = "disabled"
 
 # Command a card is edited through, spawned on the path of a temporary vCard
-# file it edits in place, with every stream inherited. `card create -i` and
-# `card update -i` both go through it, and `--composer <COMMAND>` overrides it
-# for one invocation.
+# file it edits in place, with every stream inherited. `card build -i`,
+# `card create -i` and `card update -i` all go through it, and
+# `--composer <COMMAND>` overrides it for one invocation.
 #
 # The path is appended as the last argument, so a shell line takes it there
 # too. The command must block until the edit is done: use `code --wait`, not
 # `code`.
+#
+# What it leaves in the file is the decision, and nothing is asked after it: a
+# card that came back changed is written, one the command emptied or left
+# untouched is an edit given up on, and a non-zero exit is a failure. Use
+# `card build -i` to look at the card before sending it.
 #
 # tCard (https://github.com/pimalaya/tcard) projects the card as a TOML form,
 # opens $VISUAL or $EDITOR on it and folds the edits back onto the card's own

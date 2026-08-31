@@ -9,7 +9,7 @@
 
 use std::borrow::Cow;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::Parser;
 use vcard::{
     param::VcardParam,
@@ -118,6 +118,18 @@ impl CardFieldsArgs {
     pub fn apply(&self, card: &[u8]) -> Result<Vec<u8>> {
         if self.is_empty() {
             return Ok(card.to_vec());
+        }
+
+        // NOTE: a flag rewrites one card and the parser reads the first,
+        // so a file holding several would come back as its first card
+        // alone. Dropping the rest silently is the one outcome worth
+        // refusing outright.
+        if VcardCst::parse_many(card)
+            .filter(|card| card.is_ok())
+            .count()
+            > 1
+        {
+            bail!("Cannot apply a field flag to a source holding several vCards");
         }
 
         let mut cst = VcardCst::parse(card).context("Parse vCard error")?;

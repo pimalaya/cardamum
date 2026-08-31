@@ -50,7 +50,7 @@ impl CardCommand {
             // NOTE: `build` reaches no backend, so it resolves no account
             // either: printing a vCard on a machine holding no
             // configuration is what it is for.
-            Self::Build(cmd) => cmd.execute(printer),
+            Self::Build(cmd) => cmd.execute(printer, config_paths, account_name),
             Self::List(cmd) => {
                 let client = client(printer, config_paths, account_name, backend)?;
                 cmd.execute(printer, client)

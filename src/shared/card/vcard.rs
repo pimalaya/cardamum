@@ -25,20 +25,28 @@ use crate::shared::uuid::uuid_v4;
 ///
 /// `-` reads stdin and an existing path is read from disk, otherwise the
 /// value is taken as literal vCard contents.
+///
+/// A source carrying nothing but whitespace is refused rather than passed
+/// on: handing a backend an empty body is never what was meant, and an
+/// abandoned `card build -i` prints nothing, which pipes straight into
+/// here.
 pub fn read_source(source: &str) -> Result<Vec<u8>> {
     if source == "-" {
         let mut buf = Vec::new();
         stdin()
             .read_to_end(&mut buf)
             .context("Read vCard from stdin error")?;
-        return Ok(buf);
+
+        return refuse_blank(buf, "stdin");
     }
 
     let path = PathBuf::from(source);
 
     if path.is_file() {
-        return fs::read(&path)
-            .with_context(|| format!("Read vCard from `{}` error", path.display()));
+        let contents = fs::read(&path)
+            .with_context(|| format!("Read vCard from `{}` error", path.display()))?;
+
+        return refuse_blank(contents, &format!("`{}`", path.display()));
     }
 
     if source.trim_start().starts_with("BEGIN:VCARD") {
@@ -46,6 +54,15 @@ pub fn read_source(source: &str) -> Result<Vec<u8>> {
     }
 
     bail!("Source `{source}` is neither a readable file nor vCard contents")
+}
+
+/// Refuses a source that carries no card at all.
+fn refuse_blank(contents: Vec<u8>, source: &str) -> Result<Vec<u8>> {
+    if contents.iter().all(u8::is_ascii_whitespace) {
+        bail!("No vCard to read from {source}");
+    }
+
+    Ok(contents)
 }
 
 /// What is wrong with a card, empty when nothing is.

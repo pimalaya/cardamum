@@ -8,7 +8,7 @@ use io_people::v1::rest::other_contacts::list::PeopleOtherContactsListParams;
 use pimalaya_cli::printer::Printer;
 
 use crate::people::{
-    client::PeopleClient, other_contact::fields::OTHER_CONTACT_FIELDS, render::PersonsReport,
+    client::PeopleClient, other_contact::fields::OTHER_CONTACT_FIELDS, render::PeoplePersonsOutput,
 };
 
 /// List the "other contacts" (one People page).
@@ -41,7 +41,7 @@ impl PeopleOtherContactListCommand {
             .other_contacts_list(OTHER_CONTACT_FIELDS, &params)?
             .response;
 
-        printer.out(PersonsReport {
+        printer.out(PeoplePersonsOutput {
             preset,
             id_color,
             people: page.other_contacts,

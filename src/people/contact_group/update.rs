@@ -7,7 +7,7 @@ use clap::Parser;
 use io_people::v1::rest::contact_groups::PeopleContactGroup;
 use pimalaya_cli::printer::Printer;
 
-use crate::people::{client::PeopleClient, render::GroupReport};
+use crate::people::{client::PeopleClient, render::PeopleContactGroupOutput};
 
 /// Rename a contact group.
 ///
@@ -40,6 +40,6 @@ impl PeopleContactGroupUpdateCommand {
         };
         let updated = client.contact_group_update(&group, &[], &[])?.response;
 
-        printer.out(GroupReport(updated))
+        printer.out(PeopleContactGroupOutput(updated))
     }
 }

@@ -22,7 +22,7 @@ const PRODUCER: &str = "cardamum";
 pub struct PimdirClient {
     pub(crate) reader: PimdirReader,
     pub(crate) blobs: PimdirBlobs,
-    /// The expanded store root, which a producer is opened against.
+    /// The store root, which a producer is opened against.
     root: PathBuf,
     /// The account grouping the collections, `None` in a single-account store.
     pub(crate) account: Option<String>,
@@ -35,11 +35,7 @@ impl PimdirClient {
     /// root holding no store fails here. Its reads fold the pending queue
     /// over the committed rows (SPEC §15.4), so a staged card reads back.
     pub fn new(config: PimdirConfig) -> Result<Self> {
-        // NOTE: `root` carries a raw `~/…` verbatim, and opening it
-        // unexpanded would look for a store at a literal `./~/…`.
-        let root = shellexpand::full(&config.root.to_string_lossy())
-            .map(|expanded| PathBuf::from(expanded.into_owned()))
-            .unwrap_or_else(|_| config.root.clone());
+        let PimdirConfig { root, account } = config;
 
         let reader = PimdirReader::open(&root)
             .map(PimdirReader::with_pending)
@@ -50,7 +46,7 @@ impl PimdirClient {
             reader,
             blobs,
             root,
-            account: config.account.clone(),
+            account,
         })
     }
 

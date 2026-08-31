@@ -24,7 +24,7 @@ CLI to manage contacts, written in Rust
 - **Discovery**: an email address is enough to find a provider's server, through SRV records, `.well-known` and the provider configuration documents.
 - **Interactive wizard**: `cardamum configure` turns an email address into a tested account.
 - **Multi-account**: one TOML file, one block per account, several files deep-merged when you want secrets apart.
-- **JSON output**: every command switches to JSON with `--json`, for scripts and other tools.
+- **JSON output**: every command switches to JSON with `--json`, and `cardamum json-schema` describes what each one emits, for scripts and other tools.
 - Full standard, blocking client with **TLS** support:
   - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature, enabled by default)
   - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)

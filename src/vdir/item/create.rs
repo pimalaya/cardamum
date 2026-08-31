@@ -3,9 +3,13 @@
 //! Stores a new item file in a collection, inferring its kind when the
 //! command does not give one.
 
+use core::fmt;
+
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
+use schemars::JsonSchema;
+use serde::Serialize;
 
 use crate::vdir::{
     client::VdirClient,
@@ -16,7 +20,8 @@ use crate::vdir::{
 ///
 /// The kind, which is the file extension, defaults to sniffing the input:
 /// a `BEGIN:VCALENDAR` head is iCalendar, everything else vCard. Override
-/// it with `--kind`. JSON output: `{"message": "..."}`.
+/// it with `--kind`. JSON output: `{"id"}`, the file stem the item landed
+/// under.
 #[derive(Debug, Parser)]
 pub struct VdirItemCreateCommand {
     /// Collection to store the item in.
@@ -40,6 +45,20 @@ impl VdirItemCreateCommand {
 
         let (id, _) = client.store_item(path, None, kind, contents)?;
 
-        printer.out(Message::new(format!("Item `{id}` successfully created")))
+        printer.out(VdirItemCreateOutput { id })
+    }
+}
+
+/// The item the collection now holds.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VdirItemCreateOutput {
+    /// Item id, the file stem it was stored under.
+    pub id: String,
+}
+
+impl fmt::Display for VdirItemCreateOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Item `{}` successfully created", self.id)
     }
 }

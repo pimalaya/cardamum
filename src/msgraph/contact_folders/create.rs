@@ -7,7 +7,7 @@ use clap::Parser;
 use io_msgraph::v1::rest::users::contact_folders::MsgraphContactFolder;
 use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::{client::MsgraphClient, contact_folders::render::FolderReport};
+use crate::msgraph::{client::MsgraphClient, contact_folders::render::MsgraphContactFolderOutput};
 
 /// Create a contact folder.
 ///
@@ -27,6 +27,6 @@ impl MsgraphContactFolderCreateCommand {
         };
         let created = client.contact_folder_create(&folder)?.response;
 
-        printer.out(FolderReport(created))
+        printer.out(MsgraphContactFolderOutput(created))
     }
 }

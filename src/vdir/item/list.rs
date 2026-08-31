@@ -6,9 +6,12 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use comfy_table::{Cell, Color, Row, Table};
 use io_vdir::item::VdirItem;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{
+    printer::Printer,
+    table::{Cell, Color, Row, Table},
+};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
@@ -32,7 +35,7 @@ impl VdirItemListCommand {
         let path = client.collection_path(&self.collection)?;
         let items = client.list_items(path)?;
 
-        let table = ItemsTable {
+        let table = VdirItemListOutput {
             preset: client.account.table_preset().to_string(),
             id_color: client.account.cards_list_table_id_color(),
             rows: items.into_iter().filter_map(ItemRow::from_item).collect(),
@@ -43,22 +46,31 @@ impl VdirItemListCommand {
 }
 
 /// The item listing, as the table and the JSON both render it.
-#[derive(Clone, Debug, Serialize)]
-pub struct ItemsTable {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VdirItemListOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// The items the collection holds.
     #[serde(rename = "items")]
     pub rows: Vec<ItemRow>,
 }
 
 /// One listed item: its id, kind, size and path on disk.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ItemRow {
+    /// Item id, its file stem.
     pub id: String,
+    /// The item kind its extension names.
     pub kind: &'static str,
+    /// Size of its contents, in bytes.
     pub size: usize,
+    /// The item's path on disk.
     pub path: String,
 }
 
@@ -74,7 +86,7 @@ impl ItemRow {
     }
 }
 
-impl fmt::Display for ItemsTable {
+impl fmt::Display for VdirItemListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 

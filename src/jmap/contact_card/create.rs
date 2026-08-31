@@ -10,7 +10,7 @@ use io_jmap::rfc9610::contact_card::{JmapContactCard, set::JmapContactCardSetArg
 use pimalaya_cli::printer::Printer;
 
 use crate::jmap::{
-    client::JmapClient, error::format_set_error, input::JsonArg, render::CardReport,
+    client::JmapClient, error::format_set_error, input::JsonArg, render::JmapContactCardOutput,
 };
 
 /// Create a ContactCard from a raw JSContact body (`ContactCard/set`).
@@ -50,6 +50,6 @@ impl JmapContactCardCreateCommand {
             .next()
             .ok_or_else(|| anyhow::anyhow!("ContactCard create returned no object"))?;
 
-        printer.out(CardReport(created))
+        printer.out(JmapContactCardOutput(created))
     }
 }

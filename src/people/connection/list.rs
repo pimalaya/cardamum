@@ -8,7 +8,7 @@ use clap::Parser;
 use io_people::v1::rest::people::connections::list::PeopleConnectionsListParams;
 use pimalaya_cli::printer::Printer;
 
-use crate::people::{client::PeopleClient, project, render::PersonsReport};
+use crate::people::{client::PeopleClient, project, render::PeoplePersonsOutput};
 
 /// List the signed-in user's contacts (one People page).
 ///
@@ -40,7 +40,7 @@ impl PeopleConnectionListCommand {
             .connections_list(project::READ_FIELDS, &params)?
             .response;
 
-        printer.out(PersonsReport {
+        printer.out(PeoplePersonsOutput {
             preset,
             id_color,
             people: page.connections,

@@ -7,7 +7,7 @@ use clap::Parser;
 use io_people::v1::rest::contact_groups::PeopleGroupField;
 use pimalaya_cli::printer::Printer;
 
-use crate::people::{client::PeopleClient, render::GroupReport};
+use crate::people::{client::PeopleClient, render::PeopleContactGroupOutput};
 
 /// GET a contact group by id.
 ///
@@ -36,6 +36,6 @@ impl PeopleContactGroupGetCommand {
             .contact_group_get(&resource_name, self.max_members, &fields)?
             .response;
 
-        printer.out(GroupReport(group))
+        printer.out(PeopleContactGroupOutput(group))
     }
 }

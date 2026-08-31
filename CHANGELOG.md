@@ -9,10 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added the `json-schema` command, aliased `json-schemas`, which prints the JSON Schema of a command's `--json` output or writes one file per command into a directory.
+
+  Every command returning data now hands the printer a named output type describing what it emits, so a script consuming `--json` has a schema rather than the prose in a help page. A command only confirming a write still prints a plain message, and none is registered.
+
+- Added `carddav.auth = "none"`, for a CardDAV server that asks for no credentials.
+
+  The wizard offers it where discovery advertised no authentication scheme at all. Every existing spelling of `carddav.auth` parses unchanged.
+
 - Added `--fallback` to `carddav report sync`, which enumerates the addressbook with a Depth 1 `PROPFIND` for a server implementing no `sync-collection` REPORT.
 - Added the truncation report to `carddav propfind <addressbook>`, which used to drop the fact that the server cut its listing short.
 
 ### Changed
+
+- **BREAKING**: every `--json` key spelling more than one word is camelCase, where it used to be snake_case.
+
+  A listing now answers `addressbookId` and `fnValue`, an update `keptProperties`, a sync `syncToken`: the convention of the wire formats the backends already speak, and one no `jq` path has to quote. A key a provider owns keeps that provider's spelling, so `@odata.nextLink`, `nextPageToken`, `contactGroups` and the JMAP `list` are untouched. The TOML configuration is not concerned and stays kebab-case.
+
+- **BREAKING**: `addressbook create`, `card create`, `card update` and `vdir item create` emit their result under `--json` instead of a prose message.
+
+  The four carried data inside `{"message": "..."}`: the identifier the backend assigned, and for `card update` the vCard properties the server would not let go. They now emit `{"id"}`, and `{"id", "keptProperties"}` for the update, which is what the new schemas describe. Terminal output is unchanged, word for word.
 
 - **BREAKING**: the pimdir backend no longer takes the store's owner role, and `pimdir.source` is gone from the configuration.
 
@@ -41,6 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   It is the backend's own identifier, the one `card list` reports, and a `UID` names no card on its own.
 
 ### Fixed
+
+- Fixed `carddav.tls.cert` never expanding a `~` or an environment variable, so a certificate written home-relative was looked for in the current directory.
+
+  The `pimdir.root` expansion moved off its call site onto the field for the same reason: a path is expanded as the configuration is read, so no reader of the field can forget to.
 
 - Fixed the pimdir backend accepting a collection of any kind as an addressbook.
 

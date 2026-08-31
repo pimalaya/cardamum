@@ -9,7 +9,7 @@ use pimalaya_cli::printer::Printer;
 
 use crate::carddav::{
     client::CarddavClient,
-    report::entries::{CardEntriesReport, EntryRow},
+    report::entries::{CarddavCardEntriesOutput, EntryRow},
 };
 
 /// Fetch the named cards in one round-trip (RFC 6352 §8.7).
@@ -35,7 +35,7 @@ impl CarddavReportMultigetCommand {
         let ids: Vec<&str> = self.card_ids.iter().map(String::as_str).collect();
         let entries = client.multiget_cards(&self.addressbook_id, &ids)?;
 
-        printer.out(CardEntriesReport {
+        printer.out(CarddavCardEntriesOutput {
             preset,
             id_color,
             rows: entries.into_iter().map(EntryRow::from).collect(),

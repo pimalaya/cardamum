@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
-use crate::people::{client::PeopleClient, project, render::PersonReport};
+use crate::people::{client::PeopleClient, project, render::PeoplePersonOutput};
 
 /// GET the signed-in user (`people/me`).
 ///
@@ -19,6 +19,6 @@ impl PeopleProfileGetCommand {
         let person = client
             .person_get("people/me", project::READ_FIELDS, &[])?
             .response;
-        printer.out(PersonReport(person))
+        printer.out(PeoplePersonOutput(person))
     }
 }

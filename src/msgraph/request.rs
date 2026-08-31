@@ -10,7 +10,7 @@ use pimalaya_cli::printer::Printer;
 use serde_json::Value;
 use url::Url;
 
-use crate::{msgraph::client::MsgraphClient, shared::raw_json::RawJson};
+use crate::{msgraph::client::MsgraphClient, shared::raw_json::RawJsonOutput};
 
 /// Send a raw Microsoft Graph request and print the JSON response.
 ///
@@ -43,7 +43,7 @@ impl MsgraphRequestCommand {
         };
         let out: MsgraphSendOutput<Value> = client.run(send)?;
 
-        printer.out(RawJson(out.response))
+        printer.out(RawJsonOutput(out.response))
     }
 }
 

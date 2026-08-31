@@ -3,15 +3,19 @@
 //! Creates an addressbook on the account backend and prints its new
 //! identifier.
 
+use core::fmt;
+
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
+use schemars::JsonSchema;
+use serde::Serialize;
 
 use crate::shared::client::AddressbookClient;
 
 /// Create a new addressbook.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`, the identifier the backend assigned.
 #[derive(Debug, Parser)]
 pub struct AddressbookCreateCommand {
     /// Display name of the addressbook to create.
@@ -33,7 +37,20 @@ impl AddressbookCreateCommand {
             self.color.as_deref(),
         )?;
 
-        let msg = format!("Addressbook `{id}` successfully created");
-        printer.out(Message::new(msg))
+        printer.out(AddressbookCreateOutput { id })
+    }
+}
+
+/// The addressbook the backend created.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddressbookCreateOutput {
+    /// Backend-assigned identifier of the new addressbook.
+    pub id: String,
+}
+
+impl fmt::Display for AddressbookCreateOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Addressbook `{}` successfully created", self.id)
     }
 }

@@ -11,13 +11,16 @@ use std::{
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
-use comfy_table::{Cell, Row, Table};
 use io_webdav::{
     coroutine::{WebdavCoroutine, WebdavCoroutineState, WebdavYield},
     rfc4918::{GETETAG, WebdavMultistatus, report::WebdavReport},
     rfc6352::addressbook::ADDRESS_DATA,
 };
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{
+    printer::Printer,
+    table::{Cell, Row, Table},
+};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
@@ -30,7 +33,7 @@ use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
 /// `-` for stdin, and the parsed multistatus is printed.
 ///
 /// JSON output: `{"responses": [{"href", "status", "etag",
-/// "data_bytes"}], "sync_token"}`.
+/// "dataBytes"}], "syncToken"}`.
 #[derive(Debug, Parser)]
 pub struct CarddavReportRawCommand {
     /// Identifier of the addressbook to run the REPORT against.
@@ -65,7 +68,7 @@ impl CarddavReportRawCommand {
         let coroutine = WebdavReport::new(&base_url, &auth, &user_agent, &path, self.depth, body);
         let multistatus = run_report(&mut client, coroutine)?;
 
-        printer.out(RawReport {
+        printer.out(CarddavReportRawOutput {
             preset,
             sync_token: multistatus.sync_token,
             responses: multistatus.responses.iter().map(EntryRow::from).collect(),
@@ -122,21 +125,30 @@ fn run_report(
 }
 
 /// Multistatus a raw REPORT answered.
-#[derive(Clone, Debug, Serialize)]
-pub struct RawReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CarddavReportRawOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// One entry per multistatus response.
     pub responses: Vec<EntryRow>,
+    /// The `sync-token` the multistatus carried, when it carried one.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sync_token: Option<String>,
 }
 
 /// One multistatus response: href, status, ETag and body size.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct EntryRow {
+    /// The response href.
     pub href: String,
+    /// Its status code, when the response carried one.
     pub status: Option<u16>,
+    /// Its `getetag` property, unquoted.
     pub etag: Option<String>,
+    /// Size of its `address-data` property, in bytes.
     pub data_bytes: usize,
 }
 
@@ -153,7 +165,7 @@ impl From<&io_webdav::rfc4918::WebdavResponseEntry> for EntryRow {
     }
 }
 
-impl fmt::Display for RawReport {
+impl fmt::Display for CarddavReportRawOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 

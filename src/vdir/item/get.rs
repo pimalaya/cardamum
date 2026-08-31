@@ -7,6 +7,7 @@ use core::fmt;
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::vdir::{client::VdirClient, item::input::kind_str};
@@ -30,7 +31,7 @@ impl VdirItemGetCommand {
         let path = client.collection_path(&self.collection)?;
         let item = client.get_item(path, &self.id)?;
 
-        let out = Item {
+        let out = VdirItemGetOutput {
             id: self.id,
             kind: kind_str(item.kind),
             contents: String::from_utf8(item.contents)?,
@@ -41,14 +42,18 @@ impl VdirItemGetCommand {
 }
 
 /// One fetched item: its id, its kind and its raw contents.
-#[derive(Clone, Debug, Serialize)]
-pub struct Item {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VdirItemGetOutput {
+    /// Item id, its file stem.
     pub id: String,
+    /// The item kind its extension names.
     pub kind: &'static str,
+    /// The item's contents, as text.
     pub contents: String,
 }
 
-impl fmt::Display for Item {
+impl fmt::Display for VdirItemGetOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.contents)
     }

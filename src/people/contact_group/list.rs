@@ -7,7 +7,7 @@ use clap::Parser;
 use io_people::v1::rest::contact_groups::{PeopleGroupField, list::PeopleContactGroupsListParams};
 use pimalaya_cli::printer::Printer;
 
-use crate::people::{client::PeopleClient, render::GroupsReport};
+use crate::people::{client::PeopleClient, render::PeopleContactGroupsOutput};
 
 /// List the contact groups (one People page).
 ///
@@ -42,7 +42,7 @@ impl PeopleContactGroupListCommand {
         ];
         let page = client.contact_groups_list(&fields, &params)?.response;
 
-        printer.out(GroupsReport {
+        printer.out(PeopleContactGroupsOutput {
             preset,
             id_color,
             groups: page.contact_groups,

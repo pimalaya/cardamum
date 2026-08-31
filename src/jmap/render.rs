@@ -5,8 +5,9 @@
 
 use core::fmt;
 
-use comfy_table::{Cell, Color, Row, Table};
 use io_jmap::rfc9610::{address_book::JmapAddressBook, contact_card::JmapContactCard};
+use pimalaya_cli::table::{Cell, Color, Row, Table};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::shared::table::style_from_preset;
@@ -31,18 +32,24 @@ pub fn card_books(card: &JmapContactCard) -> String {
 
 /// A list of address books; `--json` emits the raw JMAP objects and the
 /// state token to feed to `changes`.
-#[derive(Clone, Debug, Serialize)]
-pub struct BooksReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JmapAddressBooksOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// The raw JMAP AddressBook objects.
     #[serde(rename = "list")]
+    #[schemars(with = "Vec<serde_json::Value>")]
     pub books: Vec<JmapAddressBook>,
+    /// The state token to feed to `address-book changes`.
     pub state: String,
 }
 
-impl fmt::Display for BooksReport {
+impl fmt::Display for JmapAddressBooksOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 
@@ -72,11 +79,11 @@ impl fmt::Display for BooksReport {
 }
 
 /// A single address book; `--json` emits the raw JMAP object.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct BookReport(pub JmapAddressBook);
+pub struct JmapAddressBookOutput(#[schemars(with = "serde_json::Value")] pub JmapAddressBook);
 
-impl fmt::Display for BookReport {
+impl fmt::Display for JmapAddressBookOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let book = &self.0;
         writeln!(f, "id: {}", book.id.as_deref().unwrap_or(""))?;
@@ -92,18 +99,24 @@ impl fmt::Display for BookReport {
 
 /// A list of contact cards; `--json` emits the raw JMAP objects and the
 /// state token to feed to `changes`.
-#[derive(Clone, Debug, Serialize)]
-pub struct CardsReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JmapContactCardsOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// The raw JMAP ContactCard objects.
     #[serde(rename = "list")]
+    #[schemars(with = "Vec<serde_json::Value>")]
     pub cards: Vec<JmapContactCard>,
+    /// The state token to feed to `contact-card changes`.
     pub state: String,
 }
 
-impl fmt::Display for CardsReport {
+impl fmt::Display for JmapContactCardsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 
@@ -131,11 +144,11 @@ impl fmt::Display for CardsReport {
 }
 
 /// A single contact card; `--json` emits the raw JMAP object.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct CardReport(pub JmapContactCard);
+pub struct JmapContactCardOutput(#[schemars(with = "serde_json::Value")] pub JmapContactCard);
 
-impl CardReport {
+impl JmapContactCardOutput {
     /// Whether the card carries nothing [`fmt::Display`] would render.
     ///
     /// A `set` response often lands here, carrying only server
@@ -147,7 +160,7 @@ impl CardReport {
     }
 }
 
-impl fmt::Display for CardReport {
+impl fmt::Display for JmapContactCardOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // NOTE: a `set` response echoes only the properties the server
         // itself decided, so most of these are absent after a write.
@@ -172,18 +185,25 @@ impl fmt::Display for CardReport {
 }
 
 /// The ids a `/changes` call reports, plus the state to sync from next.
-#[derive(Clone, Debug, Serialize)]
-pub struct ChangesReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct JmapChangesOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Ids created since the given state.
     pub created: Vec<String>,
+    /// Ids updated since it.
     pub updated: Vec<String>,
+    /// Ids destroyed since it.
     pub destroyed: Vec<String>,
+    /// The state to sync from next.
     pub new_state: String,
+    /// Whether the server held more changes back.
     pub has_more_changes: bool,
 }
 
-impl fmt::Display for ChangesReport {
+impl fmt::Display for JmapChangesOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 

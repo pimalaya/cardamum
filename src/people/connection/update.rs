@@ -12,7 +12,7 @@ use crate::people::{
     client::PeopleClient,
     input::{PersonJsonArg, update_fields_from_json},
     project,
-    render::PersonReport,
+    render::PeoplePersonOutput,
 };
 
 /// Update a contact from a raw People person JSON body.
@@ -49,6 +49,6 @@ impl PeopleConnectionUpdateCommand {
             .contact_update(&person, &fields, project::READ_FIELDS, &[])?
             .response;
 
-        printer.out(PersonReport(updated))
+        printer.out(PeoplePersonOutput(updated))
     }
 }

@@ -13,7 +13,7 @@ use clap::{CommandFactory, Parser, Subcommand};
 use pimalaya_cli::{
     clap::{
         args::{AccountFlag, JsonFlag, LogFlags},
-        commands::{CompletionCommand, ManualCommand},
+        commands::{CompletionCommand, JsonSchemaCommand, ManualCommand},
         parsers::path_parser,
     },
     footer, long_version,
@@ -36,6 +36,7 @@ use crate::{
     account::cli::AccountCommand,
     backend::Backend,
     config::{AccountConfig, Config},
+    json_schema,
     shared::{
         addressbook::cli::AddressbookCommand, card::cli::CardCommand, client::AddressbookClient,
     },
@@ -121,6 +122,8 @@ pub enum Command {
     Completion(CompletionCommand),
     #[command(alias = "manuals")]
     Manual(ManualCommand),
+    #[command(alias = "json-schemas")]
+    JsonSchema(JsonSchemaCommand),
 }
 
 /// Welcomes, then offers to generate a first configuration. Returns
@@ -267,6 +270,7 @@ impl Command {
             Self::Account(cmd) => cmd.execute(printer, config_paths, account_name, backend),
             Self::Completion(cmd) => cmd.execute(printer, Cli::command()),
             Self::Manual(cmd) => cmd.execute(printer, Cli::command()),
+            Self::JsonSchema(cmd) => cmd.execute(printer, json_schema::schemas()),
         }
     }
 }

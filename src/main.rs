@@ -75,6 +75,7 @@ mod cli;
 mod config;
 #[cfg(feature = "jmap")]
 mod jmap;
+mod json_schema;
 #[cfg(feature = "msgraph")]
 mod msgraph;
 #[cfg(feature = "people")]

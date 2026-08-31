@@ -22,6 +22,7 @@ use crate::{
 
 const BASIC: &str = "Basic (username + password)";
 const BEARER: &str = "Bearer (API token)";
+const NONE: &str = "None (the server asks for no credentials)";
 
 /// Configures CardDAV from a discovered entry, prompting credentials.
 pub fn configure_discovered(
@@ -47,8 +48,10 @@ pub fn configure_discovered(
 
 /// Prompts the authentication scheme from `caps`, then its credentials.
 ///
-/// Both schemes are offered when none was advertised, and the token flow
-/// shows the OAuth brokers only when a grant was.
+/// Both credentialed schemes are offered when none was advertised, and
+/// the token flow shows the OAuth brokers only when a grant was. A server
+/// advertising nothing may also be asking for nothing, so the
+/// credential-less scheme is offered there too.
 fn prompt_auth(
     account_name: &str,
     login_hint: Option<&str>,
@@ -60,6 +63,9 @@ fn prompt_auth(
     }
     if caps.token() || !caps.any() {
         schemes.push(BEARER);
+    }
+    if !caps.any() {
+        schemes.push(NONE);
     }
 
     let scheme = if schemes.len() == 1 {
@@ -80,6 +86,7 @@ fn prompt_auth(
                 secret::configure_token("CardDAV API token", &key, caps.oauth || !caps.any())?;
             CarddavAuthConfig::Bearer { token }
         }
+        NONE => CarddavAuthConfig::None,
         _ => unreachable!(),
     })
 }

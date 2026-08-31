@@ -10,7 +10,7 @@ use pimalaya_cli::printer::Printer;
 use serde_json::Value;
 use url::Url;
 
-use crate::{people::client::PeopleClient, shared::raw_json::RawJson};
+use crate::{people::client::PeopleClient, shared::raw_json::RawJsonOutput};
 
 /// Send a raw Google People API request and print the JSON response.
 ///
@@ -44,7 +44,7 @@ impl PeopleRequestCommand {
         };
         let out: PeopleSendOutput<Value> = client.run(send)?;
 
-        printer.out(RawJson(out.response))
+        printer.out(RawJsonOutput(out.response))
     }
 }
 

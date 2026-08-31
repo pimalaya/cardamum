@@ -8,6 +8,7 @@ use anyhow::{Result, anyhow};
 use clap::Parser;
 use io_jmap::rfc8620::session::JmapSession;
 use pimalaya_cli::printer::Printer;
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::jmap::client::JmapClient;
@@ -25,16 +26,16 @@ impl JmapSessionGetCommand {
             .ok_or_else(|| anyhow!("JMAP session is not available"))?
             .clone();
 
-        printer.out(SessionReport(session))
+        printer.out(JmapSessionGetOutput(session))
     }
 }
 
 /// The JMAP session, as a summary block or as the raw object.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct SessionReport(pub JmapSession);
+pub struct JmapSessionGetOutput(#[schemars(with = "serde_json::Value")] pub JmapSession);
 
-impl fmt::Display for SessionReport {
+impl fmt::Display for JmapSessionGetOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let session = &self.0;
         writeln!(f, "username: {}", session.username)?;

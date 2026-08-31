@@ -20,8 +20,8 @@ use std::path::PathBuf;
 use anyhow::Result;
 #[cfg(feature = "jmap")]
 use anyhow::bail;
-use comfy_table::ContentArrangement;
 use crossterm::style::Color;
+use pimalaya_cli::table::ContentArrangement;
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -30,6 +30,14 @@ use crossterm::style::Color;
 ))]
 use pimalaya_config::secret::Secret;
 use pimalaya_config::toml::TomlConfig;
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "people",
+    feature = "pimdir"
+))]
+use pimalaya_config::toml::shell_expanded_path;
 #[cfg(any(feature = "vdir", feature = "carddav", feature = "jmap"))]
 use pimalaya_config::toml::shell_expanded_string;
 #[cfg(any(
@@ -39,14 +47,36 @@ use pimalaya_config::toml::shell_expanded_string;
     feature = "people"
 ))]
 use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsProvider};
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "people"
+))]
+use serde::Deserializer;
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "carddav")]
+#[cfg(any(feature = "carddav", feature = "jmap"))]
 use url::Url;
 
 /// Whether a value is still what [`Default`] made it, so the serializer
 /// can leave it out of a generated document.
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     *value == T::default()
+}
+
+/// Expands a leading tilde and any shell variable in an optional path,
+/// as [`shell_expanded_path`] does for a mandatory one.
+///
+/// TODO: drop this for `pimalaya_config::toml::opt_shell_expanded_path`
+/// once pimalaya-config ships an optional variant.
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "people"
+))]
+fn opt_shell_expanded_path<'de, D: Deserializer<'de>>(de: D) -> Result<Option<PathBuf>, D::Error> {
+    shell_expanded_path(de).map(Some)
 }
 
 /// The whole configuration file: the options shared by every account,
@@ -249,7 +279,10 @@ pub struct VdirConfig {
 pub struct PimdirConfig {
     /// The store directory, holding `pimdir.db` and `objects/`.
     ///
-    /// It must already exist: creating one is the sync engine's job.
+    /// Environment variables and a leading tilde are expanded as the
+    /// value is read. It must already exist: creating one is the sync
+    /// engine's job.
+    #[serde(deserialize_with = "shell_expanded_path")]
     pub root: PathBuf,
     /// The account the collections are grouped under, for a store shared
     /// by several accounts or domains, as the mobile apps do.
@@ -270,10 +303,13 @@ pub struct CarddavConfig {
     /// `.well-known`, which a Google domain probes authenticated. It
     /// costs DNS and HTTP round-trips, and `server` or `home` skip it.
     pub discover: Option<String>,
-    /// DAV context root, where principal and home set discovery start.
+    /// DAV context root, where the principal and home set walk starts,
+    /// skipping the DNS and PACC round-trips `discover` pays.
     ///
-    /// The `.well-known` step is skipped. Accepts a full URL, a bare
-    /// domain or `domain:port`, a bare authority defaulting to `https`.
+    /// Accepts a full URL, a bare domain or `domain:port`, a bare
+    /// authority defaulting to `https`. A value naming no path is probed
+    /// once through `.well-known/carddav`, a bare origin not being
+    /// necessarily the context root.
     pub server: Option<String>,
     /// Pre-resolved addressbook home set URL, where the client lists
     /// addressbooks, skipping every discovery step.
@@ -290,6 +326,8 @@ pub struct CarddavConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CarddavAuthConfig {
+    /// No credentials, for a server that asks for none.
+    None,
     /// HTTP Basic authentication, per RFC 7617.
     Basic {
         /// The username the server knows the principal by.
@@ -571,6 +609,10 @@ pub struct TlsConfig {
     #[serde(default)]
     pub rustls: RustlsConfig,
     /// Path to an additional PEM certificate to trust.
+    ///
+    /// Environment variables and a leading tilde are expanded as the
+    /// value is read.
+    #[serde(default, deserialize_with = "opt_shell_expanded_path")]
     pub cert: Option<PathBuf>,
 }
 
@@ -652,11 +694,11 @@ impl TlsConfig {
 /// A full URL is taken verbatim, a bare `host[:port]` takes
 /// `default_scheme`, and a scheme outside `allowed` is rejected.
 #[cfg(feature = "jmap")]
-pub fn parse_server(server: &str, default_scheme: &str, allowed: &[&str]) -> Result<url::Url> {
+pub fn parse_server(server: &str, default_scheme: &str, allowed: &[&str]) -> Result<Url> {
     let url = if server.contains("://") {
-        url::Url::parse(server)?
+        Url::parse(server)?
     } else {
-        url::Url::parse(&format!("{default_scheme}://{server}"))?
+        Url::parse(&format!("{default_scheme}://{server}"))?
     };
 
     let scheme = url.scheme();
@@ -666,4 +708,69 @@ pub fn parse_server(server: &str, default_scheme: &str, allowed: &[&str]) -> Res
     }
 
     Ok(url)
+}
+
+#[cfg(test)]
+mod tests {
+    #[cfg(any(
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "people",
+        feature = "pimdir"
+    ))]
+    use std::{env::var, path::PathBuf};
+
+    #[cfg(feature = "pimdir")]
+    #[test]
+    fn a_mandatory_path_expands_the_leading_tilde() {
+        use super::PimdirConfig;
+
+        let home = PathBuf::from(var("HOME").expect("HOME must be set"));
+        let config: PimdirConfig = toml::from_str(r#"root = "~/Contacts""#).unwrap();
+
+        assert_eq!(config.root, home.join("Contacts"));
+    }
+
+    #[cfg(any(
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "people"
+    ))]
+    #[test]
+    fn an_optional_path_expands_the_leading_tilde_and_stays_absent() {
+        use super::TlsConfig;
+
+        let home = PathBuf::from(var("HOME").expect("HOME must be set"));
+
+        let config: TlsConfig = toml::from_str(r#"cert = "~/ca.pem""#).unwrap();
+        assert_eq!(config.cert, Some(home.join("ca.pem")));
+
+        let config: TlsConfig = toml::from_str("").unwrap();
+        assert_eq!(config.cert, None);
+    }
+
+    #[cfg(feature = "carddav")]
+    #[test]
+    fn carddav_auth_parses_every_scheme() {
+        use super::{CarddavAuthConfig, CarddavConfig};
+
+        let credential_less: CarddavConfig =
+            toml::from_str("server = \"dav.example.org\"\nauth = \"none\"").unwrap();
+        assert!(matches!(credential_less.auth, CarddavAuthConfig::None));
+
+        let basic: CarddavConfig = toml::from_str(
+            "server = \"dav.example.org\"\n\
+             auth.basic.username = \"me\"\n\
+             auth.basic.password.raw = \"secret\"",
+        )
+        .unwrap();
+        assert!(matches!(basic.auth, CarddavAuthConfig::Basic { .. }));
+
+        let bearer: CarddavConfig =
+            toml::from_str("server = \"dav.example.org\"\nauth.bearer.token.raw = \"token\"")
+                .unwrap();
+        assert!(matches!(bearer.auth, CarddavAuthConfig::Bearer { .. }));
+    }
 }

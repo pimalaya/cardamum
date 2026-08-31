@@ -7,7 +7,7 @@ use clap::Parser;
 use io_jmap::rfc9610::address_book::get::JmapAddressBookGetOptions;
 use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, render::BooksReport};
+use crate::jmap::{client::JmapClient, render::JmapAddressBooksOutput};
 
 /// Get JMAP AddressBooks by id (`AddressBook/get`); omit ids for all.
 ///
@@ -30,7 +30,7 @@ impl JmapAddressBookGetCommand {
         };
         let out = client.address_book_get(opts)?;
 
-        printer.out(BooksReport {
+        printer.out(JmapAddressBooksOutput {
             preset,
             id_color,
             books: out.address_books,

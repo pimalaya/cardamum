@@ -9,7 +9,7 @@ use pimalaya_cli::printer::Printer;
 
 use crate::carddav::{
     client::CarddavClient,
-    report::entries::{CardEntriesReport, EntryRow},
+    report::entries::{CarddavCardEntriesOutput, EntryRow},
 };
 
 /// Fetch every card of an addressbook (RFC 6352 §8.6).
@@ -31,7 +31,7 @@ impl CarddavReportQueryCommand {
         let id_color = client.account.cards_list_table_id_color();
         let entries = client.list_cards(&self.addressbook_id)?;
 
-        printer.out(CardEntriesReport {
+        printer.out(CarddavCardEntriesOutput {
             preset,
             id_color,
             rows: entries.into_iter().map(EntryRow::from).collect(),

@@ -138,10 +138,13 @@ carddav.auth.basic.password.command = "pass show example"
 #carddav.auth.bearer.token.command = "ortie token show"
 #carddav.auth.bearer.token.raw = "oauth2-token"
 
-# TLS configuration.
+# No credentials, for a server that asks for none.
+#carddav.auth = "none"
+
+# TLS configuration. A `cert` path expands `~` and any environment variable.
 #carddav.tls.provider = "rustls"
 #carddav.tls.rustls.crypto = "ring"
-#carddav.tls.cert = "/etc/ssl/certs/ca-certificates.crt"
+#carddav.tls.cert = "~/.local/share/ca/example.pem"
 
 # --------------------------------------------------------------------------------
 # JMAP backend (RFC 8620 + RFC 9610)

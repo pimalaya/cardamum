@@ -303,6 +303,7 @@ fn discovery_tls() -> Tls {
 mod tests {
     use super::*;
 
+    #[cfg(any(feature = "carddav", feature = "jmap"))]
     #[test]
     fn caps_fold_each_method_onto_its_axis() {
         let oauth = DiscoveryAuthMethod::OauthIssuer("https://issuer".into());
@@ -344,6 +345,7 @@ mod tests {
         assert!(!fastmail.basic);
     }
 
+    #[cfg(any(feature = "carddav", feature = "jmap"))]
     #[test]
     fn caps_report_emptiness_and_token_offer() {
         assert!(!AuthCaps::default().any());

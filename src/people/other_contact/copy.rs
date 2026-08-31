@@ -9,7 +9,7 @@ use pimalaya_cli::printer::Printer;
 
 use crate::people::{
     client::PeopleClient, other_contact::fields::OTHER_CONTACT_FIELDS, project,
-    render::PersonReport,
+    render::PeoplePersonOutput,
 };
 
 /// Copy an other contact into the user's contacts.
@@ -34,6 +34,6 @@ impl PeopleOtherContactCopyCommand {
             )?
             .response;
 
-        printer.out(PersonReport(person))
+        printer.out(PeoplePersonOutput(person))
     }
 }

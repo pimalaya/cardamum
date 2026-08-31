@@ -7,8 +7,11 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use comfy_table::{Cell, Color, Row, Table};
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{
+    printer::Printer,
+    table::{Cell, Color, Row, Table},
+};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::shared::{
@@ -17,7 +20,7 @@ use crate::shared::{
 
 /// List vCards inside the given addressbook.
 ///
-/// JSON output: `{"cards": [{"id", "addressbook_id", "etag", "fn_value",
+/// JSON output: `{"cards": [{"id", "addressbookId", "etag", "fnValue",
 /// "email", "tel"}]}`.
 #[derive(Debug, Parser)]
 pub struct CardListCommand {
@@ -43,7 +46,7 @@ impl CardListCommand {
             .unwrap_or(client.account.cards_list_page_size());
         let cards = client.list_cards(&addressbook_id, Some(self.page), Some(page_size))?;
 
-        let table = CardsTable {
+        let table = CardListOutput {
             preset: client.account.table_preset().to_string(),
             id_color: client.account.cards_list_table_id_color(),
             fn_color: client.account.cards_list_table_fn_color(),
@@ -57,30 +60,44 @@ impl CardListCommand {
 }
 
 /// Table of cards, and the JSON shape the command prints.
-#[derive(Clone, Debug, Serialize)]
-pub struct CardsTable {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CardListOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// Color of the FN column.
     #[serde(skip)]
     pub fn_color: Color,
+    /// Color of the EMAIL column.
     #[serde(skip)]
     pub email_color: Color,
+    /// Color of the TEL column.
     #[serde(skip)]
     pub tel_color: Color,
+    /// The cards of the requested page.
     #[serde(rename = "cards")]
     pub rows: Vec<CardRow>,
 }
 
-/// One card, previewed as rendered by [`CardsTable`].
-#[derive(Clone, Debug, Serialize)]
+/// One card, previewed as rendered by [`CardListOutput`].
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct CardRow {
+    /// Backend-specific identifier of the card.
     pub id: String,
+    /// Identifier of the addressbook holding it.
     pub addressbook_id: String,
+    /// Entity tag, when the backend exposes one.
     pub etag: Option<String>,
+    /// First `FN` value found in the vCard.
     pub fn_value: Option<String>,
+    /// First `EMAIL` value found in the vCard.
     pub email: Option<String>,
+    /// First `TEL` value found in the vCard.
     pub tel: Option<String>,
 }
 
@@ -98,7 +115,7 @@ impl From<Card> for CardRow {
     }
 }
 
-impl fmt::Display for CardsTable {
+impl fmt::Display for CardListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 

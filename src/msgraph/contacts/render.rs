@@ -4,8 +4,9 @@
 
 use core::fmt;
 
-use comfy_table::{Cell, Color, Row, Table};
 use io_msgraph::v1::rest::users::contacts::MsgraphContact;
+use pimalaya_cli::table::{Cell, Color, Row, Table};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::shared::table::style_from_preset;
@@ -34,19 +35,25 @@ pub fn contact_phone(contact: &MsgraphContact) -> &str {
 ///
 /// The table shows ID, NAME, EMAIL and PHONE, while `--json` emits the raw
 /// Graph contact objects plus any next-page link.
-#[derive(Clone, Debug, Serialize)]
-pub struct ContactsReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MsgraphContactsOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// The raw Graph contact objects.
     #[serde(rename = "contacts")]
+    #[schemars(with = "Vec<serde_json::Value>")]
     pub contacts: Vec<MsgraphContact>,
+    /// The link to the next page, when the page was truncated.
     #[serde(rename = "@odata.nextLink", skip_serializing_if = "Option::is_none")]
     pub next_link: Option<String>,
 }
 
-impl fmt::Display for ContactsReport {
+impl fmt::Display for MsgraphContactsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 
@@ -79,11 +86,11 @@ impl fmt::Display for ContactsReport {
 }
 
 /// A single contact, emitted verbatim by `--json`.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct ContactReport(pub MsgraphContact);
+pub struct MsgraphContactOutput(#[schemars(with = "serde_json::Value")] pub MsgraphContact);
 
-impl fmt::Display for ContactReport {
+impl fmt::Display for MsgraphContactOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let contact = &self.0;
         writeln!(f, "id: {}", contact.id)?;

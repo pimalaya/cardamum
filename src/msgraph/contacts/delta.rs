@@ -7,9 +7,12 @@ use core::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use comfy_table::{Cell, Color, Row, Table};
 use io_msgraph::v1::rest::users::contacts::delta::MsgraphContactDelta;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{
+    printer::Printer,
+    table::{Cell, Color, Row, Table},
+};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
@@ -61,7 +64,7 @@ impl MsgraphContactDeltaCommand {
         }
         .response;
 
-        printer.out(DeltaReport {
+        printer.out(MsgraphContactDeltaOutput {
             preset,
             id_color,
             contacts: page.value,
@@ -72,21 +75,28 @@ impl MsgraphContactDeltaCommand {
 }
 
 /// A page of the contacts delta, with the links continuing the round.
-#[derive(Clone, Debug, Serialize)]
-pub struct DeltaReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MsgraphContactDeltaOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// The raw Graph contact deltas of this page.
     #[serde(rename = "contacts")]
+    #[schemars(with = "Vec<serde_json::Value>")]
     pub contacts: Vec<MsgraphContactDelta>,
+    /// The link draining the rest of the page, when it was truncated.
     #[serde(rename = "@odata.nextLink", skip_serializing_if = "Option::is_none")]
     pub next_link: Option<String>,
+    /// The link opening the next round, when the round ended here.
     #[serde(rename = "@odata.deltaLink", skip_serializing_if = "Option::is_none")]
     pub delta_link: Option<String>,
 }
 
-impl fmt::Display for DeltaReport {
+impl fmt::Display for MsgraphContactDeltaOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 

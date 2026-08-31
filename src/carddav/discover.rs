@@ -8,6 +8,7 @@ use std::fmt;
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::carddav::client::CarddavClient;
@@ -20,7 +21,7 @@ use crate::carddav::client::CarddavClient;
 /// principal walk, so `principal` shows as unresolved rather than
 /// failing the command.
 ///
-/// JSON output: `{"server", "principal", "addressbook_home_set"}`, with
+/// JSON output: `{"server", "principal", "addressbookHomeSet"}`, with
 /// unresolved endpoints as `null`.
 #[derive(Debug, Parser)]
 pub struct CarddavDiscoverCommand;
@@ -37,7 +38,7 @@ impl CarddavDiscoverCommand {
             .ok()
             .map(|url| url.to_string());
 
-        printer.out(DiscoveryReport {
+        printer.out(CarddavDiscoverOutput {
             server,
             principal,
             addressbook_home_set,
@@ -46,14 +47,18 @@ impl CarddavDiscoverCommand {
 }
 
 /// The endpoints a CardDAV session runs against, `None` when unresolved.
-#[derive(Clone, Debug, Serialize)]
-pub struct DiscoveryReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CarddavDiscoverOutput {
+    /// The DAV context root the session runs against.
     pub server: String,
+    /// The `current-user-principal` URL, `None` when unresolved.
     pub principal: Option<String>,
+    /// The `addressbook-home-set` URL, `None` when unresolved.
     pub addressbook_home_set: Option<String>,
 }
 
-impl fmt::Display for DiscoveryReport {
+impl fmt::Display for CarddavDiscoverOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let unresolved = "(unresolved)";
         writeln!(f, "server: {}", self.server)?;

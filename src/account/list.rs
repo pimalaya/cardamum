@@ -7,10 +7,13 @@ use std::{fmt, path::PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
-use comfy_table::{Cell, Color, ContentArrangement, Row, Table};
 use crossterm::style::Color as CrosstermColor;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{
+    printer::Printer,
+    table::{Cell, Color, ContentArrangement, Row, Table},
+};
 use pimalaya_config::toml::TomlConfig;
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
@@ -59,7 +62,7 @@ impl AccountListCommand {
             .collect();
         accounts.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let table = AccountsTable {
+        let table = AccountListOutput {
             preset,
             arrangement,
             colors,
@@ -89,11 +92,15 @@ fn load_config(paths: &[PathBuf]) -> Result<Config> {
     }
 }
 
-/// One account, as rendered by [`AccountsTable`].
-#[derive(Clone, Debug, Serialize)]
+/// One account, as rendered by [`AccountListOutput`].
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct AccountRow {
+    /// The `[accounts.<name>]` table key.
     pub name: String,
+    /// Whether a command passing no `-a <NAME>` runs against it.
     pub default: bool,
+    /// The backends the account declares a config block for.
     pub backends: Vec<&'static str>,
 }
 
@@ -133,19 +140,23 @@ impl AccountRow {
     }
 }
 
-/// Table of accounts, and the JSON shape the command prints.
-#[derive(Clone, Debug, Serialize)]
-pub struct AccountsTable {
+/// Table of accounts, and the JSON shape `account list` prints.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountListOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// The column arrangement the table is drawn with.
     #[serde(skip)]
     pub arrangement: ContentArrangement,
     #[serde(skip)]
     colors: AccountColors,
+    /// The accounts, sorted by name.
     pub accounts: Vec<AccountRow>,
 }
 
-impl fmt::Display for AccountsTable {
+impl fmt::Display for AccountListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 

@@ -9,7 +9,7 @@ use clap::Parser;
 use io_jmap::rfc9610::address_book::set::{JmapAddressBookCreate, JmapAddressBookSetArgs};
 use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, error::format_set_error, render::BookReport};
+use crate::jmap::{client::JmapClient, error::format_set_error, render::JmapAddressBookOutput};
 
 /// Create a JMAP AddressBook (`AddressBook/set` create).
 ///
@@ -49,6 +49,6 @@ impl JmapAddressBookCreateCommand {
             .next()
             .ok_or_else(|| anyhow::anyhow!("AddressBook create returned no object"))?;
 
-        printer.out(BookReport(created))
+        printer.out(JmapAddressBookOutput(created))
     }
 }

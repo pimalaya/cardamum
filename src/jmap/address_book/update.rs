@@ -9,7 +9,7 @@ use clap::Parser;
 use io_jmap::rfc9610::address_book::set::{JmapAddressBookSetArgs, JmapAddressBookUpdate};
 use pimalaya_cli::printer::{Message, Printer};
 
-use crate::jmap::{client::JmapClient, error::format_set_error, render::BookReport};
+use crate::jmap::{client::JmapClient, error::format_set_error, render::JmapAddressBookOutput};
 
 /// Update a JMAP AddressBook (`AddressBook/set` update).
 ///
@@ -49,7 +49,7 @@ impl JmapAddressBookUpdateCommand {
         }
 
         match out.updated.into_values().next().flatten() {
-            Some(book) => printer.out(BookReport(book)),
+            Some(book) => printer.out(JmapAddressBookOutput(book)),
             None => printer.out(Message::new(format!(
                 "AddressBook `{}` successfully updated",
                 self.id

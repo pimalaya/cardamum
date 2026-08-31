@@ -7,8 +7,8 @@
 //! that, so the narrower value always wins.
 
 use anyhow::{Result, bail};
-use comfy_table::{Color as TableColor, ContentArrangement};
 use crossterm::style::Color;
+use pimalaya_cli::table::{Color as TableColor, ContentArrangement};
 
 use crate::{
     config::{

@@ -8,6 +8,7 @@
 //! of each protocol module.
 
 use anyhow::{Result, bail};
+#[cfg(any(feature = "jmap", feature = "msgraph", feature = "people"))]
 use pimalaya_config::secret::SecretResolver;
 
 use crate::{

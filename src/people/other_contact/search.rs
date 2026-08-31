@@ -8,7 +8,7 @@ use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
 use crate::people::{
-    client::PeopleClient, other_contact::fields::OTHER_CONTACT_FIELDS, render::PersonsReport,
+    client::PeopleClient, other_contact::fields::OTHER_CONTACT_FIELDS, render::PeoplePersonsOutput,
 };
 
 /// Search the "other contacts" by query string.
@@ -38,7 +38,7 @@ impl PeopleOtherContactSearchCommand {
             .filter_map(|result| result.person)
             .collect();
 
-        printer.out(PersonsReport {
+        printer.out(PeoplePersonsOutput {
             preset,
             id_color,
             people,

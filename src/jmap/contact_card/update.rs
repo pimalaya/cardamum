@@ -10,7 +10,7 @@ use io_jmap::rfc9610::contact_card::set::{JmapContactCardPatch, JmapContactCardS
 use pimalaya_cli::printer::{Message, Printer};
 
 use crate::jmap::{
-    client::JmapClient, error::format_set_error, input::JsonArg, render::CardReport,
+    client::JmapClient, error::format_set_error, input::JsonArg, render::JmapContactCardOutput,
 };
 
 /// Update a ContactCard from a raw JSContact patch (`ContactCard/set`).
@@ -55,7 +55,7 @@ impl JmapContactCardUpdateCommand {
             .into_values()
             .next()
             .flatten()
-            .map(CardReport)
+            .map(JmapContactCardOutput)
             .filter(|report| !report.is_empty());
 
         match updated {

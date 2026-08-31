@@ -7,9 +7,12 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use comfy_table::{Cell, Color, Row, Table};
 use io_webdav::rfc6352::{addressbook::CarddavAddressbook, card::CarddavCardRef};
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{
+    printer::Printer,
+    table::{Cell, Color, Row, Table},
+};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
@@ -40,48 +43,84 @@ impl CarddavPropfindCommand {
                 let id_color = client.account.addressbooks_list_table_id_color();
                 let name_color = client.account.addressbooks_list_table_name_color();
                 let books = client.list_addressbooks()?;
-                printer.out(AddressbooksReport {
-                    preset,
-                    id_color,
-                    name_color,
-                    rows: books.into_iter().map(AddressbookRow::from).collect(),
-                })
+                printer.out(CarddavPropfindOutput::Addressbooks(
+                    CarddavPropfindAddressbooksOutput {
+                        preset,
+                        id_color,
+                        name_color,
+                        rows: books.into_iter().map(AddressbookRow::from).collect(),
+                    },
+                ))
             }
             Some(id) => {
                 let id_color = client.account.cards_list_table_id_color();
                 let enumerated = client.enum_cards(&id)?;
-                printer.out(CardRefsReport {
+                printer.out(CarddavPropfindOutput::Cards(CarddavPropfindCardsOutput {
                     preset,
                     id_color,
                     rows: enumerated.refs.into_iter().map(CardRefRow::from).collect(),
                     truncated: enumerated.truncated,
-                })
+                }))
             }
         }
     }
 }
 
+/// What a PROPFIND prints, which is what it was pointed at.
+///
+/// Untagged, so each shape serializes exactly as it would on its own: the
+/// argument already says which of the two came back.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(untagged)]
+pub enum CarddavPropfindOutput {
+    /// The addressbook collections under the home-set.
+    Addressbooks(CarddavPropfindAddressbooksOutput),
+    /// The card resources of one addressbook.
+    Cards(CarddavPropfindCardsOutput),
+}
+
+impl fmt::Display for CarddavPropfindOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Addressbooks(out) => out.fmt(f),
+            Self::Cards(out) => out.fmt(f),
+        }
+    }
+}
+
 /// Addressbook collections listed by a home-set PROPFIND.
-#[derive(Clone, Debug, Serialize)]
-pub struct AddressbooksReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CarddavPropfindAddressbooksOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// Color of the NAME column.
     #[serde(skip)]
     pub name_color: Color,
+    /// The addressbook collections under the home-set.
     #[serde(rename = "addressbooks")]
     pub rows: Vec<AddressbookRow>,
 }
 
 /// One addressbook collection with its DAV properties.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct AddressbookRow {
+    /// Collection id, its href last path segment.
     pub id: String,
+    /// The `displayname` property.
     pub display_name: Option<String>,
+    /// The CardDAV `addressbook-description` property.
     pub description: Option<String>,
+    /// The Apple `calendar-color` property.
     pub color: Option<String>,
+    /// The Apple `getctag` property, which changes on any member write.
     pub ctag: Option<String>,
+    /// The RFC 6578 `sync-token`, to feed to `report sync`.
     pub sync_token: Option<String>,
 }
 
@@ -98,7 +137,7 @@ impl From<CarddavAddressbook> for AddressbookRow {
     }
 }
 
-impl fmt::Display for AddressbooksReport {
+impl fmt::Display for CarddavPropfindAddressbooksOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 
@@ -132,12 +171,16 @@ impl fmt::Display for AddressbooksReport {
 }
 
 /// Card references listed by an addressbook PROPFIND.
-#[derive(Clone, Debug, Serialize)]
-pub struct CardRefsReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CarddavPropfindCardsOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// The card resources the addressbook holds.
     #[serde(rename = "cards")]
     pub rows: Vec<CardRefRow>,
     /// Whether the server cut the listing short with a 507 row.
@@ -148,9 +191,12 @@ pub struct CardRefsReport {
 }
 
 /// One card resource: its id and ETag, never its body.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct CardRefRow {
+    /// Card resource id, its href last path segment.
     pub id: String,
+    /// The server ETag, when it sent one.
     pub etag: Option<String>,
 }
 
@@ -163,7 +209,7 @@ impl From<CarddavCardRef> for CardRefRow {
     }
 }
 
-impl fmt::Display for CardRefsReport {
+impl fmt::Display for CarddavPropfindCardsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 

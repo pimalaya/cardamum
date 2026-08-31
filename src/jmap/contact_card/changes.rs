@@ -8,12 +8,12 @@ use clap::Parser;
 use io_jmap::rfc9610::contact_card::changes::JmapContactCardChangesOptions;
 use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, render::ChangesReport};
+use crate::jmap::{client::JmapClient, render::JmapChangesOutput};
 
 /// The ContactCards changed since a state (`ContactCard/changes`).
 ///
-/// JSON output: `{"created", "updated", "destroyed", "new_state",
-/// "has_more_changes"}`.
+/// JSON output: `{"created", "updated", "destroyed", "newState",
+/// "hasMoreChanges"}`.
 #[derive(Debug, Parser)]
 pub struct JmapContactCardChangesCommand {
     /// State token from a previous `get`, `query` or `changes`.
@@ -27,7 +27,7 @@ impl JmapContactCardChangesCommand {
         let out = client
             .contact_card_changes(self.since_state, JmapContactCardChangesOptions::default())?;
 
-        printer.out(ChangesReport {
+        printer.out(JmapChangesOutput {
             preset,
             created: out.created,
             updated: out.updated,

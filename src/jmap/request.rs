@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::{
     jmap::{client::JmapClient, input::JsonArg},
-    shared::raw_json::RawJson,
+    shared::raw_json::RawJsonOutput,
 };
 
 /// Send a raw JMAP request and print the raw JMAP response.
@@ -61,6 +61,6 @@ impl JmapRequestCommand {
             "sessionState": response.session_state,
         });
 
-        printer.out(RawJson(value))
+        printer.out(RawJsonOutput(value))
     }
 }

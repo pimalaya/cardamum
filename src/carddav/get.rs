@@ -7,6 +7,7 @@ use core::fmt;
 use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::carddav::client::CarddavClient;
@@ -28,7 +29,7 @@ impl CarddavGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
         let body = client.read_card(&self.addressbook_id, &self.card_id)?;
 
-        let card = Card {
+        let card = CarddavGetOutput {
             id: self.card_id,
             etag: body.etag,
             contents: String::from_utf8(body.data)?,
@@ -39,14 +40,18 @@ impl CarddavGetCommand {
 }
 
 /// A fetched card: its raw vCard bytes and the server ETag.
-#[derive(Clone, Debug, Serialize)]
-pub struct Card {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CarddavGetOutput {
+    /// Card resource id, its href last path segment.
     pub id: String,
+    /// The server ETag, when it sent one.
     pub etag: Option<String>,
+    /// The raw vCard, as text.
     pub contents: String,
 }
 
-impl fmt::Display for Card {
+impl fmt::Display for CarddavGetOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.contents)
     }

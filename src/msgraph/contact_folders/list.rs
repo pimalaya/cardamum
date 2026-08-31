@@ -7,7 +7,7 @@ use clap::Parser;
 use io_msgraph::v1::rest::users::contact_folders::list::MsgraphContactFoldersListParams;
 use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::{client::MsgraphClient, contact_folders::render::FoldersReport};
+use crate::msgraph::{client::MsgraphClient, contact_folders::render::MsgraphContactFoldersOutput};
 
 /// List the contact folders of the mailbox (one Graph page).
 ///
@@ -30,7 +30,7 @@ impl MsgraphContactFolderListCommand {
         };
         let page = client.contact_folders_list(&params)?.response;
 
-        printer.out(FoldersReport {
+        printer.out(MsgraphContactFoldersOutput {
             preset,
             id_color,
             folders: page.value,

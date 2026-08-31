@@ -7,7 +7,7 @@ use clap::Parser;
 use io_jmap::rfc9610::contact_card::get::JmapContactCardGetOptions;
 use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, render::CardsReport};
+use crate::jmap::{client::JmapClient, render::JmapContactCardsOutput};
 
 /// Get JMAP ContactCards by id (`ContactCard/get`).
 ///
@@ -30,7 +30,7 @@ impl JmapContactCardGetCommand {
         };
         let out = client.contact_card_get(opts)?;
 
-        printer.out(CardsReport {
+        printer.out(JmapContactCardsOutput {
             preset,
             id_color,
             cards: out.cards,

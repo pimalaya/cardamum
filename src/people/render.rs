@@ -6,8 +6,9 @@
 
 use core::fmt;
 
-use comfy_table::{Cell, Color, Row, Table};
 use io_people::v1::rest::{contact_groups::PeopleContactGroup, people::PeoplePerson};
+use pimalaya_cli::table::{Cell, Color, Row, Table};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{people::project, shared::table::style_from_preset};
@@ -47,21 +48,28 @@ pub fn person_phone(person: &PeoplePerson) -> &str {
 ///
 /// The table shows ID / NAME / EMAIL / PHONE; `--json` emits the raw
 /// People person objects, plus any page and sync tokens.
-#[derive(Clone, Debug, Serialize)]
-pub struct PersonsReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PeoplePersonsOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// The raw People person objects.
     #[serde(rename = "people")]
+    #[schemars(with = "Vec<serde_json::Value>")]
     pub people: Vec<PeoplePerson>,
+    /// The token to the next page, when the page was truncated.
     #[serde(rename = "nextPageToken", skip_serializing_if = "Option::is_none")]
     pub next_page_token: Option<String>,
+    /// The token opening the next sync round, when the API sent one.
     #[serde(rename = "nextSyncToken", skip_serializing_if = "Option::is_none")]
     pub next_sync_token: Option<String>,
 }
 
-impl fmt::Display for PersonsReport {
+impl fmt::Display for PeoplePersonsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 
@@ -99,11 +107,11 @@ impl fmt::Display for PersonsReport {
 }
 
 /// A single person; `--json` emits the raw People object.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct PersonReport(pub PeoplePerson);
+pub struct PeoplePersonOutput(#[schemars(with = "serde_json::Value")] pub PeoplePerson);
 
-impl fmt::Display for PersonReport {
+impl fmt::Display for PeoplePersonOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let person = &self.0;
         writeln!(f, "id: {}", project::person_id(&person.resource_name))?;
@@ -134,21 +142,28 @@ pub fn group_name(group: &PeopleContactGroup) -> &str {
 ///
 /// The table shows ID / NAME / TYPE / MEMBERS; `--json` emits the raw
 /// People group objects, plus any tokens.
-#[derive(Clone, Debug, Serialize)]
-pub struct GroupsReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PeopleContactGroupsOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// The raw People contact group objects.
     #[serde(rename = "contactGroups")]
+    #[schemars(with = "Vec<serde_json::Value>")]
     pub groups: Vec<PeopleContactGroup>,
+    /// The token to the next page, when the page was truncated.
     #[serde(rename = "nextPageToken", skip_serializing_if = "Option::is_none")]
     pub next_page_token: Option<String>,
+    /// The token opening the next sync round, when the API sent one.
     #[serde(rename = "nextSyncToken", skip_serializing_if = "Option::is_none")]
     pub next_sync_token: Option<String>,
 }
 
-impl fmt::Display for GroupsReport {
+impl fmt::Display for PeopleContactGroupsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 
@@ -186,11 +201,11 @@ impl fmt::Display for GroupsReport {
 }
 
 /// A single contact group; `--json` emits the raw People object.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct GroupReport(pub PeopleContactGroup);
+pub struct PeopleContactGroupOutput(#[schemars(with = "serde_json::Value")] pub PeopleContactGroup);
 
-impl fmt::Display for GroupReport {
+impl fmt::Display for PeopleContactGroupOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let group = &self.0;
         writeln!(f, "id: {}", group_id(group))?;

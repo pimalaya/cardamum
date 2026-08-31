@@ -6,16 +6,19 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use comfy_table::{Cell, Color, Row, Table};
 use io_vdir::collection::VdirCollection;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{
+    printer::Printer,
+    table::{Cell, Color, Row, Table},
+};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{shared::table::style_from_preset, vdir::client::VdirClient};
 
 /// List every collection under the configured vdir root.
 ///
-/// JSON output: `{"collections": [{"id", "display_name", "description",
+/// JSON output: `{"collections": [{"id", "displayName", "description",
 /// "color", "path"}]}`.
 #[derive(Debug, Parser)]
 pub struct VdirCollectionListCommand;
@@ -24,7 +27,7 @@ impl VdirCollectionListCommand {
     pub fn execute(self, printer: &mut impl Printer, client: VdirClient) -> Result<()> {
         let collections = client.list_collections()?;
 
-        let table = CollectionsTable {
+        let table = VdirCollectionListOutput {
             preset: client.account.table_preset().to_string(),
             name_color: client.account.addressbooks_list_table_name_color(),
             rows: collections.into_iter().map(From::from).collect(),
@@ -35,23 +38,33 @@ impl VdirCollectionListCommand {
 }
 
 /// The collection listing, as the table and the JSON both render it.
-#[derive(Clone, Debug, Serialize)]
-pub struct CollectionsTable {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VdirCollectionListOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the NAME column.
     #[serde(skip)]
     pub name_color: Color,
+    /// The collections under the vdir root.
     #[serde(rename = "collections")]
     pub rows: Vec<CollectionRow>,
 }
 
 /// One listed collection: its id, its metadata and its path on disk.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct CollectionRow {
+    /// Collection id, its directory name.
     pub id: String,
+    /// The `displayname` file's contents, when the collection has one.
     pub display_name: Option<String>,
+    /// The `description` file's contents, when it has one.
     pub description: Option<String>,
+    /// The `color` file's contents, when it has one.
     pub color: Option<String>,
+    /// The collection's path on disk.
     pub path: String,
 }
 
@@ -67,7 +80,7 @@ impl From<VdirCollection> for CollectionRow {
     }
 }
 
-impl fmt::Display for CollectionsTable {
+impl fmt::Display for VdirCollectionListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 

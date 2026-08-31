@@ -7,7 +7,7 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
-use crate::people::{client::PeopleClient, project, render::PersonsReport};
+use crate::people::{client::PeopleClient, project, render::PeoplePersonsOutput};
 
 /// Search the signed-in user's contacts by query string.
 ///
@@ -36,7 +36,7 @@ impl PeopleConnectionSearchCommand {
             .filter_map(|result| result.person)
             .collect();
 
-        printer.out(PersonsReport {
+        printer.out(PeoplePersonsOutput {
             preset,
             id_color,
             people,

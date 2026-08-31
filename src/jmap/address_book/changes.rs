@@ -8,12 +8,12 @@ use clap::Parser;
 use io_jmap::rfc9610::address_book::changes::JmapAddressBookChangesOptions;
 use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, render::ChangesReport};
+use crate::jmap::{client::JmapClient, render::JmapChangesOutput};
 
 /// The AddressBooks changed since a state (`AddressBook/changes`).
 ///
-/// JSON output: `{"created", "updated", "destroyed", "new_state",
-/// "has_more_changes"}`.
+/// JSON output: `{"created", "updated", "destroyed", "newState",
+/// "hasMoreChanges"}`.
 #[derive(Debug, Parser)]
 pub struct JmapAddressBookChangesCommand {
     /// State token from a previous `get` (its `state`) or `changes`.
@@ -27,7 +27,7 @@ impl JmapAddressBookChangesCommand {
         let out = client
             .address_book_changes(self.since_state, JmapAddressBookChangesOptions::default())?;
 
-        printer.out(ChangesReport {
+        printer.out(JmapChangesOutput {
             preset,
             created: out.created,
             updated: out.updated,

@@ -7,8 +7,11 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use comfy_table::{Cell, Color, Row, Table};
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{
+    printer::Printer,
+    table::{Cell, Color, Row, Table},
+};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::shared::{
@@ -26,7 +29,7 @@ impl AddressbookListCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
         let addressbooks = client.list_addressbooks()?;
 
-        let table = AddressbooksTable {
+        let table = AddressbookListOutput {
             preset: client.account.table_preset().to_string(),
             id_color: client.account.addressbooks_list_table_id_color(),
             name_color: client.account.addressbooks_list_table_name_color(),
@@ -40,28 +43,40 @@ impl AddressbookListCommand {
 }
 
 /// Table of addressbooks, and the JSON shape the command prints.
-#[derive(Clone, Debug, Serialize)]
-pub struct AddressbooksTable {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AddressbookListOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// Color of the ID column.
     #[serde(skip)]
     pub id_color: Color,
+    /// Color of the NAME column.
     #[serde(skip)]
     pub name_color: Color,
+    /// Color of the DESC column.
     #[serde(skip)]
     pub description_color: Color,
+    /// Color of the COLOR column.
     #[serde(skip)]
     pub color_color: Color,
+    /// The addressbooks the account exposes.
     #[serde(rename = "addressbooks")]
     pub rows: Vec<AddressbookRow>,
 }
 
-/// One addressbook, as rendered by [`AddressbooksTable`].
-#[derive(Clone, Debug, Serialize)]
+/// One addressbook, as rendered by [`AddressbookListOutput`].
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct AddressbookRow {
+    /// Backend-specific identifier of the collection.
     pub id: String,
+    /// Human-readable display name.
     pub name: String,
+    /// Free-form description, when the backend exposes one.
     pub description: Option<String>,
+    /// ASCII `#RRGGBB` color marker, when the backend exposes one.
     pub color: Option<String>,
 }
 
@@ -76,7 +91,7 @@ impl From<Addressbook> for AddressbookRow {
     }
 }
 
-impl fmt::Display for AddressbooksTable {
+impl fmt::Display for AddressbookListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 

@@ -31,7 +31,10 @@ Distinctness SHALL be the command as the configuration wrote it: a shell line an
 A resolver SHALL live no longer than the account it is assembled for. It holds plaintext, so it belongs where an account is reached as a whole and is dropped with it, never held on a client nor shared between accounts.
 
 ### Requirement: Path fields are shell-expanded
-A configuration field naming a filesystem path SHALL expand `~` and environment variables before use, so a path written home-relative resolves against the real home rather than the current directory.
+A configuration field naming a filesystem path SHALL expand `~` and environment variables as the value is deserialized, never at a call site, so a path written home-relative resolves against the real home rather than the current directory and no reader of the field can forget. An optional path SHALL carry `serde(default)` alongside its deserializer, an absent key never reaching it.
+
+### Requirement: A DAV server may ask for no credentials
+`CarddavAuthConfig` SHALL carry a credential-less variant alongside Basic and Bearer, spelled `auth = "none"`, which emits no `Authorization` header. The wizard SHALL offer it where discovery advertised no scheme at all, a server advertising nothing being as likely to want nothing as to want something undiscovered.
 
 ### Requirement: Table rendering is configurable
 The `table.preset` option SHALL accept a `comfy-table` v7 positional preset string, one character per component, mapped onto the v8 typed style builder by [shared/table.rs](../../src/shared/table.rs). Keeping the v7 spelling means an existing configuration stays valid across the v8 upgrade. A character position left out, or set to a space, draws nothing.

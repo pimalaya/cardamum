@@ -19,6 +19,7 @@ use pimalaya_cli::printer::Printer;
 ))]
 use pimalaya_config::secret::SecretResolver;
 use pimalaya_config::toml::TomlConfig;
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
@@ -61,7 +62,7 @@ impl AccountCheckCommand {
                 )
             })?;
 
-        let mut report = CheckReport {
+        let mut report = AccountCheckOutput {
             account: name,
             backends: Vec::new(),
         };
@@ -275,17 +276,24 @@ fn connect_people(
 }
 
 /// Result of a check: one outcome per configured backend.
-#[derive(Clone, Debug, Serialize)]
-pub struct CheckReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountCheckOutput {
+    /// The account that was checked.
     pub account: String,
+    /// One outcome per backend the account configures.
     pub backends: Vec<BackendCheck>,
 }
 
 /// Outcome of checking a single backend.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct BackendCheck {
+    /// The backend that was reached.
     pub backend: &'static str,
+    /// Whether it answered.
     pub ok: bool,
+    /// Why it did not, when it did not.
     pub error: Option<String>,
 }
 
@@ -306,7 +314,7 @@ impl BackendCheck {
     }
 }
 
-impl fmt::Display for CheckReport {
+impl fmt::Display for AccountCheckOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Account: {}", self.account)?;
         for check in &self.backends {

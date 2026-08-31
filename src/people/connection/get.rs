@@ -6,7 +6,7 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
-use crate::people::{client::PeopleClient, project, render::PersonReport};
+use crate::people::{client::PeopleClient, project, render::PeoplePersonOutput};
 
 /// GET a contact by id.
 ///
@@ -25,6 +25,6 @@ impl PeopleConnectionGetCommand {
             .person_get(&resource_name, project::READ_FIELDS, &[])?
             .response;
 
-        printer.out(PersonReport(person))
+        printer.out(PeoplePersonOutput(person))
     }
 }

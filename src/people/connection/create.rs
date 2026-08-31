@@ -8,7 +8,9 @@ use clap::Parser;
 use io_people::v1::rest::people::PeoplePerson;
 use pimalaya_cli::printer::Printer;
 
-use crate::people::{client::PeopleClient, input::PersonJsonArg, project, render::PersonReport};
+use crate::people::{
+    client::PeopleClient, input::PersonJsonArg, project, render::PeoplePersonOutput,
+};
 
 /// Create a contact from a raw People person JSON body.
 ///
@@ -33,6 +35,6 @@ impl PeopleConnectionCreateCommand {
             .contact_create(&person, project::READ_FIELDS, &[])?
             .response;
 
-        printer.out(PersonReport(created))
+        printer.out(PeoplePersonOutput(created))
     }
 }

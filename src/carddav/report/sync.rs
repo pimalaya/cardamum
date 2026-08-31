@@ -7,11 +7,14 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use comfy_table::{Cell, Row, Table};
 use io_webdav::rfc6578::sync_collection::{
     WebdavSyncChange, WebdavSyncCollectionOptions, WebdavSyncDelta,
 };
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{
+    printer::Printer,
+    table::{Cell, Row, Table},
+};
+use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
@@ -23,7 +26,7 @@ use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
 /// `report multiget` to pull the changed cards.
 ///
 /// JSON output: `{"changed": [{"href", "etag"}], "vanished": [...],
-/// "sync_token", "truncated"}`.
+/// "syncToken", "truncated"}`.
 #[derive(Debug, Parser)]
 pub struct CarddavReportSyncCommand {
     /// Identifier of the addressbook to sync.
@@ -49,25 +52,34 @@ impl CarddavReportSyncCommand {
         };
         let delta = client.sync_cards(&self.addressbook_id, self.sync_token.as_deref(), opts)?;
 
-        printer.out(SyncReport::new(preset, delta))
+        printer.out(CarddavReportSyncOutput::new(preset, delta))
     }
 }
 
 /// Changes a `sync-collection` REPORT reported for one addressbook.
-#[derive(Clone, Debug, Serialize)]
-pub struct SyncReport {
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CarddavReportSyncOutput {
+    /// The `comfy_table` preset the table is drawn with.
     #[serde(skip)]
     pub preset: String,
+    /// The resources created or updated since the given token.
     pub changed: Vec<ChangeRow>,
+    /// The hrefs of the resources that vanished since it.
     pub vanished: Vec<String>,
+    /// The token to feed to the next sync, when the server sent one.
     pub sync_token: Option<String>,
+    /// Whether the server cut the listing short (RFC 6578 section 3.6).
     pub truncated: bool,
 }
 
 /// One created or updated resource: its href and ETag.
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct ChangeRow {
+    /// The changed resource's href.
     pub href: String,
+    /// Its ETag, when the server sent one.
     pub etag: Option<String>,
 }
 
@@ -80,7 +92,7 @@ impl From<WebdavSyncChange> for ChangeRow {
     }
 }
 
-impl SyncReport {
+impl CarddavReportSyncOutput {
     fn new(preset: String, delta: WebdavSyncDelta) -> Self {
         Self {
             preset,
@@ -92,7 +104,7 @@ impl SyncReport {
     }
 }
 
-impl fmt::Display for SyncReport {
+impl fmt::Display for CarddavReportSyncOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut table = Table::new();
 

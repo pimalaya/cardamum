@@ -6,7 +6,7 @@ status: current
 
 # Commands
 
-The command tree splits into three groups. The shared API (`addressbook`, `card`) is the cross-protocol least-common-denominator surface, behaving the same whatever backend serves the active account. The protocol-specific APIs each expose the full surface of one backend, including operations the shared API cannot model. The meta commands (`configure`, `account`, `completion`, `manual`) cover account generation and inspection, shell completions and man pages.
+The command tree splits into three groups. The shared API (`addressbook`, `card`) is the cross-protocol least-common-denominator surface, behaving the same whatever backend serves the active account. The protocol-specific APIs each expose the full surface of one backend, including operations the shared API cannot model. The meta commands (`configure`, `account`, `completion`, `manual`, `json-schema`) cover account generation and inspection, shell completions, man pages and the JSON Schemas of the structured output.
 
 ### Requirement: The top-level help orients a newcomer
 The top-level help SHALL frame the first run in its long description, naming the bare invocation and `cardamum configure` as the two ways to generate an account, and SHALL end with the shared Pimalaya footer (`pimalaya_cli::footer`) pointing at the issue tracker and the sponsoring page, as every other Pimalaya CLI does.
@@ -54,3 +54,21 @@ A rejected protocol write SHALL surface as prose: the server's own error type an
 
 ### Requirement: Output streams
 All output, data and errors alike, SHALL go to stdout through the printer, distinguished by the exit code; `--json` switches every command to JSON. stderr carries logs and interactive prompts only, so redirecting stdout is always safe.
+
+### Requirement: A data command answers a named output type
+A command returning data SHALL hand the printer a dedicated type named `<Domain><Target><Verb>Output`, deriving `Display`, `Serialize` and `JsonSchema`, with every public field documented. `pimalaya_cli::printer::Message` SHALL carry confirmations only: it serializes as one prose string, so a data command using it yields a `--json` payload no consumer can read.
+
+A command whose two shapes are one invocation SHALL answer one type covering both, untagged so each shape serializes exactly as it would alone.
+
+### Requirement: JSON output keys are camelCase
+Every output type SHALL carry `serde(rename_all = "camelCase")`, so a `--json` key spelling more than one word reads `addressbookId` rather than `addressbook_id`. That is the convention of the wire formats the backends speak, and unlike a hyphenated key it needs no quoting in a `jq` path. The configuration vocabulary is a separate one and stays kebab-case.
+
+A field renamed onto a provider's own wire key SHALL keep that spelling, a container attribute never reaching a field carrying its own `rename`: `@odata.nextLink`, `nextPageToken`, `contactGroups` and the JMAP `list` are the provider quoted back to the caller, not ours to restyle.
+
+### Requirement: The JSON output of every data command has a schema
+Every output type SHALL be registered in [json_schema.rs](../../src/json_schema.rs) under its CLI invocation path, hyphen-joined and prefixed `cardamum-`, and the `json-schema` command (aliased `json-schemas`) SHALL print one or write one file per entry. A registered key naming no command is a test failure, so the registry cannot drift from the tree.
+
+A wire object the protocol crate exposes without a `JsonSchema` of its own SHALL be described as raw JSON rather than left out: the payload is the provider's to define, and claiming a shape we do not own would be worse than claiming none.
+
+### Requirement: comfy-table is reached through the toolkit
+Table rendering SHALL go through `pimalaya_cli::table` rather than a direct `comfy-table` dependency, so the toolkit owns the version every Pimalaya CLI draws with.

@@ -299,6 +299,7 @@ pub fn tls_with_http_alpn(config: TlsConfig) -> Tls {
 /// spawned for this account is not run again.
 fn build_auth(auth: CarddavAuthConfig, resolver: &mut SecretResolver) -> Result<WebdavAuth> {
     Ok(match auth {
+        CarddavAuthConfig::None => WebdavAuth::None,
         CarddavAuthConfig::Basic { username, password } => {
             let password = resolver.resolve(password)?;
             WebdavAuth::Basic(HttpAuthBasic::new(username, password.expose_secret()))

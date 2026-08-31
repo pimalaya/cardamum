@@ -7,7 +7,7 @@ use clap::Parser;
 use io_people::v1::rest::contact_groups::PeopleContactGroup;
 use pimalaya_cli::printer::Printer;
 
-use crate::people::{client::PeopleClient, render::GroupReport};
+use crate::people::{client::PeopleClient, render::PeopleContactGroupOutput};
 
 /// Create a contact group.
 ///
@@ -27,6 +27,6 @@ impl PeopleContactGroupCreateCommand {
         };
         let created = client.contact_group_create(&group, &[])?.response;
 
-        printer.out(GroupReport(created))
+        printer.out(PeopleContactGroupOutput(created))
     }
 }

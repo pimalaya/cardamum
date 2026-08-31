@@ -223,12 +223,7 @@ impl Command {
                 let client = AddressbookClient::new(config, account_config, backend)?;
                 cmd.execute(printer, client)
             }
-            Self::Card(cmd) => {
-                let (config, _name, account_config) =
-                    resolve_account(printer, config_paths, account_name)?;
-                let client = AddressbookClient::new(config, account_config, backend)?;
-                cmd.execute(printer, client)
-            }
+            Self::Card(cmd) => cmd.execute(printer, config_paths, account_name, backend),
 
             #[cfg(feature = "carddav")]
             Self::Carddav(cmd) => {

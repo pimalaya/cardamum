@@ -16,7 +16,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
-default = ["rustls-ring", "carddav", "jmap", "msgraph", "people", "vdir"]
+default = ["rustls-ring", "carddav", "jmap", "msgraph", "people", "vdir", "pimdir"]
 carddav = ["dep:io-webdav"]
 jmap = ["dep:io-jmap", "vcard-rs/jscontact", "dep:base64"]
 msgraph = ["dep:io-msgraph"]

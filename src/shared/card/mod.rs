@@ -4,6 +4,7 @@
 
 mod types;
 
+pub mod build;
 pub mod cli;
 pub mod composer;
 pub mod create;

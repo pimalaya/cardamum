@@ -12,11 +12,11 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::shared::{
-    arg::AddressbookIdArg,
+    arg::{AddressbookIdArg, CardComposerArgs},
     card::{
         composer::CardComposer,
         fields::CardFieldsArgs,
-        vcard::{CardVersionArg, blank_card, check, read_source},
+        vcard::{CardVersionArg, blank_card, ensure_valid, read_source},
     },
     client::AddressbookClient,
 };
@@ -34,17 +34,9 @@ pub struct CardCreateCommand {
     /// Addressbook the card is appended to.
     #[command(flatten)]
     pub addressbook: AddressbookIdArg,
-    /// Edit the card in the composer before appending it.
-    ///
-    /// Bails when neither `card.composer` nor `--composer` names one.
-    #[arg(short, long)]
-    pub interactive: bool,
-    /// Command the card is edited in, overriding `card.composer`.
-    ///
-    /// A shell line, spawned on the path of a temporary vCard file it
-    /// edits in place.
-    #[arg(long, value_name = "COMMAND", requires = "interactive")]
-    pub composer: Option<String>,
+    /// The composer the card is refined in before it is written.
+    #[command(flatten)]
+    pub composer: CardComposerArgs,
     /// vCard version a card minted from nothing is written at.
     ///
     /// A card read from a source keeps its own.
@@ -61,7 +53,7 @@ pub struct CardCreateCommand {
 
 impl CardCreateCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
-        if self.vcard.is_none() && self.fields.is_empty() && !self.interactive {
+        if self.vcard.is_none() && self.fields.is_empty() && !self.composer.interactive {
             bail!("Nothing to create; give a vCard, a field flag, or -i to compose one");
         }
 
@@ -74,19 +66,12 @@ impl CardCreateCommand {
 
         let seeded = self.fields.apply(&base)?;
 
-        if !self.interactive {
+        if !self.composer.interactive {
             // NOTE: only a card cardamum minted is checked. A vCard given
             // on the command line goes to the backend as it was written,
             // which is what the specific commands promise too.
             if self.vcard.is_none() {
-                let violations = check(&seeded);
-
-                if !violations.is_empty() {
-                    bail!(
-                        "The card these flags describe is not a valid vCard:\n\n  {}\n",
-                        violations.join("\n  ")
-                    );
-                }
+                ensure_valid(&seeded)?;
             }
 
             let id = client.create_card(&addressbook_id, seeded)?;
@@ -94,7 +79,7 @@ impl CardCreateCommand {
         }
 
         let composer = CardComposer {
-            command: client.account.card_composer(self.composer)?,
+            command: client.account.card_composer(self.composer.composer)?,
         };
 
         // NOTE: nothing has reached the network yet, the client opening

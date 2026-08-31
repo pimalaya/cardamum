@@ -65,6 +65,10 @@ pub fn schemas() -> BTreeMap<String, Value> {
         crate::shared::card::read::CardReadOutput
     );
     insert!(
+        "cardamum-card-build",
+        crate::shared::card::build::CardBuildOutput
+    );
+    insert!(
         "cardamum-card-create",
         crate::shared::card::create::CardCreateOutput
     );

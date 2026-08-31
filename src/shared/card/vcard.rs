@@ -67,6 +67,23 @@ pub fn check(card: &[u8]) -> Vec<String> {
     }
 }
 
+/// Refuses a card that does not pass [`check`], naming what is wrong.
+///
+/// This is the strict half of a card built from flags: cardamum wrote
+/// those bytes itself, and has nobody to hand an invalid card to.
+pub fn ensure_valid(card: &[u8]) -> Result<()> {
+    let violations = check(card);
+
+    if !violations.is_empty() {
+        bail!(
+            "The card these flags describe is not a valid vCard:\n\n  {}\n",
+            violations.join("\n  ")
+        );
+    }
+
+    Ok(())
+}
+
 /// Mints a card carrying nothing but its identity.
 ///
 /// This is what a create starts from when it is given no source, and it

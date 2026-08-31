@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `card build`, which builds a vCard from the same source and the same field flags as `card create` and prints it instead of sending it anywhere.
+
+  It reaches no backend and resolves no account, so it runs on a machine holding no configuration: `cardamum card build --full-name "Jane Doe" --email work:jane@corp.example` shows what those flags produce. Both write verbs take `-` as a source, so it pipes into them, and `cardamum card read <ID> | cardamum card build --title CTO -` previews an update. It checks what `card create` checks: a card built from flags with no source is refused when it is not a valid vCard, a vCard given as a source passes through untouched.
+
 - Added `card.composer`, at the top level and per account: the command a card is edited through.
 
   It is spawned on the path of a temporary vCard file it edits in place, with stdin, stdout and stderr all inherited and nothing captured, so a terminal editor gets a real terminal. The path is appended as the last argument, so `card.composer = "tcard edit"` runs `tcard edit <PATH>`. Any command works as long as it blocks until the edit is done: use `code --wait`, not `code`.

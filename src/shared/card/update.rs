@@ -13,7 +13,7 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::shared::{
-    arg::AddressbookIdArg,
+    arg::{AddressbookIdArg, CardComposerArgs},
     card::{composer::CardComposer, fields::CardFieldsArgs, vcard::read_source},
     client::AddressbookClient,
 };
@@ -39,17 +39,9 @@ pub struct CardUpdateCommand {
     /// no source the command sends the ETag it read when this is omitted.
     #[arg(long, value_name = "ETAG")]
     pub if_match: Option<String>,
-    /// Edit the card in the composer before writing it.
-    ///
-    /// Bails when neither `card.composer` nor `--composer` names one.
-    #[arg(short, long)]
-    pub interactive: bool,
-    /// Command the card is edited in, overriding `card.composer`.
-    ///
-    /// A shell line, spawned on the path of a temporary vCard file it
-    /// edits in place.
-    #[arg(long, value_name = "COMMAND", requires = "interactive")]
-    pub composer: Option<String>,
+    /// The composer the card is refined in before it is written.
+    #[command(flatten)]
+    pub composer: CardComposerArgs,
     /// The properties the command sets on the card.
     #[command(flatten)]
     pub fields: CardFieldsArgs,
@@ -67,7 +59,7 @@ pub struct CardUpdateCommand {
 
 impl CardUpdateCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
-        if self.vcard.is_none() && self.fields.is_empty() && !self.interactive {
+        if self.vcard.is_none() && self.fields.is_empty() && !self.composer.interactive {
             bail!("Nothing to update; give a vCard, a field flag, or -i to edit the card");
         }
 
@@ -87,7 +79,7 @@ impl CardUpdateCommand {
         let if_match = self.if_match.or(etag);
         let seeded = self.fields.apply(&base)?;
 
-        if !self.interactive {
+        if !self.composer.interactive {
             let outcome =
                 client.update_card(&addressbook_id, &self.card_id, seeded, if_match.as_deref())?;
 
@@ -98,7 +90,7 @@ impl CardUpdateCommand {
         }
 
         let composer = CardComposer {
-            command: client.account.card_composer(self.composer)?,
+            command: client.account.card_composer(self.composer.composer)?,
         };
 
         // NOTE: reading the card is the one thing that has to happen

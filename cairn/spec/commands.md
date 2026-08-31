@@ -92,7 +92,7 @@ What the composer wrote SHALL be checked against its own version.s RFC contract 
 
 A card that does not pass SHALL have its violations printed and SHALL offer to re-open the editor, defaulting to yes, rather than reach the menu at all. `Save` is therefore offered only for a card that would be accepted, and a broken one leads straight back to where it can be fixed.
 
-A card built from flags with no source SHALL be checked the same way and refused, naming the violations. A vCard given on the command line SHALL NOT be, going to the backend as it was written: that is the promise the protocol-specific commands already make, and second-guessing a card someone handed over is not cardamum.s to make.
+A card built from flags with no source SHALL be checked the same way and refused, naming the violations, whether it was `card create` or `card build` that built it. A vCard given on the command line SHALL NOT be, going to the backend as it was written: that is the promise the protocol-specific commands already make, and second-guessing a card someone handed over is not cardamum.s to make.
 
 ### Requirement: An edit is never lost
 When a composed card cannot be written, whether the menu could not be shown or the backend rejected it, the temporary file SHALL be kept and the error SHALL name it: `Cannot edit vCard <path>`, which says what failed and where the work is in one line, the path being the recovery. A person who spent a minute in an editor never loses it to a failure that happened afterwards.
@@ -103,15 +103,26 @@ Aborting SHALL keep the file too, and name it, unless the composer handed back t
 `--json` SHALL refuse to run a composer rather than spawn one. The child inherits cardamum's own stdout, where it would interleave with the JSON payload, and a consumer parsing that output has no terminal to edit in.
 
 ### Requirement: A source, the field flags and the composer stack
-`card create` and `card update` SHALL take a vCard source, the field flags and `-i/--interactive` together, applied in that order: the source is the card to start from, each flag sets the property it names on it, and `-i` opens the result in the composer. Every combination therefore falls out of one pipeline, and there is no separate compose verb to keep in agreement with them.
+`card create` and `card update` SHALL take a vCard source, the field flags and `-i/--interactive` together, applied in that order: the source is the card to start from, each flag sets the property it names on it, and `-i` opens the result in the composer. Every combination therefore falls out of one pipeline, which `card build` stops one step early rather than restating: no verb beside these two writes a card.
 
-The composer SHALL be opt-in through `-i`, never opt-out. A command with no `-i` spawns nothing, which is what keeps both verbs scriptable, and `-i` SHALL bail when no composer is configured rather than fall back to one. `--composer <COMMAND>` SHALL override the configured one for a single invocation, and SHALL require `-i`.
+The composer SHALL be opt-in through `-i`, never opt-out. A command with no `-i` spawns nothing, which is what keeps both verbs scriptable, and `-i` SHALL bail when no composer is configured rather than fall back to one. `--composer <COMMAND>` SHALL override the configured one for a single invocation, and SHALL require `-i`. The pair SHALL be one shared argument, spelled once for both verbs.
 
 A create given no source SHALL mint the card it starts from rather than open an empty file, so that no composer is asked to invent an identity: it carries a `UID` and a `VERSION` and no more. An update given no source SHALL start from the card the backend holds.
 
 A command given no source, no field flag and no `-i` has nothing to write and SHALL say so, rather than send an unchanged card back to the server.
 
 A card built from flags SHALL be built unchecked. A draft on its way to an editor is not yet a card, and refusing to open one because `FN` is missing is the opposite of what a composer is for.
+
+### Requirement: A card can be built without an account
+`card build` SHALL take the same vCard source and the same field flags as `card create`, apply them in the same order, and print the resulting vCard on stdout. It SHALL reach no backend.
+
+It SHALL resolve no account and SHALL read no configuration, so that a vCard can be formatted on a machine that has none. The account a card subcommand runs against SHALL therefore be resolved by that subcommand rather than ahead of the whole `card` family.
+
+It SHALL check what `card create` would check: a card built from flags with no source is validated and refused, a vCard given as a source passes through untouched. A weaker rule would make `card build ... | card create -` a way past the guard, the piped card arriving at `create` as a source, which `create` does not check.
+
+It SHALL NOT offer the composer. `-i` is what the two write verbs already carry, and the composer command lives in the configuration this one deliberately does not read.
+
+A build given no source and no field flag has nothing to build and SHALL say so.
 
 ### Requirement: A minted card carries an identity
 A card minted from nothing SHALL carry a `UID`, minted as a fresh `urn:uuid` when `--uid` names none. The pimdir link id derives from it, so a card created without one is unaddressable in the store it lands in, and a composer handed an empty file mints none: tCard seeds an identity for a blank template but preserves what a file already holds, and a graphical editor may do neither.

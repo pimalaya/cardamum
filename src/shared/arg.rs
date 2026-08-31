@@ -14,3 +14,19 @@ pub struct AddressbookIdArg {
     #[arg(short = 'k', long = "addressbook", value_name = "ADDRESSBOOK-ID")]
     pub id: Option<String>,
 }
+
+/// The composer `card create` and `card update` refine a card in.
+#[derive(Debug, Parser)]
+pub struct CardComposerArgs {
+    /// Edit the card in the composer before writing it.
+    ///
+    /// Bails when neither `card.composer` nor `--composer` names one.
+    #[arg(short, long)]
+    pub interactive: bool,
+    /// Command the card is edited in, overriding `card.composer`.
+    ///
+    /// A shell line, spawned on the path of a temporary vCard file it
+    /// edits in place.
+    #[arg(long, value_name = "COMMAND", requires = "interactive")]
+    pub composer: Option<String>,
+}

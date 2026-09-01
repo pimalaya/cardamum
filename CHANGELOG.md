@@ -9,114 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added `card build`, which builds a vCard from the same source, the same field flags and the same composer as `card create`, and prints it instead of sending it anywhere.
-
-  It reaches no backend, and reads no configuration unless `-i` needs the composer named there, so it runs on a machine holding none: `cardamum card build --full-name "Jane Doe" --email work:jane@corp.example` shows what those flags produce. Both write verbs take `-` as a source, so it pipes into them, and `cardamum card read <ID> | cardamum card build --title CTO -` previews an update. It checks what `card create` checks: a card built from flags with no source is refused when it is not a valid vCard, a vCard given as a source passes through untouched.
-
-  `-i` opens the card in the composer and prints what comes back, which is how a card is judged before it is sent: `card build -i -o card.vcf`, read it, then `card create -k <AB> card.vcf`. `-o/--output <PATH>` writes the card to a file rather than to stdout, and it exists for that pairing: the composer inherits stdout, so `card build -i > card.vcf` would hand the editor the file as its terminal. An abandoned interactive build prints nothing and exits 0.
-
-- Added `card.composer`, at the top level and per account: the command a card is edited through.
-
-  It is spawned on the path of a temporary vCard file it edits in place, with stdin, stdout and stderr all inherited and nothing captured, so a terminal editor gets a real terminal. The path is appended as the last argument, so `card.composer = "tcard edit"` runs `tcard edit <PATH>`. Any command works as long as it blocks until the edit is done: use `code --wait`, not `code`.
-
-- Added `-i/--interactive` to `card create` and `card update`, which opens the card in that composer before writing it, and `--composer <COMMAND>` to override the configured one for a single invocation.
-
-  The composer's own exit is the decision, and nothing is asked after it: a file that came back changed is the card and gets written, a file it emptied or handed back untouched is an edit given up on, and a non-zero exit is a failure. That is the whole protocol, so an editor with its own save and discard is not second-guessed by a prompt it cannot see, and `nvim` says no with `:q!`. What comes back is still checked against its version's RFC contract, and a card that does not pass has its violations printed and offers a re-edit: `nvim` will happily hand back a card missing its `FN`, and something has to refuse it. A failed write keeps the temporary file and names it; an abandoned edit drops it.
-
-  On an update with no vCard source the card is read first, and the version the backend answered is sent as `If-Match`, so an edit that took a minute no longer silently overwrites a write that landed during it. An explicit `--if-match` still wins.
-
-- Added the vCard field flags to `card create` and `card update`: `--full-name`, `--given-name`, `--family-name`, `--middle-name`, `--name-prefix`, `--name-suffix`, `--nickname`, `--organization`, `--title`, `--birthday`, `--email work:a@b`, `--phone cell:+1-555-0100`, `--url`, `--note` and `--uid`.
-
-  A flag sets the property it names, replacing every instance the card carried, and leaves every other line byte for byte. `--given-name` and `--family-name` repeat, each component of `N` being a comma-separated list per RFC 6350 section 6.2.2, and merge into the card's existing `N` rather than clearing its other components. They are named for the role rather than the position: which of the two is written first is what varies between cultures. They are a convenience over the common fields rather than the whole of vCard: the composer is the complete surface, and `ADR` is deliberately not a flag.
-
-  The source, the flags and `-i` stack in that order, so `card create --full-name "Jane Doe" -i` opens the composer on a card already carrying the name. `card create` no longer requires a vCard: with none it mints one carrying a fresh `UID`, at `--vcard-version`.
-
-- Added the `json-schema` command, aliased `json-schemas`, which prints the JSON Schema of a command's `--json` output or writes one file per command into a directory.
-
-  Every command returning data now hands the printer a named output type describing what it emits, so a script consuming `--json` has a schema rather than the prose in a help page. A command only confirming a write still prints a plain message, and none is registered.
-
-- Added `carddav.auth = "none"`, for a CardDAV server that asks for no credentials.
-
-  The wizard offers it where discovery advertised no authentication scheme at all. Every existing spelling of `carddav.auth` parses unchanged.
-
-- Added `--fallback` to `carddav report sync`, which enumerates the addressbook with a Depth 1 `PROPFIND` for a server implementing no `sync-collection` REPORT.
+- Added a composer, the command `card.composer` names, opened by `-i/--interactive` on `card create` and `card update`: it is spawned on the path of a temporary vCard file with every stream inherited, and what it leaves there is the decision. Changed bytes are the card, an emptied or untouched file is an edit given up on, and a non-zero exit is a failure. Any command works as long as it blocks until the edit is done: `code --wait`, not `code`. `--composer <COMMAND>` overrides it for one run. What a composer wrote is still checked against its version's RFC contract, printing its violations and offering a re-edit, and a failed write keeps the temporary file and names it.
+- Added `card build`, the create pipeline stopped before the write: it applies the same source, field flags and composer and prints the vCard. It reaches no backend and reads no configuration unless `-i` needs the configured composer, so `card build --full-name "Jane Doe"` runs on a machine holding none, and `card read <ID> | card build --title CTO -` previews an update. `-o/--output <PATH>` captures it, `-i` owning stdout, and an abandoned build prints nothing at exit 0. It checks what `card create` checks, a card built from flags with no source being refused when it is not valid, so `build | create -` is no way past that guard.
+- Added `card.composer`, a shell line or an argv list, at the top level and per account.
+- Added the vCard field flags to `card build`, `card create` and `card update`: `--full-name`, `--given-name`, `--family-name`, `--middle-name`, `--name-prefix`, `--name-suffix`, `--nickname`, `--organization`, `--title`, `--birthday`, `--email work:a@b`, `--phone cell:+1-555-0100`, `--url`, `--note` and `--uid`. A flag replaces every instance of the property it names and leaves every other line byte for byte; `--given-name` and `--family-name` repeat, merge into the card's existing `N` rather than clearing its other components, and are named for the role rather than the position. They are a convenience over the common fields, not the whole of vCard: the composer is the complete surface, and `ADR` is deliberately not a flag.
+- Added the `json-schema` command (aliased `json-schemas`), printing the JSON Schema of a command's `--json` output or writing one file per command into a directory. Every command returning data now hands the printer a named output type.
+- Added `carddav.auth = "none"`, for a server that asks for no credentials; the wizard offers it where discovery advertised no scheme at all.
+- Added `--fallback` to `carddav report sync`, enumerating the addressbook with a Depth 1 `PROPFIND` for a server implementing no `sync-collection` REPORT.
 - Added the truncation report to `carddav propfind <addressbook>`, which used to drop the fact that the server cut its listing short.
-
-### Fixed
-
-- A vCard source carrying nothing but whitespace is refused instead of read as a card.
-
-  `printf '' | cardamum card create -k <AB> -` used to hand the backend an empty body and report a clean success. An empty file does the same, and both now name what they could not read from.
-
-- A source holding several vCards is refused when a field flag is set, instead of keeping the first card and dropping the rest.
-
-  A flag rewrites the card the parser reads first, so `card create --title CTO two-cards.vcf` used to write one card and lose the other, silently and with exit 0. With no flag the source still passes through as it was written, several cards included.
-
-- The backend connection is opened by the call that needs it, instead of when the client is built.
-
-  A command that never reaches the network no longer opens a socket, and, more to the point, an interactive edit holds none open while the editor is up. A server closes an idle connection, so a write landing after a long edit used to fail with `unexpected end of file` for a card that was perfectly good.
 
 ### Changed
 
-- **BREAKING**: every `--json` key spelling more than one word is camelCase, where it used to be snake_case.
-
-  A listing now answers `addressbookId` and `fnValue`, an update `keptProperties`, a sync `syncToken`: the convention of the wire formats the backends already speak, and one no `jq` path has to quote. A key a provider owns keeps that provider's spelling, so `@odata.nextLink`, `nextPageToken`, `contactGroups` and the JMAP `list` are untouched. The TOML configuration is not concerned and stays kebab-case.
-
-- **BREAKING**: `addressbook create`, `card create`, `card update` and `vdir item create` emit their result under `--json` instead of a prose message.
-
-  The four carried data inside `{"message": "..."}`: the identifier the backend assigned, and for `card update` the vCard properties the server would not let go. They now emit `{"id"}`, and `{"id", "keptProperties"}` for the update, which is what the new schemas describe. Terminal output is unchanged, word for word.
-
-- **BREAKING**: the pimdir backend no longer takes the store's owner role, and `pimdir.source` is gone from the configuration.
-
-  It reads through a lock-free reader and stages each write as one queue action through a short-lived producer, which is what the format asks of a process that is not the store's owner.
-
-  A listing therefore runs beside a sync instead of failing against it, and a staged write reads back before the sync applies it. Nothing attributes a write to a replica source any more, so `pimdir.source` has no meaning and an account still carrying it is an error.
-
-  The pimdir store must now already exist: creating one is the sync engine's job, and a root naming no store says so instead of listing an empty set of addressbooks.
-
-- **BREAKING**: the pimdir backend refuses `addressbook create`, and `card create` reports the card's link id.
-
-  Declaring a collection is an owner write, and a collection no sync knows about is one no sync would carry, so all three `addressbook` writes now refuse on pimdir. A queued create has no store-assigned id until the sync applies it, so there is none to report.
-
-- **BREAKING**: renamed `completions` and `manuals` to `completion` and `manual`, the plural staying as a hidden alias.
-
-  A command mirroring a vendor API resource keeps that API's spelling, so `people contact-group members`, `jmap address-book changes` and `jmap contact-card changes` are unchanged, each gaining a hidden singular alias.
-
-  The `msgraph` family, singular where Graph is plural, is aligned onto Graph: `msgraph contact-folder` and `contact` become `contact-folders` and `contacts`, joining the `child-folders` that already sat under the first. Every singular spelling stays as a hidden alias, where it used to be shown beside the plural.
-
-- Resolved an account's credentials once, so a command two of its backends name is spawned once.
-
-  `account check` and the wizard's connection test reach every backend the account configures, and each of them used to spawn its own credential command: an account naming one `pass` entry from its `carddav` and `jmap` tables paid two key unlocks for one entry. Both now resolve the whole account through one resolver, which spawns each distinct command once and hands its value to every backend naming it. A command is compared as the configuration wrote it, so a shell line and its argv spelling stay two commands.
-
-- Reworded the card argument of `card read`, `card update` and `card delete`, which called itself a card `UID`.
-
-  It is the backend's own identifier, the one `card list` reports, and a `UID` names no card on its own.
+- **BREAKING**: every `--json` key spelling more than one word is camelCase, where it used to be snake_case: `addressbookId`, `fnValue`, `keptProperties`, `syncToken`. A key a provider owns keeps that provider's spelling, so `@odata.nextLink`, `nextPageToken`, `contactGroups` and the JMAP `list` are untouched, and the TOML configuration stays kebab-case.
+- **BREAKING**: `addressbook create`, `card create`, `card update` and `vdir item create` emit their result under `--json` instead of a prose message: `{"id"}`, and `{"id", "keptProperties"}` for the update. Terminal output is unchanged, word for word.
+- **BREAKING**: the pimdir backend no longer takes the store's owner role, and `pimdir.source` is gone. It reads through a lock-free reader and stages each write as one queue action through a short-lived producer, so a listing runs beside a sync instead of failing against it and a staged write reads back before the sync applies it. The store must already exist, creating one being the sync engine's job.
+- **BREAKING**: the pimdir backend refuses `addressbook create`, `update` and `delete`, declaring a collection being an owner write, and `card create` reports the card's link id, a queued create having no store-assigned id until the sync applies it.
+- **BREAKING**: renamed `completions` and `manuals` to `completion` and `manual`, the plural staying as a hidden alias. A command mirroring a vendor API resource keeps that API's spelling, so `people contact-group members`, `jmap address-book changes` and `jmap contact-card changes` are unchanged; the `msgraph` family is aligned onto Graph, `contact-folder` and `contact` becoming `contact-folders` and `contacts`. Every counterpart spelling stays as a hidden alias.
+- `card create` and `card update` take the source, the field flags and `-i` in that order, so `card create --full-name "Jane Doe" -i` opens the composer on a card already carrying the name. Neither requires a vCard any more: a create with none mints one carrying a fresh `UID` at `--vcard-version`, and an update with none reads the card first and sends the version the backend answered as `If-Match`, so an edit that took a minute no longer silently overwrites a write that landed during it. An explicit `--if-match` still wins.
+- The backend connection is opened by the call that needs it instead of when the client is built, so a command that never reaches the network opens no socket and an interactive edit holds none open while the editor is up. A server closes an idle connection, so a write landing after a long edit used to fail with `unexpected end of file` for a card that was perfectly good.
+- Resolved an account's credentials once, so a command two of its backends name is spawned once: an account naming one `pass` entry from its `carddav` and `jmap` tables used to pay two key unlocks. A command is compared as the configuration wrote it, so a shell line and its argv spelling stay two commands.
+- Reworded the card argument of `card read`, `card update` and `card delete`, which called itself a card `UID`: it is the backend's own identifier, the one `card list` reports.
 
 ### Fixed
 
-- Fixed `carddav.tls.cert` never expanding a `~` or an environment variable, so a certificate written home-relative was looked for in the current directory.
-
-  The `pimdir.root` expansion moved off its call site onto the field for the same reason: a path is expanded as the configuration is read, so no reader of the field can forget to.
-
-- Fixed the pimdir backend accepting a collection of any kind as an addressbook.
-
-  A sync engine caches mail, calendars and contacts in one store, and only the listing narrowed them to `text/vcard`, so `card list -k imap/INBOX` printed a mailbox's messages as blank contacts and a create would have staged a vCard into it.
-
-  An addressbook id now names an addressbook or nothing, and a wrong one is refused naming the addressbooks the account holds.
-
-- Fixed a card vanishing from the pimdir backend when another card of the same addressbook carried its `UID`.
-
-  RFC 6352 requires that `UID` to be unique and servers hand over duplicates anyway, most often after a repeated import. The store keys the second copy apart now, so both cards list, read and act as ordinary cards under their own ids.
-
-- Fixed `card list` leaving the `TEL` column empty for any card writing its phone above its mail.
-
-  The preview chained its three property reads, so a line that was not an `EMAIL` never reached the `TEL` read. Every backend was affected.
-
-- Fixed the pimdir backend linking a card it stages under `uid:<UID>` where the sync engine uses the bare `UID`.
-
-  It would have stored the card twice and synced it as a duplicate contact. The derivations now come from io-pimdir's own conventions.
-
-- Fixed the pimdir backend naming a body it writes with a digest of its own choosing instead of the hash the store records, which put the body where no read would look for it.
+- A vCard source carrying nothing but whitespace is refused, naming where it was read from, instead of read as a card: `printf '' | card create -k <AB> -` used to hand the backend an empty body and report a clean success.
+- A source holding several vCards is refused when a field flag is set, instead of keeping the first card and dropping the rest: a flag rewrites the card the parser reads first, so `card create --title CTO two-cards.vcf` used to write one card and lose the other at exit 0. With no flag the source still passes through as it was written.
+- `carddav.tls.cert` expands a `~` or an environment variable, a certificate written home-relative having been looked for in the current directory. `pimdir.root` moved its expansion onto the field for the same reason.
+- The pimdir backend no longer accepts a collection of any kind as an addressbook. A sync engine caches mail, calendars and contacts in one store and only the listing narrowed them to `text/vcard`, so `card list -k imap/INBOX` printed a mailbox's messages as blank contacts. A wrong id is refused naming the addressbooks the account holds.
+- A card no longer vanishes from the pimdir backend when another card of the same addressbook carries its `UID`. RFC 6352 requires that `UID` to be unique and servers hand over duplicates anyway, most often after a repeated import; the store keys the second copy apart, so both cards list, read and act under their own ids.
+- `card list` no longer leaves the `TEL` column empty for a card writing its phone above its mail. The preview chained its three property reads, so a line that was not an `EMAIL` never reached the `TEL` read. Every backend was affected.
+- The pimdir backend links a card it stages under the bare `UID` the sync engine uses, rather than `uid:<UID>`, which would have stored the card twice and synced it as a duplicate contact.
+- The pimdir backend names a body it writes with the hash the store records rather than a digest of its own choosing, which put the body where no read would look for it.
 
 ## [0.2.0] - 2026-08-24
 

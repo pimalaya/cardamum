@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added filters to `carddav report query` ([#25](https://github.com/pimalaya/cardamum/issues/25)).
+
+  `--match` and `--not-match <PROP> <TYPE> <VALUE>`, `--defined` and `--not-defined <PROP>` each add an RFC 6352 prop-filter evaluated by the server, combined by `--test` (default `allof`). `--collation` and `--limit` complete them, and `report raw` covers the rest.
+
+- Added an FN column to the `carddav report query` and `report multiget` tables, and a `truncated` field to their JSON output.
+
 - Added a composer, the command `card.composer` names, opened by `-i/--interactive` on `card create` and `card update`: it is spawned on the path of a temporary vCard file with every stream inherited, and what it leaves there is the decision. Changed bytes are the card, an emptied or untouched file is an edit given up on, and a non-zero exit is a failure. Any command works as long as it blocks until the edit is done: `code --wait`, not `code`. `--composer <COMMAND>` overrides it for one run. What a composer wrote is still checked against its version's RFC contract, printing its violations and offering a re-edit, and a failed write keeps the temporary file and names it.
 - Added `card build`, the create pipeline stopped before the write: it applies the same source, field flags and composer and prints the vCard. It reaches no backend and reads no configuration unless `-i` needs the configured composer, so `card build --full-name "Jane Doe"` runs on a machine holding none, and `card read <ID> | card build --title CTO -` previews an update. `-o/--output <PATH>` captures it, `-i` owning stdout, and an abandoned build prints nothing at exit 0. It checks what `card create` checks, a card built from flags with no source being refused when it is not valid, so `build | create -` is no way past that guard.
 - Added `card.composer`, a shell line or an argv list, at the top level and per account.
@@ -20,10 +26,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Forwarded `vendored` to io-pimdir, which now links the system SQLite by default: the store needs sqlite3 on the machine, or `vendored` to build one from source, the way `vendored` already covers OpenSSL.
+
 - **BREAKING**: every `--json` key spelling more than one word is camelCase, where it used to be snake_case: `addressbookId`, `fnValue`, `keptProperties`, `syncToken`. A key a provider owns keeps that provider's spelling, so `@odata.nextLink`, `nextPageToken`, `contactGroups` and the JMAP `list` are untouched, and the TOML configuration stays kebab-case.
 - **BREAKING**: `addressbook create`, `card create`, `card update` and `vdir item create` emit their result under `--json` instead of a prose message: `{"id"}`, and `{"id", "keptProperties"}` for the update. Terminal output is unchanged, word for word.
 - **BREAKING**: the pimdir backend no longer takes the store's owner role, and `pimdir.source` is gone. It reads through a lock-free reader and stages each write as one queue action through a short-lived producer, so a listing runs beside a sync instead of failing against it and a staged write reads back before the sync applies it. The store must already exist, creating one being the sync engine's job.
 - **BREAKING**: the pimdir backend refuses `addressbook create`, `update` and `delete`, declaring a collection being an owner write, and `card create` reports the card's link id, a queued create having no store-assigned id until the sync applies it.
+- **BREAKING**: the pimdir backend refuses a store written by an earlier draft of the format, naming the table it lacks; delete the store and let the sync recreate it, there being no migration.
+
+  io-pimdir now holds the sync engine io-replica used to, and its summaries are typed: a staged create or update names the body alone and the sync derives the card's summary from it, and a listing previews an undownloaded card from the store's contact summary.
 - **BREAKING**: renamed `completions` and `manuals` to `completion` and `manual`, the plural staying as a hidden alias. A command mirroring a vendor API resource keeps that API's spelling, so `people contact-group members`, `jmap address-book changes` and `jmap contact-card changes` are unchanged; the `msgraph` family is aligned onto Graph, `contact-folder` and `contact` becoming `contact-folders` and `contacts`. Every counterpart spelling stays as a hidden alias.
 - `card create` and `card update` take the source, the field flags and `-i` in that order, so `card create --full-name "Jane Doe" -i` opens the composer on a card already carrying the name. Neither requires a vCard any more: a create with none mints one carrying a fresh `UID` at `--vcard-version`, and an update with none reads the card first and sends the version the backend answered as `If-Match`, so an edit that took a minute no longer silently overwrites a write that landed during it. An explicit `--if-match` still wins.
 - The backend connection is opened by the call that needs it instead of when the client is built, so a command that never reaches the network opens no socket and an interactive edit holds none open while the editor is up. A server closes an idle connection, so a write landing after a long edit used to fail with `unexpected end of file` for a card that was perfectly good.

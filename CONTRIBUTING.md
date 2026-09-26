@@ -28,7 +28,7 @@ Each backend sits behind its own cargo feature, and exactly one TLS provider mus
 | `msgraph`     | io-msgraph: the Microsoft Graph contacts API                         |
 | `people`      | io-people: the Google People API                                     |
 | `vdir`        | io-vdir: the local vdir home                                         |
-| `pimdir`      | io-pimdir and io-replica: the local pimdir store                     |
+| `pimdir`      | io-pimdir: the local pimdir store                                    |
 | `rustls-ring` | the default TLS provider                                             |
 | `rustls-aws`  | Rustls with the aws-lc crypto provider                               |
 | `native-tls`  | the platform TLS stack                                               |

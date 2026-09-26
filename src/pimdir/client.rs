@@ -6,11 +6,11 @@
 use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
-use io_pimdir::{PimdirBlobs, PimdirProducer, PimdirReader};
+use io_pimdir::client::{blobs::PimdirBlobs, producer::PimdirProducer, reader::PimdirReader};
 
 use crate::config::PimdirConfig;
 
-/// The process name each staged action records (pimdir SPEC §15.1).
+/// The process name each staged action records (pimdir STORAGE §15.1).
 ///
 /// Diagnostic only: it says who asked, never who applies.
 const PRODUCER: &str = "cardamum";
@@ -32,8 +32,9 @@ impl PimdirClient {
     /// Opens the pimdir store at the configured root to read.
     ///
     /// A reader creates nothing, the schema being the owner's to write, so a
-    /// root holding no store fails here. Its reads fold the pending queue
-    /// over the committed rows (SPEC §15.4), so a staged card reads back.
+    /// root holding no store fails here, and so does one an earlier draft
+    /// wrote. Its reads fold the pending queue over the committed rows
+    /// (STORAGE §15.4), so a staged card reads back.
     pub fn new(config: PimdirConfig) -> Result<Self> {
         let PimdirConfig { root, account } = config;
 

@@ -11,7 +11,7 @@ use io_webdav::{
     rfc4918::{send::WebdavSendError, summarize_body},
     rfc6352::{
         addressbook::{CarddavAddressbook, CarddavAddressbookPatch},
-        card::CarddavCardEntry,
+        card::{CarddavCardEntry, list::CarddavCardListOptions},
     },
 };
 use pimalaya_config::secret::SecretResolver;
@@ -109,8 +109,11 @@ impl CarddavBackend {
         page: Option<u32>,
         page_size: Option<u32>,
     ) -> Result<Vec<Card>> {
-        let entries = self.inner.list_cards(addressbook_id)?;
-        let cards = entries
+        let opts = CarddavCardListOptions::default();
+        let cards = self
+            .inner
+            .list_cards(addressbook_id, &opts)?
+            .cards
             .into_iter()
             .map(|entry| into_card(addressbook_id, entry))
             .collect();

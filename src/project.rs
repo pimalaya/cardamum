@@ -29,6 +29,7 @@ pub fn text_prop(
     value: &str,
 ) -> VcardProp<'static> {
     VcardProp {
+        group: None,
         name: VcardPropName::Kind(kind),
         params,
         value: VcardValue::Text(VcardText(Cow::Owned(value.to_string()))),

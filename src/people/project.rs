@@ -126,6 +126,7 @@ pub fn to_vcard(person: &PeoplePerson) -> String {
             && n.suffixes.is_empty();
         if !empty {
             card.push(VcardProp {
+                group: None,
                 name: VcardPropName::Kind(VcardPropKind::N),
                 params: vec![],
                 value: VcardValue::N(n),
@@ -136,6 +137,7 @@ pub fn to_vcard(person: &PeoplePerson) -> String {
     for nickname in &person.nicknames {
         if let Some(nick) = opt(&nickname.value) {
             card.push(VcardProp {
+                group: None,
                 name: VcardPropName::Kind(VcardPropKind::Nickname),
                 params: vec![],
                 value: VcardValue::TextList(VcardTextList(vec![Cow::Owned(nick.to_string())])),
@@ -157,6 +159,7 @@ pub fn to_vcard(person: &PeoplePerson) -> String {
                 None => username.to_string(),
             };
             card.push(VcardProp {
+                group: None,
                 name: VcardPropName::Kind(VcardPropKind::Impp),
                 params: vec![],
                 value: VcardValue::Uri(VcardUri(Cow::Owned(uri))),
@@ -187,6 +190,7 @@ pub fn to_vcard(person: &PeoplePerson) -> String {
                 components.push(Cow::Owned(department.to_string()));
             }
             card.push(VcardProp {
+                group: None,
                 name: VcardPropName::Kind(VcardPropKind::Org),
                 params: vec![],
                 value: VcardValue::Org(VcardOrg(components)),
@@ -205,6 +209,7 @@ pub fn to_vcard(person: &PeoplePerson) -> String {
     for url in &person.urls {
         if let Some(page) = opt(&url.value) {
             card.push(VcardProp {
+                group: None,
                 name: VcardPropName::Kind(VcardPropKind::Url),
                 params: vec![],
                 value: VcardValue::Uri(VcardUri(Cow::Owned(page.to_string()))),
@@ -222,6 +227,7 @@ pub fn to_vcard(person: &PeoplePerson) -> String {
         ))
     }) {
         card.push(VcardProp {
+            group: None,
             name: VcardPropName::Kind(VcardPropKind::Bday),
             params: vec![],
             value: VcardValue::DateAndOrTime(VcardDateAndOrTime(Cow::Owned(date))),
@@ -678,6 +684,7 @@ fn adr_prop(address: &PeopleAddress) -> Option<VcardProp<'static>> {
     }
 
     Some(VcardProp {
+        group: None,
         name: VcardPropName::Kind(VcardPropKind::Adr),
         params: std_type(&address.address_type)
             .map(type_param)
@@ -693,6 +700,7 @@ fn adr_prop(address: &PeopleAddress) -> Option<VcardProp<'static>> {
 /// RELATED defaults to a URI.
 fn related_prop(r#type: &'static str, name: &str) -> VcardProp<'static> {
     VcardProp {
+        group: None,
         name: VcardPropName::Kind(VcardPropKind::Related),
         params: vec![type_param(r#type), VcardParam::Value(Cow::Borrowed("text"))],
         value: VcardValue::Text(VcardText(Cow::Owned(name.to_string()))),

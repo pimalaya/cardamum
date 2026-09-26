@@ -273,6 +273,7 @@ fn names(line: &VcardLine, kind: VcardPropKind) -> bool {
 /// A property with no parameter.
 fn prop(kind: VcardPropKind, value: VcardValue<'static>) -> VcardProp<'static> {
     VcardProp {
+        group: None,
         name: VcardPropName::Kind(kind),
         params: Vec::new(),
         value,
@@ -291,6 +292,7 @@ fn typed(
     };
 
     VcardProp {
+        group: None,
         name: VcardPropName::Kind(kind),
         params,
         value,

@@ -42,6 +42,7 @@ pub fn configure_discovered(
         server: Some(url.to_string()),
         home: None,
         tls: Default::default(),
+        proxy: None,
         auth,
     })
 }

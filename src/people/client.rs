@@ -6,12 +6,14 @@
 use std::ops::{Deref, DerefMut};
 
 use anyhow::{Result, anyhow};
-use io_people::v1::client::{PeopleClientStd, PeopleClientStdConnectOptions};
+use io_people::v1::client::PeopleClientStd;
+use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 
 use crate::{
     account::context::Account,
-    config::{AccountConfig, Config},
+    config::{AccountConfig, Config, ProxyConfig},
+    people::backend::connect_people,
 };
 
 /// The connected People client and the account it runs for.
@@ -49,10 +51,9 @@ pub fn build_people_client(
         .ok_or_else(|| anyhow!("Google People config is missing for account `{name}`"))?;
 
     let token = people_config.auth.token.get()?;
-    let options = PeopleClientStdConnectOptions {
-        tls: people_config.tls.into_tls(people_config.alpn),
-    };
-    let inner = PeopleClientStd::connect(token.expose_secret(), options)?;
+    let tls = people_config.tls.into_tls(people_config.alpn);
+    let proxy = ProxyConfig::resolve(people_config.proxy, &mut SecretResolver::new())?;
+    let inner = connect_people(token.expose_secret(), tls, proxy)?;
 
     let account = Account::from(config).merge(Account::from(account_config));
     Ok(PeopleClient { inner, account })

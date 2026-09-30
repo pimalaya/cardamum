@@ -7,11 +7,12 @@ use std::ops::{Deref, DerefMut};
 
 use anyhow::{Result, anyhow};
 use io_msgraph::v1::client::{MsgraphClientStd, MsgraphClientStdConnectOptions};
+use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 
 use crate::{
     account::context::Account,
-    config::{AccountConfig, Config},
+    config::{AccountConfig, Config, ProxyConfig},
 };
 
 /// The connected Graph client, plus the account it runs for.
@@ -51,6 +52,7 @@ pub fn build_msgraph_client(
     let token = msgraph_config.auth.token.get()?;
     let options = MsgraphClientStdConnectOptions {
         tls: msgraph_config.tls.into_tls(msgraph_config.alpn),
+        proxy: ProxyConfig::resolve(msgraph_config.proxy, &mut SecretResolver::new())?,
         user_id: msgraph_config.user_id,
     };
     let inner = MsgraphClientStd::connect(token.expose_secret(), options)?;

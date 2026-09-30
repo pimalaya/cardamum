@@ -28,6 +28,7 @@ pub fn configure(account_name: &str) -> Result<PeopleConfig> {
 
     Ok(PeopleConfig {
         tls: Default::default(),
+        proxy: None,
         alpn: vec!["http/1.1".to_string()],
         auth: PeopleAuthConfig { token },
     })

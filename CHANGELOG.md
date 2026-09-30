@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `proxy`, a per-account SOCKS5 or HTTP proxy every network backend connects through, and `<backend>.proxy` to override it for one backend.
+
+  The password is a secret like any credential, so it stays out of the URL. Without either, the `all_proxy` and `https_proxy` environment variables are read. CardDAV `discover` lookups only read the environment.
+
 - Added filters to `carddav report query` ([#25](https://github.com/pimalaya/cardamum/issues/25)).
 
   `--match` and `--not-match <PROP> <TYPE> <VALUE>`, `--defined` and `--not-defined <PROP>` each add an RFC 6352 prop-filter evaluated by the server, combined by `--test` (default `allof`). `--collation` and `--limit` complete them, and `report raw` covers the rest.

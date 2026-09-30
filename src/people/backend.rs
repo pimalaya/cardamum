@@ -10,9 +10,11 @@
 //! user's own groups. Memberships are m:n labels, so one card can appear
 //! under several books and each listing is narrowed to its group.
 
+use std::time::Duration;
+
 use anyhow::{Error, Result, bail};
 use io_people::v1::{
-    client::{PeopleClientStd, PeopleClientStdConnectOptions},
+    client::PeopleClientStd,
     rest::{
         contact_groups::{
             PeopleContactGroup, PeopleContactGroupType, list::PeopleContactGroupsListParams,
@@ -21,10 +23,15 @@ use io_people::v1::{
     },
 };
 use pimalaya_config::secret::SecretResolver;
+use pimalaya_stream::{
+    proxy::Proxy,
+    stream::{Stream, TlsConnectOptions},
+    tls::Tls,
+};
 use secrecy::ExposeSecret;
 
 use crate::{
-    config::PeopleConfig,
+    config::{PeopleConfig, ProxyConfig},
     people::project,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
@@ -32,6 +39,9 @@ use crate::{
         client::paginate,
     },
 };
+
+/// Host serving the People API.
+const PEOPLE_API_HOST: &str = "people.googleapis.com";
 
 /// Contact group id of myContacts, the group every contact belongs to.
 pub const MY_CONTACTS_GROUP: &str = "myContacts";
@@ -48,10 +58,9 @@ impl PeopleBackend {
     /// one credential command from several of its backends spawns it once.
     pub fn new(config: PeopleConfig, resolver: &mut SecretResolver) -> Result<Self> {
         let token = resolver.resolve(config.auth.token)?;
-        let options = PeopleClientStdConnectOptions {
-            tls: config.tls.into_tls(config.alpn),
-        };
-        let inner = PeopleClientStd::connect(token.expose_secret(), options)?;
+        let tls = config.tls.into_tls(config.alpn);
+        let proxy = ProxyConfig::resolve(config.proxy, resolver)?;
+        let inner = connect_people(token.expose_secret(), tls, proxy)?;
         Ok(Self { inner })
     }
 
@@ -331,6 +340,24 @@ impl PeopleBackend {
         self.inner.contact_delete(&format!("people/{card_id}"))?;
         Ok(())
     }
+}
+
+/// Opens a People client over a TLS stream to the People API reached
+/// through `proxy`.
+///
+/// io-people's own `connect` takes no proxy, so the stream is opened
+/// here, with the same 30s read timeout.
+pub fn connect_people(token: &str, tls: Tls, proxy: Proxy) -> Result<PeopleClientStd> {
+    let opts = TlsConnectOptions {
+        tls,
+        proxy,
+        ..Default::default()
+    };
+
+    let stream = Stream::connect_tls(PEOPLE_API_HOST, 443, opts)?;
+    stream.set_read_timeout(Some(Duration::from_secs(30)))?;
+
+    Ok(PeopleClientStd::new(stream, token))
 }
 
 /// Whether the person is a member of the contact group `id`.

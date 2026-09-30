@@ -171,6 +171,15 @@ carddav.auth.basic.password.command = "pass show example"
 #carddav.tls.rustls.crypto = "ring"
 #carddav.tls.cert = "~/.local/share/ca/example.pem"
 
+# Proxy the network backends of this account connect through, absent their own
+# `<backend>.proxy` block (same keys). Without any, the `all_proxy` and
+# `https_proxy` environment variables are read. The URL takes `socks5://`,
+# `socks5h://` or `http://`.
+#proxy.url = "socks5h://localhost:1080"
+#proxy.username = "alice"
+#proxy.password.command = "pass show proxy"
+#carddav.proxy.url = "http://proxy.example.org:3128"
+
 # --------------------------------------------------------------------------------
 # JMAP backend (RFC 8620 + RFC 9610)
 #

@@ -18,7 +18,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::Result;
-#[cfg(feature = "jmap")]
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "people"
+))]
 use anyhow::bail;
 use crossterm::style::Color;
 use pimalaya_cli::table::ContentArrangement;
@@ -28,7 +33,7 @@ use pimalaya_cli::table::ContentArrangement;
     feature = "msgraph",
     feature = "people"
 ))]
-use pimalaya_config::secret::Secret;
+use pimalaya_config::secret::{Secret, SecretResolver};
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -46,7 +51,17 @@ use pimalaya_config::{command::CommandConfig, toml::TomlConfig};
     feature = "msgraph",
     feature = "people"
 ))]
-use pimalaya_stream::tls::{Rustls, RustlsCrypto, Tls, TlsProvider};
+use pimalaya_stream::{
+    proxy::{Proxy, ProxyAuth},
+    tls::{Rustls, RustlsCrypto, Tls, TlsProvider},
+};
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "people"
+))]
+use secrecy::SecretString;
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -112,7 +127,20 @@ impl TomlConfig for Config {
     }
 
     fn take_named_account(&mut self, name: &str) -> Option<(String, Self::Account)> {
-        self.accounts.remove_entry(name)
+        let entry = self.accounts.remove_entry(name);
+
+        #[cfg(any(
+            feature = "carddav",
+            feature = "jmap",
+            feature = "msgraph",
+            feature = "people"
+        ))]
+        let entry = entry.map(|(name, mut account)| {
+            account.inherit_proxy();
+            (name, account)
+        });
+
+        entry
     }
 
     fn take_default_account(&mut self) -> Option<(String, Self::Account)> {
@@ -131,8 +159,9 @@ impl TomlConfig for Config {
 /// A key outside this list still renders, after the listed ones, so a
 /// field added to [`AccountConfig`] can never go missing from a
 /// generated document because nobody updated this table.
-const RENDER_ORDER: [&str; 10] = [
+const RENDER_ORDER: [&str; 11] = [
     "default",
+    "proxy",
     "vdir",
     "pimdir",
     "carddav",
@@ -223,6 +252,35 @@ impl AccountConfig {
 
         Ok(document)
     }
+
+    /// Hands the account proxy to every network backend naming none of
+    /// its own.
+    #[cfg(any(
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "people"
+    ))]
+    fn inherit_proxy(&mut self) {
+        let Some(proxy) = &self.proxy else {
+            return;
+        };
+
+        let slots = [
+            #[cfg(feature = "carddav")]
+            self.carddav.as_mut().map(|c| &mut c.proxy),
+            #[cfg(feature = "jmap")]
+            self.jmap.as_mut().map(|c| &mut c.proxy),
+            #[cfg(feature = "msgraph")]
+            self.msgraph.as_mut().map(|c| &mut c.proxy),
+            #[cfg(feature = "people")]
+            self.people.as_mut().map(|c| &mut c.proxy),
+        ];
+
+        for slot in slots.into_iter().flatten() {
+            slot.get_or_insert_with(|| proxy.clone());
+        }
+    }
 }
 
 /// Account configuration.
@@ -241,6 +299,16 @@ pub struct AccountConfig {
     /// Card options, overriding the global ones.
     #[serde(default)]
     pub card: CardConfig,
+    /// Proxy every network backend of this account goes through, unless
+    /// its own block names one.
+    #[cfg(any(
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "people"
+    ))]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<ProxyConfig>,
     /// The local vdir home this account reads.
     #[cfg(feature = "vdir")]
     pub vdir: Option<VdirConfig>,
@@ -317,6 +385,10 @@ pub struct CarddavConfig {
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
+    /// Proxy the connection goes through, falling back to the account one
+    /// and then to the `all_proxy`/`https_proxy` environment variables.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<ProxyConfig>,
     /// Authentication configuration.
     pub auth: CarddavAuthConfig,
 }
@@ -362,6 +434,10 @@ pub struct JmapConfig {
     /// `native-tls` ignores ALPN.
     #[serde(default = "io_jmap::client::JmapClientStd::default_alpn")]
     pub alpn: Vec<String>,
+    /// Proxy the connection goes through, falling back to the account one
+    /// and then to the `all_proxy`/`https_proxy` environment variables.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<ProxyConfig>,
     /// Authentication configuration.
     pub auth: JmapAuthConfig,
 }
@@ -405,6 +481,10 @@ pub struct MsgraphConfig {
     /// `native-tls` ignores ALPN.
     #[serde(default = "default_http_alpn")]
     pub alpn: Vec<String>,
+    /// Proxy the connection goes through, falling back to the account one
+    /// and then to the `all_proxy`/`https_proxy` environment variables.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<ProxyConfig>,
     /// Authentication configuration.
     pub auth: MsgraphAuthConfig,
 }
@@ -439,6 +519,10 @@ pub struct PeopleConfig {
     /// `native-tls` ignores ALPN.
     #[serde(default = "default_http_alpn")]
     pub alpn: Vec<String>,
+    /// Proxy the connection goes through, falling back to the account one
+    /// and then to the `all_proxy`/`https_proxy` environment variables.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proxy: Option<ProxyConfig>,
     /// Authentication configuration.
     pub auth: PeopleAuthConfig,
 }
@@ -596,6 +680,72 @@ impl From<TableArrangementConfig> for ContentArrangement {
             TableArrangementConfig::DynamicFullWidth => ContentArrangement::DynamicFullWidth,
             TableArrangementConfig::Disabled => ContentArrangement::Disabled,
         }
+    }
+}
+
+/// Proxy configuration.
+///
+/// `url` is a `socks5://`, `socks5h://` or `http://` proxy URL. Its user
+/// info authenticates too, but `username` and `password` keep the secret
+/// out of the URL.
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "people"
+))]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub struct ProxyConfig {
+    /// The proxy URL.
+    pub url: String,
+    /// The proxy username, required by `password`.
+    pub username: Option<String>,
+    /// The proxy password.
+    pub password: Option<Secret>,
+}
+
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "people"
+))]
+impl ProxyConfig {
+    /// Resolves an optional configuration, an absent one reading the
+    /// environment at connect time.
+    pub fn resolve(config: Option<Self>, resolver: &mut SecretResolver) -> Result<Proxy> {
+        match config {
+            Some(config) => config.try_into_proxy(resolver),
+            None => Ok(Proxy::System),
+        }
+    }
+
+    /// Resolves the configuration into a runtime [`Proxy`], the password
+    /// going through `resolver`.
+    pub fn try_into_proxy(self, resolver: &mut SecretResolver) -> Result<Proxy> {
+        let mut proxy = Proxy::from_url(&self.url)?;
+
+        let auth = match (self.username, self.password) {
+            (None, None) => return Ok(proxy),
+            (None, Some(_)) => bail!("Proxy password requires a username"),
+            (Some(user), pass) => ProxyAuth {
+                user,
+                pass: match pass {
+                    Some(pass) => resolver.resolve(pass)?,
+                    None => SecretString::default(),
+                },
+            },
+        };
+
+        match &mut proxy {
+            Proxy::Socks5 { auth: slot, .. } | Proxy::Http { auth: slot, .. } => {
+                *slot = Some(auth);
+            }
+            Proxy::None | Proxy::System => {}
+        }
+
+        Ok(proxy)
     }
 }
 
@@ -778,5 +928,31 @@ mod tests {
             toml::from_str("server = \"dav.example.org\"\nauth.bearer.token.raw = \"token\"")
                 .unwrap();
         assert!(matches!(bearer.auth, CarddavAuthConfig::Bearer { .. }));
+    }
+
+    #[cfg(all(feature = "carddav", feature = "jmap"))]
+    #[test]
+    fn an_account_proxy_fills_every_backend_naming_none() {
+        use pimalaya_config::toml::TomlConfig;
+
+        use super::Config;
+
+        let mut config: Config = toml::from_str(
+            "[accounts.a]\n\
+             proxy.url = \"socks5h://localhost:1080\"\n\
+             carddav.server = \"dav.example.org\"\n\
+             carddav.auth = \"none\"\n\
+             jmap.server = \"jmap.example.org\"\n\
+             jmap.proxy.url = \"http://proxy.example.org:3128\"\n\
+             jmap.auth.bearer.token.raw = \"token\"",
+        )
+        .unwrap();
+
+        let (_, account) = config.take_named_account("a").unwrap();
+        let carddav = account.carddav.unwrap().proxy.unwrap();
+        let jmap = account.jmap.unwrap().proxy.unwrap();
+
+        assert_eq!(carddav.url, "socks5h://localhost:1080");
+        assert_eq!(jmap.url, "http://proxy.example.org:3128");
     }
 }

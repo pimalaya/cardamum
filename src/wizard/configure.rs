@@ -326,6 +326,7 @@ mod tests {
                 server: Some(String::from("https://dav.example.org")),
                 home: None,
                 tls: Default::default(),
+                proxy: None,
                 auth: CarddavAuthConfig::Basic {
                     username: String::from("alice@example.org"),
                     password: Secret::Command(CommandConfig::Argv {

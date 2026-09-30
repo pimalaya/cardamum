@@ -23,7 +23,7 @@ use secrecy::ExposeSecret;
 use url::Url;
 
 use crate::{
-    config::MsgraphConfig,
+    config::{MsgraphConfig, ProxyConfig},
     msgraph::project,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
@@ -50,6 +50,7 @@ impl MsgraphBackend {
         let token = resolver.resolve(config.auth.token)?;
         let options = MsgraphClientStdConnectOptions {
             tls: config.tls.into_tls(config.alpn),
+            proxy: ProxyConfig::resolve(config.proxy, resolver)?,
             user_id: config.user_id,
         };
         let inner = MsgraphClientStd::connect(token.expose_secret(), options)?;

@@ -40,6 +40,7 @@ pub fn configure_discovered(
     Ok(JmapConfig {
         server: server.to_string(),
         tls: Default::default(),
+        proxy: None,
         alpn: io_jmap::client::JmapClientStd::default_alpn(),
         auth,
     })

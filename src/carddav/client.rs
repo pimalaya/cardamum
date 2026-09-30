@@ -31,7 +31,8 @@ use io_pim_discovery::{
 use io_webdav::{client::WebdavClientStd as Inner, rfc4918::WebdavAuth};
 use pimalaya_config::secret::SecretResolver;
 use pimalaya_stream::{
-    stream::{Stream, TlsConnectOptions},
+    proxy::Proxy,
+    stream::{Stream, TcpConnectOptions, TlsConnectOptions},
     tls::Tls,
 };
 use secrecy::ExposeSecret;
@@ -39,7 +40,7 @@ use url::Url;
 
 use crate::{
     account::context::Account,
-    config::{AccountConfig, CarddavAuthConfig, CarddavConfig, Config, TlsConfig},
+    config::{AccountConfig, CarddavAuthConfig, CarddavConfig, Config, ProxyConfig, TlsConfig},
 };
 
 /// DNS resolver the discovery mechanisms query.
@@ -111,14 +112,16 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
         server,
         home,
         tls,
+        proxy,
         auth,
     } = config;
 
     let tls = tls_with_http_alpn(tls);
     let auth = build_auth(auth, resolver)?;
+    let proxy = ProxyConfig::resolve(proxy, resolver)?;
 
     if let Some(home) = home {
-        let mut client = Inner::connect(&home, &tls, auth)?;
+        let mut client = connect_webdav(&home, &tls, &proxy, auth)?;
         client.addressbook_home_set = Some(home);
         return Ok(client);
     }
@@ -129,7 +132,7 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
             let domain = discover
                 .ok_or_else(|| anyhow!("CardDAV config needs `server`, `home`, or `discover`"))?;
             if is_google(&domain) {
-                google_carddav_server(&auth, &tls)?
+                google_carddav_server(&auth, &tls, &proxy)?
             } else {
                 discover_server(&domain, &tls)
                     .ok_or_else(|| anyhow!("CardDAV discovery failed for `{domain}`"))?
@@ -142,15 +145,49 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
     // 404s everything outside `/dav/*`, so probe `.well-known/carddav`
     // and follow its redirect.
     let server = match server.path() {
-        "" | "/" => probe_carddav_context_root(&server, &tls).unwrap_or(server),
+        "" | "/" => probe_carddav_context_root(&server, &tls, &proxy).unwrap_or(server),
         _ => server,
     };
 
-    let mut client = Inner::connect(&server, &tls, auth)?;
+    let mut client = connect_webdav(&server, &tls, &proxy, auth)?;
     client.current_user_principal()?;
     client.addressbook_home_set()?;
 
     Ok(client)
+}
+
+/// Opens a WebDAV client on `url` reached through `proxy`, plain TCP for
+/// `http` and TLS for `https`.
+///
+/// io-webdav's own `connect` takes no proxy, so the stream is opened
+/// here.
+fn connect_webdav(url: &Url, tls: &Tls, proxy: &Proxy, auth: WebdavAuth) -> Result<Inner> {
+    let Some(host) = url.host_str() else {
+        bail!("CardDAV URL `{url}` has no host");
+    };
+
+    let stream = match url.scheme() {
+        "http" => {
+            let opts = TcpConnectOptions {
+                proxy: proxy.clone(),
+                ..Default::default()
+            };
+
+            Stream::connect_tcp(host, url.port().unwrap_or(80), opts)?
+        }
+        "https" => {
+            let opts = TlsConnectOptions {
+                tls: tls.clone(),
+                proxy: proxy.clone(),
+                ..Default::default()
+            };
+
+            Stream::connect_tls(host, url.port().unwrap_or(443), opts)?
+        }
+        scheme => bail!("CardDAV URL `{url}` has unsupported scheme `{scheme}`"),
+    };
+
+    Ok(Inner::new(stream, auth, url.clone()))
 }
 
 /// Probes `.well-known/carddav` on a bare-origin `server` with a GET.
@@ -158,11 +195,11 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
 /// Returns the context-root redirect target when the server publishes
 /// one. Silent: a failed probe or a response without a redirect leaves
 /// the origin as-is.
-fn probe_carddav_context_root(server: &Url, tls: &Tls) -> Option<Url> {
+fn probe_carddav_context_root(server: &Url, tls: &Tls, proxy: &Proxy) -> Option<Url> {
     let host = server.host_str()?;
     let port = server.port_or_known_default()?;
     let request = Http11WellKnown::prepare_request(server.as_str(), "carddav").ok()?;
-    let output = run_well_known(host, port, request, tls).ok()?;
+    let output = run_well_known(host, port, request, tls, proxy).ok()?;
     output.redirect_url
 }
 
@@ -172,9 +209,11 @@ fn run_well_known(
     port: u16,
     request: HttpRequest,
     tls: &Tls,
+    proxy: &Proxy,
 ) -> Result<Http11WellKnownOutput> {
     let opts = TlsConnectOptions {
         tls: tls.clone(),
+        proxy: proxy.clone(),
         ..Default::default()
     };
     let mut stream = Stream::connect_tls(host, port, opts)?;
@@ -242,7 +281,7 @@ pub fn is_google(domain: &str) -> bool {
 /// `gmail.com`, and its `.well-known` endpoint only 301-redirects for
 /// an authenticated PROPFIND (a plain GET 404s), so the well-known
 /// builder is reused with its method swapped and a bearer added.
-fn google_carddav_server(auth: &WebdavAuth, tls: &Tls) -> Result<Url> {
+fn google_carddav_server(auth: &WebdavAuth, tls: &Tls, proxy: &Proxy) -> Result<Url> {
     let WebdavAuth::Bearer(bearer) = auth else {
         bail!("Google CardDAV requires OAuth 2.0 bearer authentication");
     };
@@ -253,7 +292,7 @@ fn google_carddav_server(auth: &WebdavAuth, tls: &Tls) -> Result<Url> {
         .header("Authorization", bearer.to_authorization())
         .header("Depth", "0");
 
-    let output = run_well_known(GOOGLE_API_HOST, 443, request, tls)?;
+    let output = run_well_known(GOOGLE_API_HOST, 443, request, tls, proxy)?;
 
     if let Some(url) = output.redirect_url {
         return Ok(url);

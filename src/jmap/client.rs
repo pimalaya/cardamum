@@ -6,12 +6,12 @@
 use std::ops::{Deref, DerefMut};
 
 use anyhow::{Result, anyhow};
-use io_jmap::client::JmapClientStd;
+use io_jmap::client::{JmapClientStd, JmapClientStdConnectOptions};
 use pimalaya_config::secret::SecretResolver;
 
 use crate::{
     account::context::Account,
-    config::{AccountConfig, Config, parse_server},
+    config::{AccountConfig, Config, ProxyConfig, parse_server},
     jmap::backend::jmap_http_auth,
 };
 
@@ -49,15 +49,19 @@ pub fn build_jmap_client(
         .take()
         .ok_or_else(|| anyhow!("JMAP config is missing for account `{name}`"))?;
 
-    let tls = jmap_config.tls.into_tls(jmap_config.alpn);
-    let http_auth = jmap_http_auth(jmap_config.auth, &mut SecretResolver::new())?;
+    let mut resolver = SecretResolver::new();
+    let http_auth = jmap_http_auth(jmap_config.auth, &mut resolver)?;
     let url = parse_server(
         &jmap_config.server,
         "https",
         &["http", "https", "jmap", "jmaps"],
     )?;
+    let options = JmapClientStdConnectOptions {
+        tls: jmap_config.tls.into_tls(jmap_config.alpn),
+        proxy: ProxyConfig::resolve(jmap_config.proxy, &mut resolver)?,
+    };
 
-    let mut inner = JmapClientStd::connect(&url, &tls, http_auth)?;
+    let mut inner = JmapClientStd::connect(&url, http_auth, options)?;
     inner.session_get(&url)?;
 
     let account = Account::from(config).merge(Account::from(account_config));

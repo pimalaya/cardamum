@@ -892,9 +892,9 @@ dependencies = [
 
 [[package]]
 name = "io-jmap"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8877b3fb4192f582fefd8f4113c12af45f7fb24ed9a132b4618aa4db6424bf1"
+checksum = "dfba5d15f9451ed373c5fbdb9280dc94da0ee9de313615bc05ee8d7068a61a16"
 dependencies = [
  "anyhow",
  "io-http",
@@ -909,9 +909,9 @@ dependencies = [
 
 [[package]]
 name = "io-msgraph"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90ea756d13b4c21c94fe9d27f13c4f5976316d721588e011c8a49da5cd1473b1"
+checksum = "51140cd0784652d13ba54459fa97276ea150e99b8eca8625cd4e213501db5eaa"
 dependencies = [
  "anyhow",
  "base64",
@@ -920,7 +920,6 @@ dependencies = [
  "pimalaya-stream",
  "serde",
  "serde_json",
- "thiserror",
  "url",
 ]
 
@@ -944,9 +943,9 @@ dependencies = [
 
 [[package]]
 name = "io-pim-discovery"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da1a1cd982a92647cd760d2fa84f9695e496526bba22a95c69e3e8460681ba69"
+checksum = "091245d7c51eee2b93a613f95e3615b164377364819e7506f61f62bf1e5643cc"
 dependencies = [
  "anyhow",
  "base64",
@@ -1004,18 +1003,18 @@ dependencies = [
 
 [[package]]
 name = "io-webdav"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee94bf0643ef5adefaf8e870d7e43d122deeb06d281c4ad121c6bff4a6a4fb7f"
+checksum = "0ea2e45d515a9a5970cf51142e375c4935724a03634d9fc46ed2a0efe8c83123"
 dependencies = [
  "anyhow",
  "io-http",
  "log",
  "pimalaya-stream",
- "quick-xml",
  "serde",
  "thiserror",
  "url",
+ "xmlparser",
 ]
 
 [[package]]
@@ -1405,9 +1404,9 @@ checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
 
 [[package]]
 name = "pimalaya-cli"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4db8af1fd7b9ffa9bed65ccc090f3cf3e06ef4e30d9138261081196f5271033"
+checksum = "df3482c0af710d2f95f8cdbe660a8d89eaa361ac07daed47cb28b00e0c5d6289"
 dependencies = [
  "anyhow",
  "clap",
@@ -1498,15 +1497,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "quick-xml"
-version = "0.42.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41b1177fdf999d2321d3fb46ff47159d9c1fb9ad66a4879f8c50a0b504615e9b"
-dependencies = [
- "memchr",
 ]
 
 [[package]]
@@ -2404,6 +2394,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
 
 [[package]]
+name = "xmlparser"
+version = "0.13.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
+
+[[package]]
 name = "yoke"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2416,9 +2412,9 @@ dependencies = [
 
 [[package]]
 name = "yoke-derive"
-version = "0.8.3"
+version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33811428bee40dbceb6d545e95754741d17a6aef9a4849f0fd62e2ba4f412a78"
+checksum = "ec8ebde2db3681e8c9980cc27822030e68752690ddfa9473e739aeb4dbde6d71"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use anyhow::{Error, Result, anyhow, bail};
 use base64::{Engine, prelude::BASE64_STANDARD};
 use io_jmap::{
-    client::JmapClientStd,
+    client::{JmapClientStd, JmapClientStdConnectOptions},
     rfc9610::{
         address_book::{
             JmapAddressBook,
@@ -34,7 +34,7 @@ use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
 
 use crate::{
-    config::{JmapAuthConfig, JmapConfig, parse_server},
+    config::{JmapAuthConfig, JmapConfig, ProxyConfig, parse_server},
     jmap::{
         error::{JmapSetError, format_set_error},
         project,
@@ -57,11 +57,14 @@ impl JmapBackend {
     /// The credential is resolved through `resolver`, so an account naming
     /// one credential command from several of its backends spawns it once.
     pub fn new(config: JmapConfig, resolver: &mut SecretResolver) -> Result<Self> {
-        let tls = config.tls.into_tls(config.alpn);
         let http_auth = jmap_http_auth(config.auth, resolver)?;
         let url = parse_server(&config.server, "https", &["http", "https", "jmap", "jmaps"])?;
+        let options = JmapClientStdConnectOptions {
+            tls: config.tls.into_tls(config.alpn),
+            proxy: ProxyConfig::resolve(config.proxy, resolver)?,
+        };
 
-        let mut inner = JmapClientStd::connect(&url, &tls, http_auth)?;
+        let mut inner = JmapClientStd::connect(&url, http_auth, options)?;
         inner.session_get(&url)?;
 
         Ok(Self { inner })

@@ -15,7 +15,7 @@
 //! `card`) is the cross-protocol least-common-denominator surface,
 //! behaving the same whatever backend serves the account.
 //!
-//! The protocol-specific APIs (`carddav`, `jmap`, `msgraph`, `people`,
+//! The protocol-specific APIs (`carddav`, `jmap`, `msgraph`, `gpeople`,
 //! `vdir`) each expose the full surface of one backend, including what
 //! the shared API cannot model. The meta commands (`configure`,
 //! `account`, `completions`, `manuals`) cover the rest.
@@ -35,7 +35,7 @@
 //! crate's client.
 //!
 //! The backends: carddav over io-webdav, jmap over io-jmap, msgraph over
-//! io-msgraph, people over io-people, vdir over io-vdir and pimdir over
+//! io-msgraph, people over io-gpeople, vdir over io-vdir and pimdir over
 //! io-pimdir, each behind its own cargo feature.
 //!
 //! The cross-backend layer is owned here, not by a per-domain
@@ -73,16 +73,16 @@ mod backend;
 mod carddav;
 mod cli;
 mod config;
+#[cfg(feature = "gpeople")]
+mod gpeople;
 #[cfg(feature = "jmap")]
 mod jmap;
 mod json_schema;
 #[cfg(feature = "msgraph")]
 mod msgraph;
-#[cfg(feature = "people")]
-mod people;
 #[cfg(feature = "pimdir")]
 mod pimdir;
-#[cfg(any(feature = "msgraph", feature = "people"))]
+#[cfg(any(feature = "msgraph", feature = "gpeople"))]
 mod project;
 mod shared;
 #[cfg(feature = "vdir")]

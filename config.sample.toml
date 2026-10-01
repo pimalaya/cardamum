@@ -228,11 +228,11 @@ msgraph.auth.token.command = "ortie token show"
 # The People API is OAuth 2.0 bearer-token only.
 # --------------------------------------------------------------------------------
 
-[accounts.people-example]
-people.auth.token.command = "ortie token show"
-#people.auth.token.raw = "oauth2-token"
+[accounts.gpeople-example]
+gpeople.auth.token.command = "ortie token show"
+#gpeople.auth.token.raw = "oauth2-token"
 
 # TLS configuration, and the ALPN identifiers offered during the handshake,
 # `[]` skipping the negotiation. Rustls only; native-tls ignores them.
-#people.tls.provider = "rustls"
-#people.alpn = ["http/1.1"]
+#gpeople.tls.provider = "rustls"
+#gpeople.alpn = ["http/1.1"]

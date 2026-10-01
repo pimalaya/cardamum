@@ -28,11 +28,14 @@ use io_pim_discovery::{
     pacc::client::DiscoveryPaccClientStd,
     rfc6764::{client::DiscoveryWebdavClientStd, service::DiscoveryDavService},
 };
-use io_webdav::{client::WebdavClientStd as Inner, rfc4918::WebdavAuth};
+use io_webdav::{
+    client::{WebdavClientStd as Inner, WebdavClientStdConnectOptions},
+    rfc4918::WebdavAuth,
+};
 use pimalaya_config::secret::SecretResolver;
 use pimalaya_stream::{
     proxy::Proxy,
-    stream::{Stream, TcpConnectOptions, TlsConnectOptions},
+    stream::{Stream, TlsConnectOptions},
     tls::Tls,
 };
 use secrecy::ExposeSecret;
@@ -121,7 +124,8 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
     let proxy = ProxyConfig::resolve(proxy, resolver)?;
 
     if let Some(home) = home {
-        let mut client = connect_webdav(&home, &tls, &proxy, auth)?;
+        let options = WebdavClientStdConnectOptions { tls, proxy };
+        let mut client = Inner::connect(&home, auth, options)?;
         client.addressbook_home_set = Some(home);
         return Ok(client);
     }
@@ -149,45 +153,12 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
         _ => server,
     };
 
-    let mut client = connect_webdav(&server, &tls, &proxy, auth)?;
+    let options = WebdavClientStdConnectOptions { tls, proxy };
+    let mut client = Inner::connect(&server, auth, options)?;
     client.current_user_principal()?;
     client.addressbook_home_set()?;
 
     Ok(client)
-}
-
-/// Opens a WebDAV client on `url` reached through `proxy`, plain TCP for
-/// `http` and TLS for `https`.
-///
-/// io-webdav's own `connect` takes no proxy, so the stream is opened
-/// here.
-fn connect_webdav(url: &Url, tls: &Tls, proxy: &Proxy, auth: WebdavAuth) -> Result<Inner> {
-    let Some(host) = url.host_str() else {
-        bail!("CardDAV URL `{url}` has no host");
-    };
-
-    let stream = match url.scheme() {
-        "http" => {
-            let opts = TcpConnectOptions {
-                proxy: proxy.clone(),
-                ..Default::default()
-            };
-
-            Stream::connect_tcp(host, url.port().unwrap_or(80), opts)?
-        }
-        "https" => {
-            let opts = TlsConnectOptions {
-                tls: tls.clone(),
-                proxy: proxy.clone(),
-                ..Default::default()
-            };
-
-            Stream::connect_tls(host, url.port().unwrap_or(443), opts)?
-        }
-        scheme => bail!("CardDAV URL `{url}` has unsupported scheme `{scheme}`"),
-    };
-
-    Ok(Inner::new(stream, auth, url.clone()))
 }
 
 /// Probes `.well-known/carddav` on a bare-origin `server` with a GET.

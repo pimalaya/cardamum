@@ -9,7 +9,7 @@
 
 use anyhow::{Result, bail};
 use log::debug;
-#[cfg(any(feature = "jmap", feature = "msgraph", feature = "people"))]
+#[cfg(any(feature = "jmap", feature = "msgraph", feature = "gpeople"))]
 use pimalaya_config::secret::SecretResolver;
 
 use crate::{
@@ -53,8 +53,8 @@ enum BackendConfig {
     Jmap(Box<crate::config::JmapConfig>),
     #[cfg(feature = "msgraph")]
     Msgraph(Box<crate::config::MsgraphConfig>),
-    #[cfg(feature = "people")]
-    People(Box<crate::config::PeopleConfig>),
+    #[cfg(feature = "gpeople")]
+    Gpeople(Box<crate::config::GpeopleConfig>),
 }
 
 /// The active backend of an [`AddressbookClient`].
@@ -69,8 +69,8 @@ enum BackendClient {
     Jmap(Box<crate::jmap::backend::JmapBackend>),
     #[cfg(feature = "msgraph")]
     Msgraph(Box<crate::msgraph::backend::MsgraphBackend>),
-    #[cfg(feature = "people")]
-    People(Box<crate::people::backend::PeopleBackend>),
+    #[cfg(feature = "gpeople")]
+    Gpeople(Box<crate::gpeople::backend::GpeopleBackend>),
 }
 
 impl AddressbookClient {
@@ -127,12 +127,12 @@ impl AddressbookClient {
             inner = Some(BackendConfig::Msgraph(Box::new(msgraph_config)));
         }
 
-        #[cfg(feature = "people")]
+        #[cfg(feature = "gpeople")]
         if inner.is_none()
-            && backend.allows_people()
-            && let Some(people_config) = account_config.people.take()
+            && backend.allows_gpeople()
+            && let Some(gpeople_config) = account_config.gpeople.take()
         {
-            inner = Some(BackendConfig::People(Box::new(people_config)));
+            inner = Some(BackendConfig::Gpeople(Box::new(gpeople_config)));
         }
 
         let Some(config_) = inner else {
@@ -204,12 +204,12 @@ impl BackendConfig {
                     MsgraphBackend::new(config.as_ref().clone(), &mut SecretResolver::new())?;
                 Ok(BackendClient::Msgraph(Box::new(client)))
             }
-            #[cfg(feature = "people")]
-            Self::People(config) => {
-                use crate::people::backend::PeopleBackend;
+            #[cfg(feature = "gpeople")]
+            Self::Gpeople(config) => {
+                use crate::gpeople::backend::GpeopleBackend;
                 let client =
-                    PeopleBackend::new(config.as_ref().clone(), &mut SecretResolver::new())?;
-                Ok(BackendClient::People(Box::new(client)))
+                    GpeopleBackend::new(config.as_ref().clone(), &mut SecretResolver::new())?;
+                Ok(BackendClient::Gpeople(Box::new(client)))
             }
         }
     }
@@ -229,8 +229,8 @@ impl AddressbookClient {
             BackendClient::Jmap(client) => client.list_addressbooks(),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.list_addressbooks(),
-            #[cfg(feature = "people")]
-            BackendClient::People(client) => client.list_addressbooks(),
+            #[cfg(feature = "gpeople")]
+            BackendClient::Gpeople(client) => client.list_addressbooks(),
         }
     }
 
@@ -252,8 +252,8 @@ impl AddressbookClient {
             BackendClient::Jmap(client) => client.create_addressbook(name, description, color),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.create_addressbook(name, description, color),
-            #[cfg(feature = "people")]
-            BackendClient::People(client) => client.create_addressbook(name, description, color),
+            #[cfg(feature = "gpeople")]
+            BackendClient::Gpeople(client) => client.create_addressbook(name, description, color),
         }
     }
 
@@ -270,8 +270,8 @@ impl AddressbookClient {
             BackendClient::Jmap(client) => client.update_addressbook(id, patch),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.update_addressbook(id, patch),
-            #[cfg(feature = "people")]
-            BackendClient::People(client) => client.update_addressbook(id, patch),
+            #[cfg(feature = "gpeople")]
+            BackendClient::Gpeople(client) => client.update_addressbook(id, patch),
         }
     }
 
@@ -289,8 +289,8 @@ impl AddressbookClient {
             BackendClient::Jmap(client) => client.delete_addressbook(id),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.delete_addressbook(id),
-            #[cfg(feature = "people")]
-            BackendClient::People(client) => client.delete_addressbook(id),
+            #[cfg(feature = "gpeople")]
+            BackendClient::Gpeople(client) => client.delete_addressbook(id),
         }
     }
 
@@ -315,8 +315,8 @@ impl AddressbookClient {
             BackendClient::Jmap(client) => client.list_cards(addressbook_id, page, page_size),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.list_cards(addressbook_id, page, page_size),
-            #[cfg(feature = "people")]
-            BackendClient::People(client) => client.list_cards(addressbook_id, page, page_size),
+            #[cfg(feature = "gpeople")]
+            BackendClient::Gpeople(client) => client.list_cards(addressbook_id, page, page_size),
         }
     }
 
@@ -333,8 +333,8 @@ impl AddressbookClient {
             BackendClient::Jmap(client) => client.get_card(addressbook_id, card_id),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.get_card(addressbook_id, card_id),
-            #[cfg(feature = "people")]
-            BackendClient::People(client) => client.get_card(addressbook_id, card_id),
+            #[cfg(feature = "gpeople")]
+            BackendClient::Gpeople(client) => client.get_card(addressbook_id, card_id),
         }
     }
 
@@ -351,8 +351,8 @@ impl AddressbookClient {
             BackendClient::Jmap(client) => client.create_card(addressbook_id, contents),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.create_card(addressbook_id, contents),
-            #[cfg(feature = "people")]
-            BackendClient::People(client) => client.create_card(addressbook_id, contents),
+            #[cfg(feature = "gpeople")]
+            BackendClient::Gpeople(client) => client.create_card(addressbook_id, contents),
         }
     }
 
@@ -389,8 +389,8 @@ impl AddressbookClient {
             BackendClient::Msgraph(client) => {
                 client.update_card(addressbook_id, card_id, contents, if_match)
             }
-            #[cfg(feature = "people")]
-            BackendClient::People(client) => {
+            #[cfg(feature = "gpeople")]
+            BackendClient::Gpeople(client) => {
                 client.update_card(addressbook_id, card_id, contents, if_match)
             }
         }
@@ -409,8 +409,8 @@ impl AddressbookClient {
             BackendClient::Jmap(client) => client.delete_card(addressbook_id, card_id),
             #[cfg(feature = "msgraph")]
             BackendClient::Msgraph(client) => client.delete_card(addressbook_id, card_id),
-            #[cfg(feature = "people")]
-            BackendClient::People(client) => client.delete_card(addressbook_id, card_id),
+            #[cfg(feature = "gpeople")]
+            BackendClient::Gpeople(client) => client.delete_card(addressbook_id, card_id),
         }
     }
 }

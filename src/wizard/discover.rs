@@ -25,26 +25,26 @@ use url::Url;
 
 #[cfg(feature = "carddav")]
 use crate::config::CarddavConfig;
+#[cfg(feature = "gpeople")]
+use crate::config::GpeopleConfig;
 #[cfg(feature = "jmap")]
 use crate::config::JmapConfig;
 #[cfg(feature = "msgraph")]
 use crate::config::MsgraphConfig;
-#[cfg(feature = "people")]
-use crate::config::PeopleConfig;
 #[cfg(feature = "pimdir")]
 use crate::config::PimdirConfig;
 #[cfg(feature = "vdir")]
 use crate::config::VdirConfig;
 #[cfg(feature = "carddav")]
 use crate::wizard::carddav;
+#[cfg(feature = "gpeople")]
+use crate::wizard::gpeople;
 #[cfg(feature = "jmap")]
 use crate::wizard::jmap;
 #[cfg(any(feature = "vdir", feature = "pimdir"))]
 use crate::wizard::local;
 #[cfg(feature = "msgraph")]
 use crate::wizard::msgraph;
-#[cfg(feature = "people")]
-use crate::wizard::people;
 use crate::{
     account::check,
     config::AccountConfig,
@@ -72,8 +72,8 @@ enum Chosen {
     Jmap(Box<JmapConfig>),
     #[cfg(feature = "msgraph")]
     Msgraph(MsgraphConfig),
-    #[cfg(feature = "people")]
-    People(PeopleConfig),
+    #[cfg(feature = "gpeople")]
+    Gpeople(GpeopleConfig),
 }
 
 /// Discovers one account from a single prompt, tests it, and hands back
@@ -150,8 +150,8 @@ fn build_account(account_name: &str, input: &str) -> Result<(AccountConfig, bool
         Chosen::Jmap(jmap) => account.jmap = Some(*jmap),
         #[cfg(feature = "msgraph")]
         Chosen::Msgraph(msgraph) => account.msgraph = Some(msgraph),
-        #[cfg(feature = "people")]
-        Chosen::People(people) => account.people = Some(people),
+        #[cfg(feature = "gpeople")]
+        Chosen::Gpeople(people) => account.gpeople = Some(people),
     }
 
     Ok((account, tested))
@@ -234,7 +234,7 @@ fn stop_undiscovered(input: &str) -> Result<Outcome> {
         feature = "carddav",
         feature = "jmap",
         feature = "msgraph",
-        feature = "people"
+        feature = "gpeople"
     ),
     allow(unreachable_patterns)
 )]
@@ -256,8 +256,8 @@ fn dispatch(account_name: &str, email: &str, choice: Discovered) -> Result<Outco
         DiscoveredKind::Msgraph => Ok(Outcome::untested(Chosen::Msgraph(msgraph::configure(
             account_name,
         )?))),
-        #[cfg(feature = "people")]
-        DiscoveredKind::People => Ok(Outcome::untested(Chosen::People(people::configure(
+        #[cfg(feature = "gpeople")]
+        DiscoveredKind::Gpeople => Ok(Outcome::untested(Chosen::Gpeople(gpeople::configure(
             account_name,
         )?))),
         kind => bail!("Configuration `{kind:?}` is not supported by this build"),
@@ -293,7 +293,7 @@ fn retain_supported(found: &mut Vec<Discovered>) {
         DiscoveredKind::Carddav(_) => cfg!(feature = "carddav"),
         DiscoveredKind::Jmap(_) => cfg!(feature = "jmap"),
         DiscoveredKind::Msgraph => cfg!(feature = "msgraph"),
-        DiscoveredKind::People => cfg!(feature = "people"),
+        DiscoveredKind::Gpeople => cfg!(feature = "gpeople"),
     });
 }
 

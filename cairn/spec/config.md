@@ -18,7 +18,7 @@ The configuration SHALL be loaded from the first valid path among `$XDG_CONFIG_H
 Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
 
 ### Requirement: One backend block per backend
-Each account block SHALL carry at most one sub-block per compiled-in backend (`vdir`, `pimdir`, `carddav`, `jmap`, `msgraph`, `people`), each deserialized with `deny_unknown_fields` so a typo is an error rather than a silently ignored option. An account may declare several, and `--backend` picks between them (see [backends.md](backends.md)).
+Each account block SHALL carry at most one sub-block per compiled-in backend (`vdir`, `pimdir`, `carddav`, `jmap`, `msgraph`, `gpeople`), each deserialized with `deny_unknown_fields` so a typo is an error rather than a silently ignored option. An account may declare several, and `--backend` picks between them (see [backends.md](backends.md)).
 
 ### Requirement: Secrets are read, never written
 A credential field SHALL be a pimalaya-config `Secret`: a raw value in the file, or a command whose stdout is the secret (an argv array for a known keyring provider or token broker, a string for a shell command). Cardamum only ever reads a secret; it never stores, refreshes or issues one. An OAuth 2.0 token therefore comes from an external broker such as Ortie, and a missing secret surfaces when the account is tested.

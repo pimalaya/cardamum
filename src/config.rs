@@ -12,7 +12,7 @@ use std::collections::HashMap;
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people",
+    feature = "gpeople",
     feature = "pimdir"
 ))]
 use std::path::PathBuf;
@@ -22,7 +22,7 @@ use anyhow::Result;
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 use anyhow::bail;
 use crossterm::style::Color;
@@ -31,14 +31,14 @@ use pimalaya_cli::table::ContentArrangement;
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 use pimalaya_config::secret::{Secret, SecretResolver};
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people",
+    feature = "gpeople",
     feature = "pimdir"
 ))]
 use pimalaya_config::toml::shell_expanded_path;
@@ -49,7 +49,7 @@ use pimalaya_config::{command::CommandConfig, toml::TomlConfig};
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 use pimalaya_stream::{
     proxy::{Proxy, ProxyAuth},
@@ -59,14 +59,14 @@ use pimalaya_stream::{
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 use secrecy::SecretString;
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 use serde::Deserializer;
 use serde::{Deserialize, Serialize};
@@ -88,7 +88,7 @@ fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 fn opt_shell_expanded_path<'de, D: Deserializer<'de>>(de: D) -> Result<Option<PathBuf>, D::Error> {
     shell_expanded_path(de).map(Some)
@@ -133,7 +133,7 @@ impl TomlConfig for Config {
             feature = "carddav",
             feature = "jmap",
             feature = "msgraph",
-            feature = "people"
+            feature = "gpeople"
         ))]
         let entry = entry.map(|(name, mut account)| {
             account.inherit_proxy();
@@ -167,7 +167,7 @@ const RENDER_ORDER: [&str; 11] = [
     "carddav",
     "jmap",
     "msgraph",
-    "people",
+    "gpeople",
     "addressbook",
     "card",
     "table",
@@ -259,7 +259,7 @@ impl AccountConfig {
         feature = "carddav",
         feature = "jmap",
         feature = "msgraph",
-        feature = "people"
+        feature = "gpeople"
     ))]
     fn inherit_proxy(&mut self) {
         let Some(proxy) = &self.proxy else {
@@ -273,8 +273,8 @@ impl AccountConfig {
             self.jmap.as_mut().map(|c| &mut c.proxy),
             #[cfg(feature = "msgraph")]
             self.msgraph.as_mut().map(|c| &mut c.proxy),
-            #[cfg(feature = "people")]
-            self.people.as_mut().map(|c| &mut c.proxy),
+            #[cfg(feature = "gpeople")]
+            self.gpeople.as_mut().map(|c| &mut c.proxy),
         ];
 
         for slot in slots.into_iter().flatten() {
@@ -305,7 +305,7 @@ pub struct AccountConfig {
         feature = "carddav",
         feature = "jmap",
         feature = "msgraph",
-        feature = "people"
+        feature = "gpeople"
     ))]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy: Option<ProxyConfig>,
@@ -325,8 +325,8 @@ pub struct AccountConfig {
     #[cfg(feature = "msgraph")]
     pub msgraph: Option<MsgraphConfig>,
     /// The Google People account this account talks to.
-    #[cfg(feature = "people")]
-    pub people: Option<PeopleConfig>,
+    #[cfg(feature = "gpeople")]
+    pub gpeople: Option<GpeopleConfig>,
 }
 
 /// Vdir configuration.
@@ -505,10 +505,10 @@ fn default_msgraph_user_id() -> String {
 }
 
 /// Google People configuration.
-#[cfg(feature = "people")]
+#[cfg(feature = "gpeople")]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct PeopleConfig {
+pub struct GpeopleConfig {
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
@@ -524,20 +524,20 @@ pub struct PeopleConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub proxy: Option<ProxyConfig>,
     /// Authentication configuration.
-    pub auth: PeopleAuthConfig,
+    pub auth: GpeopleAuthConfig,
 }
 
 /// Google People authentication configuration.
-#[cfg(feature = "people")]
+#[cfg(feature = "gpeople")]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct PeopleAuthConfig {
+pub struct GpeopleAuthConfig {
     /// OAuth 2.0 access token sent as `Bearer <token>`, the only
     /// authorization the People API accepts.
     pub token: Secret,
 }
 
-#[cfg(any(feature = "msgraph", feature = "people"))]
+#[cfg(any(feature = "msgraph", feature = "gpeople"))]
 fn default_http_alpn() -> Vec<String> {
     vec![String::from("http/1.1")]
 }
@@ -692,7 +692,7 @@ impl From<TableArrangementConfig> for ContentArrangement {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -709,7 +709,7 @@ pub struct ProxyConfig {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 impl ProxyConfig {
     /// Resolves an optional configuration, an absent one reading the
@@ -754,7 +754,7 @@ impl ProxyConfig {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -777,7 +777,7 @@ pub struct TlsConfig {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -793,7 +793,7 @@ pub enum TlsProviderConfig {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -807,7 +807,7 @@ pub struct RustlsConfig {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
@@ -822,7 +822,7 @@ pub enum RustlsCryptoConfig {
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 impl TlsConfig {
     /// Converts the config into a [`Tls`] carrying the given ALPN
@@ -872,7 +872,7 @@ mod tests {
         feature = "carddav",
         feature = "jmap",
         feature = "msgraph",
-        feature = "people",
+        feature = "gpeople",
         feature = "pimdir"
     ))]
     use std::{env::var, path::PathBuf};
@@ -892,7 +892,7 @@ mod tests {
         feature = "carddav",
         feature = "jmap",
         feature = "msgraph",
-        feature = "people"
+        feature = "gpeople"
     ))]
     #[test]
     fn an_optional_path_expands_the_leading_tilde_and_stays_absent() {

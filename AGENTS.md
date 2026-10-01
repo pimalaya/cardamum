@@ -32,7 +32,7 @@ Check the structure yourself against the strict rules (CAIRN.md §8): a discover
 
 - Run every cargo command through the nix devshell: `nix develop --command cargo <...>`.
 - Run `cargo fmt` on the crate after finishing code changes.
-- Build the feature matrix, not just the default: every backend (`carddav`, `jmap`, `msgraph`, `people`, `vdir`, `pimdir`) must compile on its own, since the shared client is fully cfg-gated.
+- Build the feature matrix, not just the default: every backend (`carddav`, `jmap`, `msgraph`, `gpeople`, `vdir`, `pimdir`) must compile on its own, since the shared client is fully cfg-gated.
 - Never adjust production code to fit a test: adjust the test to match correct behaviour.
 - Never print a secret in output, a log line or a test fixture.
 - No em dashes in prose, per the Pimalaya guidelines.

@@ -15,7 +15,7 @@ use pimalaya_cli::printer::Printer;
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "people"
+    feature = "gpeople"
 ))]
 use pimalaya_config::secret::SecretResolver;
 use pimalaya_config::toml::TomlConfig;
@@ -71,7 +71,7 @@ impl AccountCheckCommand {
             feature = "carddav",
             feature = "jmap",
             feature = "msgraph",
-            feature = "people"
+            feature = "gpeople"
         ))]
         let mut resolver = SecretResolver::new();
 
@@ -123,13 +123,13 @@ impl AccountCheckCommand {
             ));
         }
 
-        #[cfg(feature = "people")]
-        if backend.allows_people()
-            && let Some(people_config) = &account_config.people
+        #[cfg(feature = "gpeople")]
+        if backend.allows_gpeople()
+            && let Some(gpeople_config) = &account_config.gpeople
         {
             report.backends.push(BackendCheck::from(
-                "people",
-                connect_people(people_config, &mut resolver),
+                "gpeople",
+                connect_gpeople(gpeople_config, &mut resolver),
             ));
         }
 
@@ -151,7 +151,7 @@ pub fn test_account(account_config: &AccountConfig) -> Result<()> {
         feature = "carddav",
         feature = "jmap",
         feature = "msgraph",
-        feature = "people"
+        feature = "gpeople"
     ))]
     let mut resolver = SecretResolver::new();
 
@@ -180,9 +180,9 @@ pub fn test_account(account_config: &AccountConfig) -> Result<()> {
         connect_msgraph(msgraph_config, &mut resolver)?;
     }
 
-    #[cfg(feature = "people")]
-    if let Some(people_config) = &account_config.people {
-        connect_people(people_config, &mut resolver)?;
+    #[cfg(feature = "gpeople")]
+    if let Some(gpeople_config) = &account_config.gpeople {
+        connect_gpeople(gpeople_config, &mut resolver)?;
     }
 
     Ok(())
@@ -262,14 +262,14 @@ fn connect_msgraph(
 
 /// Lists the People contact groups, proving the token grants access to
 /// the contacts API.
-#[cfg(feature = "people")]
-fn connect_people(
-    people_config: &crate::config::PeopleConfig,
+#[cfg(feature = "gpeople")]
+fn connect_gpeople(
+    gpeople_config: &crate::config::GpeopleConfig,
     resolver: &mut SecretResolver,
 ) -> Result<()> {
-    use crate::people::backend::PeopleBackend;
+    use crate::gpeople::backend::GpeopleBackend;
 
-    let mut client = PeopleBackend::new(people_config.clone(), resolver)?;
+    let mut client = GpeopleBackend::new(gpeople_config.clone(), resolver)?;
     client.list_addressbooks()?;
 
     Ok(())

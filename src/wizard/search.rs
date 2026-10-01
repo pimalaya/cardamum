@@ -62,7 +62,7 @@ pub enum DiscoveredKind {
     /// The Microsoft Graph API (Microsoft accounts only).
     Msgraph,
     /// The Google People API (Google accounts only).
-    People,
+    Gpeople,
 }
 
 /// The authentication capabilities a service advertised, folded across all
@@ -106,7 +106,7 @@ impl fmt::Display for Discovered {
             DiscoveredKind::Carddav(url) => write!(f, "CardDAV {url}"),
             DiscoveredKind::Jmap(url) => write!(f, "JMAP {url}"),
             DiscoveredKind::Msgraph => write!(f, "Microsoft Graph API"),
-            DiscoveredKind::People => write!(f, "Google People API"),
+            DiscoveredKind::Gpeople => write!(f, "Google People API"),
         }
     }
 }
@@ -131,7 +131,7 @@ impl Discovered {
         match self.kind {
             DiscoveredKind::Jmap(_) => 0,
             DiscoveredKind::Carddav(_) => 1,
-            DiscoveredKind::Msgraph | DiscoveredKind::People => 2,
+            DiscoveredKind::Msgraph | DiscoveredKind::Gpeople => 2,
         }
     }
 }
@@ -173,7 +173,7 @@ pub fn search(email: &str) -> Result<Vec<Discovered>> {
 
     match provider {
         Some(DiscoveryKnownProvider::Google) => found.push(Discovered {
-            kind: DiscoveredKind::People,
+            kind: DiscoveredKind::Gpeople,
             username: Some(email.to_string()),
             auth: AuthCaps {
                 oauth: true,

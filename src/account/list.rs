@@ -119,9 +119,9 @@ impl AccountRow {
         if account.msgraph.is_some() {
             backends.push("msgraph");
         }
-        #[cfg(feature = "people")]
-        if account.people.is_some() {
-            backends.push("people");
+        #[cfg(feature = "gpeople")]
+        if account.gpeople.is_some() {
+            backends.push("gpeople");
         }
         #[cfg(feature = "vdir")]
         if account.vdir.is_some() {

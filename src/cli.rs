@@ -24,12 +24,12 @@ use pimalaya_config::toml::TomlConfig;
 
 #[cfg(feature = "carddav")]
 use crate::carddav::{cli::CarddavCommand, client::build_carddav_client};
+#[cfg(feature = "gpeople")]
+use crate::gpeople::{cli::GpeopleCommand, client::build_gpeople_client};
 #[cfg(feature = "jmap")]
 use crate::jmap::{cli::JmapCommand, client::build_jmap_client};
 #[cfg(feature = "msgraph")]
 use crate::msgraph::{cli::MsgraphCommand, client::build_msgraph_client};
-#[cfg(feature = "people")]
-use crate::people::{cli::PeopleCommand, client::build_people_client};
 #[cfg(feature = "vdir")]
 use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
 use crate::{
@@ -107,9 +107,9 @@ pub enum Command {
     #[cfg(feature = "msgraph")]
     #[command(subcommand)]
     Msgraph(MsgraphCommand),
-    #[cfg(feature = "people")]
+    #[cfg(feature = "gpeople")]
     #[command(subcommand)]
-    People(PeopleCommand),
+    Gpeople(GpeopleCommand),
     #[cfg(feature = "vdir")]
     #[command(subcommand)]
     Vdir(VdirCommand),
@@ -246,11 +246,11 @@ impl Command {
                 let client = build_msgraph_client(config, name, account_config)?;
                 cmd.execute(printer, client)
             }
-            #[cfg(feature = "people")]
-            Self::People(cmd) => {
+            #[cfg(feature = "gpeople")]
+            Self::Gpeople(cmd) => {
                 let (config, name, account_config) =
                     resolve_account(printer, config_paths, account_name)?;
-                let client = build_people_client(config, name, account_config)?;
+                let client = build_gpeople_client(config, name, account_config)?;
                 cmd.execute(printer, client)
             }
             #[cfg(feature = "vdir")]

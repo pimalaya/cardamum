@@ -20,7 +20,7 @@ CLI to manage contacts, written in Rust
 ## Features
 
 - **Shared API**: `addressbook` and `card` work the same whichever backend serves the account.
-- **Protocol-specific APIs**: `carddav`, `jmap`, `msgraph`, `people` and `vdir` each expose what only that backend has, down to a raw request escape hatch.
+- **Protocol-specific APIs**: `carddav`, `jmap`, `msgraph`, `gpeople` and `vdir` each expose what only that backend has, down to a raw request escape hatch.
 - **Discovery**: an email address is enough to find a provider's server, through SRV records, `.well-known` and the provider configuration documents.
 - **Interactive wizard**: `cardamum configure` turns an email address into a tested account.
 - **Multi-account**: one TOML file, one block per account, several files deep-merged when you want secrets apart.
@@ -31,7 +31,7 @@ CLI to manage contacts, written in Rust
   - [Native TLS](https://crates.io/crates/native-tls) (requires `native-tls` feature)
 
 > [!TIP]
-> Each backend sits behind its own cargo feature. `carddav`, `jmap`, `msgraph`, `people` and `vdir` are enabled by default, `pimdir` is opt-in. Build with `--no-default-features` and pick the ones you need.
+> Each backend sits behind its own cargo feature. `carddav`, `jmap`, `msgraph`, `gpeople` and `vdir` are enabled by default, `pimdir` is opt-in. Build with `--no-default-features` and pick the ones you need.
 
 ## Installation
 
@@ -124,13 +124,13 @@ addressbook.default = "card"
 
 ### Google
 
-Use the `people` backend, which speaks the [People API](https://developers.google.com/people) directly and is richer than Google's CardDAV bridge. Contact groups map to addressbooks, the `myContacts` group listing as Contacts.
+Use the `gpeople` backend, which speaks the [People API](https://developers.google.com/people) directly and is richer than Google's CardDAV bridge. Contact groups map to addressbooks, the `myContacts` group listing as Contacts.
 
 Both routes need [OAuth 2.0](https://developers.google.com/identity/protocols/oauth2), and an access token expires within the hour, so point the token at a broker rather than pasting one in:
 
 ```toml
 [accounts.example]
-people.auth.token.command = ["ortie", "token", "show"]
+gpeople.auth.token.command = ["ortie", "token", "show"]
 addressbook.default = "myContacts"
 ```
 
@@ -249,7 +249,7 @@ cardamum card create --addressbook personal ada.vcf
 cardamum -a work -b carddav card list
 cardamum carddav report sync personal
 cardamum jmap contact-card changes <SINCE-STATE>
-cardamum people connection list --sync-token <TOKEN>
+cardamum gpeople connection list --sync-token <TOKEN>
 cardamum msgraph contacts delta --folder contacts
 ```
 

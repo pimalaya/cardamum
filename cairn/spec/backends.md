@@ -8,13 +8,13 @@ status: current
 
 Each backend is a `<Proto>Client` wrapper over the io-* `*Std` client (or, for the local stores, over the store handle), paired with a `src/<proto>/backend.rs` adapter implementing the shared operations and converting io-* results into the CLI's own shared types ([`Addressbook`](../../src/shared/addressbook/types.rs), [`Card`](../../src/shared/card/types.rs)). Cardamum owns these types: no aggregator library sits between it and the io-* crates, because the least-common-denominator layer is a product decision with a single owner (the org's aggregator-retirement rule).
 
-Every backend sits behind its own cargo feature (`carddav`, `jmap`, `msgraph`, `people`, `vdir`, `pimdir`), so a build ships only the protocols it needs.
+Every backend sits behind its own cargo feature (`carddav`, `jmap`, `msgraph`, `gpeople`, `vdir`, `pimdir`), so a build ships only the protocols it needs.
 
 ### Requirement: Shared operation set
 The shared adapters SHALL cover, per backend: `list_addressbooks`, `create_addressbook`, `update_addressbook`, `delete_addressbook`, `list_cards`, `get_card`, `create_card`, `update_card` and `delete_card`. A backend that cannot model an operation SHALL fail with a clear message naming the limit rather than emulating it or silently succeeding.
 
 ### Requirement: Network backends
-CardDAV, JMAP, Microsoft Graph and Google People SHALL each adapt their io-* high-level client. CardDAV reuses io-webdav's addressbook and card verbs over the resolved addressbook home set. JMAP reuses io-jmap's RFC 9610 `AddressBook` and `ContactCard` methods. Microsoft Graph maps contact folders to addressbooks over io-msgraph's `contact_folders` / `contacts` surface. Google People maps contact groups to addressbooks over io-people's `contactGroups` / `people` surface.
+CardDAV, JMAP, Microsoft Graph and Google People SHALL each adapt their io-* high-level client. CardDAV reuses io-webdav's addressbook and card verbs over the resolved addressbook home set. JMAP reuses io-jmap's RFC 9610 `AddressBook` and `ContactCard` methods. Microsoft Graph maps contact folders to addressbooks over io-msgraph's `contact_folders` / `contacts` surface. Google People maps contact groups to addressbooks over io-people's `contactGroups` / `gpeople` surface.
 
 ### Requirement: A shared update never creates
 The shared `card update` and `addressbook update` SHALL fail when the target does not exist, rather than creating it. On a backend whose write verb is create-or-replace (CardDAV `PUT`, a filesystem write), the adapter SHALL establish that the target exists before writing: CardDAV reads the card's current version and guards the write with the ETag it returns, and vdir locates the item. An unknown id then fails on that read rather than creating anything. The wildcard `If-Match: *` SHALL NOT be used for this: RFC 9110 §13.1.1 defines it, but iCloud rejects it with `412` even for a resource that exists. A protocol-specific command SHALL keep its verb's native semantics instead: `carddav put` stays create-or-replace, gated only by the preconditions the caller passes.

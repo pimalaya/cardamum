@@ -182,40 +182,43 @@ pub fn schemas() -> BTreeMap<String, Value> {
         );
     }
 
-    #[cfg(feature = "people")]
+    #[cfg(feature = "gpeople")]
     {
-        use crate::people::render::{
-            PeopleContactGroupOutput, PeopleContactGroupsOutput, PeoplePersonOutput,
-            PeoplePersonsOutput,
+        use crate::gpeople::render::{
+            GpeopleContactGroupOutput, GpeopleContactGroupsOutput, GpeoplePersonOutput,
+            GpeoplePersonsOutput,
         };
 
         insert!(
-            "cardamum-people-contact-group-list",
-            PeopleContactGroupsOutput
+            "cardamum-gpeople-contact-group-list",
+            GpeopleContactGroupsOutput
         );
         insert!(
-            "cardamum-people-contact-group-get",
-            PeopleContactGroupOutput
+            "cardamum-gpeople-contact-group-get",
+            GpeopleContactGroupOutput
         );
         insert!(
-            "cardamum-people-contact-group-create",
-            PeopleContactGroupOutput
+            "cardamum-gpeople-contact-group-create",
+            GpeopleContactGroupOutput
         );
         insert!(
-            "cardamum-people-contact-group-update",
-            PeopleContactGroupOutput
+            "cardamum-gpeople-contact-group-update",
+            GpeopleContactGroupOutput
         );
-        insert!("cardamum-people-connection-list", PeoplePersonsOutput);
-        insert!("cardamum-people-connection-get", PeoplePersonOutput);
-        insert!("cardamum-people-connection-create", PeoplePersonOutput);
-        insert!("cardamum-people-connection-update", PeoplePersonOutput);
-        insert!("cardamum-people-connection-search", PeoplePersonsOutput);
-        insert!("cardamum-people-other-contact-list", PeoplePersonsOutput);
-        insert!("cardamum-people-other-contact-search", PeoplePersonsOutput);
-        insert!("cardamum-people-other-contact-copy", PeoplePersonOutput);
-        insert!("cardamum-people-profile-get", PeoplePersonOutput);
+        insert!("cardamum-gpeople-connection-list", GpeoplePersonsOutput);
+        insert!("cardamum-gpeople-connection-get", GpeoplePersonOutput);
+        insert!("cardamum-gpeople-connection-create", GpeoplePersonOutput);
+        insert!("cardamum-gpeople-connection-update", GpeoplePersonOutput);
+        insert!("cardamum-gpeople-connection-search", GpeoplePersonsOutput);
+        insert!("cardamum-gpeople-other-contact-list", GpeoplePersonsOutput);
         insert!(
-            "cardamum-people-request",
+            "cardamum-gpeople-other-contact-search",
+            GpeoplePersonsOutput
+        );
+        insert!("cardamum-gpeople-other-contact-copy", GpeoplePersonOutput);
+        insert!("cardamum-gpeople-profile-get", GpeoplePersonOutput);
+        insert!(
+            "cardamum-gpeople-request",
             crate::shared::raw_json::RawJsonOutput
         );
     }

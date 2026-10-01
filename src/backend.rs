@@ -28,9 +28,9 @@ pub enum Backend {
     /// Microsoft Graph, over io-msgraph.
     #[cfg(feature = "msgraph")]
     Msgraph,
-    /// Google People, over io-people.
-    #[cfg(feature = "people")]
-    People,
+    /// Google People, over io-gpeople.
+    #[cfg(feature = "gpeople")]
+    Gpeople,
     /// A local pimdir store, over io-pimdir.
     #[cfg(feature = "pimdir")]
     Pimdir,
@@ -60,9 +60,9 @@ impl Backend {
     }
 
     /// Whether the Google People arm of a shared command may run.
-    #[cfg(feature = "people")]
-    pub fn allows_people(self) -> bool {
-        matches!(self, Self::Auto | Self::People)
+    #[cfg(feature = "gpeople")]
+    pub fn allows_gpeople(self) -> bool {
+        matches!(self, Self::Auto | Self::Gpeople)
     }
 
     /// Whether the pimdir arm of a shared command is allowed to run.
@@ -90,8 +90,8 @@ impl FromStr for Backend {
             "jmap" => Ok(Self::Jmap),
             #[cfg(feature = "msgraph")]
             "msgraph" => Ok(Self::Msgraph),
-            #[cfg(feature = "people")]
-            "people" => Ok(Self::People),
+            #[cfg(feature = "gpeople")]
+            "gpeople" => Ok(Self::Gpeople),
             #[cfg(feature = "pimdir")]
             "pimdir" => Ok(Self::Pimdir),
             #[cfg(feature = "vdir")]
@@ -111,8 +111,8 @@ impl fmt::Display for Backend {
             Self::Jmap => write!(f, "jmap"),
             #[cfg(feature = "msgraph")]
             Self::Msgraph => write!(f, "msgraph"),
-            #[cfg(feature = "people")]
-            Self::People => write!(f, "people"),
+            #[cfg(feature = "gpeople")]
+            Self::Gpeople => write!(f, "gpeople"),
             #[cfg(feature = "pimdir")]
             Self::Pimdir => write!(f, "pimdir"),
             #[cfg(feature = "vdir")]

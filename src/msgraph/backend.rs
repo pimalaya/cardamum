@@ -2,19 +2,22 @@
 //!
 //! The Graph arm of the shared-API client, mapping the addressbook and card
 //! operations onto [`io_msgraph::v1::client::MsgraphClientStd`] calls and
-//! projecting contacts onto vCard documents ([`crate::msgraph::project`]).
+//! projecting contacts onto vCard documents through io-msgraph's `vcard`
+//! feature.
 //!
 //! Graph contact folders are the addressbooks, except the default Contacts
 //! folder, which the folders endpoint does not list: it is surfaced under
 //! the [`CONTACTS_FOLDER`] sentinel id. Updates carry no If-Match guard
 //! server-side (last-write-wins), so passing one bails.
 
-use anyhow::{Error, Result, bail};
+use anyhow::{Result, bail};
 use io_msgraph::v1::{
     client::{MsgraphClientStd, MsgraphClientStdConnectOptions},
     rest::users::{
         contact_folders::MsgraphContactFolder,
-        contacts::{MsgraphContact, list::MsgraphContactsListParams},
+        contacts::{
+            MsgraphContact, list::MsgraphContactsListParams, vcard::MSGRAPH_CONTACT_STASH_EXPAND,
+        },
     },
     send::MsgraphSend,
 };
@@ -24,7 +27,6 @@ use url::Url;
 
 use crate::{
     config::{MsgraphConfig, ProxyConfig},
-    msgraph::project,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -166,10 +168,9 @@ impl MsgraphBackend {
         page: Option<u32>,
         page_size: Option<u32>,
     ) -> Result<Vec<Card>> {
-        let expand = graph_expand();
         let params = MsgraphContactsListParams {
             top: Some(100),
-            expand: Some(&expand),
+            expand: Some(MSGRAPH_CONTACT_STASH_EXPAND),
             ..Default::default()
         };
 
@@ -202,8 +203,10 @@ impl MsgraphBackend {
 
     /// Reads the contact `card_id`, projected onto a vCard document.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
-        let expand = graph_expand();
-        let contact = self.inner.contact_get(card_id, Some(&expand))?.response;
+        let contact = self
+            .inner
+            .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))?
+            .response;
         Ok(into_card(addressbook_id, contact))
     }
 
@@ -212,7 +215,7 @@ impl MsgraphBackend {
     /// Graph names the resource, so the returned id is server-assigned.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let vcard = into_vcard_text(contents)?;
-        let contact = project::to_new_contact(&vcard).map_err(Error::msg)?;
+        let contact = MsgraphContact::create_from_vcard(&vcard)?;
 
         let created = self
             .inner
@@ -240,11 +243,13 @@ impl MsgraphBackend {
 
         let vcard = into_vcard_text(contents)?;
 
-        let expand = graph_expand();
-        let base = self.inner.contact_get(card_id, Some(&expand))?.response;
-        let base_vcard = project::to_vcard(&base);
+        let base = self
+            .inner
+            .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))?
+            .response;
+        let base_vcard = base.to_vcard();
 
-        let contact = project::to_contact_delta(&vcard, &base_vcard).map_err(Error::msg)?;
+        let contact = MsgraphContact::update_from_vcard(&vcard, &base_vcard)?;
         self.inner.contact_update(card_id, &contact)?;
 
         Ok(CardUpdateOutcome::default())
@@ -265,7 +270,7 @@ fn folder(addressbook_id: &str) -> Option<&str> {
 /// io-msgraph contact to the shared card shape: the projected vCard
 /// document as contents, the Graph id as id and the changeKey as ETag.
 fn into_card(addressbook_id: &str, contact: MsgraphContact) -> Card {
-    let vcard = project::to_vcard(&contact);
+    let vcard = contact.to_vcard();
     Card {
         id: contact.id,
         addressbook_id: addressbook_id.to_string(),
@@ -282,13 +287,4 @@ fn into_vcard_text(contents: Vec<u8>) -> Result<String> {
 /// Parses an OData paging link served by Graph.
 fn parse_graph_url(raw: &str) -> Result<Url> {
     Url::parse(raw).map_err(|err| anyhow::anyhow!("Invalid Graph page URL `{raw}`: {err}"))
-}
-
-/// The `$expand` clause fetching the stash extended property along with
-/// the contact (Graph omits extended properties otherwise).
-fn graph_expand() -> String {
-    format!(
-        "singleValueExtendedProperties($filter=id eq '{}')",
-        project::EXTENDED_PROP_ID
-    )
 }

@@ -926,9 +926,9 @@ dependencies = [
 
 [[package]]
 name = "io-msgraph"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51140cd0784652d13ba54459fa97276ea150e99b8eca8625cd4e213501db5eaa"
+checksum = "7340a9a7bed1e5ebfb9f572ed893073f9fb087a496b01be4d23d152ecd76ff89"
 dependencies = [
  "anyhow",
  "base64",
@@ -938,6 +938,7 @@ dependencies = [
  "serde",
  "serde_json",
  "url",
+ "vcard-rs",
 ]
 
 [[package]]
@@ -2178,9 +2179,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "vcard-rs"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d18553b315dcd0a649f3e86a4465cd3166b60b4f2cbbff2cabd5a42f7504adc0"
+checksum = "bea378d5fe5266787d2386dfc20cfe37232b24386379d3742ecc4b947471f268"
 dependencies = [
  "memchr",
  "serde_json",

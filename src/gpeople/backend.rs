@@ -3,14 +3,14 @@
 //! The People arm of the shared-API client: thin glue mapping the shared
 //! addressbook and card operations onto
 //! [`io_gpeople::v1::client::GpeopleClientStd`] calls, projecting persons
-//! onto vCard documents (see [`crate::gpeople::project`]).
+//! onto vCard documents through io-gpeople's `vcard` feature.
 //!
 //! Contact groups are the addressbooks: the myContacts system group, the
 //! one every contact belongs to, comes first as Contacts, then the
 //! user's own groups. Memberships are m:n labels, so one card can appear
 //! under several books and each listing is narrowed to its group.
 
-use anyhow::{Error, Result, bail};
+use anyhow::{Result, bail};
 use io_gpeople::v1::{
     client::{GpeopleClientStd, GpeopleClientStdConnectOptions},
     rest::{
@@ -18,7 +18,9 @@ use io_gpeople::v1::{
             GpeopleContactGroup, GpeopleContactGroupType, list::GpeopleContactGroupsListParams,
         },
         people::{
-            GpeoplePerson, GpeoplePersonField, connections::list::GpeopleConnectionsListParams,
+            GpeoplePerson, GpeoplePersonField,
+            connections::list::GpeopleConnectionsListParams,
+            vcard::{GPEOPLE_PERSON_STASH_KEY, GPEOPLE_PERSON_VCARD_FIELDS},
         },
     },
 };
@@ -27,7 +29,6 @@ use secrecy::ExposeSecret;
 
 use crate::{
     config::{GpeopleConfig, ProxyConfig},
-    gpeople::project,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -205,7 +206,7 @@ impl GpeopleBackend {
             };
             let current = self
                 .inner
-                .connections_list(project::READ_FIELDS, &params)?
+                .connections_list(GPEOPLE_PERSON_VCARD_FIELDS, &params)?
                 .response;
 
             cards.extend(
@@ -229,7 +230,11 @@ impl GpeopleBackend {
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
         let person = self
             .inner
-            .person_get(&format!("people/{card_id}"), project::READ_FIELDS, &[])?
+            .person_get(
+                &format!("people/{card_id}"),
+                GPEOPLE_PERSON_VCARD_FIELDS,
+                &[],
+            )?
             .response;
 
         Ok(into_card(addressbook_id, person))
@@ -241,13 +246,13 @@ impl GpeopleBackend {
     /// the membership right after.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let vcard = into_vcard_text(contents)?;
-        let person = project::to_person(&vcard).map_err(Error::msg)?;
+        let person = GpeoplePerson::from_vcard(&vcard)?;
 
         let created = self
             .inner
-            .contact_create(&person, project::READ_FIELDS, &[])?
+            .contact_create(&person, GPEOPLE_PERSON_VCARD_FIELDS, &[])?
             .response;
-        let id = project::person_id(&created.resource_name).to_string();
+        let id = created.id().to_string();
 
         if addressbook_id != MY_CONTACTS_GROUP {
             let modified = self
@@ -285,21 +290,21 @@ impl GpeopleBackend {
         let vcard = into_vcard_text(contents)?;
         let resource_name = format!("people/{card_id}");
 
-        let mut person = project::to_person(&vcard).map_err(Error::msg)?;
+        let mut person = GpeoplePerson::from_vcard(&vcard)?;
         person.resource_name = resource_name.clone();
 
         let current = self
             .inner
-            .person_get(&resource_name, project::READ_FIELDS, &[])?
+            .person_get(&resource_name, GPEOPLE_PERSON_VCARD_FIELDS, &[])?
             .response;
 
-        let base = project::to_vcard(&current);
-        let base_person = project::to_person(&base).map_err(Error::msg)?;
+        let base = current.to_vcard();
+        let base_person = GpeoplePerson::from_vcard(&base)?;
         let outcome = CardUpdateOutcome {
-            kept_properties: project::unremovable_properties(&base_person, &person),
+            kept_properties: person.unremovable_properties(&base_person),
         };
 
-        let fields = project::changed_fields(&person, &base_person);
+        let fields = person.changed_fields(&base_person);
         if fields.is_empty() {
             return Ok(outcome);
         }
@@ -312,7 +317,7 @@ impl GpeopleBackend {
             let mut merged: Vec<_> = current
                 .client_data
                 .into_iter()
-                .filter(|entry| entry.key.as_deref() != Some(project::CLIENT_DATA_KEY))
+                .filter(|entry| entry.key.as_deref() != Some(GPEOPLE_PERSON_STASH_KEY))
                 .collect();
             merged.append(&mut person.client_data);
             person.client_data = merged;
@@ -324,7 +329,7 @@ impl GpeopleBackend {
         };
 
         self.inner
-            .contact_update(&person, &fields, project::READ_FIELDS, &[])?;
+            .contact_update(&person, &fields, GPEOPLE_PERSON_VCARD_FIELDS, &[])?;
 
         Ok(outcome)
     }
@@ -357,11 +362,11 @@ fn in_group(person: &GpeoplePerson, id: &str) -> bool {
 /// The projected vCard document is the contents, the person id the id
 /// and the person etag the ETag.
 fn into_card(addressbook_id: &str, person: GpeoplePerson) -> Card {
-    let vcard = project::to_vcard(&person);
+    let vcard = person.to_vcard();
     let etag = (!person.etag.is_empty()).then(|| person.etag.clone());
 
     Card {
-        id: project::person_id(&person.resource_name).to_string(),
+        id: person.id().to_string(),
         addressbook_id: addressbook_id.to_string(),
         etag,
         contents: vcard.into_bytes(),

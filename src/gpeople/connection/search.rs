@@ -5,9 +5,10 @@
 
 use anyhow::Result;
 use clap::Parser;
+use io_gpeople::v1::rest::people::vcard::GPEOPLE_PERSON_VCARD_FIELDS;
 use pimalaya_cli::printer::Printer;
 
-use crate::gpeople::{client::GpeopleClient, project, render::GpeoplePersonsOutput};
+use crate::gpeople::{client::GpeopleClient, render::GpeoplePersonsOutput};
 
 /// Search the signed-in user's contacts by query string.
 ///
@@ -28,7 +29,12 @@ impl GpeopleConnectionSearchCommand {
         let id_color = client.account.cards_list_table_id_color();
 
         let response = client
-            .contacts_search(&self.query, project::READ_FIELDS, self.page_size, &[])?
+            .contacts_search(
+                &self.query,
+                GPEOPLE_PERSON_VCARD_FIELDS,
+                self.page_size,
+                &[],
+            )?
             .response;
         let people = response
             .results

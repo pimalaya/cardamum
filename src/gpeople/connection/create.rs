@@ -5,12 +5,10 @@
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use io_gpeople::v1::rest::people::GpeoplePerson;
+use io_gpeople::v1::rest::people::{GpeoplePerson, vcard::GPEOPLE_PERSON_VCARD_FIELDS};
 use pimalaya_cli::printer::Printer;
 
-use crate::gpeople::{
-    client::GpeopleClient, input::PersonJsonArg, project, render::GpeoplePersonOutput,
-};
+use crate::gpeople::{client::GpeopleClient, input::PersonJsonArg, render::GpeoplePersonOutput};
 
 /// Create a contact from a raw People person JSON body.
 ///
@@ -32,7 +30,7 @@ impl GpeopleConnectionCreateCommand {
             serde_json::from_value(value).context("Invalid People person JSON")?;
 
         let created = client
-            .contact_create(&person, project::READ_FIELDS, &[])?
+            .contact_create(&person, GPEOPLE_PERSON_VCARD_FIELDS, &[])?
             .response;
 
         printer.out(GpeoplePersonOutput(created))

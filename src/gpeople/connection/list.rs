@@ -5,10 +5,12 @@
 
 use anyhow::Result;
 use clap::Parser;
-use io_gpeople::v1::rest::people::connections::list::GpeopleConnectionsListParams;
+use io_gpeople::v1::rest::people::{
+    connections::list::GpeopleConnectionsListParams, vcard::GPEOPLE_PERSON_VCARD_FIELDS,
+};
 use pimalaya_cli::printer::Printer;
 
-use crate::gpeople::{client::GpeopleClient, project, render::GpeoplePersonsOutput};
+use crate::gpeople::{client::GpeopleClient, render::GpeoplePersonsOutput};
 
 /// List the signed-in user's contacts (one People page).
 ///
@@ -37,7 +39,7 @@ impl GpeopleConnectionListCommand {
             ..Default::default()
         };
         let page = client
-            .connections_list(project::READ_FIELDS, &params)?
+            .connections_list(GPEOPLE_PERSON_VCARD_FIELDS, &params)?
             .response;
 
         printer.out(GpeoplePersonsOutput {

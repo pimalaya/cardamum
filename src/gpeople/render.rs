@@ -11,7 +11,7 @@ use pimalaya_cli::table::{Cell, Color, Row, Table};
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{gpeople::project, shared::table::style_from_preset};
+use crate::shared::table::style_from_preset;
 
 /// Display name of a person (display name, else unstructured name).
 pub fn person_name(person: &GpeoplePerson) -> &str {
@@ -84,9 +84,7 @@ impl fmt::Display for GpeoplePersonsOutput {
             .add_rows(self.people.iter().map(|person| {
                 let mut row = Row::new();
                 row.max_height(1)
-                    .add_cell(
-                        Cell::new(project::person_id(&person.resource_name)).fg(self.id_color),
-                    )
+                    .add_cell(Cell::new(person.id()).fg(self.id_color))
                     .add_cell(Cell::new(person_name(person)))
                     .add_cell(Cell::new(person_email(person)))
                     .add_cell(Cell::new(person_phone(person)));
@@ -114,7 +112,7 @@ pub struct GpeoplePersonOutput(#[schemars(with = "serde_json::Value")] pub Gpeop
 impl fmt::Display for GpeoplePersonOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let person = &self.0;
-        writeln!(f, "id: {}", project::person_id(&person.resource_name))?;
+        writeln!(f, "id: {}", person.id())?;
         writeln!(f, "name: {}", person_name(person))?;
         writeln!(f, "email: {}", person_email(person))?;
         writeln!(f, "phone: {}", person_phone(person))

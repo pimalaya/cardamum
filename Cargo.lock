@@ -875,9 +875,9 @@ dependencies = [
 
 [[package]]
 name = "io-gpeople"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25294c627d2e9e9350756785f3a492e12333ad715f6091a90b7750658e954ce6"
+checksum = "0215e6b7eb66a548d3f142f499121c7edae42d378b7c15dfdb42a83db5e784f6"
 dependencies = [
  "anyhow",
  "base64",
@@ -888,6 +888,7 @@ dependencies = [
  "serde_json",
  "thiserror",
  "url",
+ "vcard-rs",
 ]
 
 [[package]]

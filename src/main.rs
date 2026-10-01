@@ -44,14 +44,13 @@
 //! partial concept lives in a protocol command, not an ownerless API.
 //!
 //! CardDAV, vdir and pimdir speak vCard natively, JMAP, Graph and People
-//! do not. For those three the shared card contents is a vCard this
-//! crate synthesizes and re-projects on the way back, in [`project`] and
-//! the per-backend project.rs.
+//! do not. For those three the shared card contents is a synthesized
+//! vCard, re-projected on the way back.
 //!
-//! JMAP converts through vcard-rs's JSContact codec, Graph and People
-//! project field by field with a provider-side stash for the properties
-//! that have no slot. Those modules are ported from cardamum-android, so
-//! both products treat the same quirks identically.
+//! JMAP converts through vcard-rs's JSContact codec in src/jmap/project.rs.
+//! Graph and People project field by field with a provider-side stash for
+//! the properties that have no slot, through the `vcard` features of
+//! io-msgraph and io-gpeople, which Neverest shares.
 //!
 //! The [`wizard`]: one prompt takes an email address, a server URL or a
 //! folder path, io-pim-discovery turns it into the reachable services,
@@ -82,8 +81,6 @@ mod json_schema;
 mod msgraph;
 #[cfg(feature = "pimdir")]
 mod pimdir;
-#[cfg(any(feature = "msgraph", feature = "gpeople"))]
-mod project;
 mod shared;
 #[cfg(feature = "vdir")]
 mod vdir;

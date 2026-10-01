@@ -6,7 +6,7 @@ status: current
 
 # vCard projection
 
-CardDAV, vdir and pimdir speak vCard natively. JMAP, Microsoft Graph and Google People do not: for those three, the shared `Card.contents` is a vCard document of record that Cardamum synthesizes from the backend's own contact resource and re-projects on the way back ([jmap](../../src/jmap/project.rs), [msgraph](https://docs.rs/io-msgraph/latest/io_msgraph/v1/rest/users/contacts/vcard/) (io-msgraph's `vcard` feature), [gpeople](../../src/gpeople/project.rs), with the shared helpers in [project.rs](../../src/project.rs)).
+CardDAV, vdir and pimdir speak vCard natively. JMAP, Microsoft Graph and Google People do not: for those three, the shared `Card.contents` is a vCard document of record that Cardamum synthesizes from the backend's own contact resource and re-projects on the way back ([jmap](../../src/jmap/project.rs), [msgraph](https://docs.rs/io-msgraph/latest/io_msgraph/v1/rest/users/contacts/vcard/) (io-msgraph's `vcard` feature), [gpeople](https://docs.rs/io-gpeople/latest/io_gpeople/v1/rest/people/vcard/) (io-gpeople's `vcard` feature), the vCard building blocks being vcard-rs API).
 
 These modules are ported verbatim from cardamum-android, so both products treat the same provider quirks identically.
 

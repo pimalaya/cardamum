@@ -20,7 +20,7 @@ default = ["rustls-ring", "carddav", "jmap", "msgraph", "gpeople", "vdir"]
 carddav = ["dep:io-webdav"]
 jmap = ["dep:io-jmap", "vcard-rs/jscontact", "dep:base64"]
 msgraph = ["dep:io-msgraph", "io-msgraph/vcard"]
-gpeople = ["dep:io-gpeople"]
+gpeople = ["dep:io-gpeople", "io-gpeople/vcard"]
 pimdir = ["dep:io-pimdir"]
 vdir = ["dep:io-vdir"]
 native-tls = ["pimalaya-stream/native-tls", "io-pim-discovery/native-tls", "io-webdav?/native-tls", "io-jmap?/native-tls", "io-msgraph?/native-tls", "io-gpeople?/native-tls"]
@@ -52,7 +52,7 @@ getrandom = "0.4"
 io-http = { version = "0.5", default-features = false }
 io-jmap = { version = "0.4", default-features = false, features = ["client"], optional = true }
 io-msgraph = { version = "0.4.1", default-features = false, features = ["client"], optional = true }
-io-gpeople = { version = "0.4", default-features = false, features = ["client"], optional = true }
+io-gpeople = { version = "0.4.1", default-features = false, features = ["client"], optional = true }
 io-pim-discovery = { version = "0.8", default-features = false, features = ["pacc", "rfc6764", "rfc8620"] }
 io-pimdir = { version = "0.5", default-features = false, features = ["client"], optional = true }
 io-vdir = { version = "0.2", default-features = false, features = ["client", "serde"], optional = true }

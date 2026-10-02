@@ -875,9 +875,9 @@ dependencies = [
 
 [[package]]
 name = "io-gpeople"
-version = "0.4.1"
+version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0215e6b7eb66a548d3f142f499121c7edae42d378b7c15dfdb42a83db5e784f6"
+checksum = "c98997024af2d20e26ed3ca7e819f5f22dc18ff440b13bbd09a10ea9d2c3e565"
 dependencies = [
  "anyhow",
  "base64",
@@ -910,9 +910,9 @@ dependencies = [
 
 [[package]]
 name = "io-jmap"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dfba5d15f9451ed373c5fbdb9280dc94da0ee9de313615bc05ee8d7068a61a16"
+checksum = "cac88102ac3621a7da2dc6a306c5251c293f2c5b0c16fbc08ccea1fad849188b"
 dependencies = [
  "anyhow",
  "io-http",
@@ -927,9 +927,9 @@ dependencies = [
 
 [[package]]
 name = "io-msgraph"
-version = "0.4.1"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7340a9a7bed1e5ebfb9f572ed893073f9fb087a496b01be4d23d152ecd76ff89"
+checksum = "bf5b9c7de32943e38be0e1f99c03c9280aca59d9041f90073404b17e2c861fb9"
 dependencies = [
  "anyhow",
  "base64",
@@ -966,9 +966,9 @@ dependencies = [
 
 [[package]]
 name = "io-pimdir"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1fe9a53f7f303ae84c20591e0a9c7f53880fd7495f4391c08c945c161882e52e"
+checksum = "731a6a53112d974335dfb31724b68434b7f72bb2232b503f3f95d6679f7509bc"
 dependencies = [
  "blake3",
  "fs4",
@@ -1004,9 +1004,9 @@ dependencies = [
 
 [[package]]
 name = "io-webdav"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b5ab843d0358e9f97d457f2b8a3e58d99689f382dc2f4b1d2d7fe7143ba72aa"
+checksum = "0910be6c0a525345eed08d5a7e411e5ad67c83e57e1aa141c720419ce5682fa9"
 dependencies = [
  "anyhow",
  "io-http",

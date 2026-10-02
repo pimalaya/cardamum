@@ -30,11 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- A card created or updated on Microsoft Graph or Google People keeps its vCard UID, which used to come back replaced by one derived from the provider id. **Behaviour change.**
+
+  A contact the provider created, or that an earlier version wrote, keeps the UID it reads back with today.
+
 - **BREAKING**: renamed the Google People backend from `people` to `gpeople`, as `gmail` and `gcal` already are in Himalaya and Calendula: the cargo feature, the account config table (`gpeople.auth…`) and the command (`cardamum gpeople …`). Rename `people` to `gpeople` in the config; nothing reads the old name.
 
   The backend now uses io-gpeople, the renamed io-people.
 
-- Forwarded `vendored` to io-pimdir, which now links the system SQLite by default: the store needs sqlite3 on the machine, or `vendored` to build one from source, the way `vendored` already covers OpenSSL.
+- Forwarded `vendored` to io-pimdir and turned it on by default, so `cargo install` builds SQLite (for the `pimdir` backend) and OpenSSL (for `native-tls`) from source and needs neither on the machine. Drop it to link the system libraries. The Nix builds still link the store's.
 
 - **BREAKING**: every `--json` key spelling more than one word is camelCase, where it used to be snake_case: `addressbookId`, `fnValue`, `keptProperties`, `syncToken`. A key a provider owns keeps that provider's spelling, so `@odata.nextLink`, `nextPageToken`, `contactGroups` and the JMAP `list` are untouched, and the TOML configuration stays kebab-case.
 - **BREAKING**: `addressbook create`, `card create`, `card update` and `vdir item create` emit their result under `--json` instead of a prose message: `{"id"}`, and `{"id", "keptProperties"}` for the update. Terminal output is unchanged, word for word.

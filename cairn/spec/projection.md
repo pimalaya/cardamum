@@ -30,3 +30,12 @@ A stashed line longer than `MAX_STASH_LINE` (8 KiB, in practice a base64 `PHOTO`
 
 ### Requirement: Slot shape differs per provider
 Microsoft Graph has *fixed* slots (a bounded set of emails, phones and IM addresses) and rejects bodies that overflow them, so the first properties win and the overflow lands in the stash remainder like any unmanaged line, surviving on the server and restoring on read. Google People fields are true lists, so every vCard property of a managed kind projects without truncation.
+
+### Requirement: The UID rides the stash
+
+Graph and People have no UID field, so a synthesized card SHALL take its UID from the provider stash, where every card written through Cardamum carries the one it was written with, and SHALL mint one from the provider id only for a contact the stash carries none for (created by the provider, or written by a Cardamum predating this rule). A minted UID never changes, the provider id never changing.
+
+#### Scenario: A card created with a UID keeps it
+- GIVEN a vCard with `UID:urn:uuid:4fbe8971`
+- WHEN it is created on a Graph or People address book and read back
+- THEN the card carries `UID:urn:uuid:4fbe8971`, not one derived from the Graph id or the People resource name

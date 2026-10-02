@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-02
+
 ### Added
 
 - Added `proxy`, a per-account SOCKS5 or HTTP proxy every network backend connects through, and `<backend>.proxy` to override it for one backend.
@@ -47,7 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING**: the pimdir backend refuses a store written by an earlier draft of the format, naming the table it lacks; delete the store and let the sync recreate it, there being no migration.
 
   io-pimdir now holds the sync engine io-replica used to, and its summaries are typed: a staged create or update names the body alone and the sync derives the card's summary from it, and a listing previews an undownloaded card from the store's contact summary.
-- **BREAKING**: renamed `completions` and `manuals` to `completion` and `manual`, the plural staying as a hidden alias. A command mirroring a vendor API resource keeps that API's spelling, so `people contact-group members`, `jmap address-book changes` and `jmap contact-card changes` are unchanged; the `msgraph` family is aligned onto Graph, `contact-folder` and `contact` becoming `contact-folders` and `contacts`. Every counterpart spelling stays as a hidden alias.
+- Renamed `completions` and `manuals` to `completion` and `manual`, the plural staying as a hidden alias. A command mirroring a vendor API resource keeps that API's spelling, so `gpeople contact-group members`, `jmap address-book changes` and `jmap contact-card changes` are unchanged; the `msgraph` family is aligned onto Graph, `contact-folder` and `contact` becoming `contact-folders` and `contacts`. Every counterpart spelling stays as a hidden alias.
 - `card create` and `card update` take the source, the field flags and `-i` in that order, so `card create --full-name "Jane Doe" -i` opens the composer on a card already carrying the name. Neither requires a vCard any more: a create with none mints one carrying a fresh `UID` at `--vcard-version`, and an update with none reads the card first and sends the version the backend answered as `If-Match`, so an edit that took a minute no longer silently overwrites a write that landed during it. An explicit `--if-match` still wins.
 - The backend connection is opened by the call that needs it instead of when the client is built, so a command that never reaches the network opens no socket and an interactive edit holds none open while the editor is up. A server closes an idle connection, so a write landing after a long edit used to fail with `unexpected end of file` for a card that was perfectly good.
 - Resolved an account's credentials once, so a command two of its backends name is spawned once: an account naming one `pass` entry from its `carddav` and `jmap` tables used to pay two key unlocks. A command is compared as the configuration wrote it, so a shell line and its argv spelling stay two commands.
@@ -130,6 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Init repository
 
-[Unreleased]: https://github.com/pimalaya/cardamum/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/pimalaya/cardamum/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/pimalaya/cardamum/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pimalaya/cardamum/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pimalaya/cardamum/compare/root...v0.1.0

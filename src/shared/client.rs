@@ -7,6 +7,16 @@
 //! shared method to it, the glue itself living in the backend submodule
 //! of each protocol module.
 
+#[cfg(not(any(
+    feature = "vdir",
+    feature = "pimdir",
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople"
+)))]
+use std::convert::Infallible;
+
 use anyhow::{Result, bail};
 use log::debug;
 #[cfg(any(feature = "jmap", feature = "msgraph", feature = "gpeople"))]
@@ -55,6 +65,17 @@ enum BackendConfig {
     Msgraph(Box<crate::config::MsgraphConfig>),
     #[cfg(feature = "gpeople")]
     Gpeople(Box<crate::config::GpeopleConfig>),
+    /// Stands in when no backend is compiled in: never built, so every
+    /// match over the backends stays exhaustive.
+    #[cfg(not(any(
+        feature = "vdir",
+        feature = "pimdir",
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "gpeople"
+    )))]
+    Unused(Infallible),
 }
 
 /// The active backend of an [`AddressbookClient`].
@@ -71,6 +92,17 @@ enum BackendClient {
     Msgraph(Box<crate::msgraph::backend::MsgraphBackend>),
     #[cfg(feature = "gpeople")]
     Gpeople(Box<crate::gpeople::backend::GpeopleBackend>),
+    /// Stands in when no backend is compiled in: never built, so every
+    /// match over the backends stays exhaustive.
+    #[cfg(not(any(
+        feature = "vdir",
+        feature = "pimdir",
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "gpeople"
+    )))]
+    Unused(Infallible),
 }
 
 impl AddressbookClient {
@@ -184,6 +216,15 @@ impl BackendConfig {
     /// Opens the backend this configuration describes.
     fn open(&self) -> Result<BackendClient> {
         match self {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            Self::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
             Self::Vdir(config) => {
                 use crate::vdir::backend::VdirBackend;
@@ -229,6 +270,15 @@ impl AddressbookClient {
     /// Lists every addressbook available to the active account.
     pub fn list_addressbooks(&mut self) -> Result<Vec<Addressbook>> {
         match self.open()? {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.list_addressbooks(),
             #[cfg(feature = "pimdir")]
@@ -252,6 +302,15 @@ impl AddressbookClient {
         color: Option<&str>,
     ) -> Result<String> {
         match self.open()? {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.create_addressbook(name, description, color),
             #[cfg(feature = "pimdir")]
@@ -270,6 +329,15 @@ impl AddressbookClient {
     /// Applies a partial update to the addressbook identified by `id`.
     pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
         match self.open()? {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.update_addressbook(id, patch),
             #[cfg(feature = "pimdir")]
@@ -289,6 +357,15 @@ impl AddressbookClient {
     /// exclusively contains.
     pub fn delete_addressbook(&mut self, id: &str) -> Result<()> {
         match self.open()? {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.delete_addressbook(id),
             #[cfg(feature = "pimdir")]
@@ -315,6 +392,15 @@ impl AddressbookClient {
         page_size: Option<u32>,
     ) -> Result<Vec<Card>> {
         match self.open()? {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.list_cards(addressbook_id, page, page_size),
             #[cfg(feature = "pimdir")]
@@ -333,6 +419,15 @@ impl AddressbookClient {
     /// Fetches the card `card_id` from `addressbook_id`.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
         match self.open()? {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.get_card(addressbook_id, card_id),
             #[cfg(feature = "pimdir")]
@@ -351,6 +446,15 @@ impl AddressbookClient {
     /// Appends a raw vCard and returns the id the backend assigned.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         match self.open()? {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.create_card(addressbook_id, contents),
             #[cfg(feature = "pimdir")]
@@ -379,6 +483,15 @@ impl AddressbookClient {
         if_match: Option<&str>,
     ) -> Result<CardUpdateOutcome> {
         match self.open()? {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => {
                 client.update_card(addressbook_id, card_id, contents, if_match)
@@ -409,6 +522,15 @@ impl AddressbookClient {
     /// Permanently deletes `card_id` from `addressbook_id`.
     pub fn delete_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<()> {
         match self.open()? {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
             BackendClient::Vdir(client) => client.delete_card(addressbook_id, card_id),
             #[cfg(feature = "pimdir")]

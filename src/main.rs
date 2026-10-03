@@ -84,6 +84,7 @@ mod pimdir;
 mod shared;
 #[cfg(feature = "vdir")]
 mod vdir;
+#[cfg(feature = "wizard")]
 mod wizard;
 
 use std::{

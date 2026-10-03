@@ -33,6 +33,8 @@ CLI to manage contacts, written in Rust
 > [!TIP]
 > Each backend sits behind its own cargo feature. `carddav`, `jmap`, `msgraph`, `gpeople`, `vdir` and `pimdir` are all enabled by default. Build with `--no-default-features` and pick the ones you need.
 >
+> The default `wizard` feature brings the interactive `configure`; leave it out of a scripted or embedded build that never prompts.
+>
 > The default `vendored` feature builds SQLite and OpenSSL from source; leave it out (`--no-default-features --features …`) to link the system ones.
 
 ## Installation

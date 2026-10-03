@@ -17,6 +17,13 @@ use std::collections::HashMap;
 ))]
 use std::path::PathBuf;
 
+#[cfg(any(
+    feature = "wizard",
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople"
+))]
 use anyhow::Result;
 #[cfg(any(
     feature = "carddav",
@@ -132,12 +139,29 @@ impl TomlConfig for Config {
     }
 }
 
+/// The documented sample configuration, shown in the welcome banner and
+/// pointed at when no configuration is found.
+#[cfg(feature = "wizard")]
+pub const CONFIG_SAMPLE_URL: &str =
+    "https://github.com/pimalaya/cardamum/blob/master/config.sample.toml";
+
+/// How to get a configuration, for the errors meeting none.
+#[cfg(feature = "wizard")]
+pub const NO_CONFIG_HINT: &str = "run `cardamum configure` to generate one, or write it by hand: \
+     https://github.com/pimalaya/cardamum/blob/master/config.sample.toml";
+
+/// How to get a configuration, for the errors meeting none.
+#[cfg(not(feature = "wizard"))]
+pub const NO_CONFIG_HINT: &str = "write one by hand: \
+     https://github.com/pimalaya/cardamum/blob/master/config.sample.toml";
+
 /// The order a rendered account groups its keys in, most defining
 /// first: what the account is, its backend, then the rendering options.
 ///
 /// A key outside this list still renders, after the listed ones, so a
 /// field added to [`AccountConfig`] can never go missing from a
 /// generated document because nobody updated this table.
+#[cfg(feature = "wizard")]
 const RENDER_ORDER: [&str; 11] = [
     "default",
     "proxy",
@@ -157,6 +181,7 @@ const RENDER_ORDER: [&str; 11] = [
 ///
 /// Serialized alphabetically, `carddav.server` would read under the
 /// `carddav.auth` credential authenticating against it.
+#[cfg(feature = "wizard")]
 const ENDPOINT_KEYS: [&str; 5] = ["discover", "server", "home", "home-dir", "root"];
 
 impl AccountConfig {
@@ -167,6 +192,7 @@ impl AccountConfig {
     /// coming out alphabetically: groups are reordered
     /// ([`RENDER_ORDER`]), each endpoint is lifted to the top of its own
     /// ([`ENDPOINT_KEYS`]), and a blank line separates them.
+    #[cfg(feature = "wizard")]
     pub fn render(&self, name: &str) -> Result<String> {
         // NOTE: borrowed rather than built into a `Config`, which would
         // mean cloning the account (and so deriving `Clone` down every

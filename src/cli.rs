@@ -10,6 +10,8 @@ use std::{
 
 use anyhow::{Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
+#[cfg(feature = "wizard")]
+use pimalaya_cli::prompt;
 use pimalaya_cli::{
     clap::{
         args::{AccountFlag, JsonFlag, LogFlags},
@@ -18,7 +20,6 @@ use pimalaya_cli::{
     },
     footer, long_version,
     printer::Printer,
-    prompt,
 };
 use pimalaya_config::toml::TomlConfig;
 
@@ -32,15 +33,16 @@ use crate::jmap::{cli::JmapCommand, client::build_jmap_client};
 use crate::msgraph::{cli::MsgraphCommand, client::build_msgraph_client};
 #[cfg(feature = "vdir")]
 use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
+#[cfg(feature = "wizard")]
+use crate::wizard::{self, configure::ConfigureCommand};
 use crate::{
     account::cli::AccountCommand,
     backend::Backend,
-    config::{AccountConfig, Config},
+    config::{AccountConfig, Config, NO_CONFIG_HINT},
     json_schema,
     shared::{
         addressbook::cli::AddressbookCommand, card::cli::CardCommand, client::AddressbookClient,
     },
-    wizard::{self, configure::ConfigureCommand, discover::CONFIG_SAMPLE_URL},
 };
 
 /// Top-level command-line interface parser.
@@ -114,6 +116,7 @@ pub enum Command {
     #[command(subcommand)]
     Vdir(VdirCommand),
     /// Configure an account interactively.
+    #[cfg(feature = "wizard")]
     #[command(visible_alias = "wizard")]
     Configure(ConfigureCommand),
     #[command(subcommand)]
@@ -133,6 +136,7 @@ pub enum Command {
 /// configuration: a bare invocation, and a command needing an account.
 /// It is a hook rather than a gate, so what happens after a declined
 /// offer is the caller's business.
+#[cfg(feature = "wizard")]
 pub fn offer_configuration(
     printer: &mut impl Printer,
     config_paths: &[PathBuf],
@@ -147,6 +151,17 @@ pub fn offer_configuration(
     ConfigureCommand.execute(printer, config_paths)?;
 
     Ok(true)
+}
+
+/// Offers nothing in a build without the wizard, so the caller falls back
+/// to what it does when the offer is declined.
+#[cfg(not(feature = "wizard"))]
+pub fn offer_configuration(
+    _printer: &mut impl Printer,
+    _config_paths: &[PathBuf],
+    _path: &Path,
+) -> Result<bool> {
+    Ok(false)
 }
 
 /// Resolves the account a command runs against: loads the merged config,
@@ -178,7 +193,7 @@ pub fn resolve_account(
             match Config::from_paths_or_default(config_paths)? {
                 Some(config) => config,
                 None => bail!(
-                    "No configuration found at {}, run `cardamum configure` to generate one or write it by hand: {CONFIG_SAMPLE_URL}",
+                    "No configuration found at {}, {NO_CONFIG_HINT}",
                     path.display(),
                 ),
             }
@@ -261,6 +276,7 @@ impl Command {
                 cmd.execute(printer, client)
             }
 
+            #[cfg(feature = "wizard")]
             Self::Configure(cmd) => cmd.execute(printer, config_paths),
             Self::Account(cmd) => cmd.execute(printer, config_paths, account_name, backend),
             Self::Completion(cmd) => cmd.execute(printer, Cli::command()),

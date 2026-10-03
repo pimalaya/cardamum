@@ -36,6 +36,7 @@ pub fn schemas() -> BTreeMap<String, Value> {
         };
     }
 
+    #[cfg(feature = "wizard")]
     insert!(
         "cardamum-configure",
         crate::wizard::configure::ConfigureOutput

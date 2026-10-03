@@ -47,17 +47,12 @@ use crate::wizard::local;
 use crate::wizard::msgraph;
 use crate::{
     account::check,
-    config::AccountConfig,
+    config::{AccountConfig, CONFIG_SAMPLE_URL},
     wizard::search::{self, Discovered, DiscoveredKind},
 };
 
 /// The label of the single wizard prompt.
 const ENDPOINT_PROMPT: &str = "Email:";
-
-/// The documented sample configuration, shown in the welcome banner and
-/// pointed at when discovery finds nothing to configure automatically.
-pub const CONFIG_SAMPLE_URL: &str =
-    "https://github.com/pimalaya/cardamum/blob/master/config.sample.toml";
 
 /// The backend config produced by the chosen flow, folded into a fresh
 /// [`AccountConfig`] afterwards.

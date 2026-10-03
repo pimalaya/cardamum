@@ -18,7 +18,7 @@ use serde::Serialize;
 
 use crate::{
     account::context::map_color_or,
-    config::{AccountConfig, Config, TableArrangementConfig},
+    config::{AccountConfig, Config, NO_CONFIG_HINT, TableArrangementConfig},
     shared::table::{DEFAULT_PRESET, style_from_preset},
 };
 
@@ -86,7 +86,7 @@ fn load_config(paths: &[PathBuf]) -> Result<Config> {
     match Config::from_paths_or_default(paths)? {
         Some(config) => Ok(config),
         None => anyhow::bail!(
-            "No configuration found at {}, run `cardamum configure` to generate one",
+            "No configuration found at {}, {NO_CONFIG_HINT}",
             Config::target_path(paths)?.display(),
         ),
     }

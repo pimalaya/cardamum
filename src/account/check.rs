@@ -22,9 +22,11 @@ use pimalaya_config::toml::TomlConfig;
 use schemars::JsonSchema;
 use serde::Serialize;
 
+#[cfg(feature = "wizard")]
+use crate::config::AccountConfig;
 use crate::{
     backend::Backend,
-    config::{AccountConfig, Config},
+    config::{Config, NO_CONFIG_HINT},
 };
 
 /// Validate the account configuration.
@@ -49,7 +51,7 @@ impl AccountCheckCommand {
         let mut config = match Config::from_paths_or_default(config_paths)? {
             Some(config) => config,
             None => bail!(
-                "No configuration found at {}, run `cardamum configure` to generate one",
+                "No configuration found at {}, {NO_CONFIG_HINT}",
                 Config::target_path(config_paths)?.display(),
             ),
         };
@@ -146,6 +148,7 @@ impl AccountCheckCommand {
 /// The wizard runs it over a freshly built account, so a bad credential
 /// or endpoint stops the process instead of yielding a configuration
 /// that cannot connect.
+#[cfg(feature = "wizard")]
 pub fn test_account(account_config: &AccountConfig) -> Result<()> {
     #[cfg(any(
         feature = "carddav",

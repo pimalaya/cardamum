@@ -38,9 +38,10 @@ use pimalaya_config::secret::{Secret, SecretResolver};
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
-    feature = "gpeople",
-    feature = "pimdir"
+    feature = "gpeople"
 ))]
+use pimalaya_config::toml::opt_shell_expanded_path;
+#[cfg(feature = "pimdir")]
 use pimalaya_config::toml::shell_expanded_path;
 #[cfg(any(feature = "vdir", feature = "carddav", feature = "jmap"))]
 use pimalaya_config::toml::shell_expanded_string;
@@ -62,13 +63,6 @@ use pimalaya_stream::{
     feature = "gpeople"
 ))]
 use secrecy::SecretString;
-#[cfg(any(
-    feature = "carddav",
-    feature = "jmap",
-    feature = "msgraph",
-    feature = "gpeople"
-))]
-use serde::Deserializer;
 use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "carddav", feature = "jmap"))]
 use url::Url;
@@ -77,21 +71,6 @@ use url::Url;
 /// can leave it out of a generated document.
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     *value == T::default()
-}
-
-/// Expands a leading tilde and any shell variable in an optional path,
-/// as [`shell_expanded_path`] does for a mandatory one.
-///
-/// TODO: drop this for `pimalaya_config::toml::opt_shell_expanded_path`
-/// once pimalaya-config ships an optional variant.
-#[cfg(any(
-    feature = "carddav",
-    feature = "jmap",
-    feature = "msgraph",
-    feature = "gpeople"
-))]
-fn opt_shell_expanded_path<'de, D: Deserializer<'de>>(de: D) -> Result<Option<PathBuf>, D::Error> {
-    shell_expanded_path(de).map(Some)
 }
 
 /// The whole configuration file: the options shared by every account,

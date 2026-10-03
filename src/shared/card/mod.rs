@@ -11,6 +11,7 @@ pub mod create;
 pub mod delete;
 pub mod fields;
 pub mod list;
+pub mod project;
 pub mod read;
 pub mod update;
 pub mod vcard;

@@ -509,4 +509,73 @@ mod tests {
             retention: None,
         }
     }
+
+    /// A store holding one address book, `book`, and the backend over it.
+    fn store() -> (tempfile::TempDir, PimdirBackend) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = io_pimdir::client::PimdirStore::open(dir.path()).unwrap();
+        store.ensure_collection("book", CARD_KIND).unwrap();
+        drop(store);
+
+        let backend = PimdirBackend::new(PimdirConfig {
+            root: dir.path().to_path_buf(),
+            account: None,
+        })
+        .unwrap();
+
+        (dir, backend)
+    }
+
+    /// Applies the queue as the store's owner, a sync, would.
+    fn drain(dir: &tempfile::TempDir) {
+        io_pimdir::client::PimdirStore::open(dir.path())
+            .unwrap()
+            .for_source("carddav")
+            .drain()
+            .unwrap();
+    }
+
+    /// A card created, applied, listed, updated and read keeps every
+    /// field a contact list shows: names, addresses, numbers,
+    /// organization, title and note.
+    #[test]
+    fn a_card_round_trips_its_common_fields_through_the_store() {
+        use crate::shared::card::project::CardFields;
+
+        let (dir, mut backend) = store();
+        let card = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:c1\r\nFN:Jane Doe\r\n\
+            N:Doe;Jane;;;\r\nEMAIL:jane@example.org\r\nEMAIL:doe@example.org\r\n\
+            TEL:+33 1 00 00 00 00\r\nORG:Example Corp\r\nTITLE:Chief\r\n\
+            NOTE:Likes tea\r\nEND:VCARD\r\n";
+
+        let link = backend.create_card("book", card.to_vec()).unwrap();
+        assert_eq!(link, "urn:uuid:c1");
+        drain(&dir);
+
+        let cards = backend.list_cards("book", None, None).unwrap();
+        assert_eq!(cards.len(), 1);
+        let fields = CardFields::project(&cards[0].contents);
+        assert_eq!(fields.full_name.as_deref(), Some("Jane Doe"));
+        assert_eq!(fields.emails, ["jane@example.org", "doe@example.org"]);
+        assert_eq!(fields.phones, ["+33 1 00 00 00 00"]);
+        assert_eq!(fields.organization.as_deref(), Some("Example Corp"));
+        assert_eq!(fields.title.as_deref(), Some("Chief"));
+        assert_eq!(fields.note.as_deref(), Some("Likes tea"));
+
+        let id = cards[0].id.clone();
+        let updated = String::from_utf8(card.to_vec())
+            .unwrap()
+            .replace("TITLE:Chief", "TITLE:Director");
+        backend
+            .update_card("book", &id, updated.into_bytes(), None)
+            .unwrap();
+
+        // NOTE: the reader folds the pending update over the stored row,
+        // so the change reads back before a sync applies it.
+        let read = backend.get_card("book", &id).unwrap();
+        assert_eq!(
+            CardFields::project(&read.contents).title.as_deref(),
+            Some("Director")
+        );
+    }
 }

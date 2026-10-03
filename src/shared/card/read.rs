@@ -10,12 +10,14 @@ use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
+use crate::shared::{arg::AddressbookIdArg, card::project::CardFields, client::AddressbookClient};
 
 /// Read the raw vCard bytes of the given card.
 ///
-/// JSON output: `{"id", "etag", "contents"}`, with the raw vCard in
-/// `contents`.
+/// JSON output: `{"id", "etag", "contents", "uid", "fullName",
+/// "givenName", "familyName", "emails", "phones", "organization",
+/// "organizationUnits", "title", "note"}`, with the raw vCard in
+/// `contents` and its common fields beside it.
 #[derive(Debug, Parser)]
 pub struct CardReadCommand {
     /// Addressbook holding the card.
@@ -34,6 +36,7 @@ impl CardReadCommand {
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         let card = client.get_card(&addressbook_id, &self.card_id)?;
         let card = CardReadOutput {
+            fields: CardFields::project(&card.contents),
             id: card.id,
             etag: card.etag,
             contents: String::from_utf8(card.contents)?,
@@ -53,6 +56,9 @@ pub struct CardReadOutput {
     pub etag: Option<String>,
     /// The raw vCard, as text.
     pub contents: String,
+    /// The common fields, read through the vCard's decoded model.
+    #[serde(flatten)]
+    pub fields: CardFields,
 }
 
 impl fmt::Display for CardReadOutput {

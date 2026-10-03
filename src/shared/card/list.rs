@@ -15,13 +15,21 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::shared::{
-    arg::AddressbookIdArg, card::Card, client::AddressbookClient, table::style_from_preset,
+    arg::AddressbookIdArg,
+    card::{Card, project::CardFields},
+    client::AddressbookClient,
+    table::style_from_preset,
 };
 
 /// List vCards inside the given addressbook.
 ///
 /// JSON output: `{"cards": [{"id", "addressbookId", "etag", "fnValue",
-/// "email", "tel"}]}`.
+/// "email", "tel", "uid", "fullName", "givenName", "familyName",
+/// "emails", "phones", "organization", "organizationUnits", "title",
+/// "note"}]}`: the first `FN`, `EMAIL` and `TEL` as before, then the
+/// common fields read through the decoded vCard, every address and
+/// number included. On pimdir, a card not downloaded yet carries what
+/// its summary knows: its `UID`, its name and its addresses.
 #[derive(Debug, Parser)]
 pub struct CardListCommand {
     /// Addressbook to list the cards of.
@@ -99,12 +107,16 @@ pub struct CardRow {
     pub email: Option<String>,
     /// First `TEL` value found in the vCard.
     pub tel: Option<String>,
+    /// The common fields, read through the vCard's decoded model.
+    #[serde(flatten)]
+    pub fields: CardFields,
 }
 
 impl From<Card> for CardRow {
     fn from(card: Card) -> Self {
         let (fn_value, email, tel) = vcard_preview(&card.contents);
         Self {
+            fields: CardFields::project(&card.contents),
             id: card.id,
             addressbook_id: card.addressbook_id,
             etag: card.etag,

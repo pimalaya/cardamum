@@ -43,6 +43,9 @@ const SCAN_BATCH: usize = 500;
 /// Pimdir backend of the shared-API client, over an opened local store.
 pub struct PimdirBackend {
     inner: PimdirClient,
+    /// What the writes so far came back with, a capability their source
+    /// supports in part (pimdir STORAGE §15.6).
+    notes: Vec<String>,
 }
 
 impl PimdirBackend {
@@ -50,6 +53,7 @@ impl PimdirBackend {
     pub fn new(config: PimdirConfig) -> Result<Self> {
         Ok(Self {
             inner: PimdirClient::new(config)?,
+            notes: Vec::new(),
         })
     }
 
@@ -218,11 +222,16 @@ impl PimdirBackend {
         self.known_collection(addressbook_id)?;
 
         let seq = self.item(addressbook_id, card_id)?.seq;
-        self.inner
-            .producer()?
-            .enqueue(addressbook_id, &PimdirAction::Remove { seq }, None)
+        let action = PimdirAction::Remove { seq };
+        let mut producer = self.inner.producer()?;
+        let partials = producer
+            .check(addressbook_id, &action)
+            .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
+        producer
+            .enqueue(addressbook_id, &action, None)
             .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
 
+        self.notes.extend(partials.iter().map(ToString::to_string));
         Ok(())
     }
 
@@ -356,7 +365,7 @@ impl PimdirBackend {
     /// its shared lock is what keeps a collector out of the window between
     /// the two. A body the store already holds keeps the stored copy.
     fn stage(
-        &self,
+        &mut self,
         collection: &str,
         contents: &[u8],
         action: impl FnOnce(PimdirHash) -> PimdirAction,
@@ -374,11 +383,21 @@ impl PimdirBackend {
             size: size as usize,
         };
 
+        let action = action(object.hash.clone());
+        let partials = producer
+            .check(collection, &action)
+            .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
         producer
-            .enqueue(collection, &action(object.hash.clone()), Some(&object))
+            .enqueue(collection, &action, Some(&object))
             .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
 
+        self.notes.extend(partials.iter().map(ToString::to_string));
         Ok(())
+    }
+
+    /// Takes the notes the writes so far came back with.
+    pub fn take_notes(&mut self) -> Vec<String> {
+        std::mem::take(&mut self.notes)
     }
 }
 

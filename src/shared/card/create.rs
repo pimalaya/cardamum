@@ -11,6 +11,7 @@ use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use crate::shared::note::Noted;
 use crate::shared::{
     arg::{AddressbookIdArg, CardComposerArgs},
     card::{
@@ -75,7 +76,10 @@ impl CardCreateCommand {
             }
 
             let id = client.create_card(&addressbook_id, seeded)?;
-            return printer.out(CardCreateOutput::Created(CardCreatedOutput { id }));
+            return printer.out(Noted {
+                output: CardCreateOutput::Created(CardCreatedOutput { id }),
+                notes: client.take_notes(),
+            });
         }
 
         let composer = CardComposer {
@@ -92,7 +96,10 @@ impl CardCreateCommand {
         let created = client.create_card(&addressbook_id, draft.contents.clone());
         let id = draft.finish(created)?;
 
-        printer.out(CardCreateOutput::Created(CardCreatedOutput { id }))
+        printer.out(Noted {
+            output: CardCreateOutput::Created(CardCreatedOutput { id }),
+            notes: client.take_notes(),
+        })
     }
 }
 

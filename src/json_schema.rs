@@ -70,11 +70,11 @@ pub fn schemas() -> BTreeMap<String, Value> {
     );
     insert!(
         "cardamum-card-create",
-        crate::shared::card::create::CardCreateOutput
+        crate::shared::note::Noted<crate::shared::card::create::CardCreateOutput>
     );
     insert!(
         "cardamum-card-update",
-        crate::shared::card::update::CardUpdateOutput
+        crate::shared::note::Noted<crate::shared::card::update::CardUpdateOutput>
     );
 
     #[cfg(feature = "carddav")]

@@ -189,18 +189,21 @@ impl PimdirBackend {
     /// Stages a body replacement for `card_id` as an `update` action.
     ///
     /// The next sync applies and pushes it, three-way merging against the
-    /// stored base. `if_match` is ignored: reconciling against that base is
-    /// stronger than an ETag precondition a local store cannot check.
+    /// stored base. `if_match` gates the staging on the card's version,
+    /// the store's hash of its body with the pending queue folded in: the
+    /// gate is the caller's, the merge the store's.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
         card_id: &str,
         contents: Vec<u8>,
-        _if_match: Option<&str>,
+        if_match: Option<&str>,
     ) -> Result<CardUpdateOutcome> {
         self.known_collection(addressbook_id)?;
 
-        let seq = self.item(addressbook_id, card_id)?.seq;
+        let item = self.item(addressbook_id, card_id)?;
+        check_version(&item, addressbook_id, card_id, if_match)?;
+        let seq = item.seq;
 
         self.stage(addressbook_id, &contents, |hash| PimdirAction::Update {
             seq,
@@ -213,11 +216,19 @@ impl PimdirBackend {
     /// Stages a `remove` action for `card_id`.
     ///
     /// The next sync applies it as a tombstone and pushes a server-side
-    /// delete.
-    pub fn delete_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<()> {
+    /// delete. `if_match` gates it as it gates
+    /// [`update_card`](Self::update_card).
+    pub fn delete_card(
+        &mut self,
+        addressbook_id: &str,
+        card_id: &str,
+        if_match: Option<&str>,
+    ) -> Result<()> {
         self.known_collection(addressbook_id)?;
 
-        let seq = self.item(addressbook_id, card_id)?.seq;
+        let item = self.item(addressbook_id, card_id)?;
+        check_version(&item, addressbook_id, card_id, if_match)?;
+        let seq = item.seq;
         let action = PimdirAction::Remove { seq };
         let mut producer = self.inner.producer()?;
         let partials = producer
@@ -396,6 +407,39 @@ impl PimdirBackend {
     }
 }
 
+/// How the refusal of a write whose `--if-match` names a version the
+/// card no longer has starts, a prefix callers may match on.
+pub const PRECONDITION_FAILED: &str = "Precondition failed";
+
+/// Fails unless `if_match` names the card's current version.
+///
+/// The version is the store's hash of the card's body, the pending
+/// queue folded in: the `etag` a read or a listing reports. A card whose
+/// body is not local has no version to match. Surrounding double quotes
+/// are dropped, so an HTTP-quoted tag matches as well.
+fn check_version(
+    item: &PimdirItem,
+    addressbook_id: &str,
+    card_id: &str,
+    if_match: Option<&str>,
+) -> Result<()> {
+    let Some(expected) = if_match else {
+        return Ok(());
+    };
+    let expected = expected.trim().trim_matches('"');
+    let current = item.object.as_ref().map(|hash| hash.0.as_str());
+
+    if current == Some(expected) {
+        return Ok(());
+    }
+
+    bail!(
+        "{PRECONDITION_FAILED}: card `{card_id}` in addressbook `{addressbook_id}` is at version \
+         `{}`, not `{expected}`; read it again",
+        current.unwrap_or("none (body not fetched)"),
+    )
+}
+
 /// Renders a stored item's contact summary as the listing preview of a
 /// card.
 ///
@@ -572,5 +616,75 @@ mod tests {
             CardFields::project(&read.contents).title.as_deref(),
             Some("Director")
         );
+    }
+
+    const JANE: &[u8] = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:c1\r\n\
+                          FN:Jane Doe\r\nEMAIL:jane@example.org\r\nEND:VCARD\r\n";
+
+    /// How many actions wait in the queue of `book`.
+    fn pending(backend: &PimdirBackend) -> usize {
+        backend
+            .inner
+            .producer()
+            .unwrap()
+            .pending_actions("book")
+            .unwrap()
+            .len()
+    }
+
+    /// A read and a listing report one version, the body's hash, and a
+    /// staged update gated on it moves it at once.
+    #[test]
+    fn the_version_is_the_body_hash_and_follows_a_staged_update() {
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        drain(&dir);
+
+        let listed = backend.list_cards("book", None, None).unwrap();
+        let id = listed[0].id.clone();
+        let etag = backend.get_card("book", &id).unwrap().etag.unwrap();
+        assert_eq!(listed[0].etag.as_deref(), Some(etag.as_str()));
+
+        let edited = String::from_utf8(JANE.to_vec())
+            .unwrap()
+            .replace("Jane Doe", "Jane Roe");
+        backend
+            .update_card("book", &id, edited.into_bytes(), Some(&etag))
+            .unwrap();
+
+        let moved = backend.get_card("book", &id).unwrap().etag.unwrap();
+        assert_ne!(moved, etag);
+    }
+
+    /// A write naming a version the card no longer has queues nothing and
+    /// says so with the stable prefix; the right one deletes it.
+    #[test]
+    fn a_stale_if_match_refuses_the_update_and_the_delete() {
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        drain(&dir);
+        let id = backend.list_cards("book", None, None).unwrap()[0]
+            .id
+            .clone();
+
+        let update = backend.update_card("book", &id, JANE.to_vec(), Some("stale"));
+        let err = update.unwrap_err().to_string();
+        assert!(err.starts_with(PRECONDITION_FAILED), "{err}");
+        assert!(err.contains("`stale`"), "{err}");
+
+        let delete = backend.delete_card("book", &id, Some("stale"));
+        let err = delete.unwrap_err().to_string();
+        assert!(err.starts_with(PRECONDITION_FAILED), "{err}");
+        assert_eq!(pending(&backend), 0);
+
+        let etag = backend.get_card("book", &id).unwrap().etag.unwrap();
+        backend
+            .delete_card("book", &id, Some(&format!("\"{etag}\"")))
+            .unwrap();
+        assert_eq!(pending(&backend), 1);
+        assert!(backend.list_cards("book", None, None).unwrap().is_empty());
+
+        drain(&dir);
+        assert!(backend.get_card("book", &id).is_err());
     }
 }

@@ -510,7 +510,16 @@ impl AddressbookClient {
     }
 
     /// Permanently deletes `card_id` from `addressbook_id`.
-    pub fn delete_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<()> {
+    ///
+    /// `if_match` gates the delete as it gates [`update_card`](Self::update_card);
+    /// a backend with no such guard refuses it rather than pretending the
+    /// check happened.
+    pub fn delete_card(
+        &mut self,
+        addressbook_id: &str,
+        card_id: &str,
+        if_match: Option<&str>,
+    ) -> Result<()> {
         match self.open()? {
             #[cfg(not(any(
                 feature = "vdir",
@@ -522,17 +531,17 @@ impl AddressbookClient {
             )))]
             BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
-            BackendClient::Vdir(client) => client.delete_card(addressbook_id, card_id),
+            BackendClient::Vdir(client) => client.delete_card(addressbook_id, card_id, if_match),
             #[cfg(feature = "pimdir")]
-            BackendClient::Pimdir(client) => client.delete_card(addressbook_id, card_id),
+            BackendClient::Pimdir(client) => client.delete_card(addressbook_id, card_id, if_match),
             #[cfg(feature = "carddav")]
-            BackendClient::Carddav(client) => client.delete_card(addressbook_id, card_id),
+            BackendClient::Carddav(client) => client.delete_card(addressbook_id, card_id, if_match),
             #[cfg(feature = "jmap")]
-            BackendClient::Jmap(client) => client.delete_card(addressbook_id, card_id),
+            BackendClient::Jmap(client) => client.delete_card(addressbook_id, card_id, if_match),
             #[cfg(feature = "msgraph")]
-            BackendClient::Msgraph(client) => client.delete_card(addressbook_id, card_id),
+            BackendClient::Msgraph(client) => client.delete_card(addressbook_id, card_id, if_match),
             #[cfg(feature = "gpeople")]
-            BackendClient::Gpeople(client) => client.delete_card(addressbook_id, card_id),
+            BackendClient::Gpeople(client) => client.delete_card(addressbook_id, card_id, if_match),
         }
     }
 }

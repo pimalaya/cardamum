@@ -174,8 +174,13 @@ impl CarddavBackend {
     }
 
     /// Permanently deletes `card_id` from `addressbook_id`.
-    pub fn delete_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<()> {
-        self.inner.delete_card(addressbook_id, card_id, None)?;
+    pub fn delete_card(
+        &mut self,
+        addressbook_id: &str,
+        card_id: &str,
+        if_match: Option<&str>,
+    ) -> Result<()> {
+        self.inner.delete_card(addressbook_id, card_id, if_match)?;
         Ok(())
     }
 }

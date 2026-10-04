@@ -282,7 +282,15 @@ impl JmapBackend {
     }
 
     /// Destroys the ContactCard `card_id`.
-    pub fn delete_card(&mut self, _addressbook_id: &str, card_id: &str) -> Result<()> {
+    pub fn delete_card(
+        &mut self,
+        _addressbook_id: &str,
+        card_id: &str,
+        if_match: Option<&str>,
+    ) -> Result<()> {
+        if if_match.is_some() {
+            bail!("JMAP does not support If-Match guarded deletes");
+        }
         let args = JmapContactCardSetArgs {
             destroy: Some(vec![card_id.to_string()]),
             ..Default::default()

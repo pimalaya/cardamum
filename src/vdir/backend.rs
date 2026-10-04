@@ -174,7 +174,15 @@ impl VdirBackend {
     }
 
     /// Permanently deletes `card_id` from `addressbook_id`.
-    pub fn delete_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<()> {
+    pub fn delete_card(
+        &mut self,
+        addressbook_id: &str,
+        card_id: &str,
+        if_match: Option<&str>,
+    ) -> Result<()> {
+        if if_match.is_some() {
+            bail!("The vdir backend has no ETag, so it cannot honour If-Match");
+        }
         let path = self.addressbook_path(addressbook_id)?;
         self.inner.delete_item(path, card_id)?;
         Ok(())

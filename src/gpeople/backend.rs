@@ -335,7 +335,15 @@ impl GpeopleBackend {
     }
 
     /// Deletes the contact `card_id`.
-    pub fn delete_card(&mut self, _addressbook_id: &str, card_id: &str) -> Result<()> {
+    pub fn delete_card(
+        &mut self,
+        _addressbook_id: &str,
+        card_id: &str,
+        if_match: Option<&str>,
+    ) -> Result<()> {
+        if if_match.is_some() {
+            bail!("Google People cannot gate a delete on an ETag");
+        }
         self.inner.contact_delete(&format!("people/{card_id}"))?;
         Ok(())
     }

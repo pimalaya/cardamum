@@ -72,6 +72,7 @@ mod backend;
 mod carddav;
 mod cli;
 mod config;
+mod error;
 #[cfg(feature = "gpeople")]
 mod gpeople;
 #[cfg(feature = "jmap")]
@@ -94,7 +95,7 @@ use std::{
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
-use pimalaya_cli::{error::ErrorReport, log::Logger, printer::Printer, printer::StdoutPrinter};
+use pimalaya_cli::{log::Logger, printer::Printer, printer::StdoutPrinter};
 use pimalaya_config::toml::TomlConfig;
 
 use crate::{cli::Cli, config::Config};
@@ -103,7 +104,7 @@ fn main() {
     let cli = Cli::parse();
     let mut printer = StdoutPrinter::new(&cli.json);
     let result = execute(cli, &mut printer);
-    ErrorReport::eval(&mut printer, result);
+    error::eval(&mut printer, result);
 }
 
 fn execute(cli: Cli, printer: &mut StdoutPrinter) -> Result<()> {

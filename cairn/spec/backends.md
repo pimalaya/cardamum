@@ -61,7 +61,7 @@ A pimdir write SHALL append one action to the store's queue (pimdir SPEC §15.1)
 ### Requirement: A pimdir card's version is its body hash
 The pimdir backend SHALL report as a card's `etag`, in `card list` and `card read`, the store's hash of its body, the pending queue folded in, so a staged update moves it at once. A card whose body is not local SHALL report none.
 
-`update_card` and `delete_card` SHALL refuse, before anything is queued, a write whose `if_match` is not that version, surrounding double quotes ignored, with an error starting `Precondition failed:` and naming the version found and the one expected. A card with no local body matches no version.
+`update_card` and `delete_card` SHALL refuse, before anything is queued, a write whose `if_match` is not that version, surrounding double quotes ignored, with the code `precondition-failed` and an error starting `Precondition failed:`, naming the version found and the one expected. A card with no local body matches no version.
 
 ### Requirement: pimdir derivations match the sync engine
 The link id, summary and sort key of a card a pimdir write stages SHALL be io-pimdir's own derivations (`io_pimdir::summary`, pimdir STORAGE Annex A), and the backend SHALL carry none of its own. A queued `add` or `update` names the body alone: the store's owner derives the summary and the sort key from it when it applies the action, so a card Cardamum stages summarizes exactly as the same card arriving through a sync. The link id `create_card` reports is the same derivation run on the same bytes: the bare `UID`, with nothing prepended, or `hash:` over the body when the card states none.

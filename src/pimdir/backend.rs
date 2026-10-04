@@ -26,6 +26,7 @@ use log::warn;
 
 use crate::{
     config::PimdirConfig,
+    error::{CodedError, ErrorCode},
     pimdir::client::PimdirClient,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
@@ -147,10 +148,14 @@ impl PimdirBackend {
 
         let item = self.item(addressbook_id, card_id)?;
         let Some(hash) = item.object else {
-            bail!(
-                "Card `{card_id}` in `{addressbook_id}` is not downloaded yet \
-                 (body not fetched); run a sync to hydrate it"
-            );
+            return Err(CodedError::new(
+                ErrorCode::BodyPending,
+                format!(
+                    "Card `{card_id}` in `{addressbook_id}` is not downloaded yet \
+                     (body not fetched); run a sync to hydrate it"
+                ),
+            )
+            .into());
         };
         let contents =
             self.inner.blobs.get(&hash)?.ok_or_else(|| {
@@ -433,11 +438,15 @@ fn check_version(
         return Ok(());
     }
 
-    bail!(
-        "{PRECONDITION_FAILED}: card `{card_id}` in addressbook `{addressbook_id}` is at version \
-         `{}`, not `{expected}`; read it again",
-        current.unwrap_or("none (body not fetched)"),
+    Err(CodedError::new(
+        ErrorCode::PreconditionFailed,
+        format!(
+            "{PRECONDITION_FAILED}: card `{card_id}` in addressbook `{addressbook_id}` is at \
+             version `{}`, not `{expected}`; read it again",
+            current.unwrap_or("none (body not fetched)"),
+        ),
     )
+    .into())
 }
 
 /// Renders a stored item's contact summary as the listing preview of a
@@ -658,6 +667,22 @@ mod tests {
 
     /// A write naming a version the card no longer has queues nothing and
     /// says so with the stable prefix; the right one deletes it.
+    /// A stale version and an undownloaded body carry their stable code.
+    #[test]
+    fn a_stale_if_match_carries_its_code() {
+        use crate::error::{ErrorCode, code_of};
+
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        drain(&dir);
+        let id = backend.list_cards("book", None, None).unwrap()[0]
+            .id
+            .clone();
+
+        let err = backend.delete_card("book", &id, Some("stale")).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));
+    }
+
     #[test]
     fn a_stale_if_match_refuses_the_update_and_the_delete() {
         let (dir, mut backend) = store();

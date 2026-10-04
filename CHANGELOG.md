@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added the `wizard` cargo feature, on by default, gating the interactive configuration: the `configure` command and the offer a first run makes. A build without it drops the prompts and the dependencies only they use, and a missing configuration points at the documented sample instead.
 - Added the common fields of a card to the `card list` and `card read` JSON: `uid`, `fullName`, `givenName`, `familyName`, every address in `emails` and number in `phones`, `organization`, `organizationUnits`, `title` and `note`, read through the decoded vCard.
 - Added `--if-match` to `card delete`: CardDAV sends it as `If-Match`, pimdir checks it against the card's version, and the backends that cannot gate a delete refuse it.
+- Added a stable `code` to the `--json` error output for failures a caller acts on: `body-pending`, `precondition-failed`.
 
 ### Changed
 

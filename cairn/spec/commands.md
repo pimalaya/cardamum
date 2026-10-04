@@ -151,5 +151,18 @@ The name flags SHALL be named for the role, given and family, rather than for th
 ### Requirement: A delete can be gated on a version
 `card delete` SHALL take `--if-match <ETAG>`. CardDAV SHALL send it as `If-Match` and pimdir SHALL check it as an update does; the backends that cannot gate a delete (vdir, jmap, msgraph, gpeople) SHALL refuse it rather than drop it.
 
+### Requirement: A JSON error carries a stable code
+A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`. The code SHALL be found anywhere in the error chain, so added context does not hide it. A failure with no code SHALL print no `code` field. The plain output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording.
+
+| Code | Raised when |
+|---|---|
+| `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
+| `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |
+
+#### Scenario: A stale version
+- GIVEN a pimdir card whose body changed since it was read
+- WHEN `cardamum --json card delete --if-match <old etag>` names it
+- THEN the command exits 1, queues nothing and prints `{"code":"precondition-failed","error":"Precondition failed: …","sources":[],"backtrace":null}`
+
 ### Requirement: A card projects its common fields
 `card list` rows and the `card read` output SHALL carry the card's common fields, read through vcard-rs's decoded model rather than off raw lines: `uid`, `fullName`, `givenName` and `familyName` (the `N` components, space-joined), `emails` and `phones` (every `EMAIL` and `TEL` in document order, a `tel:` URI as its number), `organization` and `organizationUnits` (the `ORG` components), `title` and `note`. A card that does not parse SHALL project nothing rather than fail the listing. The projection is read-only: the vCard stays the record.

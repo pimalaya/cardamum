@@ -6,7 +6,6 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::{Message, Printer};
 
-use crate::shared::note::Noted;
 use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
 
 /// Permanently delete the given card.
@@ -31,9 +30,6 @@ impl CardDeleteCommand {
         client.delete_card(&addressbook_id, &self.card_id)?;
 
         let msg = format!("Card `{}` successfully deleted", self.card_id);
-        printer.out(Noted {
-            output: Message::new(msg),
-            notes: client.take_notes(),
-        })
+        printer.out(Message::new(msg))
     }
 }

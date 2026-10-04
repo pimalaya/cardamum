@@ -12,7 +12,6 @@ use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::shared::note::Noted;
 use crate::shared::{
     arg::{AddressbookIdArg, CardComposerArgs},
     card::{composer::CardComposer, fields::CardFieldsArgs, vcard::read_source},
@@ -84,13 +83,10 @@ impl CardUpdateCommand {
             let outcome =
                 client.update_card(&addressbook_id, &self.card_id, seeded, if_match.as_deref())?;
 
-            return printer.out(Noted {
-                output: CardUpdateOutput::Applied(CardUpdatedOutput {
-                    id: self.card_id,
-                    kept_properties: outcome.kept_properties,
-                }),
-                notes: client.take_notes(),
-            });
+            return printer.out(CardUpdateOutput::Applied(CardUpdatedOutput {
+                id: self.card_id,
+                kept_properties: outcome.kept_properties,
+            }));
         }
 
         let composer = CardComposer {
@@ -116,13 +112,10 @@ impl CardUpdateCommand {
 
         let outcome = draft.finish(updated)?;
 
-        printer.out(Noted {
-            output: CardUpdateOutput::Applied(CardUpdatedOutput {
-                id: self.card_id,
-                kept_properties: outcome.kept_properties,
-            }),
-            notes: client.take_notes(),
-        })
+        printer.out(CardUpdateOutput::Applied(CardUpdatedOutput {
+            id: self.card_id,
+            kept_properties: outcome.kept_properties,
+        }))
     }
 }
 

@@ -43,9 +43,6 @@ const SCAN_BATCH: usize = 500;
 /// Pimdir backend of the shared-API client, over an opened local store.
 pub struct PimdirBackend {
     inner: PimdirClient,
-    /// What the writes so far came back with, a capability their source
-    /// supports in part (pimdir STORAGE §15.6).
-    notes: Vec<String>,
 }
 
 impl PimdirBackend {
@@ -53,7 +50,6 @@ impl PimdirBackend {
     pub fn new(config: PimdirConfig) -> Result<Self> {
         Ok(Self {
             inner: PimdirClient::new(config)?,
-            notes: Vec::new(),
         })
     }
 
@@ -231,7 +227,9 @@ impl PimdirBackend {
             .enqueue(addressbook_id, &action, None)
             .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
 
-        self.notes.extend(partials.iter().map(ToString::to_string));
+        for partial in &partials {
+            warn!("{partial}");
+        }
         Ok(())
     }
 
@@ -391,13 +389,10 @@ impl PimdirBackend {
             .enqueue(collection, &action, Some(&object))
             .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
 
-        self.notes.extend(partials.iter().map(ToString::to_string));
+        for partial in &partials {
+            warn!("{partial}");
+        }
         Ok(())
-    }
-
-    /// Takes the notes the writes so far came back with.
-    pub fn take_notes(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.notes)
     }
 }
 

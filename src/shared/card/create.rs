@@ -11,7 +11,6 @@ use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::shared::note::Noted;
 use crate::shared::{
     arg::{AddressbookIdArg, CardComposerArgs},
     card::{
@@ -76,10 +75,7 @@ impl CardCreateCommand {
             }
 
             let id = client.create_card(&addressbook_id, seeded)?;
-            return printer.out(Noted {
-                output: CardCreateOutput::Created(CardCreatedOutput { id }),
-                notes: client.take_notes(),
-            });
+            return printer.out(CardCreateOutput::Created(CardCreatedOutput { id }));
         }
 
         let composer = CardComposer {
@@ -96,10 +92,7 @@ impl CardCreateCommand {
         let created = client.create_card(&addressbook_id, draft.contents.clone());
         let id = draft.finish(created)?;
 
-        printer.out(Noted {
-            output: CardCreateOutput::Created(CardCreatedOutput { id }),
-            notes: client.take_notes(),
-        })
+        printer.out(CardCreateOutput::Created(CardCreatedOutput { id }))
     }
 }
 
@@ -131,9 +124,6 @@ impl fmt::Display for CardCreateOutput {
 #[serde(rename_all = "camelCase")]
 pub struct CardCreatedOutput {
     /// Backend-assigned identifier of the new card.
-    ///
-    /// On pimdir this is the link id the queued create was staged under,
-    /// the store having no id of its own until a sync applies it.
     pub id: String,
 }
 

@@ -28,8 +28,8 @@ use crate::shared::{
 /// "emails", "phones", "organization", "organizationUnits", "title",
 /// "note"}]}`: the first `FN`, `EMAIL` and `TEL` as before, then the
 /// common fields read through the decoded vCard, every address and
-/// number included. On pimdir, a card not downloaded yet carries what
-/// its summary knows: its `UID`, its name and its addresses.
+/// number included. A card whose body is not available yet carries
+/// what its backend knows of it.
 #[derive(Debug, Parser)]
 pub struct CardListCommand {
     /// Addressbook to list the cards of.

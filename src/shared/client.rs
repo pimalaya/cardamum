@@ -192,16 +192,6 @@ impl AddressbookClient {
     }
 
     /// The open backend, opening it when it is not.
-    /// Takes the notes the writes so far came back with: a capability their
-    /// source supports in part, on pimdir alone.
-    pub fn take_notes(&mut self) -> Vec<String> {
-        match &mut self.inner {
-            #[cfg(feature = "pimdir")]
-            Some(BackendClient::Pimdir(client)) => client.take_notes(),
-            _ => Vec::new(),
-        }
-    }
-
     fn open(&mut self) -> Result<&mut BackendClient> {
         if self.inner.is_none() {
             debug!("opening the backend connection");

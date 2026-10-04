@@ -34,7 +34,7 @@ pub struct CardFieldsArgs {
     /// Identity of the card (`UID`).
     ///
     /// A card minted from nothing gets a fresh `urn:uuid` when this names
-    /// none, the pimdir link id deriving from it.
+    /// none.
     #[arg(long, value_name = "TEXT")]
     pub uid: Option<String>,
     /// Display name (`FN`), which every vCard is required to carry.

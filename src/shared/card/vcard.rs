@@ -105,7 +105,7 @@ pub fn ensure_valid(card: &[u8]) -> Result<()> {
 ///
 /// This is what a create starts from when it is given no source, and it
 /// is a card rather than an empty file so that no composer is asked to
-/// invent a `UID`: the pimdir link id derives from it, and an editor
+/// invent a `UID`: a backend may key the card on it, and an editor
 /// handed an empty file mints none.
 pub fn blank_card(version: VcardVersion) -> Result<Vec<u8>> {
     let uid = format!("urn:uuid:{}", uuid_v4()?);

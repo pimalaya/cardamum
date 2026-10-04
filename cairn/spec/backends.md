@@ -22,6 +22,9 @@ The shared `card update` and `addressbook update` SHALL fail when the target doe
 ### Requirement: Clearing an optional field removes it
 A shared update SHALL distinguish "leave this field untouched" from "clear this field", and SHALL carry the difference all the way to the storage: on CardDAV a cleared property leaves as a `DAV:remove` instruction (RFC 4918 §9.2), never as an omitted `DAV:set`, and on vdir a cleared property has its metadata file removed rather than left in place. A backend that cannot express removal SHALL report that rather than accept the request and drop it. The adapter SHALL forward the diff as such, never reading the current state to merge unchanged fields by hand.
 
+### Requirement: Shared outputs carry no backend details
+The output of a shared command SHALL NOT carry a field that only one backend fills. A backend detail worth showing SHALL be logged by that backend's adapter or shown by its own namespace.
+
 ### Requirement: An unsupported precondition is refused, not dropped
 A backend with no entity-tag concept SHALL refuse `--if-match` rather than accept and ignore it, as msgraph, jmap and vdir do. Silently dropping a guard the caller asked for is the one outcome that reads as protection and is none.
 

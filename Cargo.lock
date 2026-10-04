@@ -968,8 +968,7 @@ dependencies = [
 [[package]]
 name = "io-pimdir"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f1b7368c9064cefacb73865fdc8471073c582fec085e9f6e1e9bd481005fca4"
+source = "git+https://github.com/pimalaya/io-pimdir?rev=8c83c0486fafc67a9598052cfee6df8017e84e8f#8c83c0486fafc67a9598052cfee6df8017e84e8f"
 dependencies = [
  "blake3",
  "fs4",

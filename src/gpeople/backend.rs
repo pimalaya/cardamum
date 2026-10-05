@@ -95,6 +95,7 @@ impl GpeopleBackend {
                             name: "Contacts".to_string(),
                             description: None,
                             color: None,
+                            default: false,
                         },
                     );
                 } else if group.group_type == Some(GpeopleContactGroupType::UserContactGroup) {
@@ -107,6 +108,7 @@ impl GpeopleBackend {
                         name,
                         description: None,
                         color: None,
+                        default: false,
                     });
                 }
             }

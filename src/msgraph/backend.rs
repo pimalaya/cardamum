@@ -67,6 +67,7 @@ impl MsgraphBackend {
             name: "Contacts".to_string(),
             description: None,
             color: None,
+            default: false,
         }];
 
         let mut page = self
@@ -85,6 +86,7 @@ impl MsgraphBackend {
                     id: folder.id,
                     description: None,
                     color: None,
+                    default: false,
                 });
             }
 

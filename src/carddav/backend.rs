@@ -194,6 +194,7 @@ fn into_addressbook(wire: CarddavAddressbook) -> Addressbook {
         name,
         description: wire.description,
         color: wire.color,
+        default: false,
     }
 }
 

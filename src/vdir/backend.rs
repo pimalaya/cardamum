@@ -219,5 +219,6 @@ fn into_addressbook(collection: VdirCollection) -> Addressbook {
         name,
         description: collection.description,
         color: collection.color,
+        default: false,
     }
 }

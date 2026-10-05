@@ -23,6 +23,11 @@ pub struct Addressbook {
     /// ASCII `#RRGGBB` color marker, when the backend exposes it.
     #[serde(default)]
     pub color: Option<String>,
+    /// Whether new cards go here when no address book is named, as the
+    /// server states it (the pimdir backend reads it from the store,
+    /// STORAGE §14); `false` where the backend does not say.
+    #[serde(default)]
+    pub default: bool,
 }
 
 /// Partial update applied to an [`Addressbook`].

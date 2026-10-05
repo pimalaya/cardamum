@@ -341,6 +341,7 @@ fn into_addressbook(book: JmapAddressBook) -> Addressbook {
         id,
         description: book.description,
         color: None,
+        default: false,
     }
 }
 

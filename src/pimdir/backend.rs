@@ -68,6 +68,7 @@ impl PimdirBackend {
                 id: collection.id,
                 description: collection.description,
                 color: collection.color,
+                default: collection.role.as_deref() == Some("default"),
             })
             .collect();
 
@@ -491,6 +492,43 @@ mod tests {
     use io_pimdir::placement::{PimdirLevel, PimdirLinkId};
 
     use super::*;
+
+    /// The address book the server names the default carries the mark, read
+    /// from the role the sync engine recorded (pimdir STORAGE §14).
+    #[test]
+    fn the_default_address_book_is_the_one_its_store_marks() {
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let store = io_pimdir::client::PimdirStore::open(dir.path())
+                .unwrap()
+                .for_account("work");
+            for id in ["carddav/default", "carddav/team"] {
+                store.ensure_collection(id, CARD_KIND).unwrap();
+            }
+            store
+                .set_collection_role("carddav/default", Some("default"))
+                .unwrap();
+        }
+
+        let mut backend = PimdirBackend::new(crate::config::PimdirConfig {
+            root: dir.path().to_path_buf(),
+            account: None,
+        })
+        .unwrap();
+        let defaults: Vec<(String, bool)> = backend
+            .list_addressbooks()
+            .unwrap()
+            .into_iter()
+            .map(|book| (book.id, book.default))
+            .collect();
+        assert_eq!(
+            defaults,
+            [
+                ("carddav/default".into(), true),
+                ("carddav/team".into(), false)
+            ]
+        );
+    }
 
     /// RFC 6352 §5.1 requires a `UID` unique per collection, which servers
     /// do not always enforce, most often after a repeated import.

@@ -78,6 +78,9 @@ pub struct AddressbookRow {
     pub description: Option<String>,
     /// ASCII `#RRGGBB` color marker, when the backend exposes one.
     pub color: Option<String>,
+    /// Whether new cards go here when no address book is named, as the
+    /// server states it.
+    pub default: bool,
 }
 
 impl From<Addressbook> for AddressbookRow {
@@ -87,6 +90,7 @@ impl From<Addressbook> for AddressbookRow {
             name: book.name,
             description: book.description,
             color: book.color,
+            default: book.default,
         }
     }
 }

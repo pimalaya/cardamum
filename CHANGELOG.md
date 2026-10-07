@@ -16,7 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
-- Changed io-pimdir to the git revision `f9b13f8` (pimdir draft-04), the one neverest, himalaya and calendula pin, so the set shares one io-pimdir and one store schema: a store reconciled by the current neverest (no `probes` table) opens, and an empty mail date is stored as no date.
+- Changed io-pimdir to the git revision `ff28408` (pimdir draft-04), the one neverest, himalaya and calendula pin, so the set shares one io-pimdir and one store schema: a store reconciled by the current neverest (no `probes` table) opens, an empty mail date is stored as no date, and a band round keeps undated mail.
 - Changed the pimdir `update_card` and `delete_card` to honour `--if-match` against the `etag` they report, the store's hash of the card's body: a write naming a version the card no longer has is refused before anything is queued, with an error starting `Precondition failed:`.
 - Changed the pimdir writes to be refused before they are queued when a source of the store does not support them, naming the capability, the source and why (pimdir draft-03, STORAGE §15.6). A write a source supports only in part logs a warning.
 

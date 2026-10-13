@@ -550,6 +550,14 @@ impl AddressbookClient {
 ///
 /// A `page_size` of `None` returns every item, while a size of zero or a
 /// page past the end returns nothing.
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople",
+    feature = "vdir",
+    test
+))]
 pub fn paginate<T>(items: Vec<T>, page: Option<u32>, page_size: Option<u32>) -> Vec<T> {
     let Some(size) = page_size else {
         return items;

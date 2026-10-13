@@ -49,6 +49,9 @@ An id naming no address book of the account SHALL be refused naming the ones it 
 ### Requirement: pimdir is a cache, not a server
 The pimdir backend SHALL treat the store as a possibly-partial cache. `get_card` on a card whose body is not local (`level < Full`, no stored object) SHALL report a clear "body not fetched" state, the cue to sync, rather than a data-loss error. The card still lists: `list_cards` SHALL project the stored contact summary (pimdir STORAGE Annex A) into a minimal preview vCard (`UID`, `FN`, `EMAIL`), the name escaped back into a content line, so a contact list reads correctly before a full sync, while `get_card` refuses outright so a preview can never be mistaken for the document of record.
 
+### Requirement: A pimdir card listing streams the store
+`list_cards` on pimdir SHALL walk the address book in keyset batches of the store's contacts order and hold one batch of rows and the page it returns, never the address book. The cards before the page SHALL be counted off their rows without reading a body, a body SHALL be read only for a card the page returns, and the walk SHALL stop once the page is full.
+
 ### Requirement: pimdir takes the reader and producer roles, never the owner
 The pimdir backend SHALL read through a `PimdirReader` and write through a `PimdirProducer`, and SHALL NOT open a `PimdirStore`. The owner handle drains the queue, sweeps the objects and purges the trash, and holds an exclusive lock on the store for its lifetime, so holding it would both lock a sync out for the length of a listing and put every destructive verb behind a frontend that never calls them. The reader SHALL be built with the pending overlay, so an action this process staged reads back before the store's owner applies it.
 

@@ -12,7 +12,7 @@
 //! pinning it. The store's owner, a sync, applies and pushes it, and the
 //! reader folds the pending queue so a staged change shows here at once.
 
-use std::io::Write;
+use std::{io::Write, ops::ControlFlow};
 
 use anyhow::{Result, anyhow, bail};
 use io_pimdir::{
@@ -31,7 +31,6 @@ use crate::{
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
-        client::paginate,
     },
 };
 
@@ -39,7 +38,12 @@ use crate::{
 const CARD_KIND: &str = "text/vcard";
 
 /// How many items to pull per keyset page when scanning a whole collection.
+#[cfg(not(test))]
 const SCAN_BATCH: usize = 500;
+
+/// A batch small enough for a test store to span several.
+#[cfg(test)]
+const SCAN_BATCH: usize = 7;
 
 /// Pimdir backend of the shared-API client, over an opened local store.
 pub struct PimdirBackend {
@@ -122,6 +126,10 @@ impl PimdirBackend {
     /// The order is the store's own contacts one, display name ascending.
     /// An unhydrated card lists as a preview projected from its stored
     /// summary, [`get_card`](Self::get_card) reporting the absence.
+    ///
+    /// The collection streams through in keyset batches: the cards before
+    /// the page are counted off their rows, a body is read only for a card
+    /// the page returns, and the scan stops once the page is full.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
@@ -130,13 +138,32 @@ impl PimdirBackend {
     ) -> Result<Vec<Card>> {
         self.known_collection(addressbook_id)?;
 
-        let cards = self
-            .scan_items(addressbook_id)?
-            .into_iter()
-            .map(|item| self.card_from_item(addressbook_id, item))
-            .collect::<Result<Vec<_>>>()?;
+        let (mut skip, take) = match page_size {
+            None => (0, None),
+            Some(0) => return Ok(Vec::new()),
+            Some(size) => {
+                let page = page.unwrap_or(1).max(1);
+                let skip = ((page - 1) as usize).saturating_mul(size as usize);
+                (skip, Some(size as usize))
+            }
+        };
+        let mut cards = Vec::new();
 
-        Ok(paginate(cards, page, page_size))
+        self.scan(addressbook_id, |item| {
+            if skip > 0 {
+                skip -= 1;
+                return Ok(ControlFlow::Continue(()));
+            }
+
+            cards.push(self.card_from_item(addressbook_id, item)?);
+
+            match take {
+                Some(take) if cards.len() >= take => Ok(ControlFlow::Break(())),
+                _ => Ok(ControlFlow::Continue(())),
+            }
+        })?;
+
+        Ok(cards)
     }
 
     /// Fetches `card_id` from `addressbook_id`, reading its blob.
@@ -270,32 +297,38 @@ impl PimdirBackend {
             .collect())
     }
 
-    /// Pulls every live item of a collection by keyset paging, each with
-    /// its summary joined.
+    /// Walks every live item of a collection by keyset paging, each with
+    /// its summary joined, until `visit` breaks.
     ///
     /// The order is the contacts one the store maintains, display name
-    /// ascending.
-    fn scan_items(&self, addressbook_id: &str) -> Result<Vec<PimdirItem>> {
-        let mut all: Vec<PimdirItem> = Vec::new();
+    /// ascending. One batch of rows is held at a time, never the
+    /// collection.
+    fn scan(
+        &self,
+        addressbook_id: &str,
+        mut visit: impl FnMut(PimdirItem) -> Result<ControlFlow<()>>,
+    ) -> Result<()> {
         let mut cursor: Option<(String, i64)> = None;
 
         loop {
-            let page = self.inner.reader.list_summaries(
+            let batch = self.inner.reader.list_summaries(
                 addressbook_id,
                 cursor.as_ref().map(|(key, seq)| (key.as_str(), *seq)),
                 SCAN_BATCH,
             )?;
-            let len = page.len();
-            if let Some(last) = page.last() {
+            let len = batch.len();
+            if let Some(last) = batch.last() {
                 cursor = Some((last.sort_key.clone(), last.seq));
             }
-            all.extend(page);
+            for item in batch {
+                if visit(item)?.is_break() {
+                    return Ok(());
+                }
+            }
             if len < SCAN_BATCH {
-                break;
+                return Ok(());
             }
         }
-
-        Ok(all)
     }
 
     /// Builds a shared [`Card`] from a stored item.
@@ -749,5 +782,131 @@ mod tests {
 
         drain(&dir);
         assert!(backend.get_card("book", &id).is_err());
+    }
+
+    /// A card named `name`, its `UID` and address derived from `index`.
+    fn card(index: usize, name: &str) -> Vec<u8> {
+        format!(
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:card-{index}\r\nFN:{name}\r\n\
+             EMAIL:card-{index}@example.org\r\nEND:VCARD\r\n"
+        )
+        .into_bytes()
+    }
+
+    /// An address book of `count` cards whose names sort apart from
+    /// their creation order, some sharing one name, applied by a sync.
+    fn book(count: usize) -> (tempfile::TempDir, PimdirBackend) {
+        let (dir, mut backend) = store();
+        let names = ["Zoé", "adam", "Émile", "bob", "Bob", "", "carla", "Zoé"];
+        for index in 0..count {
+            let name = format!("{} {index:03}", names[index % names.len()]);
+            backend
+                .create_card("book", card(index, name.trim()))
+                .unwrap();
+        }
+        drain(&dir);
+        (dir, backend)
+    }
+
+    /// The listing as it was before it streamed: every summary, then
+    /// every card built with its body, then the page cut in memory.
+    fn eager(
+        backend: &PimdirBackend,
+        page: Option<u32>,
+        page_size: Option<u32>,
+    ) -> Result<Vec<Card>> {
+        let mut all = Vec::new();
+        backend.scan("book", |item| {
+            all.push(item);
+            Ok(ControlFlow::Continue(()))
+        })?;
+
+        let cards = all
+            .into_iter()
+            .map(|item| backend.card_from_item("book", item))
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(crate::shared::client::paginate(cards, page, page_size))
+    }
+
+    /// Every page comes out as it did when the whole address book was
+    /// read first: same cards, same order, same bodies and versions.
+    fn assert_streams_as_it_listed(backend: &mut PimdirBackend) {
+        let mut listed = 0;
+        for page_size in [
+            None,
+            Some(0),
+            Some(1),
+            Some(3),
+            Some(7),
+            Some(10),
+            Some(100),
+        ] {
+            for page in [None, Some(0), Some(1), Some(2), Some(5), Some(9), Some(50)] {
+                let streamed = backend.list_cards("book", page, page_size).unwrap();
+                let expected = eager(backend, page, page_size).unwrap();
+                assert_eq!(streamed, expected, "page {page:?} of {page_size:?}");
+                listed += streamed.len();
+            }
+        }
+        assert!(listed > 300, "{listed}");
+    }
+
+    #[test]
+    fn a_streamed_listing_lists_what_the_whole_read_listed() {
+        let (_dir, mut backend) = book(40);
+        assert_streams_as_it_listed(&mut backend);
+
+        // NOTE: the pending queue folds in as it did, a staged update
+        // and a staged removal included.
+        let ids: Vec<String> = backend
+            .list_cards("book", None, None)
+            .unwrap()
+            .into_iter()
+            .map(|card| card.id)
+            .collect();
+        backend
+            .update_card("book", &ids[3], card(3, "Renamed"), None)
+            .unwrap();
+        assert!(ids.len() > 4 * SCAN_BATCH);
+        backend.delete_card("book", &ids[11], None).unwrap();
+        assert_streams_as_it_listed(&mut backend);
+        assert_eq!(backend.list_cards("book", None, None).unwrap().len(), 39);
+    }
+
+    /// Makes the bodies of `ids` unreadable: each blob turns into a
+    /// directory, so any read of it fails the listing.
+    fn poison(backend: &PimdirBackend, ids: &[String]) {
+        for id in ids {
+            let item = backend.item("book", id).unwrap();
+            let path = backend.inner.blobs.path(item.object.as_ref().unwrap());
+            std::fs::remove_file(&path).unwrap();
+            std::fs::create_dir(&path).unwrap();
+        }
+    }
+
+    /// A page reads the bodies of its own cards and no other: not those
+    /// before it, not those after it.
+    #[test]
+    fn a_page_reads_no_body_but_its_own() {
+        let (_dir, mut backend) = book(40);
+        let order: Vec<String> = backend
+            .list_cards("book", None, None)
+            .unwrap()
+            .into_iter()
+            .map(|card| card.id)
+            .collect();
+        let page = backend.list_cards("book", Some(3), Some(5)).unwrap();
+        assert_eq!(
+            page.iter().map(|card| card.id.clone()).collect::<Vec<_>>(),
+            order[10..15]
+        );
+
+        poison(&backend, &order[..10]);
+        poison(&backend, &order[15..]);
+
+        assert_eq!(backend.list_cards("book", Some(3), Some(5)).unwrap(), page);
+        assert!(eager(&backend, Some(3), Some(5)).is_err());
+        assert!(backend.list_cards("book", Some(2), Some(5)).is_err());
     }
 }

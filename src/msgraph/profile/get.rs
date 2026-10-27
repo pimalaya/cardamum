@@ -29,7 +29,9 @@ impl MsgraphProfileGetCommand {
 /// The signed-in user, emitted verbatim by `--json`.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct MsgraphProfileGetOutput(#[schemars(with = "serde_json::Value")] pub MsgraphUser);
+pub struct MsgraphProfileGetOutput(
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub MsgraphUser,
+);
 
 impl fmt::Display for MsgraphProfileGetOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -21,7 +21,7 @@ use crate::{
 /// capabilities. `using` defaults to the core and contacts capabilities
 /// when omitted.
 ///
-/// JSON output: the raw JMAP response.
+/// JSON output: `{response}`, the raw JMAP response.
 #[derive(Debug, Parser)]
 pub struct JmapRequestCommand {
     #[command(flatten)]
@@ -61,6 +61,6 @@ impl JmapRequestCommand {
             "sessionState": response.session_state,
         });
 
-        printer.out(RawJsonOutput(value))
+        printer.out(RawJsonOutput { response: value })
     }
 }

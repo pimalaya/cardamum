@@ -86,7 +86,7 @@ impl CardCreateCommand {
         // on the first call that needs it, so the editor runs with no
         // connection held and the create below opens one.
         let Some(draft) = composer.edit(printer, &seeded)? else {
-            return printer.out(CardCreateOutput::Abandoned);
+            return printer.out(CardCreateOutput::Abandoned {});
         };
 
         let created = client.create_card(&addressbook_id, draft.contents.clone());
@@ -106,15 +106,16 @@ impl CardCreateCommand {
 pub enum CardCreateOutput {
     /// The card the backend created.
     Created(CardCreatedOutput),
-    /// Nothing, the edit having been abandoned.
-    Abandoned,
+    /// Nothing, the edit having been abandoned: an empty object rather
+    /// than null, so every payload of the command is a JSON object.
+    Abandoned {},
 }
 
 impl fmt::Display for CardCreateOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Created(out) => out.fmt(f),
-            Self::Abandoned => writeln!(f, "Card not created"),
+            Self::Abandoned {} => writeln!(f, "Card not created"),
         }
     }
 }

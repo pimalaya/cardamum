@@ -15,7 +15,7 @@ use crate::{msgraph::client::MsgraphClient, shared::raw_json::RawJsonOutput};
 /// Send a raw Microsoft Graph request and print the JSON response.
 ///
 /// The path is joined onto the Graph `v1.0/` base, or a full URL is used
-/// as-is. JSON output: the raw Graph response.
+/// as-is. JSON output: `{response}`, the raw Graph response.
 #[derive(Debug, Parser)]
 pub struct MsgraphRequestCommand {
     /// HTTP method: get, post, patch, delete.
@@ -43,7 +43,9 @@ impl MsgraphRequestCommand {
         };
         let out: MsgraphSendOutput<Value> = client.run(send)?;
 
-        printer.out(RawJsonOutput(out.response))
+        printer.out(RawJsonOutput {
+            response: out.response,
+        })
     }
 }
 

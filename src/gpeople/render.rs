@@ -107,7 +107,9 @@ impl fmt::Display for GpeoplePersonsOutput {
 /// A single person; `--json` emits the raw People object.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct GpeoplePersonOutput(#[schemars(with = "serde_json::Value")] pub GpeoplePerson);
+pub struct GpeoplePersonOutput(
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub GpeoplePerson,
+);
 
 impl fmt::Display for GpeoplePersonOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -202,7 +204,7 @@ impl fmt::Display for GpeopleContactGroupsOutput {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
 pub struct GpeopleContactGroupOutput(
-    #[schemars(with = "serde_json::Value")] pub GpeopleContactGroup,
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub GpeopleContactGroup,
 );
 
 impl fmt::Display for GpeopleContactGroupOutput {

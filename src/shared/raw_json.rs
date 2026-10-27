@@ -9,20 +9,27 @@ use schemars::JsonSchema;
 use serde::Serialize;
 use serde_json::Value;
 
-/// A raw JSON payload: pretty on stdout, verbatim with `--json`.
+/// A raw JSON payload: pretty on stdout, verbatim under `response` with
+/// `--json`.
+///
+/// Wrapped rather than transparent, so the payload is a JSON object
+/// whatever the backend answered: an array, or null for a 204.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
-#[serde(transparent)]
-pub struct RawJsonOutput(pub Value);
+#[serde(rename_all = "camelCase")]
+pub struct RawJsonOutput {
+    /// The response the backend answered, null when it carried no body.
+    pub response: Value,
+}
 
 impl fmt::Display for RawJsonOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // NOTE: a 204 carries no body, which parses as null. Printing
         // "null" would read as a value the server sent; it sent nothing.
-        if self.0.is_null() {
+        if self.response.is_null() {
             return Ok(());
         }
 
-        let pretty = serde_json::to_string_pretty(&self.0).map_err(|_| fmt::Error)?;
+        let pretty = serde_json::to_string_pretty(&self.response).map_err(|_| fmt::Error)?;
         write!(f, "{pretty}")
     }
 }
@@ -35,9 +42,18 @@ mod tests {
 
     #[test]
     fn an_empty_response_prints_nothing() {
-        assert_eq!(RawJsonOutput(Value::Null).to_string(), "");
         assert_eq!(
-            RawJsonOutput(json!({"id": "x"})).to_string(),
+            RawJsonOutput {
+                response: Value::Null
+            }
+            .to_string(),
+            ""
+        );
+        assert_eq!(
+            RawJsonOutput {
+                response: json!({"id": "x"})
+            }
+            .to_string(),
             "{\n  \"id\": \"x\"\n}"
         );
     }

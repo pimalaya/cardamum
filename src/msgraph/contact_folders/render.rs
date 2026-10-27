@@ -67,7 +67,7 @@ impl fmt::Display for MsgraphContactFoldersOutput {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
 pub struct MsgraphContactFolderOutput(
-    #[schemars(with = "serde_json::Value")] pub MsgraphContactFolder,
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub MsgraphContactFolder,
 );
 
 impl fmt::Display for MsgraphContactFolderOutput {

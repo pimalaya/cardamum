@@ -23,10 +23,11 @@ use io_pimdir::{
     summary::{PimdirSummary, contact},
 };
 use log::warn;
+use pimalaya_cli::error::CodedError;
 
 use crate::{
     config::PimdirConfig,
-    error::{CodedError, ErrorCode},
+    error::ErrorCode,
     pimdir::client::PimdirClient,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
@@ -741,7 +742,9 @@ mod tests {
     /// A stale version and an undownloaded body carry their stable code.
     #[test]
     fn a_stale_if_match_carries_its_code() {
-        use crate::error::{ErrorCode, code_of};
+        use pimalaya_cli::error::code_of;
+
+        use crate::error::ErrorCode;
 
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();

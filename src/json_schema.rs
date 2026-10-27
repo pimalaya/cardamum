@@ -16,15 +16,18 @@
 
 use std::collections::BTreeMap;
 
+use pimalaya_cli::{clap::commands::JsonSchemaRegistry, error::ErrorReport};
 use schemars::schema_for;
-use serde_json::Value;
 
-/// Builds the command-to-schema map consumed by `json-schema <DIR>`.
+use crate::error::ErrorCode;
+
+/// Builds the command-to-schema registry consumed by `json-schema <DIR>`.
 ///
-/// Each value describes the type the command hands to the printer. A
+/// Each value describes the type the command hands to the printer, and
+/// `cardamum-error` the failure object every command prints instead. A
 /// command whose backend answers with nothing to show falls back to a
 /// `Message`, which no entry describes.
-pub fn schemas() -> BTreeMap<String, Value> {
+pub fn registry() -> JsonSchemaRegistry {
     let mut schemas = BTreeMap::new();
 
     macro_rules! insert {
@@ -244,14 +247,20 @@ pub fn schemas() -> BTreeMap<String, Value> {
         );
     }
 
-    schemas
+    insert!("cardamum-error", ErrorReport<ErrorCode>);
+
+    JsonSchemaRegistry {
+        bin: "cardamum",
+        version: env!("CARGO_PKG_VERSION"),
+        schemas,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use clap::{Command, CommandFactory};
 
-    use super::schemas;
+    use super::registry;
     use crate::cli::Cli;
 
     /// Collects every command path of the tree, hyphen-joined.
@@ -268,8 +277,16 @@ mod tests {
         let mut known = Vec::new();
         paths(&Cli::command(), "cardamum", &mut known);
 
-        for key in schemas().keys() {
+        // NOTE: the failure object every command prints, not a command.
+        known.push("cardamum-error".into());
+
+        for key in registry().schemas.keys() {
             assert!(known.contains(key), "{key} names no command");
         }
+    }
+
+    #[test]
+    fn every_payload_is_an_object() {
+        assert_eq!(registry().non_object_roots(), Vec::<&str>::new());
     }
 }

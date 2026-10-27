@@ -100,7 +100,7 @@ impl CardUpdateCommand {
         client.disconnect();
 
         let Some(draft) = composer.edit(printer, &seeded)? else {
-            return printer.out(CardUpdateOutput::Abandoned);
+            return printer.out(CardUpdateOutput::Abandoned {});
         };
 
         let updated = client.update_card(
@@ -129,15 +129,16 @@ impl CardUpdateCommand {
 pub enum CardUpdateOutput {
     /// The card the backend updated.
     Applied(CardUpdatedOutput),
-    /// Nothing, the edit having been abandoned.
-    Abandoned,
+    /// Nothing, the edit having been abandoned: an empty object rather
+    /// than null, so every payload of the command is a JSON object.
+    Abandoned {},
 }
 
 impl fmt::Display for CardUpdateOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Applied(out) => out.fmt(f),
-            Self::Abandoned => writeln!(f, "Card not updated"),
+            Self::Abandoned {} => writeln!(f, "Card not updated"),
         }
     }
 }

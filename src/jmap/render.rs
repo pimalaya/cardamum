@@ -81,7 +81,9 @@ impl fmt::Display for JmapAddressBooksOutput {
 /// A single address book; `--json` emits the raw JMAP object.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct JmapAddressBookOutput(#[schemars(with = "serde_json::Value")] pub JmapAddressBook);
+pub struct JmapAddressBookOutput(
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub JmapAddressBook,
+);
 
 impl fmt::Display for JmapAddressBookOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -146,7 +148,9 @@ impl fmt::Display for JmapContactCardsOutput {
 /// A single contact card; `--json` emits the raw JMAP object.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct JmapContactCardOutput(#[schemars(with = "serde_json::Value")] pub JmapContactCard);
+pub struct JmapContactCardOutput(
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub JmapContactCard,
+);
 
 impl JmapContactCardOutput {
     /// Whether the card carries nothing [`fmt::Display`] would render.

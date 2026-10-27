@@ -26,7 +26,7 @@ A protocol-specific command set SHALL match the remote protocol's own structure 
 pimdir has no protocol-specific surface by design: it is a store rather than a protocol, and its operator commands ship as the separate `pimdir` binary in io-pimdir.
 
 ### Requirement: Specific commands are raw-faithful
-A specific command SHALL surface the native ids and metadata the shared layer normalizes away (ETags, CTags, sync tokens, hrefs, the Graph `changeKey`, the People `etag` and `resourceName`), and SHALL make the incremental-sync primitive its headline (`report sync`, `changes`, `delta`). Default human output is a friendly table; `--json` SHALL emit the raw native payload, and create and update SHALL accept the raw native representation. Each backend keeps a raw escape hatch: a raw XML body for CardDAV, raw JSON in and out plus a generic request passthrough for the object backends. Precondition control is offered only where the protocol has it (CardDAV `--if-match` and `--if-none-match`).
+A specific command SHALL surface the native ids and metadata the shared layer normalizes away (ETags, CTags, sync tokens, hrefs, the Graph `changeKey`, the People `etag` and `resourceName`), and SHALL make the incremental-sync primitive its headline (`report sync`, `changes`, `delta`). Default human output is a friendly table; `--json` SHALL emit the raw native payload, and create and update SHALL accept the raw native representation. Each backend keeps a raw escape hatch: a raw XML body for CardDAV, raw JSON in and out plus a generic request passthrough for the object backends, whose `--json` prints the response verbatim under `response` (`null` when the server sent no body), so the payload is an object whatever the server answered. Precondition control is offered only where the protocol has it (CardDAV `--if-match` and `--if-none-match`).
 
 ### Requirement: Specific commands take their ids positionally
 A protocol-specific command SHALL take the ids it operates on as positional arguments, repeatable where the protocol accepts several, and reserve flags for the rest, mirroring Himalaya. A short option SHALL NOT be given to an argument whose letter the global options already use: clap asserts on the collision in a debug build and silently makes the letter ambiguous in a release one, so the command never runs either way.
@@ -66,9 +66,9 @@ Every output type SHALL carry `serde(rename_all = "camelCase")`, so a `--json` k
 A field renamed onto a provider's own wire key SHALL keep that spelling, a container attribute never reaching a field carrying its own `rename`: `@odata.nextLink`, `nextPageToken`, `contactGroups` and the JMAP `list` are the provider quoted back to the caller, not ours to restyle.
 
 ### Requirement: The JSON output of every data command has a schema
-Every output type SHALL be registered in [json_schema.rs](../../src/json_schema.rs) under its CLI invocation path, hyphen-joined and prefixed `cardamum-`, and the `json-schema` command (aliased `json-schemas`) SHALL print one or write one file per entry. A registered key naming no command is a test failure, so the registry cannot drift from the tree.
+Every output type SHALL be registered in [json_schema.rs](../../src/json_schema.rs) under its CLI invocation path, hyphen-joined and prefixed `cardamum-`, and the `json-schema` command (aliased `json-schemas`) SHALL print one or write one file per entry. A registered key naming no command is a test failure, so the registry cannot drift from the tree; `cardamum-error`, the failure object every command prints, is the one key naming none.
 
-A wire object the protocol crate exposes without a `JsonSchema` of its own SHALL be described as raw JSON rather than left out: the payload is the provider's to define, and claiming a shape we do not own would be worse than claiming none.
+A wire object the protocol crate exposes without a `JsonSchema` of its own SHALL be described as a JSON object of any shape rather than left out: the payload is the provider's to define, and claiming a shape we do not own would be worse than claiming none.
 
 ### Requirement: comfy-table is reached through the toolkit
 Table rendering SHALL go through `pimalaya_cli::table` rather than a direct `comfy-table` dependency, so the toolkit owns the version every Pimalaya CLI draws with.
@@ -163,6 +163,9 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 - GIVEN a pimdir card whose body changed since it was read
 - WHEN `cardamum --json card delete --if-match <old etag>` names it
 - THEN the command exits 1, queues nothing and prints `{"code":"precondition-failed","error":"Precondition failed: …","sources":[],"backtrace":null}`
+
+### Requirement: The JSON contract is described and versioned
+`json-schema` SHALL describe the failure object under the key `cardamum-error`, its `code` typed by the code vocabulary. Every generated schema SHALL carry an `$id` naming the contract version: the major version of cardamum, or `0.<minor>` before 1.0. Every registered payload SHALL be a JSON object, checked by a test: a command whose shapes are one untagged type answers an empty object for a shape carrying nothing (an abandoned `card create -i`), never `null`. Piped `--json` output SHALL print one value per line.
 
 ### Requirement: A card projects its common fields
 `card list` rows and the `card read` output SHALL carry the card's common fields, read through vcard-rs's decoded model rather than off raw lines: `uid`, `fullName`, `givenName` and `familyName` (the `N` components, space-joined), `emails` and `phones` (every `EMAIL` and `TEL` in document order, a `tel:` URI as its number), `organization` and `organizationUnits` (the `ORG` components), `title` and `note`. A card that does not parse SHALL project nothing rather than fail the listing. The projection is read-only: the vCard stays the record.

@@ -15,7 +15,7 @@ use crate::{gpeople::client::GpeopleClient, shared::raw_json::RawJsonOutput};
 /// Send a raw Google People API request and print the JSON response.
 ///
 /// The path is joined onto the People `v1/` base, or a full URL is used
-/// as-is. JSON output: the raw People response.
+/// as-is. JSON output: `{response}`, the raw People response.
 #[derive(Debug, Parser)]
 pub struct GpeopleRequestCommand {
     /// HTTP method: get, post, put, patch, delete.
@@ -44,7 +44,9 @@ impl GpeopleRequestCommand {
         };
         let out: GpeopleSendOutput<Value> = client.run(send)?;
 
-        printer.out(RawJsonOutput(out.response))
+        printer.out(RawJsonOutput {
+            response: out.response,
+        })
     }
 }
 

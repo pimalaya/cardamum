@@ -33,7 +33,9 @@ impl JmapSessionGetCommand {
 /// The JMAP session, as a summary block or as the raw object.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct JmapSessionGetOutput(#[schemars(with = "serde_json::Value")] pub JmapSession);
+pub struct JmapSessionGetOutput(
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub JmapSession,
+);
 
 impl fmt::Display for JmapSessionGetOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

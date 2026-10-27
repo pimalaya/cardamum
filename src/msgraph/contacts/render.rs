@@ -88,7 +88,9 @@ impl fmt::Display for MsgraphContactsOutput {
 /// A single contact, emitted verbatim by `--json`.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct MsgraphContactOutput(#[schemars(with = "serde_json::Value")] pub MsgraphContact);
+pub struct MsgraphContactOutput(
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub MsgraphContact,
+);
 
 impl fmt::Display for MsgraphContactOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

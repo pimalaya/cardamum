@@ -351,6 +351,7 @@ impl PimdirBackend {
             seq,
             object: hash,
             if_match: read,
+            resolves: None,
         })?;
 
         Ok(CardUpdateOutcome::default())

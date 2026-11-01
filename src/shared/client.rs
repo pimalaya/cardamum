@@ -180,6 +180,35 @@ impl AddressbookClient {
         })
     }
 
+    /// Whether the backend queues a write for a sync to push rather than
+    /// make it on the server, so a write is confirmed as queued. Only the
+    /// printed wording reads it, never the JSON.
+    pub fn queues_writes(&self) -> bool {
+        match &self.config {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendConfig::Unused(never) => match *never {},
+            #[cfg(feature = "vdir")]
+            BackendConfig::Vdir(_) => false,
+            #[cfg(feature = "pimdir")]
+            BackendConfig::Pimdir(_) => true,
+            #[cfg(feature = "carddav")]
+            BackendConfig::Carddav(_) => false,
+            #[cfg(feature = "jmap")]
+            BackendConfig::Jmap(_) => false,
+            #[cfg(feature = "msgraph")]
+            BackendConfig::Msgraph(_) => false,
+            #[cfg(feature = "gpeople")]
+            BackendConfig::Gpeople(_) => false,
+        }
+    }
+
     /// Drops the connection, so the next call opens a fresh one.
     ///
     /// Called before a composer runs: an editor session lasts minutes,

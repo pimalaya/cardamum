@@ -21,6 +21,7 @@ CLI to manage contacts, written in Rust
 
 - **Shared API**: `addressbook` and `card` work the same whichever backend serves the account.
 - **Protocol-specific APIs**: `carddav`, `jmap`, `msgraph`, `gpeople` and `vdir` each expose what only that backend has, down to a raw request escape hatch.
+- **Offline store report**: `pimdir status` shows what the local pimdir store holds for the account, and the queued writes its sync engine parked rather than applied.
 - **Discovery**: an email address is enough to find a provider's server, through SRV records, `.well-known` and the provider configuration documents.
 - **Interactive wizard**: `cardamum configure` turns an email address into a tested account.
 - **Multi-account**: one TOML file, one block per account, several files deep-merged when you want secrets apart.
@@ -232,11 +233,11 @@ It is a cache, not a server, so the store must already exist, addressbooks come 
 ```toml
 [accounts.cached]
 pimdir.root = "~/.local/state/neverest/example"
-# Only for a store grouping several accounts; unset reads every collection.
+# Required by a store grouping several accounts; unset reads the only one.
 #pimdir.account = "personal"
 ```
 
-A card that is listed but not downloaded reads as "body not fetched" until a sync hydrates it. A staged write shows in the listing straight away and reaches the server on the next sync.
+A card that is listed but not downloaded reads as "body not fetched" until a sync hydrates it. Every write is queued and reaches the server on the next sync, and the commands say so. A queued update or deletion shows in the listing straight away; a queued create is not listed until the sync applies it, and `card create` reports its link id (its `UID`), not an id the other card commands take: the card gets one when the sync applies it. An addressbook no source syncs refuses writes, since nothing would carry them to a server. A create whose `UID` the addressbook already holds, synced or queued, is refused (`item-duplicate` under `--json`): update that card instead. An update made from the card it read (`card update` with no vCard source, or `--if-match`) is not applied over a server change the sync brings in first: the sync engine parks it instead. `cardamum pimdir status` lists every parked write of the account, with its queue row and the reason, beside how much of each addressbook is downloaded and how many creates are queued.
 
 ## Usage
 

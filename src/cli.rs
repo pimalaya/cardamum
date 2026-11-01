@@ -31,6 +31,8 @@ use crate::gpeople::{cli::GpeopleCommand, client::build_gpeople_client};
 use crate::jmap::{cli::JmapCommand, client::build_jmap_client};
 #[cfg(feature = "msgraph")]
 use crate::msgraph::{cli::MsgraphCommand, client::build_msgraph_client};
+#[cfg(feature = "pimdir")]
+use crate::pimdir::{backend::PimdirBackend, cli::PimdirCommand};
 #[cfg(feature = "vdir")]
 use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
 #[cfg(feature = "wizard")]
@@ -112,6 +114,9 @@ pub enum Command {
     #[cfg(feature = "gpeople")]
     #[command(subcommand)]
     Gpeople(GpeopleCommand),
+    #[cfg(feature = "pimdir")]
+    #[command(subcommand)]
+    Pimdir(PimdirCommand),
     #[cfg(feature = "vdir")]
     #[command(subcommand)]
     Vdir(VdirCommand),
@@ -267,6 +272,13 @@ impl Command {
                     resolve_account(printer, config_paths, account_name)?;
                 let client = build_gpeople_client(config, name, account_config)?;
                 cmd.execute(printer, client)
+            }
+            #[cfg(feature = "pimdir")]
+            Self::Pimdir(cmd) => {
+                let (_config, name, account_config) =
+                    resolve_account(printer, config_paths, account_name)?;
+                let backend = PimdirBackend::build(name, account_config)?;
+                cmd.execute(printer, backend)
             }
             #[cfg(feature = "vdir")]
             Self::Vdir(cmd) => {

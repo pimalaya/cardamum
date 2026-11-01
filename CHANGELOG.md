@@ -8,11 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- Added `default` to every address book in `addressbook list --json` (pimdir draft-04, io-pimdir `ef8eae0`): `true` on the one the server names the default, read on the pimdir backend from the role the sync engine recorded (`collections.role`), `false` on the other backends for now.
+- Added `default` to every address book in `addressbook list --json` (pimdir draft-04): `true` on the one the server names the default, read on the pimdir backend from the role the sync engine recorded (`collections.role`), `false` on the other backends for now.
 - Added the `wizard` cargo feature, on by default, gating the interactive configuration: the `configure` command and the offer a first run makes. A build without it drops the prompts and the dependencies only they use, and a missing configuration points at the documented sample instead.
 - Added the common fields of a card to the `card list` and `card read` JSON: `uid`, `fullName`, `givenName`, `familyName`, every address in `emails` and number in `phones`, `organization`, `organizationUnits`, `title` and `note`, read through the decoded vCard.
 - Added `--if-match` to `card delete`: CardDAV sends it as `If-Match`, pimdir checks it against the card's version, and the backends that cannot gate a delete refuse it.
-- Added a stable `code` to the `--json` error output for failures a caller acts on: `body-pending`, `precondition-failed`.
+- Added a stable `code` to the `--json` error output for failures a caller acts on: `body-pending`, `precondition-failed`, and on pimdir the code io-pimdir names for a store or a write it refuses: `store-uncreated`, `store-newer`, `store-foreign`, `store-stale`, `store-corrupt`, `store-hash-algo`, `store-busy`, `unsupported`, `item-duplicate`.
+- Added `pimdir status`, reporting the local pimdir store behind the account: its address books, how many of their cards are downloaded and how many creations are queued, and every write the sync engine parked rather than applied, with its queue row and the reason.
 
 ### Changed
 
@@ -23,6 +24,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed io-pimdir to 0.8 (pimdir draft-04), io-msgraph to 0.6 and io-gpeople to 0.5, and io-http, io-msgraph, io-pimdir and io-webdav to the unreleased git revisions the Pimalaya Android client builds (`[patch.crates-io]`, to be dropped for releases), so cardamum shares one io-pimdir and one store schema with neverest, himalaya and calendula: a store reconciled by the current neverest (no `probes` table) opens, an empty mail date is stored as no date, a band round keeps undated mail, and opening a store creates the `items_by_sort_global` index a page across collections walks. A response whose head passes 64 KiB or whose body passes 256 MiB now fails the exchange with a typed error instead of growing the buffer without bound, a connection closing mid-body fails rather than spinning, and a CardDAV multistatus is parsed without quadratic copies and nested 64 levels at most.
 - Changed the pimdir `update_card` and `delete_card` to honour `--if-match` against the `etag` they report, the store's hash of the card's body: a write naming a version the card no longer has is refused before anything is queued, with an error starting `Precondition failed:`.
 - Changed the pimdir writes to be refused before they are queued when a source of the store does not support them, naming the capability, the source and why (pimdir draft-03, STORAGE §15.6). A write a source supports only in part logs a warning.
+- Changed `card create`, `card update` and `card delete` on pimdir to say the write is queued for the next sync instead of reporting it done; the `--json` output is unchanged.
+
+  A queued create reports the card's link id, its `UID`, and is not listed until the sync applies it.
+
+- **Breaking:** changed pimdir with `pimdir.account` unset to read the one account the store groups its collections under, and to refuse a store grouping several, naming them.
+- Changed `account check` on pimdir to probe a producer as well as the reader, so a store whose staging lock cannot be taken fails the check rather than the first write; a sync collecting the store fails it at once with `store-busy`, and the check writes nothing into the store.
+- Changed the refusal of a pimdir store cardamum cannot read to say what it asks, running or upgrading the sync engine that owns it, or upgrading cardamum, instead of deleting the store, which loses the queued writes a resync never restores.
+- Changed the `addressbook delete` refusal on pimdir to name the server route only, no longer advising to remove the store directory, which loses the queued writes.
+
+### Fixed
+
+- Fixed `account check` exiting 0 when a backend failed: it now fails with one error naming each failed backend and why.
+- Fixed pimdir accepting writes into an address book no source syncs, which no sync would ever push: they are now refused before anything is staged.
+- Fixed a pimdir card whose body blob is missing reporting an `etag`, which an `--if-match` could then match.
+- Fixed pimdir recognising an address book only by the exact kind `text/vcard`: a kind carrying parameters now counts.
+- Fixed `card create` on pimdir reporting as queued a card whose `UID` the address book already holds, synced or queued, which the sync then parked: it is now refused with `item-duplicate`, leaving nothing in the store, and `-i` keeps the composer file.
+- Fixed a pimdir `card update` made from the card it read (no vCard source, or `--if-match`) overwriting, unmerged, a server change a sync brought in before applying it: the queued update now names the body it was made against, and the sync engine parks it instead.
 
 ## [0.3.0] - 2026-10-02
 

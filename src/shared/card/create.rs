@@ -28,6 +28,10 @@ use crate::shared::{
 /// opens the result in the composer. With no source the card is minted
 /// fresh, carrying nothing but a `UID`.
 ///
+/// A backend that queues the card for a sync says so, and the id it
+/// reports is the one the card is staged under: the other commands take
+/// the card once the sync applies it and it lists.
+///
 /// JSON output: `{"id"}`, the identifier the backend assigned.
 #[derive(Debug, Parser)]
 pub struct CardCreateCommand {
@@ -74,8 +78,9 @@ impl CardCreateCommand {
                 ensure_valid(&seeded)?;
             }
 
+            let queued = client.queues_writes();
             let id = client.create_card(&addressbook_id, seeded)?;
-            return printer.out(CardCreateOutput::Created(CardCreatedOutput { id }));
+            return printer.out(CardCreateOutput::Created(CardCreatedOutput { id, queued }));
         }
 
         let composer = CardComposer {
@@ -91,8 +96,9 @@ impl CardCreateCommand {
 
         let created = client.create_card(&addressbook_id, draft.contents.clone());
         let id = draft.finish(created)?;
+        let queued = client.queues_writes();
 
-        printer.out(CardCreateOutput::Created(CardCreatedOutput { id }))
+        printer.out(CardCreateOutput::Created(CardCreatedOutput { id, queued }))
     }
 }
 
@@ -120,16 +126,29 @@ impl fmt::Display for CardCreateOutput {
     }
 }
 
-/// The card the backend created.
+/// The card the backend created, or queued for a sync to create.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CardCreatedOutput {
-    /// Backend-assigned identifier of the new card.
+    /// Backend-assigned identifier of the new card, or the one a queued
+    /// card is staged under, which no other command takes until a sync
+    /// applies it.
     pub id: String,
+    /// Whether the write was queued for a sync rather than made, which
+    /// only the wording tells.
+    #[serde(skip)]
+    pub queued: bool,
 }
 
 impl fmt::Display for CardCreatedOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Card `{}` successfully created", self.id)
+        match self.queued {
+            true => writeln!(
+                f,
+                "Card `{}` queued for creation; the next sync creates it",
+                self.id
+            ),
+            false => writeln!(f, "Card `{}` successfully created", self.id),
+        }
     }
 }

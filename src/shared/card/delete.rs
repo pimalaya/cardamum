@@ -37,7 +37,13 @@ impl CardDeleteCommand {
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         client.delete_card(&addressbook_id, &self.card_id, self.if_match.as_deref())?;
 
-        let msg = format!("Card `{}` successfully deleted", self.card_id);
+        let msg = match client.queues_writes() {
+            true => format!(
+                "Card `{}` deletion queued; the next sync applies it",
+                self.card_id
+            ),
+            false => format!("Card `{}` successfully deleted", self.card_id),
+        };
         printer.out(Message::new(msg))
     }
 }

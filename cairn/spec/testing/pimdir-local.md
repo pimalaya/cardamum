@@ -17,7 +17,7 @@ cardamum's pimdir backend is an offline **cache** over a store a sync engine pop
 | `addressbook list` | base, `--json` | ✅ collections as addressbooks |
 | `addressbook create` | base | ✅ creates a `text/vcard` collection, confirmed with `pimdir collection list` |
 | `addressbook update` | `-n`, `-d`, `-C`, no field flag | ⛔ every field bails with a message naming the reason (**PD1 fixed**); a flagless update bails first |
-| `addressbook delete` | `-k` | ⛔ bails: "the pimdir backend cannot delete an addressbook; delete it on the server and sync, or remove the store directory" |
+| `addressbook delete` | `-k` | ⛔ bails: "the pimdir backend cannot delete an addressbook; delete it on the server and sync" |
 | `card create` | file, **unknown `-k`** | ✅ stores the body and writes the `v: 1` summary; an unknown collection now fails with "Addressbook `x` not found" (**PD3 fixed**) |
 | `card read` | `<id>`, **unhydrated card**, absent id, non-numeric id, **missing blob** | ✅ returns the stored body; **an unhydrated card → "not downloaded yet (body not fetched); run a sync to hydrate it"**; an absent id → "Card `999` not found"; a non-numeric id → "Invalid card id `abc` (expected a number)"; a missing blob → "Body blob missing" |
 | `card list` | base, **unhydrated card**, `-s`/`-p` paging, `--json`, **unknown `-k`**, **missing blob** | ✅ listing and paging, and **an unhydrated card previews from its `v: 1` summary** (name and email present, etag null); an unknown collection fails with "Addressbook `x` not found" (**PD2 fixed**); an item whose blob is missing previews from its summary and logs a warning (**PD4 fixed**) |

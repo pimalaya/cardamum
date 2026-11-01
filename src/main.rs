@@ -20,9 +20,9 @@
 //! the shared API cannot model. The meta commands (`configure`,
 //! `account`, `completions`, `manuals`) cover the rest.
 //!
-//! pimdir has no protocol-specific surface by design: it is a store
-//! rather than a protocol, and its operator commands ship as the
-//! separate pimdir binary.
+//! pimdir is a store rather than a protocol: its `pimdir` family only
+//! reports on the store (`status`, the parked writes included), and its
+//! operator commands ship as the separate pimdir binary.
 //!
 //! The shared commands run over [`shared::client`]'s
 //! `AddressbookClient`, one `BackendClient` variant per compiled-in

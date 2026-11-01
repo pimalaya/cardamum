@@ -8,17 +8,21 @@
 //! lists, and reading it reports "body not fetched" rather than erroring.
 //!
 //! Writes append one action to the store's queue (pimdir STORAGE §15.1)
-//! through a producer opened for that write, the body first, then the row
-//! pinning it. The store's owner, a sync, applies and pushes it, and the
-//! reader folds the pending queue so a staged change shows here at once.
+//! through a producer opened for that write, the body and the row pinning
+//! it in one step, nothing written when the producer refuses the action.
+//! An edit made against a body it read names that body, so the owner
+//! parks it rather than overwrite a change a sync brought in since. The
+//! owner applies and pushes the rest, and the reader folds the pending
+//! queue so a staged update or removal shows here at once. A staged
+//! create lists once the owner applies it, having no public id before.
 
-use std::{io::Write, ops::ControlFlow};
+use std::ops::ControlFlow;
 
 use anyhow::{Result, anyhow, bail};
 use io_pimdir::{
     client::reader::{PimdirCollection, PimdirItem},
     codec::PimdirAction,
-    object::{PimdirHash, PimdirObject},
+    object::PimdirHash,
     placement::PimdirFlags,
     summary::{PimdirSummary, contact},
 };
@@ -26,9 +30,12 @@ use log::warn;
 use pimalaya_cli::error::CodedError;
 
 use crate::{
-    config::PimdirConfig,
+    config::{AccountConfig, PimdirConfig},
     error::ErrorCode,
-    pimdir::client::PimdirClient,
+    pimdir::{
+        client::{PimdirClient, refusal},
+        status::{PimdirAddressbookStatus, PimdirParkedStatus, PimdirStatusOutput},
+    },
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -56,6 +63,95 @@ impl PimdirBackend {
     pub fn new(config: PimdirConfig) -> Result<Self> {
         Ok(Self {
             inner: PimdirClient::new(config)?,
+        })
+    }
+
+    /// Opens the store from the `[pimdir]` block of the account `name`,
+    /// as a `pimdir` command needs it.
+    ///
+    /// Bails when the account declares no such block.
+    pub fn build(name: String, mut account_config: AccountConfig) -> Result<Self> {
+        let config = account_config
+            .pimdir
+            .take()
+            .ok_or_else(|| anyhow!("Pimdir config is missing for account `{name}`"))?;
+        Self::new(config)
+    }
+
+    /// Exercises both roles this backend takes: lists the address books
+    /// through the reader, then opens a producer and probes it, so a store
+    /// whose staging lock or write lock is out of reach fails here rather
+    /// than on the first write.
+    ///
+    /// The probe takes and releases both locks without waiting on a
+    /// collector and writes nothing into the store.
+    pub fn check(&mut self) -> Result<()> {
+        self.list_addressbooks()?;
+        self.inner
+            .producer()?
+            .probe()
+            .map_err(|err| refusal(err, "Probe the pimdir store as a producer"))
+    }
+
+    /// Reports what the store holds for the account read: its address
+    /// books, how much of each is downloaded and queued, and the actions
+    /// the store's owner parked in them.
+    ///
+    /// A parked action is one the owner will never apply (pimdir STORAGE
+    /// §15.3), so the write a command reported as queued is lost unless
+    /// something shows it. Narrowed to the account's address books, as
+    /// every other read is.
+    pub fn status(&mut self) -> Result<PimdirStatusOutput> {
+        let accounts = self.inner.reader.list_accounts()?;
+        let mut addressbooks = Vec::new();
+
+        for collection in self.collections()? {
+            let (mut total, mut hydrated) = (0, 0);
+            self.scan(&collection.id, |item| {
+                total += 1;
+                hydrated += usize::from(item.object.is_some());
+                Ok(ControlFlow::Continue(()))
+            })?;
+            let queued = self.inner.reader.count_pending_creates(&collection.id)?;
+
+            addressbooks.push(PimdirAddressbookStatus {
+                name: if collection.name.is_empty() {
+                    collection.id.clone()
+                } else {
+                    collection.name
+                },
+                id: collection.id,
+                total,
+                hydrated,
+                queued,
+            });
+        }
+
+        addressbooks.sort_by(|a, b| a.name.cmp(&b.name));
+
+        let parked = self
+            .inner
+            .reader
+            .parked_actions()?
+            .into_iter()
+            .filter(|parked| {
+                addressbooks
+                    .iter()
+                    .any(|addressbook| addressbook.id == parked.collection)
+            })
+            .map(|parked| PimdirParkedStatus {
+                row: parked.id,
+                addressbook_id: parked.collection,
+                action: parked.action,
+                error: parked.error,
+            })
+            .collect();
+
+        Ok(PimdirStatusOutput {
+            account: self.inner.account.clone(),
+            accounts,
+            addressbooks,
+            parked,
         })
     }
 
@@ -118,7 +214,7 @@ impl PimdirBackend {
     pub fn delete_addressbook(&mut self, _id: &str) -> Result<()> {
         bail!(
             "The pimdir backend cannot delete an addressbook; \
-             delete it on the server and sync, or remove the store directory"
+             delete it on the server and sync"
         )
     }
 
@@ -187,7 +283,7 @@ impl PimdirBackend {
             .into());
         };
         let contents =
-            self.inner.blobs.get(&hash)?.ok_or_else(|| {
+            self.inner.reader.blobs().get(&hash)?.ok_or_else(|| {
                 anyhow!("Body blob missing for `{card_id}` in `{addressbook_id}`")
             })?;
 
@@ -207,7 +303,7 @@ impl PimdirBackend {
     /// store-assigned id to report yet. The owner derives the summary from
     /// the body, and the key it derives is the one reported here.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
-        self.known_collection(addressbook_id)?;
+        self.writable(addressbook_id)?;
 
         let link_id = contact::derive(&contents).link_id;
 
@@ -215,6 +311,7 @@ impl PimdirBackend {
             link_id: Some(link_id.clone()),
             flags: PimdirFlags::default(),
             object: Some(hash),
+            supersedes: None,
         })?;
 
         Ok(link_id.0)
@@ -226,6 +323,11 @@ impl PimdirBackend {
     /// stored base. `if_match` gates the staging on the card's version,
     /// the store's hash of its body with the pending queue folded in: the
     /// gate is the caller's, the merge the store's.
+    ///
+    /// The action names the body the edit was made against, the one
+    /// `if_match` matched (pimdir STORAGE §15.3), so the owner parks it
+    /// when a sync replaced that body before the drain. With no `if_match`
+    /// the caller read nothing, and the action names none.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
@@ -233,15 +335,18 @@ impl PimdirBackend {
         contents: Vec<u8>,
         if_match: Option<&str>,
     ) -> Result<CardUpdateOutcome> {
-        self.known_collection(addressbook_id)?;
+        self.writable(addressbook_id)?;
 
         let item = self.item(addressbook_id, card_id)?;
-        check_version(&item, addressbook_id, card_id, if_match)?;
+        check_version(self.version(&item)?, addressbook_id, card_id, if_match)?;
         let seq = item.seq;
+        // NOTE: the version matched, so the item's body is the one read.
+        let read = if_match.and(item.object);
 
         self.stage(addressbook_id, &contents, |hash| PimdirAction::Update {
             seq,
             object: hash,
+            if_match: read,
         })?;
 
         Ok(CardUpdateOutcome::default())
@@ -258,19 +363,19 @@ impl PimdirBackend {
         card_id: &str,
         if_match: Option<&str>,
     ) -> Result<()> {
-        self.known_collection(addressbook_id)?;
+        self.writable(addressbook_id)?;
 
         let item = self.item(addressbook_id, card_id)?;
-        check_version(&item, addressbook_id, card_id, if_match)?;
+        check_version(self.version(&item)?, addressbook_id, card_id, if_match)?;
         let seq = item.seq;
         let action = PimdirAction::Remove { seq };
         let mut producer = self.inner.producer()?;
         let partials = producer
             .check(addressbook_id, &action)
-            .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
+            .map_err(|err| refusal(err, "Stage the pimdir action"))?;
         producer
             .enqueue(addressbook_id, &action, None)
-            .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
+            .map_err(|err| refusal(err, "Stage the pimdir action"))?;
 
         for partial in &partials {
             warn!("{partial}");
@@ -280,9 +385,9 @@ impl PimdirBackend {
 
     /// The address book collections of the configured account.
     ///
-    /// One store holds every kind a sync caches (pimdir STORAGE §9.2), so
-    /// the kind separates an address book from a mailbox or a calendar. A
-    /// kind-less one counts: a sync predating kinds left the column empty.
+    /// One store holds every kind a sync caches (pimdir STORAGE §4.3, §14),
+    /// so the kind separates an address book from a mailbox or a calendar.
+    /// A kind-less one counts: a sync predating kinds left the column empty.
     fn collections(&self) -> Result<Vec<PimdirCollection>> {
         let collections = match self.inner.account.as_deref() {
             Some(account) => self
@@ -294,7 +399,7 @@ impl PimdirBackend {
 
         Ok(collections
             .into_iter()
-            .filter(|collection| collection.kind.is_empty() || collection.kind == CARD_KIND)
+            .filter(|collection| is_card_kind(&collection.kind))
             .collect())
     }
 
@@ -340,7 +445,13 @@ impl PimdirBackend {
     /// refuses an unhydrated card outright.
     fn card_from_item(&self, addressbook_id: &str, item: PimdirItem) -> Result<Card> {
         let stored = match &item.object {
-            Some(hash) => self.inner.blobs.get(hash)?,
+            Some(hash) => self.inner.reader.blobs().get(hash)?,
+            None => None,
+        };
+        // NOTE: the version is the body's, so a card whose blob is gone
+        // has none, as an unfetched one has none.
+        let etag = match stored {
+            Some(_) => item.object.as_ref().map(|hash| hash.0.clone()),
             None => None,
         };
 
@@ -365,7 +476,7 @@ impl PimdirBackend {
         Ok(Card {
             id: item.seq.to_string(),
             addressbook_id: addressbook_id.to_string(),
-            etag: item.object.map(|hash| hash.0),
+            etag,
             contents,
         })
     }
@@ -395,6 +506,39 @@ impl PimdirBackend {
         )
     }
 
+    /// Fails unless `collection` is an address book of the account that a
+    /// source syncs, the one place a staged write ever leaves the store.
+    ///
+    /// The owner applies a queued action as a source syncing its
+    /// collection, and with none it binds whichever source drains first to
+    /// a collection that source never lists: the card would never be
+    /// pushed. A collection the device keeps for itself is the owner's to
+    /// write (pimdir STORAGE §14.3), never a producer's.
+    fn writable(&self, collection: &str) -> Result<()> {
+        self.known_collection(collection)?;
+
+        if self.inner.reader.collection_sources(collection)?.is_empty() {
+            bail!(
+                "Addressbook `{collection}` is one no source syncs, so a card written \
+                 there would never reach a server; write into a synced addressbook"
+            );
+        }
+
+        Ok(())
+    }
+
+    /// A stored item's version, the hash of its body, when the body is
+    /// local: none for one never fetched and none for one whose blob is
+    /// gone from the store.
+    fn version(&self, item: &PimdirItem) -> Result<Option<String>> {
+        let Some(hash) = &item.object else {
+            return Ok(None);
+        };
+
+        let local = self.inner.reader.blobs().reader(hash)?.is_some();
+        Ok(local.then(|| hash.0.clone()))
+    }
+
     /// The stored item behind a public card id, or a clear miss.
     fn item(&self, collection: &str, card_id: &str) -> Result<PimdirItem> {
         let seq = card_id
@@ -407,40 +551,29 @@ impl PimdirBackend {
             .ok_or_else(|| anyhow!("Card `{card_id}` not found in `{collection}`"))
     }
 
-    /// Writes a body into the blob tree, then the action naming it.
+    /// Stages a body and the action naming it as one step.
     ///
-    /// The body is durable before anything references it (pimdir STORAGE
-    /// §14), and one producer wraps the pair rather than the enqueue alone:
-    /// its shared lock is what keeps a collector out of the window between
-    /// the two. A body the store already holds keeps the stored copy.
+    /// `PimdirProducer::enqueue_with_body_checked` checks the action
+    /// first: the gate of pimdir STORAGE §15.6 and, for an `add`, a link id
+    /// the address book holds live or has queued, which the owner would
+    /// park at drain (§15.3). Only then does it write the body under its
+    /// staging lock, named by the store's own hash, and append the row
+    /// pinning it, in one transaction: a refused write leaves no body in
+    /// the blob tree, and a collector never sees one unpinned. The partial
+    /// supports the gate passed the action with are logged.
     fn stage(
         &mut self,
         collection: &str,
         contents: &[u8],
         action: impl FnOnce(PimdirHash) -> PimdirAction,
     ) -> Result<()> {
-        let mut producer = self.inner.producer()?;
+        let enqueued = self
+            .inner
+            .producer()?
+            .enqueue_with_body_checked(collection, contents, action)
+            .map_err(|err| refusal(err, "Stage the pimdir action"))?;
 
-        // NOTE: the hash is the store's, read from `store_meta.hash_algo`:
-        // a body named under another algorithm is one no read ever finds.
-        let hash = producer.hash(contents);
-        let mut writer = self.inner.blobs.writer()?;
-        writer.write_all(contents)?;
-        let size = writer.commit(&hash)?;
-        let object = PimdirObject {
-            hash,
-            size: size as usize,
-        };
-
-        let action = action(object.hash.clone());
-        let partials = producer
-            .check(collection, &action)
-            .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
-        producer
-            .enqueue(collection, &action, Some(&object))
-            .map_err(|err| anyhow!("Stage the pimdir action: {err}"))?;
-
-        for partial in &partials {
+        for partial in &enqueued.partial {
             warn!("{partial}");
         }
         Ok(())
@@ -458,7 +591,7 @@ pub const PRECONDITION_FAILED: &str = "Precondition failed";
 /// body is not local has no version to match. Surrounding double quotes
 /// are dropped, so an HTTP-quoted tag matches as well.
 fn check_version(
-    item: &PimdirItem,
+    current: Option<String>,
     addressbook_id: &str,
     card_id: &str,
     if_match: Option<&str>,
@@ -467,9 +600,8 @@ fn check_version(
         return Ok(());
     };
     let expected = expected.trim().trim_matches('"');
-    let current = item.object.as_ref().map(|hash| hash.0.as_str());
 
-    if current == Some(expected) {
+    if current.as_deref() == Some(expected) {
         return Ok(());
     }
 
@@ -478,10 +610,18 @@ fn check_version(
         format!(
             "{PRECONDITION_FAILED}: card `{card_id}` in addressbook `{addressbook_id}` is at \
              version `{}`, not `{expected}`; read it again",
-            current.unwrap_or("none (body not fetched)"),
+            current.as_deref().unwrap_or("none (body not local)"),
         ),
     )
     .into())
+}
+
+/// Whether a collection kind makes an address book: its media type, the
+/// part before any `;` parameter, is `text/vcard`, as io-pimdir reads it
+/// when it picks the summaries, or it is empty, a sync predating kinds
+/// having left it so.
+fn is_card_kind(kind: &str) -> bool {
+    kind.is_empty() || kind.split(';').next().unwrap_or_default().trim() == CARD_KIND
 }
 
 /// Renders a stored item's contact summary as the listing preview of a
@@ -630,12 +770,35 @@ mod tests {
         }
     }
 
-    /// A store holding one address book, `book`, and the backend over it.
+    /// Declares `collection` an address book the source `carddav` syncs,
+    /// as the first round of a sync leaves it: a checkpoint, no member yet,
+    /// grouped under `account` when one is named.
+    fn synced(root: &std::path::Path, account: Option<&str>, collection: &str) {
+        use io_pimdir::{
+            change::PimdirWriteOp,
+            collection::{PimdirCheckpoint, PimdirCollectionId},
+        };
+
+        let mut store = io_pimdir::client::PimdirStore::open(root)
+            .unwrap()
+            .for_source("carddav");
+        if let Some(account) = account {
+            store = store.for_account(account);
+        }
+        store.ensure_collection(collection, CARD_KIND).unwrap();
+        store
+            .write(vec![PimdirWriteOp::SetCheckpoint {
+                collection: PimdirCollectionId::from(collection),
+                checkpoint: PimdirCheckpoint(Vec::new()),
+            }])
+            .unwrap();
+    }
+
+    /// A store holding one synced address book, `book`, and the backend
+    /// over it.
     fn store() -> (tempfile::TempDir, PimdirBackend) {
         let dir = tempfile::tempdir().unwrap();
-        let store = io_pimdir::client::PimdirStore::open(dir.path()).unwrap();
-        store.ensure_collection("book", CARD_KIND).unwrap();
-        drop(store);
+        synced(dir.path(), None, "book");
 
         let backend = PimdirBackend::new(PimdirConfig {
             root: dir.path().to_path_buf(),
@@ -882,7 +1045,11 @@ mod tests {
     fn poison(backend: &PimdirBackend, ids: &[String]) {
         for id in ids {
             let item = backend.item("book", id).unwrap();
-            let path = backend.inner.blobs.path(item.object.as_ref().unwrap());
+            let path = backend
+                .inner
+                .reader
+                .blobs()
+                .path(item.object.as_ref().unwrap());
             std::fs::remove_file(&path).unwrap();
             std::fs::create_dir(&path).unwrap();
         }
@@ -911,5 +1078,521 @@ mod tests {
         assert_eq!(backend.list_cards("book", Some(3), Some(5)).unwrap(), page);
         assert!(eager(&backend, Some(3), Some(5)).is_err());
         assert!(backend.list_cards("book", Some(2), Some(5)).is_err());
+    }
+
+    /// A card in the address book `local`, which the device keeps and no
+    /// source syncs (pimdir STORAGE §14.3), answering its public id.
+    fn kept(dir: &tempfile::TempDir) -> String {
+        let mut store = io_pimdir::client::PimdirStore::open(dir.path()).unwrap();
+        store.ensure_collection("local", CARD_KIND).unwrap();
+        let (_, seq) = store.put_item("local", JANE).unwrap();
+        seq.to_string()
+    }
+
+    /// An address book no source syncs takes no write: the owner would
+    /// apply it as a source that never lists the collection, so the card
+    /// would never reach a server.
+    #[test]
+    fn a_write_into_an_address_book_no_source_syncs_is_refused() {
+        let (dir, mut backend) = store();
+        let id = kept(&dir);
+        let created = card(1, "Joe Bloggs");
+
+        let err = backend
+            .create_card("local", created.clone())
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("no source syncs"), "{err}");
+        let err = backend
+            .update_card("local", &id, card(2, "Jane Roe"), None)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("no source syncs"), "{err}");
+        let err = backend
+            .delete_card("local", &id, None)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("no source syncs"), "{err}");
+
+        let producer = backend.inner.producer().unwrap();
+        assert!(producer.pending_actions("local").unwrap().is_empty());
+        let blob = backend.inner.reader.blobs().path(&producer.hash(&created));
+        assert!(!blob.exists(), "a refused create leaves no body behind");
+    }
+
+    /// A card whose blob is gone from the store has no local body: it
+    /// reports no version and matches none, as an unfetched one does.
+    #[test]
+    fn a_card_whose_blob_is_missing_has_no_version() {
+        use pimalaya_cli::error::code_of;
+
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        drain(&dir);
+        let id = backend.list_cards("book", None, None).unwrap()[0]
+            .id
+            .clone();
+        let hash = backend.item("book", &id).unwrap().object.unwrap();
+        std::fs::remove_file(backend.inner.reader.blobs().path(&hash)).unwrap();
+
+        let listed = backend.list_cards("book", None, None).unwrap();
+        assert_eq!(listed[0].etag, None);
+
+        let err = backend.delete_card("book", &id, Some(&hash.0)).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));
+        assert_eq!(pending(&backend), 0);
+    }
+
+    /// A kind is a media type, compared before its parameters as io-pimdir
+    /// compares it when it picks the summaries; a calendar is no address
+    /// book.
+    #[test]
+    fn an_address_book_is_told_by_its_media_type() {
+        let dir = tempfile::tempdir().unwrap();
+        {
+            let store = io_pimdir::client::PimdirStore::open(dir.path()).unwrap();
+            store.ensure_collection("versioned", CARD_KIND).unwrap();
+            store
+                .ensure_collection("calendar", "text/calendar")
+                .unwrap();
+        }
+
+        // NOTE: a store at storage-draft-05 closes the kind to bare media
+        // types, but one an earlier io-pimdir wrote is read as it is, its
+        // kinds not yet repaired by its owner.
+        assert!(is_card_kind("text/vcard; version=4.0"));
+        assert!(!is_card_kind("text/calendar; component=VEVENT"));
+
+        let mut backend = PimdirBackend::new(PimdirConfig {
+            root: dir.path().to_path_buf(),
+            account: None,
+        })
+        .unwrap();
+        let ids: Vec<String> = backend
+            .list_addressbooks()
+            .unwrap()
+            .into_iter()
+            .map(|book| book.id)
+            .collect();
+        assert_eq!(ids, ["versioned"]);
+        assert!(backend.list_cards("calendar", None, None).is_err());
+    }
+
+    /// One CLI view is one account: with nothing configured a store
+    /// grouping several is refused, naming them, until `pimdir.account`
+    /// picks one.
+    #[test]
+    fn an_unset_account_is_refused_on_a_store_grouping_several() {
+        let dir = tempfile::tempdir().unwrap();
+        for (account, id) in [("work", "work/book"), ("home", "home/book")] {
+            io_pimdir::client::PimdirStore::open(dir.path())
+                .unwrap()
+                .for_account(account)
+                .ensure_collection(id, CARD_KIND)
+                .unwrap();
+        }
+        let open = |account: Option<&str>| {
+            PimdirBackend::new(PimdirConfig {
+                root: dir.path().to_path_buf(),
+                account: account.map(String::from),
+            })
+        };
+
+        let err = match open(None) {
+            Ok(_) => panic!("an unset account opened a store grouping two"),
+            Err(err) => err.to_string(),
+        };
+        assert!(err.contains("home, work"), "{err}");
+
+        let ids: Vec<String> = open(Some("work"))
+            .unwrap()
+            .list_addressbooks()
+            .unwrap()
+            .into_iter()
+            .map(|book| book.id)
+            .collect();
+        assert_eq!(ids, ["work/book"]);
+    }
+
+    /// What a command printed, as text and as JSON.
+    #[derive(Default)]
+    struct Captured {
+        text: String,
+        json: serde_json::Value,
+    }
+
+    impl pimalaya_cli::printer::Printer for Captured {
+        fn out<T: std::fmt::Display + serde::Serialize>(&mut self, data: T) -> Result<()> {
+            self.text = data.to_string();
+            self.json = serde_json::to_value(&data)?;
+            Ok(())
+        }
+    }
+
+    /// A shared client over the store at `dir`, as a command gets one.
+    fn client(dir: &tempfile::TempDir) -> crate::shared::client::AddressbookClient {
+        crate::shared::client::AddressbookClient::new(
+            crate::config::Config::default(),
+            crate::config::AccountConfig {
+                pimdir: Some(PimdirConfig {
+                    root: dir.path().to_path_buf(),
+                    account: None,
+                }),
+                ..Default::default()
+            },
+            crate::backend::Backend::Auto,
+        )
+        .unwrap()
+    }
+
+    /// A pimdir write reaches the server on the next sync, so the shared
+    /// commands say it is queued, never that the card was written, while
+    /// their JSON stays the shape every backend prints.
+    #[test]
+    fn a_queued_write_says_it_is_queued() {
+        use clap::Parser;
+
+        use crate::shared::card::{
+            create::CardCreateCommand, delete::CardDeleteCommand, update::CardUpdateCommand,
+        };
+
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        drain(&dir);
+        let id = backend.list_cards("book", None, None).unwrap()[0]
+            .id
+            .clone();
+        let joe = String::from_utf8(card(1, "Joe Bloggs")).unwrap();
+        let roe = String::from_utf8(JANE.to_vec())
+            .unwrap()
+            .replace("Jane Doe", "Jane Roe");
+        let mut out = Captured::default();
+
+        CardCreateCommand::parse_from(["create", "-k", "book", &joe])
+            .execute(&mut out, client(&dir))
+            .unwrap();
+        assert!(out.text.contains("queued"), "{}", out.text);
+        assert!(!out.text.contains("successfully"), "{}", out.text);
+        assert_eq!(out.json, serde_json::json!({ "id": "urn:uuid:card-1" }));
+
+        CardUpdateCommand::parse_from(["update", "-k", "book", &id, &roe])
+            .execute(&mut out, client(&dir))
+            .unwrap();
+        assert!(out.text.contains("queued"), "{}", out.text);
+        assert!(!out.text.contains("successfully"), "{}", out.text);
+        assert_eq!(
+            out.json,
+            serde_json::json!({ "id": id, "keptProperties": [] })
+        );
+
+        CardDeleteCommand::parse_from(["delete", "-k", "book", &id])
+            .execute(&mut out, client(&dir))
+            .unwrap();
+        assert!(out.text.contains("queued"), "{}", out.text);
+        assert!(!out.text.contains("successfully"), "{}", out.text);
+    }
+
+    /// A create naming a `UID` the address book already holds, queued or
+    /// applied, is refused with its code and queues nothing: the owner
+    /// would park it at drain (pimdir STORAGE §15.3), so accepting it
+    /// would report a card no sync ever creates.
+    #[test]
+    fn a_create_naming_a_held_uid_is_refused() {
+        use pimalaya_cli::error::code_of;
+
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+
+        let err = backend.create_card("book", JANE.to_vec()).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::ItemDuplicate), "{err:#}");
+        assert_eq!(pending(&backend), 1);
+
+        drain(&dir);
+        let roe = String::from_utf8(JANE.to_vec())
+            .unwrap()
+            .replace("Jane Doe", "Jane Roe");
+        let before = objects(&dir);
+        let err = backend.create_card("book", roe.into_bytes()).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::ItemDuplicate), "{err:#}");
+        assert_eq!(pending(&backend), 0);
+        assert_eq!(objects(&dir), before, "a refused create leaves no body");
+        assert_eq!(backend.list_cards("book", None, None).unwrap().len(), 1);
+    }
+
+    /// Every file of the store's blob tree, sorted.
+    fn objects(dir: &tempfile::TempDir) -> Vec<std::path::PathBuf> {
+        fn walk(path: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(path).unwrap() {
+                let path = entry.unwrap().path();
+                if path.is_dir() {
+                    walk(&path, out);
+                } else {
+                    out.push(path);
+                }
+            }
+        }
+
+        let mut out = Vec::new();
+        walk(&dir.path().join("objects"), &mut out);
+        out.sort();
+        out
+    }
+
+    /// Writes `body` as the card `jane.vcf` of `collection`, as a sync
+    /// pulling it from the server leaves it: stored, hydrated and clean.
+    fn pulled(dir: &tempfile::TempDir, collection: &str, body: &[u8]) {
+        use io_pimdir::{
+            change::PimdirWriteOp,
+            collection::PimdirCollectionId,
+            object::PimdirObject,
+            placement::{PimdirBase, PimdirHandle, PimdirPlacement, PimdirStatus},
+        };
+
+        let mut store = io_pimdir::client::PimdirStore::open(dir.path())
+            .unwrap()
+            .for_source("carddav");
+        let hash = store.hash(body);
+        let derived = contact::derive(body);
+        store
+            .write(vec![
+                PimdirWriteOp::StoreObject {
+                    object: PimdirObject {
+                        hash: hash.clone(),
+                        size: body.len(),
+                    },
+                    body: Some(body.to_vec()),
+                },
+                PimdirWriteOp::UpsertPlacement(PimdirPlacement {
+                    collection: PimdirCollectionId::from(collection),
+                    handle: PimdirHandle("jane.vcf".into()),
+                    link_id: Some(derived.link_id),
+                    object: Some(hash.clone()),
+                    level: PimdirLevel::Full,
+                    summary: derived.summary,
+                    sort_key: Default::default(),
+                    flags: PimdirFlags::default(),
+                    status: PimdirStatus::Clean,
+                    conflict_revision: None,
+                    conflict_object: None,
+                    base: Some(PimdirBase {
+                        flags: PimdirFlags::default(),
+                        revision: None,
+                        object: Some(hash),
+                    }),
+                    origin: None,
+                }),
+            ])
+            .unwrap();
+    }
+
+    /// A queued edit names the body it was made against (pimdir STORAGE
+    /// §15.3): a server change a sync brings in before the drain parks the
+    /// edit, rather than being overwritten without a merge.
+    #[test]
+    fn an_edit_whose_body_a_sync_replaced_is_parked() {
+        let (dir, mut backend) = store();
+        pulled(&dir, "book", JANE);
+        let id = backend.list_cards("book", None, None).unwrap()[0]
+            .id
+            .clone();
+        let read = backend.get_card("book", &id).unwrap();
+        let rename = |name: &str| {
+            String::from_utf8(JANE.to_vec())
+                .unwrap()
+                .replace("Jane Doe", name)
+                .into_bytes()
+        };
+
+        backend
+            .update_card("book", &id, rename("Jane Roe"), read.etag.as_deref())
+            .unwrap();
+        pulled(&dir, "book", &rename("Jane Poe"));
+
+        let mut owner = io_pimdir::client::PimdirStore::open(dir.path())
+            .unwrap()
+            .for_source("carddav");
+        let report = owner.drain().unwrap();
+        assert_eq!((report.applied, report.parked), (0, 1), "{report:?}");
+        assert_eq!(
+            backend.get_card("book", &id).unwrap().contents,
+            rename("Jane Poe")
+        );
+    }
+
+    /// A guarded edit the owner parks, its body replaced by a sync before
+    /// the drain, shows in `pimdir status` with its row and the reason it
+    /// never applied, and only in the status of the account it targets.
+    #[test]
+    fn status_shows_the_parked_edit_of_the_account_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let open = |account: &str| {
+            PimdirBackend::new(PimdirConfig {
+                root: dir.path().to_path_buf(),
+                account: Some(account.into()),
+            })
+            .unwrap()
+        };
+        let rename = |name: &str| {
+            String::from_utf8(JANE.to_vec())
+                .unwrap()
+                .replace("Jane Doe", name)
+                .into_bytes()
+        };
+
+        for (account, book) in [("work", "work/book"), ("home", "home/book")] {
+            synced(dir.path(), Some(account), book);
+            pulled(&dir, book, JANE);
+
+            let mut backend = open(account);
+            let id = backend.list_cards(book, None, None).unwrap()[0].id.clone();
+            let read = backend.get_card(book, &id).unwrap();
+            backend
+                .update_card(book, &id, rename("Jane Roe"), read.etag.as_deref())
+                .unwrap();
+            pulled(&dir, book, &rename("Jane Poe"));
+        }
+        let mut owner = io_pimdir::client::PimdirStore::open(dir.path())
+            .unwrap()
+            .for_source("carddav");
+        assert_eq!(owner.drain().unwrap().parked, 2);
+        drop(owner);
+
+        let status = open("work").status().unwrap();
+        assert_eq!(status.account.as_deref(), Some("work"));
+        assert_eq!(status.accounts, ["home", "work"]);
+        let books: Vec<_> = status
+            .addressbooks
+            .iter()
+            .map(|book| (book.id.as_str(), book.total, book.hydrated, book.queued))
+            .collect();
+        assert_eq!(books, [("work/book", 1, 1, 0)]);
+
+        assert_eq!(status.parked.len(), 1, "{:?}", status.parked);
+        let parked = &status.parked[0];
+        assert_eq!(parked.addressbook_id, "work/book");
+        assert_eq!(parked.action, "update");
+        assert!(
+            parked.error.contains("body replaced since it was read"),
+            "{}",
+            parked.error
+        );
+
+        let text = status.to_string();
+        assert!(
+            text.contains(&format!("ROW {} update in work/book", parked.row)),
+            "{text}"
+        );
+        assert!(text.contains(&parked.error), "{text}");
+
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["parked"][0]["addressbookId"], "work/book");
+        assert_eq!(json["parked"][0]["row"], parked.row);
+    }
+
+    /// A composed card refused as a duplicate keeps its composer file,
+    /// named in the error, as any failed write does: the edit is not lost
+    /// to a success that never was.
+    #[cfg(unix)]
+    #[test]
+    fn a_composed_duplicate_keeps_its_file() {
+        use clap::Parser;
+        use pimalaya_cli::error::code_of;
+
+        use crate::shared::card::create::CardCreateCommand;
+
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        let jane = String::from_utf8(JANE.to_vec()).unwrap();
+        let mut out = Captured::default();
+
+        let err = CardCreateCommand::parse_from([
+            "create",
+            "-k",
+            "book",
+            "-i",
+            "--composer",
+            // NOTE: a suffix glued to `-i` is what GNU and BSD sed both
+            // read as in-place.
+            "sed -i.bak s/Doe/Roe/",
+            &jane,
+        ])
+        .execute(&mut out, client(&dir))
+        .unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::ItemDuplicate), "{err:#}");
+
+        let message = err.to_string();
+        let path = message
+            .split('"')
+            .nth(1)
+            .unwrap_or_else(|| panic!("no composer file named in: {message}"));
+        let kept = std::fs::read_to_string(path).unwrap();
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_file(format!("{path}.bak")).unwrap();
+        assert!(kept.contains("FN:Jane Roe"), "{kept}");
+        assert_eq!(pending(&backend), 1);
+    }
+
+    /// A root holding no store, a database declaring tables at
+    /// `user_version` 0 (another program's) and a write a syncing source
+    /// does not support (pimdir STORAGE §15.6) each carry the code
+    /// io-pimdir names, and none asks to delete anything.
+    #[test]
+    fn a_store_refusal_carries_its_code() {
+        use io_pimdir::capability::{self, PimdirCapability, PimdirSupport};
+        use pimalaya_cli::error::code_of;
+
+        let empty = tempfile::tempdir().unwrap();
+        let err = match PimdirBackend::new(PimdirConfig {
+            root: empty.path().to_path_buf(),
+            account: None,
+        }) {
+            Ok(_) => panic!("a root holding no store opened"),
+            Err(err) => err,
+        };
+        assert_eq!(code_of(&err), Some(ErrorCode::StoreUncreated), "{err:#}");
+        assert!(!format!("{err:#}").contains("delete"), "{err:#}");
+
+        // NOTE: SQLite keeps `PRAGMA user_version` big-endian at offset 60
+        // of the database header.
+        let (foreign, _) = store();
+        let mut db = std::fs::OpenOptions::new()
+            .write(true)
+            .open(foreign.path().join("pimdir.db"))
+            .unwrap();
+        std::io::Seek::seek(&mut db, std::io::SeekFrom::Start(60)).unwrap();
+        std::io::Write::write_all(&mut db, &0u32.to_be_bytes()).unwrap();
+        drop(db);
+        let err = match PimdirBackend::new(PimdirConfig {
+            root: foreign.path().to_path_buf(),
+            account: None,
+        }) {
+            Ok(_) => panic!("a foreign database opened"),
+            Err(err) => err,
+        };
+        assert_eq!(code_of(&err), Some(ErrorCode::StoreForeign), "{err:#}");
+        assert!(!format!("{err:#}").contains("delete"), "{err:#}");
+
+        let (dir, mut backend) = store();
+        let declaration: Vec<PimdirCapability> = capability::CONTACTS
+            .iter()
+            .map(|name| PimdirCapability {
+                collection: None,
+                name: name.to_string(),
+                support: match *name == capability::CONTACTS_CARD_ADD {
+                    true => PimdirSupport::None,
+                    false => PimdirSupport::Full,
+                },
+                detail: None,
+            })
+            .collect();
+        io_pimdir::client::PimdirStore::open(dir.path())
+            .unwrap()
+            .declare("carddav", &declaration)
+            .unwrap();
+
+        let err = backend.create_card("book", JANE.to_vec()).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::Unsupported), "{err:#}");
+        assert!(format!("{err:#}").contains(capability::CONTACTS_CARD_ADD));
+        assert_eq!(pending(&backend), 0);
     }
 }

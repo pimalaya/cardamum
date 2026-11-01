@@ -23,7 +23,13 @@ The shared `addressbook` and `card` commands SHALL expose only what every backen
 ### Requirement: Specific commands mirror their protocol
 A protocol-specific command set SHALL match the remote protocol's own structure and vocabulary rather than the shared API's, following Himalaya's direction. The shape follows the protocol: CardDAV (WebDAV) is a flat list of WebDAV method names, JMAP, Microsoft Graph and Google People are nested by resource with sub-verbs naming the protocol methods, and vdir is flat collection verbs plus an `item` subcommand. Verb names track the protocol, so JMAP uses `destroy` while Graph and People use `delete`.
 
-pimdir has no protocol-specific surface by design: it is a store rather than a protocol, and its operator commands ship as the separate `pimdir` binary in io-pimdir.
+pimdir is a store rather than a protocol: its `pimdir` family covers `status` alone, what a reader can tell of the store behind the account, and the operator commands (retrying or cancelling a parked action, the retained items) ship as the separate `pimdir` binary in io-pimdir.
+
+### Requirement: pimdir status reports the store and its parked actions
+`pimdir status`, gated on the `pimdir` feature, SHALL report the account being read, every account the store groups collections under, one row per address book of that account (how many cards it holds, how many of them carry a local body, how many creations are queued for the next sync), and every action the store's owner parked in those address books (`PimdirReader::parked_actions`), by its queue row (ROW), its address book, its kind and the error that parked it. A parked action addresses no card, so its row is the only id shown, under its own name. Another account's address books and parked rows SHALL NOT show. Its JSON output is `{"account", "accounts", "addressbooks": [{"id", "name", "total", "hydrated", "queued"}], "parked": [{"row", "addressbookId", "action", "error"}]}`, `parked` always present. It mirrors calendula's `pimdir status`, `calendars` named `addressbooks`.
+
+### Requirement: account check fails when a backend fails
+`account check` SHALL exercise every backend of the account `--backend` allows and print one verdict per backend when all of them pass. When any fails, it SHALL exit non-zero with one error naming each failed backend and why, so a script reads the outcome from the exit code alone. It mirrors calendula's `account check`.
 
 ### Requirement: Specific commands are raw-faithful
 A specific command SHALL surface the native ids and metadata the shared layer normalizes away (ETags, CTags, sync tokens, hrefs, the Graph `changeKey`, the People `etag` and `resourceName`), and SHALL make the incremental-sync primitive its headline (`report sync`, `changes`, `delta`). Default human output is a friendly table; `--json` SHALL emit the raw native payload, and create and update SHALL accept the raw native representation. Each backend keeps a raw escape hatch: a raw XML body for CardDAV, raw JSON in and out plus a generic request passthrough for the object backends, whose `--json` prints the response verbatim under `response` (`null` when the server sent no body), so the payload is an object whatever the server answered. Precondition control is offered only where the protocol has it (CardDAV `--if-match` and `--if-none-match`).
@@ -42,6 +48,11 @@ The shared `-k/--addressbook` resolver SHALL reject an empty id rather than pass
 
 ### Requirement: A partial write says so
 When a backend cannot carry out part of a write, and the protocol offers no way to insist, the command SHALL report what was left undone rather than print a plain success. On Google People an unmappable vCard property lives in a `clientData` entry the API will not clear, so an update dropping one keeps it, and the command names it.
+
+### Requirement: A queued write says it is queued
+A shared write SHALL say whether it reached the server or was queued for a sync. On pimdir, `card create`, `card update` and `card delete` SHALL say the write is queued and that the next sync carries it, never that the card was created, updated or deleted. Only the printed text SHALL say so: the `--json` output SHALL keep the shape every backend prints, with no `queued` field, a queued write being a pimdir detail that shared outputs do not carry.
+
+A queued creation SHALL get no placeholder id (`q<id>`, `0`, `""`): `card create` reports the card's link id, which `card read` does not accept until a sync applies the create and the card lists under its public id.
 
 ### Requirement: A displayed count is the server's
 A table SHALL NOT render an absent value as a default that reads as fact. A count the API returns only on request SHALL be requested, or left blank.
@@ -152,12 +163,21 @@ The name flags SHALL be named for the role, given and family, rather than for th
 `card delete` SHALL take `--if-match <ETAG>`. CardDAV SHALL send it as `If-Match` and pimdir SHALL check it as an update does; the backends that cannot gate a delete (vdir, jmap, msgraph, gpeople) SHALL refuse it rather than drop it.
 
 ### Requirement: A JSON error carries a stable code
-A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`. The code SHALL be found anywhere in the error chain, so added context does not hide it. A failure with no code SHALL print no `code` field. The plain output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording.
+A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`. The code SHALL be found anywhere in the error chain, so added context does not hide it. A failure with no code SHALL print no `code` field. The plain output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording. A pimdir store's code is the one io-pimdir names (`PimdirError::code()`), never read off its message.
 
 | Code | Raised when |
 |---|---|
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
 | `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |
+| `store-uncreated` | the pimdir root holds no store; its sync engine creates it |
+| `store-newer` | the pimdir store is newer than this cardamum reads; upgrade cardamum |
+| `store-foreign` | the pimdir root holds a database another program wrote |
+| `store-stale` | the pimdir store lacks part of its schema; run or upgrade its sync engine |
+| `store-corrupt` | the pimdir store's two version stamps disagree |
+| `store-hash-algo` | the pimdir store names its bodies by a hash this cardamum does not know |
+| `store-busy` | another writer held the pimdir store, past the wait on a write and at once on `account check`, which does not wait; retry |
+| `unsupported` | a source syncing the address book does not support the write (pimdir STORAGE §15.6); nothing was queued |
+| `item-duplicate` | a create names a `UID` the pimdir address book holds, synced or queued; nothing was queued |
 
 #### Scenario: A stale version
 - GIVEN a pimdir card whose body changed since it was read

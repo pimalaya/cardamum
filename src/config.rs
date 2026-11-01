@@ -360,7 +360,8 @@ pub struct PimdirConfig {
     /// The account the collections are grouped under, for a store shared
     /// by several accounts or domains, as the mobile apps do.
     ///
-    /// Unset reads every collection in the store.
+    /// Unset reads the one account the store groups its collections under,
+    /// or none; a store grouping several is refused until one is named.
     #[serde(default)]
     pub account: Option<String>,
 }

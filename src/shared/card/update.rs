@@ -86,6 +86,7 @@ impl CardUpdateCommand {
             return printer.out(CardUpdateOutput::Applied(CardUpdatedOutput {
                 id: self.card_id,
                 kept_properties: outcome.kept_properties,
+                queued: client.queues_writes(),
             }));
         }
 
@@ -115,6 +116,7 @@ impl CardUpdateCommand {
         printer.out(CardUpdateOutput::Applied(CardUpdatedOutput {
             id: self.card_id,
             kept_properties: outcome.kept_properties,
+            queued: client.queues_writes(),
         }))
     }
 }
@@ -152,11 +154,22 @@ pub struct CardUpdatedOutput {
     /// Names of the vCard properties the update dropped and the server
     /// kept anyway, empty on a backend that can clear everything.
     pub kept_properties: Vec<String>,
+    /// Whether the write was queued for a sync rather than made, which
+    /// only the wording tells.
+    #[serde(skip)]
+    pub queued: bool,
 }
 
 impl fmt::Display for CardUpdatedOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Card `{}` successfully updated", self.id)?;
+        match self.queued {
+            true => write!(
+                f,
+                "Card `{}` update queued; the next sync applies it",
+                self.id
+            )?,
+            false => write!(f, "Card `{}` successfully updated", self.id)?,
+        }
 
         // NOTE: the write landed, but not all of it: saying so beats a
         // clean success for a card that kept what the vCard dropped.

@@ -6,7 +6,10 @@
 use std::{fmt, path::PathBuf};
 
 use anyhow::{Error, Result, anyhow};
-use io_pimdir::client::{PimdirError, producer::PimdirProducer, reader::PimdirReader};
+use io_pimdir::{
+    client::{PimdirError, producer::PimdirProducer, reader::PimdirReader},
+    sql::FORMAT_VERSION,
+};
 use pimalaya_cli::error::CodedError;
 
 use crate::{config::PimdirConfig, error::ErrorCode};
@@ -81,17 +84,47 @@ impl PimdirClient {
 /// [`ErrorCode::of_pimdir`]).
 ///
 /// The message is io-pimdir's own, which says what the store asks of the
-/// user: run or upgrade its sync engine, or upgrade cardamum. Deleting
-/// the store is never the fix, a resync restoring neither its queue nor
-/// what it keeps alone.
+/// user, but for a store of another format version (see [`reinstall`]).
+/// Deleting the store is never the fix, a resync restoring neither its
+/// queue nor what it keeps alone.
 pub(crate) fn refusal(
     err: PimdirError,
     context: impl fmt::Display + Send + Sync + 'static,
 ) -> Error {
+    let message = match &err {
+        PimdirError::Version { found } => reinstall(found.as_deref()),
+        err => err.to_string(),
+    };
+
     match ErrorCode::of_pimdir(&err) {
-        Some(code) => Error::new(CodedError::new(code, err.to_string())).context(context),
+        Some(code) => Error::new(CodedError::new(code, message)).context(context),
         None => Error::new(err).context(context),
     }
+}
+
+/// What a store of another format version than [`FORMAT_VERSION`] asks
+/// of the user, `found` being the one it records, `None` when it predates
+/// the record.
+///
+/// A store opens under its own version alone and nothing migrates a draft
+/// (pimdir STORAGE §4.2, §6), so one an earlier neverest wrote is
+/// reinstalled, its queue drained first since the writes it holds live
+/// there alone. A later one asks for a cardamum built on its version.
+/// io-pimdir's own message says to move the store aside and sync a new
+/// one, which skips the drain.
+fn reinstall(found: Option<&str>) -> String {
+    let found = match found {
+        Some(found) => format!("is {found}"),
+        None => String::from("names no format version"),
+    };
+
+    format!(
+        "Pimdir store {found}, and this cardamum reads {FORMAT_VERSION} alone: \
+         reinstall a store an earlier neverest wrote (run that neverest's sync \
+         until nothing is queued, upgrade neverest, move the store aside, then \
+         run `neverest init` and sync again), or upgrade cardamum for a store \
+         a later neverest wrote"
+    )
 }
 
 /// The account this client reads, configured or derived.

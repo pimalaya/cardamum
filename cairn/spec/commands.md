@@ -170,14 +170,15 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
 | `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |
 | `store-uncreated` | the pimdir root holds no store; its sync engine creates it |
-| `store-newer` | the pimdir store is newer than this cardamum reads; upgrade cardamum |
+| `store-version` | the pimdir store is of another format version than this cardamum reads; an earlier neverest's store is reinstalled through neverest, its queue drained first, a later one's asks for a cardamum upgrade |
 | `store-foreign` | the pimdir root holds a database another program wrote |
-| `store-stale` | the pimdir store lacks part of its schema; run or upgrade its sync engine |
-| `store-corrupt` | the pimdir store's two version stamps disagree |
+| `store-corrupt` | the pimdir store's two version stamps disagree, or its schema differs from the one its version declares |
 | `store-hash-algo` | the pimdir store names its bodies by a hash this cardamum does not know |
+| `store-exposed` | another user can read or write the pimdir store, or a link stands where a lock file belongs; restrict it |
 | `store-busy` | another writer held the pimdir store, past the wait on a write and at once on `account check`, which does not wait; retry |
 | `unsupported` | a source syncing the address book does not support the write (pimdir STORAGE §15.6); nothing was queued |
 | `item-duplicate` | a create names a `UID` the pimdir address book holds, synced or queued; nothing was queued |
+| `action-malformed` | a queued pimdir action's payload is malformed (`pimdir status`); the sync engine's drain parks it |
 
 #### Scenario: A stale version
 - GIVEN a pimdir card whose body changed since it was read

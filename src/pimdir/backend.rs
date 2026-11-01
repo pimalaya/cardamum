@@ -112,7 +112,11 @@ impl PimdirBackend {
                 hydrated += usize::from(item.object.is_some());
                 Ok(ControlFlow::Continue(()))
             })?;
-            let queued = self.inner.reader.count_pending_creates(&collection.id)?;
+            let queued = self
+                .inner
+                .reader
+                .count_pending_creates(&collection.id)
+                .map_err(|err| refusal(err, "Read the pimdir queue"))?;
 
             addressbooks.push(PimdirAddressbookStatus {
                 name: if collection.name.is_empty() {
@@ -663,7 +667,10 @@ fn preview_vcard(item: &PimdirItem) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {
-    use io_pimdir::placement::{PimdirLevel, PimdirLinkId};
+    use io_pimdir::{
+        placement::{PimdirLevel, PimdirLinkId},
+        sql::FORMAT_VERSION,
+    };
 
     use super::*;
 
@@ -1040,23 +1047,30 @@ mod tests {
         assert_eq!(backend.list_cards("book", None, None).unwrap().len(), 39);
     }
 
-    /// Makes the bodies of `ids` unreadable: each blob turns into a
-    /// directory, so any read of it fails the listing.
+    /// Makes the bodies of `ids` unreadable: each blob loses every
+    /// permission, so any read of it fails the listing.
+    ///
+    /// A directory where a blob belongs no longer does, io-pimdir reading
+    /// it as a stray, so as an absent body (pimdir STORAGE §7).
+    #[cfg(unix)]
     fn poison(backend: &PimdirBackend, ids: &[String]) {
+        use std::os::unix::fs::PermissionsExt;
+
         for id in ids {
             let item = backend.item("book", id).unwrap();
             let path = backend
                 .inner
                 .reader
                 .blobs()
-                .path(item.object.as_ref().unwrap());
-            std::fs::remove_file(&path).unwrap();
-            std::fs::create_dir(&path).unwrap();
+                .path(item.object.as_ref().unwrap())
+                .unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
         }
     }
 
     /// A page reads the bodies of its own cards and no other: not those
     /// before it, not those after it.
+    #[cfg(unix)]
     #[test]
     fn a_page_reads_no_body_but_its_own() {
         let (_dir, mut backend) = book(40);
@@ -1116,7 +1130,12 @@ mod tests {
 
         let producer = backend.inner.producer().unwrap();
         assert!(producer.pending_actions("local").unwrap().is_empty());
-        let blob = backend.inner.reader.blobs().path(&producer.hash(&created));
+        let blob = backend
+            .inner
+            .reader
+            .blobs()
+            .path(&producer.hash(&created))
+            .unwrap();
         assert!(!blob.exists(), "a refused create leaves no body behind");
     }
 
@@ -1133,7 +1152,7 @@ mod tests {
             .id
             .clone();
         let hash = backend.item("book", &id).unwrap().object.unwrap();
-        std::fs::remove_file(backend.inner.reader.blobs().path(&hash)).unwrap();
+        std::fs::remove_file(backend.inner.reader.blobs().path(&hash).unwrap()).unwrap();
 
         let listed = backend.list_cards("book", None, None).unwrap();
         assert_eq!(listed[0].etag, None);
@@ -1594,5 +1613,103 @@ mod tests {
         assert_eq!(code_of(&err), Some(ErrorCode::Unsupported), "{err:#}");
         assert!(format!("{err:#}").contains(capability::CONTACTS_CARD_ADD));
         assert_eq!(pending(&backend), 0);
+    }
+
+    /// Rewrites, in the closed store at `root`, every occurrence of `from`
+    /// into `to`, a string of the same length, so each record keeps its
+    /// size. The store is opened and closed as its owner first, so its
+    /// write-ahead log is checkpointed into pimdir.db and gone.
+    fn rewrite(root: &std::path::Path, from: &str, to: &str) {
+        assert_eq!(from.len(), to.len());
+        drop(io_pimdir::client::PimdirStore::open(root).unwrap());
+        assert!(!root.join("pimdir.db-wal").exists());
+
+        let path = root.join("pimdir.db");
+        let mut db = std::fs::read(&path).unwrap();
+        let (from, to) = (from.as_bytes(), to.as_bytes());
+        let mut found = false;
+        for at in 0..=db.len() - from.len() {
+            if &db[at..at + from.len()] == from {
+                db[at..at + from.len()].copy_from_slice(to);
+                found = true;
+            }
+        }
+        assert!(found, "no {from:?} in the store");
+        std::fs::write(&path, db).unwrap();
+    }
+
+    /// A store of another format version, here one an earlier neverest
+    /// wrote, carries `store-version` and asks for a reinstall through
+    /// neverest, the queue drained first, never for its removal.
+    #[test]
+    fn a_store_of_another_version_asks_for_a_reinstall() {
+        use pimalaya_cli::error::code_of;
+
+        let (dir, backend) = store();
+        drop(backend);
+        rewrite(dir.path(), FORMAT_VERSION, "storage-draft-07");
+
+        let err = match PimdirBackend::new(PimdirConfig {
+            root: dir.path().to_path_buf(),
+            account: None,
+        }) {
+            Ok(_) => panic!("a store of another version opened"),
+            Err(err) => err,
+        };
+        assert_eq!(code_of(&err), Some(ErrorCode::StoreVersion), "{err:#}");
+        let message = format!("{err:#}");
+        assert!(message.contains("storage-draft-07"), "{message}");
+        assert!(message.contains("until nothing is queued"), "{message}");
+        assert!(message.contains("neverest init"), "{message}");
+        assert!(!message.contains("delete"), "{message}");
+        assert!(!message.contains("sync a new one"), "{message}");
+    }
+
+    /// A store another user can read is refused before anything opens,
+    /// with `store-exposed` (pimdir STORAGE §18).
+    #[cfg(unix)]
+    #[test]
+    fn a_store_others_can_read_is_refused() {
+        use std::os::unix::fs::PermissionsExt;
+
+        use pimalaya_cli::error::code_of;
+
+        let (dir, backend) = store();
+        drop(backend);
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let err = match PimdirBackend::new(PimdirConfig {
+            root: dir.path().to_path_buf(),
+            account: None,
+        }) {
+            Ok(_) => panic!("a store others can read opened"),
+            Err(err) => err,
+        };
+        assert_eq!(code_of(&err), Some(ErrorCode::StoreExposed), "{err:#}");
+    }
+
+    /// A queued action whose payload misses its version, as only another
+    /// program writes one, fails `pimdir status` with `action-malformed`
+    /// rather than with no code, until the owner's drain parks it.
+    #[test]
+    fn a_malformed_queued_action_carries_its_code() {
+        use pimalaya_cli::error::code_of;
+
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        drop(backend);
+        rewrite(dir.path(), "\"v\":1", "\"w\":1");
+
+        let mut backend = PimdirBackend::new(PimdirConfig {
+            root: dir.path().to_path_buf(),
+            account: None,
+        })
+        .unwrap();
+        let err = backend.status().unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::ActionMalformed), "{err:#}");
+
+        drain(&dir);
+        let status = backend.status().unwrap();
+        assert_eq!(status.parked.len(), 1);
     }
 }

@@ -5,14 +5,17 @@
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::vdir::{client::VdirClient, item::input::ItemInputArg};
+use crate::{
+    shared::receipt::IdReceipt,
+    vdir::{client::VdirClient, item::input::ItemInputArg},
+};
 
 /// Overwrite the bytes of an existing item.
 ///
 /// The kind, which is the file extension, is read from the current item
-/// and preserved. JSON output: `{"message": "..."}`.
+/// and preserved. JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct VdirItemUpdateCommand {
     /// Collection the item lives in.
@@ -33,9 +36,9 @@ impl VdirItemUpdateCommand {
 
         client.store_item(path, Some(self.id.clone()), kind, contents)?;
 
-        printer.out(Message::new(format!(
-            "Item `{}` successfully updated",
-            self.id
-        )))
+        printer.out(IdReceipt {
+            id: self.id,
+            done: "Item updated",
+        })
     }
 }

@@ -4,13 +4,13 @@
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::client::MsgraphClient;
+use crate::{msgraph::client::MsgraphClient, shared::receipt::IdReceipt};
 
 /// Delete a contact folder and every contact it contains.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct MsgraphContactFolderDeleteCommand {
     /// Folder id.
@@ -22,9 +22,9 @@ impl MsgraphContactFolderDeleteCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
         client.contact_folder_delete(&self.folder_id)?;
 
-        printer.out(Message::new(format!(
-            "Contact folder `{}` successfully deleted",
-            self.folder_id
-        )))
+        printer.out(IdReceipt {
+            id: self.folder_id,
+            done: "Contact folder deleted",
+        })
     }
 }

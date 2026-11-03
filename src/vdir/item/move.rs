@@ -4,13 +4,13 @@
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::vdir::client::VdirClient;
+use crate::{shared::receipt::IdReceipt, vdir::client::VdirClient};
 
 /// Move an item from one collection into another.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct VdirItemMoveCommand {
     /// Source collection the item lives in.
@@ -30,9 +30,9 @@ impl VdirItemMoveCommand {
         let target = client.collection_path(&self.target)?;
         client.move_item(source, target, &self.id)?;
 
-        printer.out(Message::new(format!(
-            "Item `{}` successfully moved from `{}` to `{}`",
-            self.id, self.source, self.target
-        )))
+        printer.out(IdReceipt {
+            id: self.id,
+            done: "Item moved",
+        })
     }
 }

@@ -5,13 +5,16 @@
 use anyhow::{Result, bail};
 use clap::Parser;
 use io_jmap::rfc9610::address_book::set::JmapAddressBookSetArgs;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, error::format_set_error};
+use crate::{
+    jmap::{client::JmapClient, error::format_set_error},
+    shared::receipt::IdReceipt,
+};
 
 /// Destroy a JMAP AddressBook (`AddressBook/set` destroy).
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct JmapAddressBookDestroyCommand {
     /// AddressBook id.
@@ -35,9 +38,9 @@ impl JmapAddressBookDestroyCommand {
             bail!("AddressBook destroy rejected{}", format_set_error(&err));
         }
 
-        printer.out(Message::new(format!(
-            "AddressBook `{}` successfully destroyed",
-            self.id
-        )))
+        printer.out(IdReceipt {
+            id: self.id,
+            done: "AddressBook destroyed",
+        })
     }
 }

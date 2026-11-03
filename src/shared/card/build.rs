@@ -12,10 +12,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use pimalaya_cli::{
-    clap::parsers::path_parser,
-    printer::{Message, Printer},
-};
+use pimalaya_cli::{clap::parsers::path_parser, printer::Printer};
 use pimalaya_config::command::CommandConfig;
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -40,7 +37,7 @@ use crate::{
 /// backend, which is how a card is judged before it is sent. No account
 /// is resolved unless `-i` needs the configured composer.
 ///
-/// JSON output: `{"contents"}`, the raw vCard as text, or `{"message"}`
+/// JSON output: `{"contents"}`, the raw vCard as text, or `{"path", "size"}`
 /// with `-o`.
 #[derive(Debug, Parser)]
 pub struct CardBuildCommand {
@@ -153,10 +150,26 @@ fn emit(printer: &mut impl Printer, output: Option<&Path>, card: &[u8]) -> Resul
 
     fs::write(path, card).with_context(|| format!("Cannot write vCard {path:?}"))?;
 
-    printer.out(Message::new(format!(
-        "Card successfully written to {}",
-        path.display()
-    )))
+    printer.out(SavedOutput {
+        path: path.display().to_string(),
+        size: card.len(),
+    })
+}
+
+/// What a build written to the file `-o` names prints.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedOutput {
+    /// The file written.
+    pub path: String,
+    /// How many bytes were written.
+    pub size: usize,
+}
+
+impl fmt::Display for SavedOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Card successfully written to {}", self.path)
+    }
 }
 
 /// The vCard the command built.

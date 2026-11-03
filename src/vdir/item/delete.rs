@@ -4,13 +4,13 @@
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::vdir::client::VdirClient;
+use crate::{shared::receipt::IdReceipt, vdir::client::VdirClient};
 
 /// Delete the given item from the collection.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct VdirItemDeleteCommand {
     /// Collection the item lives in.
@@ -26,9 +26,9 @@ impl VdirItemDeleteCommand {
         let path = client.collection_path(&self.collection)?;
         client.delete_item(path, &self.id)?;
 
-        printer.out(Message::new(format!(
-            "Item `{}` successfully deleted",
-            self.id
-        )))
+        printer.out(IdReceipt {
+            id: self.id,
+            done: "Item deleted",
+        })
     }
 }

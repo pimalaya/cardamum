@@ -5,10 +5,13 @@
 
 use anyhow::{Result, bail};
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
 use crate::shared::{
-    addressbook::AddressbookDiff, arg::AddressbookIdArg, client::AddressbookClient,
+    addressbook::AddressbookDiff,
+    arg::AddressbookIdArg,
+    client::AddressbookClient,
+    receipt::{Write, WriteReceipt},
 };
 
 /// Update an existing addressbook.
@@ -16,7 +19,7 @@ use crate::shared::{
 /// Each flag updates its own field and leaves the others untouched. To
 /// clear an optional field, pass an empty value, as in `--description ""`.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id", "queued"}`.
 #[derive(Debug, Parser)]
 pub struct AddressbookUpdateCommand {
     /// Addressbook to update.
@@ -48,7 +51,11 @@ impl AddressbookUpdateCommand {
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         client.update_addressbook(&addressbook_id, patch)?;
 
-        let msg = format!("Addressbook `{addressbook_id}` successfully updated");
-        printer.out(Message::new(msg))
+        printer.out(WriteReceipt {
+            id: addressbook_id,
+            queued: client.queues_writes(),
+            what: "Addressbook",
+            write: Write::Update,
+        })
     }
 }

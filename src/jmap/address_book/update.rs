@@ -7,14 +7,17 @@ use std::collections::BTreeMap;
 use anyhow::{Result, bail};
 use clap::Parser;
 use io_jmap::rfc9610::address_book::set::{JmapAddressBookSetArgs, JmapAddressBookUpdate};
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, error::format_set_error, render::JmapAddressBookOutput};
+use crate::{
+    jmap::{client::JmapClient, error::format_set_error, render::JmapAddressBookOutput},
+    shared::receipt::IdReceipt,
+};
 
 /// Update a JMAP AddressBook (`AddressBook/set` update).
 ///
-/// JSON output: the raw JMAP AddressBook after the update (or a message
-/// when the server returns no object).
+/// JSON output: the raw JMAP AddressBook after the update, or `{"id"}`
+/// when the server returns no object.
 #[derive(Debug, Parser)]
 pub struct JmapAddressBookUpdateCommand {
     /// AddressBook id.
@@ -50,10 +53,10 @@ impl JmapAddressBookUpdateCommand {
 
         match out.updated.into_values().next().flatten() {
             Some(book) => printer.out(JmapAddressBookOutput(book)),
-            None => printer.out(Message::new(format!(
-                "AddressBook `{}` successfully updated",
-                self.id
-            ))),
+            None => printer.out(IdReceipt {
+                id: self.id,
+                done: "AddressBook updated",
+            }),
         }
     }
 }

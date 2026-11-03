@@ -7,10 +7,13 @@ use std::collections::BTreeMap;
 use anyhow::{Result, bail};
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::set::{JmapContactCardPatch, JmapContactCardSetArgs};
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{
-    client::JmapClient, error::format_set_error, input::JsonArg, render::JmapContactCardOutput,
+use crate::{
+    jmap::{
+        client::JmapClient, error::format_set_error, input::JsonArg, render::JmapContactCardOutput,
+    },
+    shared::receipt::IdReceipt,
 };
 
 /// Update a ContactCard from a raw JSContact patch (`ContactCard/set`).
@@ -19,7 +22,7 @@ use crate::jmap::{
 /// as dotted keys.
 ///
 /// JSON output: the raw JMAP ContactCard after the update, or
-/// `{"message": "..."}` when the server returns nothing to show (most
+/// `{"id"}` when the server returns nothing to show (most
 /// do: a `set` response echoes only the properties the server itself
 /// decided).
 #[derive(Debug, Parser)]
@@ -60,10 +63,10 @@ impl JmapContactCardUpdateCommand {
 
         match updated {
             Some(report) => printer.out(report),
-            None => printer.out(Message::new(format!(
-                "ContactCard `{}` successfully updated",
-                self.id
-            ))),
+            None => printer.out(IdReceipt {
+                id: self.id,
+                done: "ContactCard updated",
+            }),
         }
     }
 }

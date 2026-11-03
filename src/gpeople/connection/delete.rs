@@ -4,13 +4,13 @@
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::gpeople::client::GpeopleClient;
+use crate::{gpeople::client::GpeopleClient, shared::receipt::IdReceipt};
 
 /// Delete a contact by id (People `people.deleteContact`).
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct GpeopleConnectionDeleteCommand {
     /// Person id (the segment after `people/`).
@@ -23,9 +23,9 @@ impl GpeopleConnectionDeleteCommand {
         let resource_name = format!("people/{}", self.person_id);
         client.contact_delete(&resource_name)?;
 
-        printer.out(Message::new(format!(
-            "Contact `{}` successfully deleted",
-            self.person_id
-        )))
+        printer.out(IdReceipt {
+            id: self.person_id,
+            done: "Contact deleted",
+        })
     }
 }

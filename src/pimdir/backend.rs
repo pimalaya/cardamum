@@ -1247,6 +1247,14 @@ mod tests {
             self.json = serde_json::to_value(&data)?;
             Ok(())
         }
+
+        fn event<T: std::fmt::Display + serde::Serialize>(&mut self, _event: T) -> Result<()> {
+            Ok(())
+        }
+
+        fn out_bytes(&mut self, _bytes: pimalaya_cli::output::Bytes) -> Result<()> {
+            Ok(())
+        }
     }
 
     /// A shared client over the store at `dir`, as a command gets one.

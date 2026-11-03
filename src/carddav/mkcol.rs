@@ -7,13 +7,13 @@ use std::collections::BTreeSet;
 use anyhow::Result;
 use clap::Parser;
 use io_webdav::rfc6352::addressbook::CarddavAddressbook;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::carddav::client::CarddavClient;
+use crate::{carddav::client::CarddavClient, shared::receipt::IdReceipt};
 
 /// MKCOL: create an addressbook collection (RFC 5689 extended MKCOL).
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 #[command(visible_alias = "create")]
 pub struct CarddavMkcolCommand {
@@ -45,9 +45,9 @@ impl CarddavMkcolCommand {
 
         client.create_addressbook(&wire)?;
 
-        printer.out(Message::new(format!(
-            "Addressbook `{}` successfully created",
-            self.id
-        )))
+        printer.out(IdReceipt {
+            id: self.id,
+            done: "Addressbook created",
+        })
     }
 }

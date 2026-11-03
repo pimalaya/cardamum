@@ -7,16 +7,19 @@ use std::collections::BTreeMap;
 use anyhow::{Result, bail};
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::copy::JmapContactCardCopyArgs;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, error::format_set_error};
+use crate::{
+    jmap::{client::JmapClient, error::format_set_error},
+    shared::receipt::IdsReceipt,
+};
 
 /// Copy ContactCards from another JMAP account (`ContactCard/copy`).
 ///
 /// The cards land in the AddressBooks of this account that
 /// `--to-address-book` names.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"ids"}`.
 #[derive(Debug, Parser)]
 pub struct JmapContactCardCopyCommand {
     /// ContactCard id(s) in the source account.
@@ -61,11 +64,9 @@ impl JmapContactCardCopyCommand {
             .into_values()
             .filter_map(|card| card.id)
             .collect();
-        let msg = format!(
-            "ContactCard(s) successfully copied as `{}`",
-            ids.join("`, `")
-        );
-
-        printer.out(Message::new(msg))
+        printer.out(IdsReceipt {
+            ids,
+            done: "ContactCards copied",
+        })
     }
 }

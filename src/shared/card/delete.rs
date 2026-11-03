@@ -4,13 +4,17 @@
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::shared::{arg::AddressbookIdArg, client::AddressbookClient};
+use crate::shared::{
+    arg::AddressbookIdArg,
+    client::AddressbookClient,
+    receipt::{Write, WriteReceipt},
+};
 
 /// Permanently delete the given card.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id", "queued"}`.
 #[derive(Debug, Parser)]
 pub struct CardDeleteCommand {
     /// Addressbook holding the card.
@@ -37,13 +41,11 @@ impl CardDeleteCommand {
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         client.delete_card(&addressbook_id, &self.card_id, self.if_match.as_deref())?;
 
-        let msg = match client.queues_writes() {
-            true => format!(
-                "Card `{}` deletion queued; the next sync applies it",
-                self.card_id
-            ),
-            false => format!("Card `{}` successfully deleted", self.card_id),
-        };
-        printer.out(Message::new(msg))
+        printer.out(WriteReceipt {
+            id: self.card_id,
+            queued: client.queues_writes(),
+            what: "Card",
+            write: Write::Delete,
+        })
     }
 }

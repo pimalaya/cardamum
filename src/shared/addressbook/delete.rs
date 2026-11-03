@@ -4,13 +4,16 @@
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::shared::client::AddressbookClient;
+use crate::shared::{
+    client::AddressbookClient,
+    receipt::{Write, WriteReceipt},
+};
 
 /// Delete the given addressbook and every card it contains.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id", "queued"}`.
 #[derive(Debug, Parser)]
 pub struct AddressbookDeleteCommand {
     /// Addressbook to delete.
@@ -25,7 +28,11 @@ impl AddressbookDeleteCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
         client.delete_addressbook(&self.id)?;
 
-        let msg = format!("Addressbook `{}` successfully deleted", self.id);
-        printer.out(Message::new(msg))
+        printer.out(WriteReceipt {
+            id: self.id,
+            queued: client.queues_writes(),
+            what: "Addressbook",
+            write: Write::Delete,
+        })
     }
 }

@@ -84,16 +84,12 @@ impl CarddavReportQueryCommand {
     fn filter(&self) -> Result<CarddavFilter> {
         let mut props = Vec::new();
 
-        for (args, negate) in self
-            .matches
-            .chunks_exact(3)
+        let matches = self.matches.as_chunks::<3>().0.iter();
+        let not_matches = self.not_matches.as_chunks::<3>().0.iter();
+        for ([name, match_type, value], negate) in matches
             .map(|args| (args, false))
-            .chain(self.not_matches.chunks_exact(3).map(|args| (args, true)))
+            .chain(not_matches.map(|args| (args, true)))
         {
-            let [name, match_type, value] = args else {
-                unreachable!("clap takes exactly three values per match");
-            };
-
             let match_type = MatchTypeArg::from_str(match_type, true)
                 .map_err(|_| {
                     anyhow!(

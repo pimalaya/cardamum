@@ -3,9 +3,13 @@
 //! Creates or replaces the raw vCard bytes of a card with a WebDAV
 //! `PUT`.
 
+use core::fmt;
+
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
+use schemars::JsonSchema;
+use serde::Serialize;
 
 use crate::{carddav::client::CarddavClient, shared::card::vcard::read_source};
 
@@ -16,7 +20,7 @@ use crate::{carddav::client::CarddavClient, shared::card::vcard::read_source};
 /// and `--if-match <ETAG>` gates the replace on the resource being
 /// unchanged (RFC 9110).
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id", "etag"}`.
 #[derive(Debug, Parser)]
 pub struct CarddavPutCommand {
     /// Identifier of the parent addressbook.
@@ -56,10 +60,26 @@ impl CarddavPutCommand {
                 .etag
         };
 
-        let etag = etag.unwrap_or_else(|| "(none)".into());
-        printer.out(Message::new(format!(
-            "Card `{}` successfully put (etag {etag})",
-            self.card_id
-        )))
+        printer.out(CarddavPutOutput {
+            id: self.card_id,
+            etag,
+        })
+    }
+}
+
+/// The card resource `carddav put` wrote.
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct CarddavPutOutput {
+    /// The card resource id.
+    pub id: String,
+    /// The ETag the server answered, `null` when it sent none.
+    pub etag: Option<String>,
+}
+
+impl fmt::Display for CarddavPutOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let etag = self.etag.as_deref().unwrap_or("(none)");
+        writeln!(f, "Card `{}` successfully put (etag {etag})", self.id)
     }
 }

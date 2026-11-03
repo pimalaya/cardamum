@@ -5,13 +5,16 @@
 use anyhow::{Result, bail};
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::set::JmapContactCardSetArgs;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, error::format_set_error};
+use crate::{
+    jmap::{client::JmapClient, error::format_set_error},
+    shared::receipt::IdReceipt,
+};
 
 /// Destroy a ContactCard (`ContactCard/set` destroy).
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct JmapContactCardDestroyCommand {
     /// ContactCard id.
@@ -31,9 +34,9 @@ impl JmapContactCardDestroyCommand {
             bail!("ContactCard destroy rejected{}", format_set_error(&err));
         }
 
-        printer.out(Message::new(format!(
-            "ContactCard `{}` successfully destroyed",
-            self.id
-        )))
+        printer.out(IdReceipt {
+            id: self.id,
+            done: "ContactCard destroyed",
+        })
     }
 }

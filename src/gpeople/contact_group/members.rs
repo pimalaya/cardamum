@@ -3,9 +3,13 @@
 //! Adds and removes members of a contact group
 //! (`contactGroups.members.modify`).
 
+use core::fmt;
+
 use anyhow::{Result, bail};
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
+use schemars::JsonSchema;
+use serde::Serialize;
 
 use crate::gpeople::client::GpeopleClient;
 
@@ -13,7 +17,7 @@ use crate::gpeople::client::GpeopleClient;
 ///
 /// Members are person resource names (`people/<id>`).
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id", "added", "removed"}`.
 #[derive(Debug, Parser)]
 pub struct GpeopleContactGroupMembersCommand {
     /// Group id (the segment after `contactGroups/`).
@@ -45,11 +49,32 @@ impl GpeopleContactGroupMembersCommand {
             );
         }
 
-        printer.out(Message::new(format!(
-            "Contact group `{}` membership successfully updated (+{} / -{})",
-            self.group_id,
-            self.add.len(),
-            self.remove.len()
-        )))
+        printer.out(GpeopleMembersOutput {
+            id: self.group_id,
+            added: self.add.len(),
+            removed: self.remove.len(),
+        })
+    }
+}
+
+/// The contact group whose members `gpeople contact-group members` changed.
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GpeopleMembersOutput {
+    /// The contact group id.
+    pub id: String,
+    /// How many members were asked to be added.
+    pub added: usize,
+    /// How many members were asked to be removed.
+    pub removed: usize,
+}
+
+impl fmt::Display for GpeopleMembersOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let Self { id, added, removed } = self;
+        writeln!(
+            f,
+            "Contact group `{id}` membership successfully updated (+{added} / -{removed})"
+        )
     }
 }

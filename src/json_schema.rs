@@ -4,9 +4,8 @@
 //! prefixed `cardamum-`, to the JSON Schema of that command's `--json`
 //! payload. [`JsonSchemaCommand`] writes one file per entry.
 //!
-//! Only the commands returning data are listed: a command confirming a
-//! write prints a `Message`, whose shape is the same everywhere and
-//! carries nothing to describe.
+//! Every runnable command appears, a write by its receipt, and a command
+//! printing one of two types is described by both, through `OneOf`.
 //!
 //! Protocol-specific entries are gated behind the same cargo features as
 //! their command modules, so the registry stays coherent under any
@@ -14,28 +13,29 @@
 //!
 //! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::JsonSchemaCommand
 
-use std::collections::BTreeMap;
-
 use pimalaya_cli::{clap::commands::JsonSchemaRegistry, error::ErrorReport};
-use schemars::schema_for;
+use schemars::JsonSchema;
 
 use crate::error::ErrorCode;
+#[cfg(any(
+    feature = "carddav",
+    feature = "gpeople",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "vdir"
+))]
+use crate::shared::receipt::IdReceipt;
 
 /// Builds the command-to-schema registry consumed by `json-schema <DIR>`.
 ///
 /// Each value describes the type the command hands to the printer, and
-/// `cardamum-error` the failure object every command prints instead. A
-/// command whose backend answers with nothing to show falls back to a
-/// `Message`, which no entry describes.
+/// `cardamum-error` the failure object every command prints instead.
 pub fn registry() -> JsonSchemaRegistry {
-    let mut schemas = BTreeMap::new();
+    let mut registry = JsonSchemaRegistry::new("cardamum", env!("CARGO_PKG_VERSION"));
 
     macro_rules! insert {
         ($key:expr, $ty:ty) => {
-            schemas.insert(
-                $key.to_string(),
-                serde_json::to_value(schema_for!($ty)).unwrap(),
-            );
+            registry.insert::<$ty>($key);
         };
     }
 
@@ -68,9 +68,10 @@ pub fn registry() -> JsonSchemaRegistry {
         "cardamum-card-read",
         crate::shared::card::read::CardReadOutput
     );
+    // NOTE: a build prints the card, or under `-o` the file written.
     insert!(
         "cardamum-card-build",
-        crate::shared::card::build::CardBuildOutput
+        OneOf<crate::shared::card::build::CardBuildOutput, crate::shared::card::build::SavedOutput>
     );
     insert!(
         "cardamum-card-create",
@@ -80,6 +81,13 @@ pub fn registry() -> JsonSchemaRegistry {
         "cardamum-card-update",
         crate::shared::card::update::CardUpdateOutput
     );
+    for key in [
+        "cardamum-addressbook-update",
+        "cardamum-addressbook-delete",
+        "cardamum-card-delete",
+    ] {
+        insert!(key, crate::shared::receipt::WriteReceipt);
+    }
 
     #[cfg(feature = "carddav")]
     {
@@ -113,6 +121,17 @@ pub fn registry() -> JsonSchemaRegistry {
             "cardamum-carddav-report-raw",
             crate::carddav::report::raw::CarddavReportRawOutput
         );
+        insert!(
+            "cardamum-carddav-put",
+            crate::carddav::put::CarddavPutOutput
+        );
+        for key in [
+            "cardamum-carddav-mkcol",
+            "cardamum-carddav-proppatch",
+            "cardamum-carddav-delete",
+        ] {
+            insert!(key, IdReceipt);
+        }
     }
 
     #[cfg(feature = "jmap")]
@@ -124,12 +143,26 @@ pub fn registry() -> JsonSchemaRegistry {
 
         insert!("cardamum-jmap-address-book-get", JmapAddressBooksOutput);
         insert!("cardamum-jmap-address-book-create", JmapAddressBookOutput);
-        insert!("cardamum-jmap-address-book-update", JmapAddressBookOutput);
+        // NOTE: an update the server answers with no changed property
+        // prints its receipt.
+        insert!(
+            "cardamum-jmap-address-book-update",
+            OneOf<JmapAddressBookOutput, IdReceipt>
+        );
+        insert!("cardamum-jmap-address-book-destroy", IdReceipt);
         insert!("cardamum-jmap-address-book-changes", JmapChangesOutput);
         insert!("cardamum-jmap-contact-card-get", JmapContactCardsOutput);
         insert!("cardamum-jmap-contact-card-query", JmapContactCardsOutput);
         insert!("cardamum-jmap-contact-card-create", JmapContactCardOutput);
-        insert!("cardamum-jmap-contact-card-update", JmapContactCardOutput);
+        insert!(
+            "cardamum-jmap-contact-card-update",
+            OneOf<JmapContactCardOutput, IdReceipt>
+        );
+        insert!("cardamum-jmap-contact-card-destroy", IdReceipt);
+        insert!(
+            "cardamum-jmap-contact-card-copy",
+            crate::shared::receipt::IdsReceipt
+        );
         insert!("cardamum-jmap-contact-card-changes", JmapChangesOutput);
         insert!(
             "cardamum-jmap-session-get",
@@ -184,6 +217,8 @@ pub fn registry() -> JsonSchemaRegistry {
             "cardamum-msgraph-request",
             crate::shared::raw_json::RawJsonOutput
         );
+        insert!("cardamum-msgraph-contacts-delete", IdReceipt);
+        insert!("cardamum-msgraph-contact-folders-delete", IdReceipt);
     }
 
     #[cfg(feature = "gpeople")]
@@ -225,6 +260,12 @@ pub fn registry() -> JsonSchemaRegistry {
             "cardamum-gpeople-request",
             crate::shared::raw_json::RawJsonOutput
         );
+        insert!("cardamum-gpeople-connection-delete", IdReceipt);
+        insert!("cardamum-gpeople-contact-group-delete", IdReceipt);
+        insert!(
+            "cardamum-gpeople-contact-group-members",
+            crate::gpeople::contact_group::members::GpeopleMembersOutput
+        );
     }
 
     #[cfg(feature = "pimdir")]
@@ -251,15 +292,32 @@ pub fn registry() -> JsonSchemaRegistry {
             "cardamum-vdir-item-create",
             crate::vdir::item::create::VdirItemCreateOutput
         );
+        for key in [
+            "cardamum-vdir-create",
+            "cardamum-vdir-rename",
+            "cardamum-vdir-delete",
+            "cardamum-vdir-item-update",
+            "cardamum-vdir-item-copy",
+            "cardamum-vdir-item-move",
+            "cardamum-vdir-item-delete",
+        ] {
+            insert!(key, IdReceipt);
+        }
     }
 
     insert!("cardamum-error", ErrorReport<ErrorCode>);
 
-    JsonSchemaRegistry {
-        bin: "cardamum",
-        version: env!("CARGO_PKG_VERSION"),
-        schemas,
-    }
+    registry
+}
+
+/// The schema of a command printing one of two types, told apart by their
+/// keys.
+#[derive(JsonSchema)]
+#[serde(untagged)]
+#[allow(dead_code)]
+enum OneOf<A, B> {
+    A(A),
+    B(B),
 }
 
 #[cfg(test)]
@@ -293,6 +351,15 @@ mod tests {
 
     #[test]
     fn every_payload_is_an_object() {
-        assert_eq!(registry().non_object_roots(), Vec::<&str>::new());
+        assert_eq!(registry().non_object_roots(), Vec::<String>::new());
+    }
+
+    /// The commands printing nothing a schema could describe.
+    const SILENT: &[&str] = &["cardamum"];
+
+    #[test]
+    fn every_command_is_described() {
+        let problems = registry().check(&Cli::command(), SILENT);
+        assert!(problems.is_empty(), "{}", problems.join("\n"));
     }
 }

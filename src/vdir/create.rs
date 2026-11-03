@@ -6,13 +6,13 @@
 use anyhow::Result;
 use clap::Parser;
 use io_vdir::collection::VdirCollection;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::vdir::client::VdirClient;
+use crate::{shared::receipt::IdReceipt, vdir::client::VdirClient};
 
 /// Create a new vdir collection under the configured root.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct VdirCollectionCreateCommand {
     /// Name of the collection.
@@ -41,9 +41,9 @@ impl VdirCollectionCreateCommand {
 
         client.create_collection(collection)?;
 
-        printer.out(Message::new(format!(
-            "Collection `{}` successfully created",
-            self.name
-        )))
+        printer.out(IdReceipt {
+            id: self.name,
+            done: "Collection created",
+        })
     }
 }

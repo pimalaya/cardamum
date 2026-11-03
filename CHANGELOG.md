@@ -17,6 +17,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **Breaking:** changed every write printing a confirmation to print a receipt instead of `{"message": ...}` under `--json`: `addressbook update|delete` and `card delete` print `{id, queued}`, the item acted on and whether the write waits for a sync; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-group members` `{id, added, removed}` and `card build -o` `{path, size}`. The text form keeps its sentence. Every command now has a schema under `json-schema` (pimalaya-cli 0.3).
+- Bumped pimalaya-cli and pimalaya-config to 0.3, io-jmap to 0.6 and io-pim-discovery to 0.9. The `--json` failure object always carries `code`, `null` when none applies.
+
 - Bumped rustls-webpki to 0.103.16 and webpki-root-certs to 1.0.11, fixing RUSTSEC-2026-0382 and RUSTSEC-2026-0383.
 - Changed piped `--json` output to print one value per line, each schema of `json-schema` to carry an `$id` naming the contract version (`v0.3`), and added `cardamum-error`, the schema of the JSON failure object (pimalaya-cli `55b6693`). The wire objects of `gpeople`, `jmap` and `msgraph` are now described as JSON objects, and the abandoned arm of `card create` and `card update`, which `--json` never prints, is now `{}` rather than `null`.
 - **Breaking:** changed the `--json` output of `gpeople request`, `jmap request` and `msgraph request` to wrap the raw response as `{"response": …}`, so the payload is an object even when the server answers no body (`null`) or an array.

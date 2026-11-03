@@ -4,13 +4,13 @@
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::client::MsgraphClient;
+use crate::{msgraph::client::MsgraphClient, shared::receipt::IdReceipt};
 
 /// Delete a contact by id.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct MsgraphContactDeleteCommand {
     /// Contact id.
@@ -22,9 +22,9 @@ impl MsgraphContactDeleteCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
         client.contact_delete(&self.contact_id)?;
 
-        printer.out(Message::new(format!(
-            "Contact `{}` successfully deleted",
-            self.contact_id
-        )))
+        printer.out(IdReceipt {
+            id: self.contact_id,
+            done: "Contact deleted",
+        })
     }
 }

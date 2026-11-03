@@ -6,16 +6,16 @@
 use anyhow::{Result, bail};
 use clap::Parser;
 use io_webdav::rfc6352::addressbook::CarddavAddressbookPatch;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::carddav::client::CarddavClient;
+use crate::{carddav::client::CarddavClient, shared::receipt::IdReceipt};
 
 /// PROPPATCH: set properties on an addressbook collection.
 ///
 /// Only the flags you pass are sent (a PROPPATCH `set`), so unset
 /// properties are left untouched; clearing a property is not exposed.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct CarddavProppatchCommand {
     /// Identifier (last URL segment) of the addressbook to patch.
@@ -47,9 +47,9 @@ impl CarddavProppatchCommand {
 
         client.update_addressbook(&patch)?;
 
-        printer.out(Message::new(format!(
-            "Addressbook `{}` properties successfully patched",
-            self.id
-        )))
+        printer.out(IdReceipt {
+            id: self.id,
+            done: "Addressbook properties patched",
+        })
     }
 }

@@ -4,16 +4,16 @@
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::{Message, Printer};
+use pimalaya_cli::printer::Printer;
 
-use crate::gpeople::client::GpeopleClient;
+use crate::{gpeople::client::GpeopleClient, shared::receipt::IdReceipt};
 
 /// Delete a contact group.
 ///
 /// Its member contacts stay in `myContacts` unless `--delete-contacts`
 /// is set.
 ///
-/// JSON output: `{"message": "..."}`.
+/// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct GpeopleContactGroupDeleteCommand {
     /// Group id (the segment after `contactGroups/`).
@@ -29,9 +29,9 @@ impl GpeopleContactGroupDeleteCommand {
         let resource_name = format!("contactGroups/{}", self.group_id);
         client.contact_group_delete(&resource_name, self.delete_contacts)?;
 
-        printer.out(Message::new(format!(
-            "Contact group `{}` successfully deleted",
-            self.group_id
-        )))
+        printer.out(IdReceipt {
+            id: self.group_id,
+            done: "Contact group deleted",
+        })
     }
 }

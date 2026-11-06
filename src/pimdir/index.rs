@@ -382,6 +382,7 @@ mod tests {
             PimdirBase, PimdirFlags, PimdirHandle, PimdirLevel, PimdirLinkId, PimdirPlacement,
             PimdirStatus,
         },
+        sql::search::FORMAT_VERSION,
         summary::{contact, mail::PimdirMailSummary},
     };
     use pimalaya_cli::error::code_of;
@@ -920,7 +921,7 @@ mod tests {
         let path = dir.path().join("index.db");
         assert!(!dir.path().join("index.db-wal").exists());
         let mut db = std::fs::read(&path).unwrap();
-        let (from, to) = (b"search-draft-08", b"search-draft-07");
+        let (from, to) = (FORMAT_VERSION.as_bytes(), b"search-draft-08");
         let mut found = false;
         for at in 0..=db.len() - from.len() {
             if &db[at..at + from.len()] == from {
@@ -932,7 +933,7 @@ mod tests {
         std::fs::write(&path, &db).unwrap();
 
         let err = assert_refused(&backend, ErrorCode::IndexVersion);
-        assert!(err.contains("search-draft-07"), "{err}");
+        assert!(err.contains("search-draft-08"), "{err}");
         assert_eq!(std::fs::read(&path).unwrap(), db, "the index was rebuilt");
     }
 

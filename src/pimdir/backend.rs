@@ -1656,7 +1656,7 @@ mod tests {
 
         let (dir, backend) = store();
         drop(backend);
-        rewrite(dir.path(), FORMAT_VERSION, "storage-draft-07");
+        rewrite(dir.path(), FORMAT_VERSION, "storage-draft-08");
 
         let err = match PimdirBackend::new(PimdirConfig {
             root: dir.path().to_path_buf(),
@@ -1667,7 +1667,7 @@ mod tests {
         };
         assert_eq!(code_of(&err), Some(ErrorCode::StoreVersion), "{err:#}");
         let message = format!("{err:#}");
-        assert!(message.contains("storage-draft-07"), "{message}");
+        assert!(message.contains("storage-draft-08"), "{message}");
         assert!(message.contains("until nothing is queued"), "{message}");
         assert!(message.contains("neverest init"), "{message}");
         assert!(!message.contains("delete"), "{message}");

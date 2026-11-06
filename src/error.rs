@@ -68,6 +68,30 @@ pub enum ErrorCode {
     /// store's owner parks it on its next drain.
     #[cfg(feature = "pimdir")]
     ActionMalformed,
+    /// The pimdir store has no search index yet: its sync engine builds
+    /// it.
+    #[cfg(feature = "pimdir")]
+    IndexMissing,
+    /// The pimdir search index was built otherwise or from another store:
+    /// its sync engine rebuilds it.
+    #[cfg(feature = "pimdir")]
+    IndexOutdated,
+    /// The pimdir search index is of another draft or shape: its sync
+    /// engine rebuilds one of an earlier draft, and leaves any other.
+    #[cfg(feature = "pimdir")]
+    IndexVersion,
+    /// The SQLite cardamum links lacks what the pimdir search index needs
+    /// (FTS5, 3.43 or later).
+    #[cfg(feature = "pimdir")]
+    IndexFts5Missing,
+    /// The pimdir search query is malformed or names an unknown field or
+    /// value (pimdir SEARCH §8.4): nothing was searched.
+    #[cfg(feature = "pimdir")]
+    QueryRefused,
+    /// The pimdir search index could not answer an accepted query, an
+    /// implementation fault.
+    #[cfg(feature = "pimdir")]
+    QueryUnanswerable,
 }
 
 #[cfg(feature = "pimdir")]
@@ -87,6 +111,12 @@ impl ErrorCode {
             "unsupported" => Some(Self::Unsupported),
             "item-duplicate" => Some(Self::ItemDuplicate),
             "action-malformed" => Some(Self::ActionMalformed),
+            "index-missing" => Some(Self::IndexMissing),
+            "index-outdated" => Some(Self::IndexOutdated),
+            "index-version" => Some(Self::IndexVersion),
+            "index-fts5-missing" => Some(Self::IndexFts5Missing),
+            "query-refused" => Some(Self::QueryRefused),
+            "query-unanswerable" => Some(Self::QueryUnanswerable),
             _ => None,
         }
     }
@@ -98,6 +128,7 @@ mod tests {
         capability::PimdirRefusal,
         client::{PimdirDuplicate, PimdirError},
         codec::PimdirActionError,
+        search::query::PimdirQuery,
     };
 
     use super::*;
@@ -137,6 +168,15 @@ mod tests {
                 existing: PimdirDuplicate::Pending(1),
             },
             PimdirError::Action(PimdirActionError::UnknownVersion(None)),
+            PimdirError::IndexMissing("index.db".into()),
+            PimdirError::IndexOutdated("index.db".into()),
+            PimdirError::IndexVersion {
+                path: "index.db".into(),
+                version: Some("search-draft-07".into()),
+                shape: None,
+            },
+            PimdirError::Fts5 { version: "3.40.0" },
+            PimdirError::Query(PimdirQuery::parse("frm:alice").unwrap_err()),
         ];
 
         for err in failures {

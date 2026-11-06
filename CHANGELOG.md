@@ -14,9 +14,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `--if-match` to `card delete`: CardDAV sends it as `If-Match`, pimdir checks it against the card's version, and the backends that cannot gate a delete refuse it.
 - Added a stable `code` to the `--json` error output for failures a caller acts on: `body-pending`, `precondition-failed`, and on pimdir the code io-pimdir names for a store or a write it refuses: `store-uncreated`, `store-version`, `store-foreign`, `store-corrupt`, `store-hash-algo`, `store-exposed`, `store-busy`, `unsupported`, `item-duplicate`, `action-malformed`.
 - Added `pimdir status`, reporting the local pimdir store behind the account: its address books, how many of their cards are downloaded and how many creations are queued, and every write the sync engine parked rather than applied, with its queue row and the reason.
+- Added `pimdir search`, searching the account's cards in the pimdir query language through the store's search index.
+
+  The sync engine builds and refreshes the index, cardamum only reads it. A hit carries the `card list` fields, its address book, what matched and a snippet; `-k` narrows to one address book, `--sort name|relevance` orders.
+- Added `pimdir count`, counting the cards a pimdir query matches.
+- Added the `--json` error codes `index-missing`, `index-outdated`, `index-version`, `index-fts5-missing`, `query-refused` and `query-unanswerable`, raised by `pimdir search` and `pimdir count`.
 
 ### Changed
 
+- Changed the `pimdir` feature to build io-pimdir's search, adding ical-rs (patched to the git revision io-pimdir builds against), mime-rs and ariadne to the binary.
 - **Breaking:** changed every write printing a confirmation to print a receipt instead of `{"message": ...}` under `--json`: `addressbook update|delete` and `card delete` print `{id, queued}`, the item acted on and whether the write waits for a sync; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-group members` `{id, added, removed}` and `card build -o` `{path, size}`. The text form keeps its sentence. Every command now has a schema under `json-schema` (pimalaya-cli 0.3).
 - Bumped pimalaya-cli and pimalaya-config to 0.3, io-jmap to 0.6 and io-pim-discovery to 0.9. The `--json` failure object always carries `code`, `null` when none applies.
 

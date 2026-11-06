@@ -26,8 +26,9 @@ const PRODUCER: &str = "cardamum";
 /// holds anything a sync has to wait on.
 pub struct PimdirClient {
     pub(crate) reader: PimdirReader,
-    /// The store root, which a producer is opened against.
-    root: PathBuf,
+    /// The store root, which a producer and the search index are opened
+    /// against.
+    pub(crate) root: PathBuf,
     /// The account grouping the collections read, `None` in a store
     /// grouping none.
     pub(crate) account: Option<String>,

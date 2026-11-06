@@ -31,8 +31,6 @@ use crate::gpeople::{cli::GpeopleCommand, client::build_gpeople_client};
 use crate::jmap::{cli::JmapCommand, client::build_jmap_client};
 #[cfg(feature = "msgraph")]
 use crate::msgraph::{cli::MsgraphCommand, client::build_msgraph_client};
-#[cfg(feature = "pimdir")]
-use crate::pimdir::{backend::PimdirBackend, cli::PimdirCommand};
 #[cfg(feature = "vdir")]
 use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
 #[cfg(feature = "wizard")]
@@ -45,6 +43,11 @@ use crate::{
     shared::{
         addressbook::cli::AddressbookCommand, card::cli::CardCommand, client::AddressbookClient,
     },
+};
+#[cfg(feature = "pimdir")]
+use crate::{
+    account::context::Account,
+    pimdir::{backend::PimdirBackend, cli::PimdirCommand},
 };
 
 /// Top-level command-line interface parser.
@@ -275,10 +278,11 @@ impl Command {
             }
             #[cfg(feature = "pimdir")]
             Self::Pimdir(cmd) => {
-                let (_config, name, account_config) =
+                let (config, name, mut account_config) =
                     resolve_account(printer, config_paths, account_name)?;
-                let backend = PimdirBackend::build(name, account_config)?;
-                cmd.execute(printer, backend)
+                let backend = PimdirBackend::build(name, &mut account_config)?;
+                let account = Account::from(config).merge(Account::from(account_config));
+                cmd.execute(printer, &account, backend)
             }
             #[cfg(feature = "vdir")]
             Self::Vdir(cmd) => {

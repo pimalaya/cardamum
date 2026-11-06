@@ -25,4 +25,7 @@
 pub mod backend;
 pub mod cli;
 pub mod client;
+pub mod count;
+pub mod index;
+pub mod search;
 pub mod status;

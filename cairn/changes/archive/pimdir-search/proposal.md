@@ -1,7 +1,7 @@
 ---
 cairn: change
 id: pimdir-search
-status: active
+status: landed
 created: 2026-11-06
 ---
 

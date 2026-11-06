@@ -21,7 +21,7 @@ CLI to manage contacts, written in Rust
 
 - **Shared API**: `addressbook` and `card` work the same whichever backend serves the account.
 - **Protocol-specific APIs**: `carddav`, `jmap`, `msgraph`, `gpeople` and `vdir` each expose what only that backend has, down to a raw request escape hatch.
-- **Offline store report**: `pimdir status` shows what the local pimdir store holds for the account, and the queued writes its sync engine parked rather than applied.
+- **Offline store report and search**: `pimdir status` shows what the local pimdir store holds for the account, and the queued writes its sync engine parked rather than applied; `pimdir search` and `pimdir count` find cards by any word of them through the store's search index.
 - **Discovery**: an email address is enough to find a provider's server, through SRV records, `.well-known` and the provider configuration documents.
 - **Interactive wizard**: `cardamum configure` turns an email address into a tested account.
 - **Multi-account**: one TOML file, one block per account, several files deep-merged when you want secrets apart.
@@ -238,6 +238,8 @@ pimdir.root = "~/.local/state/neverest/example"
 ```
 
 A card that is listed but not downloaded reads as "body not fetched" until a sync hydrates it. Every write is queued and reaches the server on the next sync, and the commands say so. A queued update or deletion shows in the listing straight away; a queued create is not listed until the sync applies it, and `card create` reports its link id (its `UID`), not an id the other card commands take: the card gets one when the sync applies it. An addressbook no source syncs refuses writes, since nothing would carry them to a server. A create whose `UID` the addressbook already holds, synced or queued, is refused (`item-duplicate` under `--json`): update that card instead. An update made from the card it read (`card update` with no vCard source, or `--if-match`) is not applied over a server change the sync brings in first: the sync engine parks it instead. `cardamum pimdir status` lists every parked write of the account, with its queue row and the reason, beside how much of each addressbook is downloaded and how many creates are queued. A store of another pimdir format version than the one cardamum builds against is refused (`store-version`): one an earlier neverest wrote is reinstalled through neverest, its queued writes synced first, and a later one asks for a cardamum upgrade. A store another user can read is refused too (`store-exposed`).
+
+`cardamum pimdir search <query>` searches the account's cards through the store's search index, which the sync engine builds and refreshes after each run: free text reaches names, organization, notes and phone numbers, and the pimdir query language adds terms such as `email:@example.org`, `has:phone`, `has:birthday`, `category:friends` and `and`, `or`, `not`. It spans every addressbook of the account unless `-k` names one, sorts by name unless `--sort relevance`, and `pimdir count` takes the same query. The answer is the store as of the last refresh, so a queued write is not in it, and a line under the table says what it could not see: cards whose body is not local, matched on their summary alone, or an index lagging the store. Cardamum never builds the index: a store without one fails with `index-missing` until the sync engine runs, and a refused query is drawn with its fault (`query-refused`).
 
 ## Usage
 

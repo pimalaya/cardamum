@@ -55,7 +55,7 @@ const SCAN_BATCH: usize = 7;
 
 /// Pimdir backend of the shared-API client, over an opened local store.
 pub struct PimdirBackend {
-    inner: PimdirClient,
+    pub(crate) inner: PimdirClient,
 }
 
 impl PimdirBackend {
@@ -70,7 +70,7 @@ impl PimdirBackend {
     /// as a `pimdir` command needs it.
     ///
     /// Bails when the account declares no such block.
-    pub fn build(name: String, mut account_config: AccountConfig) -> Result<Self> {
+    pub fn build(name: String, account_config: &mut AccountConfig) -> Result<Self> {
         let config = account_config
             .pimdir
             .take()
@@ -448,7 +448,7 @@ impl PimdirBackend {
     /// stored summary, which keeps a listing useful on a partly synced
     /// store. The preview is never the record: [`get_card`](Self::get_card)
     /// refuses an unhydrated card outright.
-    fn card_from_item(&self, addressbook_id: &str, item: PimdirItem) -> Result<Card> {
+    pub(crate) fn card_from_item(&self, addressbook_id: &str, item: PimdirItem) -> Result<Card> {
         let stored = match &item.object {
             Some(hash) => self.inner.reader.blobs().get(hash)?,
             None => None,
@@ -492,7 +492,7 @@ impl PimdirBackend {
     /// the queue accepts any name, so without this a typo in `-k` would read
     /// as an empty addressbook and stage what nothing will ever apply. The
     /// ids carry the sync engine's namespace, so the refusal lists them.
-    fn known_collection(&self, collection: &str) -> Result<()> {
+    pub(crate) fn known_collection(&self, collection: &str) -> Result<()> {
         let mut ids: Vec<String> = self
             .collections()?
             .into_iter()

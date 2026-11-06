@@ -269,10 +269,20 @@ pub fn registry() -> JsonSchemaRegistry {
     }
 
     #[cfg(feature = "pimdir")]
-    insert!(
-        "cardamum-pimdir-status",
-        crate::pimdir::status::PimdirStatusOutput
-    );
+    {
+        insert!(
+            "cardamum-pimdir-status",
+            crate::pimdir::status::PimdirStatusOutput
+        );
+        insert!(
+            "cardamum-pimdir-search",
+            crate::pimdir::search::PimdirSearchOutput
+        );
+        insert!(
+            "cardamum-pimdir-count",
+            crate::pimdir::count::PimdirCountOutput
+        );
+    }
 
     #[cfg(feature = "vdir")]
     {

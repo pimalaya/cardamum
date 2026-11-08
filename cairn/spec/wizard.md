@@ -33,7 +33,7 @@ A single prompt SHALL accept an email address (or bare domain), a `scheme://` se
 ### Requirement: Discovery is time-bounded
 The parallel discovery run SHALL be bounded by a short deadline (8 seconds), under a spinner naming the domain looked up, so a single unreachable endpoint (a firewalled port, a black-hole host) cannot stall the interactive wizard. Each mechanism runs independently; any that has not reported by the deadline is abandoned, and only what completed in time is offered. A DNS resolver that does not answer fails the lookup, the failure printed on stderr. When nothing completes, or the lookup fails, the wizard asks for a server URL (see "Nothing discovered asks for a server URL").
 
-### Requirement: Auto picks the best-ranked option
+### Requirement: Each domain gets its best option without a question
 Discovery SHALL turn what it found into options, each a protocol, its server and a sign-in (a password, an API token or OAuth 2.0), for the contacts services this build compiles: CardDAV, JMAP, the People API and Microsoft Graph contacts, the last two only where a provider rule matched, by domain or by MX, and signing in through OAuth alone. Two options reading the same (same protocol, server and sign-in) SHALL be one, and a server offering OAuth through several grants SHALL be one OAuth option. A server advertising no sign-in offers a password and an API token. A discovered server that is not `https` SHALL be dropped. The options SHALL be ranked, and the first SHALL be taken without a question as Auto: the provider's own API first, then JMAP before CardDAV, servers in the order discovery found them, and within one server OAuth, then an API token, then a password when `ortie` is on the `PATH`, else a password, then an API token, then OAuth. No HTTP authentication scheme and no user id SHALL be asked: a password signs in with HTTP Basic, a token with HTTP Bearer, and the provider APIs read the signed-in user (`me`).
 
 #### Scenario: JMAP offering OAuth beside CardDAV
@@ -51,7 +51,7 @@ Discovery SHALL turn what it found into options, each a protocol, its server and
 - WHEN the plan is built
 - THEN Auto is that provider's contacts API through OAuth, its two grants being one option
 
-### Requirement: The review names the pick in plain words
+### Requirement: The review lists each pick in plain words
 Before any sign-in, the wizard SHALL show pimalaya-cli's review with one `Contacts` row, worded without jargon beyond the protocol name: `<Protocol> at <host>` then `, with your password`, `, with an API token`, `, through your browser` (OAuth through Ortie) or `, with a token from a broker` (OAuth without Ortie), a provider API reading `People API` or `Microsoft Graph` before the same endings. Continue, selected, SHALL go on to the sign-in. Change contacts SHALL list `Auto (<its row>)` when something was discovered, every option as `<Protocol> · <sign-in>` (`Password`, `API token`, `OAuth 2.0`) naming its server only where two entries would read the same, then `Custom server URL` when CardDAV or JMAP is compiled; picking one SHALL return to the review.
 
 #### Scenario: A password option

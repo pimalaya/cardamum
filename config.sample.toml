@@ -10,8 +10,9 @@
 # can be passed at once, separated by `:`; the first one is the base and the
 # rest are deep-merged on top of it.
 #
-# `cardamum configure` discovers the contacts services your provider publishes,
-# asks how to authenticate, tests the connection and writes the account here.
+# `cardamum configure` discovers the contacts services your provider publishes
+# (or takes your server URL), picks the best one, asks your password once or
+# signs in through Ortie, tests the connection and writes the account here.
 #
 # Everything it does not cover is written by hand, which is what this file
 # documents: keep the backend you need and delete the rest. Ready-made blocks

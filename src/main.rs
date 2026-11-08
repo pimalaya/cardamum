@@ -54,8 +54,8 @@
 //! io-msgraph and io-gpeople, which Neverest shares.
 //!
 //! The [`wizard`]: one prompt takes an email address, a server URL or a
-//! folder path, io-pim-discovery turns it into the reachable services,
-//! and the chosen backend's module prompts its credential. A file, an
+//! folder path, io-pim-discovery turns it into ranked options, the best
+//! one is reviewed, then signed in and tested as it is typed. A file, an
 //! appended block or a document on stdout is then configure's call.
 //!
 //! Output follows the Pimalaya rule: data and errors go to stdout

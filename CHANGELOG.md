@@ -47,6 +47,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed the refusal of a pimdir store cardamum cannot read to say what it asks instead of deleting the store, which loses the queued writes a resync never restores: a store of another format version is reinstalled through neverest, its queue drained first, or asks for a cardamum upgrade.
 - **Breaking:** changed the pimdir backend to read a store of pimdir storage-draft-09 alone: a store any earlier neverest wrote is refused with `store-version` until neverest reinstalls it, and a store another user can read is refused with `store-exposed`.
 - Changed the `addressbook delete` refusal on pimdir to name the server route only, no longer advising to remove the store directory, which loses the queued writes.
+- Changed the wizard to take the best way to the contacts it discovered without a question, and to show it in a review in plain words.
+
+  Your provider's own API comes first where a provider rule matched, then JMAP, then CardDAV, and within one server OAuth, an API token, then a password when Ortie is installed (a password first without it). The other options and a custom server URL are one change away, and the service list, the HTTP authentication scheme prompt and the Microsoft Graph user id prompt are gone.
+- Changed the wizard to ask a password or an API token once, test it at once, then store it where you pick (an installed keyring, read back to check, by default) under `cardamum-<account>-carddav` or `cardamum-<account>-jmap`.
+
+  It names the server the secret goes to, flagging one off the address's domain, and asks no login when the address is known. A refused sign-in offers to try again, to change the login, or to go back to the review.
+- Changed the wizard to sign in to OAuth 2.0 through Ortie (`ortie configure` then `ortie auth get`, as the Ortie account `cardamum-<account>`), falling back to the token broker list when Ortie is not installed.
+- Changed the wizard to ask for a server URL when nothing is discovered, instead of stopping: `https://` and `carddav(s)://` read as CardDAV, `jmap(s)://` as JMAP, all over https, and `http://` is refused. An empty answer stops as before.
+- Bumped io-pim-discovery to 0.11, with its `autoconfig` feature.
+
+  The wizard now finds a custom domain hosted at a provider with a fixed rule through its MX records, resolves an advertised CardDAV origin to its context root (RFC 6764), and reports a DNS resolver that does not answer.
 
 ### Fixed
 

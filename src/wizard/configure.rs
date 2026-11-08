@@ -62,8 +62,11 @@ impl ConfigureCommand {
         let path = Config::target_path(config_paths)?;
         let existing = ExistingConfig::read(&path)?;
 
-        let (base_name, mut account) = discover::run()?;
+        // The sign-in's keyring keys and Ortie account carry the name.
+        let input = discover::prompt_input()?;
+        let base_name = discover::default_account_name(&input);
         let name = account_name(&base_name, existing.as_ref());
+        let mut account = discover::run(&input, &name)?;
 
         // NOTE: two `default = true` would make the account every command
         // picks depend on map ordering.

@@ -1,38 +1,31 @@
 //! # Secret prompts
 //!
-//! Secret prompts shared by the discovered-backend wizards, delegating to
-//! pimalaya-cli's OS-aware pickers: [`configure_password`] offers the OS
-//! keyrings, [`configure_token`] the OAuth 2.0 token brokers (Ortie,
-//! pizauth, oama). Both also allow a custom command or a raw value.
-//!
-//! Cardamum only reads the secret: the value must already be stored, and
-//! a missing one surfaces when the account is tested right after.
+//! Turns what pimalaya-cli's secret prompts answer into the [`Secret`] the
+//! configuration stores: [`store`] keeps a password or an API token once
+//! it passed its test, [`broker_token`] names the OAuth 2.0 token broker
+//! printing a fresh token, and [`to_secret`] converts any answer, such as
+//! the argv Ortie reads its token with.
 
 use anyhow::{Result, bail};
 use pimalaya_cli::wizard::keyring::{self, SecretChoice};
 use pimalaya_config::{command::CommandConfig, secret::Secret};
+use secrecy::SecretString;
 
-/// Prompts for a password [`Secret`] through the shared keyring picker.
-///
-/// Only CardDAV and JMAP offer a password, the proprietary APIs being
-/// bearer-only. `key_default` seeds the keyring entry, used verbatim so
-/// a secret already stored is read exactly as named.
-#[cfg(any(feature = "carddav", feature = "jmap"))]
-pub fn configure_password(label: &str, key_default: &str) -> Result<Secret> {
-    to_secret(keyring::prompt_secret(label, key_default)?)
+/// Asks where to keep a tested `secret`, storing it at `key` in the
+/// keyring picked, and answers the [`Secret`] reading it back.
+pub fn store(label: &str, key: &str, secret: &SecretString) -> Result<Secret> {
+    to_secret(keyring::prompt_store(label, key, secret)?)
 }
 
-/// Prompts for an API token [`Secret`] through the shared token picker.
-///
-/// The picker combines the OS keyrings with the OAuth 2.0 brokers when
-/// `oauth` is true, a broker printing a fresh token on every read.
-/// `key_default` seeds the keyring entry or the broker account handle.
-pub fn configure_token(label: &str, key_default: &str, oauth: bool) -> Result<Secret> {
-    to_secret(keyring::prompt_token(label, key_default, oauth)?)
+/// Prompts for the command reading an OAuth 2.0 token through the shared
+/// picker, the token brokers among the keyrings, `account` seeding the
+/// broker account and the keyring entry.
+pub fn broker_token(label: &str, account: &str) -> Result<Secret> {
+    to_secret(keyring::prompt_token(label, account, true)?)
 }
 
 /// Turns a picker choice into the [`Secret`] the configuration stores.
-fn to_secret(choice: SecretChoice) -> Result<Secret> {
+pub fn to_secret(choice: SecretChoice) -> Result<Secret> {
     Ok(match choice {
         SecretChoice::Command(argv) => command_secret(argv)?,
         SecretChoice::Shell(line) => shell_secret(&line)?,
@@ -70,7 +63,7 @@ fn shell_secret(line: &str) -> Result<Secret> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::wizard::secret::*;
 
     #[test]
     fn empty_command_secret_is_rejected() {

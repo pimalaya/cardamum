@@ -299,7 +299,7 @@ fn kind_of(config: &DiscoveryServiceConfig) -> Option<DiscoveredKind> {
         return None;
     };
 
-    let url = Url::parse(raw).ok()?;
+    let url = Url::parse(raw).ok().filter(|url| url.scheme() == "https")?;
 
     match config.service {
         DiscoveryService::Carddav => Some(DiscoveredKind::Carddav(url)),

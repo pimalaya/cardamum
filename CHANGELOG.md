@@ -54,7 +54,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
   It names the server the secret goes to, flagging one off the address's domain, and asks no login when the address is known. A refused sign-in offers to try again, to change the login, or to go back to the review.
 - Changed the wizard to sign in to OAuth 2.0 through Ortie (`ortie configure` then `ortie auth get`, as the Ortie account `cardamum-<account>`), falling back to the token broker list when Ortie is not installed.
-- Changed the wizard to ask for a server URL when nothing is discovered, instead of stopping: `https://` and `carddav(s)://` read as CardDAV, `jmap(s)://` as JMAP, all over https, and `http://` is refused. An empty answer stops as before.
+- Changed the wizard to ask for a server URL when nothing is discovered, instead of stopping: `https://` and `carddav(s)://` read as CardDAV, `jmap(s)://` as JMAP, all over https, and `http://` is refused unless it names this machine. An empty answer stops as before.
 - Bumped io-pim-discovery to 0.11, with its `autoconfig` feature.
 
   The wizard now finds a custom domain hosted at a provider with a fixed rule through its MX records, resolves an advertised CardDAV origin to its context root (RFC 6764), and reports a DNS resolver that does not answer.

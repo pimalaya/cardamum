@@ -77,7 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
-- Fixed `card read` printing a card'"'"'s control characters as is, which could drive the terminal: the text view replaces them, CRLF read as LF, and `--json` keeps the bytes.
+- Fixed `card read` printing a card's control characters as is, which could drive the terminal: the text view replaces them, CRLF read as LF, and `--json` keeps the bytes.
 - Fixed the write confirmations printing a server-given id as is.
 - Fixed a unified command spawning its secret commands again when it reopened its backend after the composer.
 - Fixed `account check` exiting 0 when a backend failed: it now prints its report and exits 2.

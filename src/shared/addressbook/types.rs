@@ -7,9 +7,8 @@ use serde::{Deserialize, Serialize};
 
 /// A collection of cards.
 ///
-/// Strict least common denominator across the backends the CLI targets:
-/// a field only some of them expose stays optional, and is filled in by
-/// the ones that know it.
+/// One shape across the backends the CLI targets: a field only some of
+/// them expose stays optional, and is filled in by the ones that know it.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Addressbook {

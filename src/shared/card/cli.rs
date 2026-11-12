@@ -11,6 +11,7 @@ use pimalaya_cli::printer::Printer;
 
 use crate::{
     backend::Backend,
+    capability,
     cli::resolve_account,
     shared::{
         card::{
@@ -27,14 +28,16 @@ use crate::{
 /// the account named by `--account`.
 #[derive(Debug, Subcommand)]
 pub enum CardCommand {
-    #[command(visible_alias = "ls")]
+    #[command(visible_alias = "ls", after_long_help = capability::help("card", "list"))]
     List(CardListCommand),
+    #[command(after_long_help = capability::help("card", "read"))]
     Read(CardReadCommand),
     Build(Box<CardBuildCommand>),
-    #[command(visible_alias = "new")]
+    #[command(visible_alias = "new", after_long_help = capability::help("card", "create"))]
     Create(Box<CardCreateCommand>),
+    #[command(after_long_help = capability::help("card", "update"))]
     Update(Box<CardUpdateCommand>),
-    #[command(visible_alias = "rm")]
+    #[command(visible_alias = "rm", after_long_help = capability::help("card", "delete"))]
     Delete(CardDeleteCommand),
 }
 

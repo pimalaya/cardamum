@@ -7,6 +7,7 @@ use anyhow::{Result, bail};
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
+use crate::capability::Capability;
 use crate::shared::{
     addressbook::AddressbookDiff,
     arg::AddressbookIdArg,
@@ -38,6 +39,18 @@ pub struct AddressbookUpdateCommand {
 
 impl AddressbookUpdateCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+        let mut capabilities = Vec::new();
+        if self.name.is_some() {
+            capabilities.push(Capability::AddressbookRename);
+        }
+        if self.description.is_some() {
+            capabilities.push(Capability::AddressbookDescription);
+        }
+        if self.color.is_some() {
+            capabilities.push(Capability::AddressbookColor);
+        }
+        client.require(&capabilities)?;
+
         let patch = AddressbookDiff {
             name: self.name,
             description: self.description.map(|d| (!d.is_empty()).then_some(d)),

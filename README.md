@@ -19,7 +19,7 @@ CLI to manage contacts, written in Rust
 
 ## Features
 
-- **Unified API**: `addressbook` and `card` work the same whichever backend serves the account.
+- **Unified API**: `addressbook` and `card` work the same whichever backend serves the account, each backend declaring what it serves: `account capability` lists it, every command's `--help` names it, and a verb a backend does not serve is refused before connecting.
 - **Protocol-specific APIs**: `carddav`, `jmap`, `msgraph`, `gpeople` and `vdir` each expose what only that backend has, down to a raw request escape hatch.
 - **Offline store report and search**: `pimdir status` shows what the local pimdir store holds for the account, and the queued writes its sync engine parked rather than applied; `pimdir search` and `pimdir count` find cards by any word of them through the store's search index.
 - **Discovery**: a domain is enough to find a provider's CardDAV server (`carddav.discover`), through the provider configuration document, SRV records and `.well-known`.

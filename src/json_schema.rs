@@ -40,6 +40,10 @@ pub fn registry() -> JsonSchemaRegistry {
     }
 
     insert!(
+        "cardamum-account-capability",
+        crate::account::capability::AccountCapabilityOutput
+    );
+    insert!(
         "cardamum-account-list",
         crate::account::list::AccountListOutput
     );

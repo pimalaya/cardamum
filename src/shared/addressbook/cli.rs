@@ -6,6 +6,7 @@ use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
 
+use crate::capability;
 use crate::shared::{
     addressbook::{
         create::AddressbookCreateCommand, delete::AddressbookDeleteCommand,
@@ -20,11 +21,13 @@ use crate::shared::{
 /// the account named by `--account`.
 #[derive(Debug, Subcommand)]
 pub enum AddressbookCommand {
-    #[command(visible_alias = "ls")]
+    #[command(visible_alias = "ls", after_long_help = capability::help("addressbook", "list"))]
     List(AddressbookListCommand),
+    #[command(after_long_help = capability::help("addressbook", "create"))]
     Create(AddressbookCreateCommand),
+    #[command(after_long_help = capability::help("addressbook", "update"))]
     Update(AddressbookUpdateCommand),
-    #[command(visible_alias = "rm")]
+    #[command(visible_alias = "rm", after_long_help = capability::help("addressbook", "delete"))]
     Delete(AddressbookDeleteCommand),
 }
 

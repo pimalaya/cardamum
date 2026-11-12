@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// A single card inside an addressbook.
 ///
-/// Strict least common denominator: contents stay raw vCard bytes, so a
+/// One shape across the backends: contents stay raw vCard bytes, so a
 /// backend with no native vCard representation projects its wire contact
 /// onto a vCard document.
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize)]

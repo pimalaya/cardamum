@@ -6,6 +6,7 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
+use crate::capability::Capability;
 use crate::shared::{
     arg::AddressbookIdArg,
     client::AddressbookClient,
@@ -38,6 +39,12 @@ pub struct CardDeleteCommand {
 
 impl CardDeleteCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+        let mut capabilities = vec![Capability::CardRemove];
+        if self.if_match.is_some() {
+            capabilities.push(Capability::CardRemoveIfMatch);
+        }
+        client.require(&capabilities)?;
+
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         client.delete_card(&addressbook_id, &self.card_id, self.if_match.as_deref())?;
 

@@ -6,6 +6,7 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
+use crate::capability::Capability;
 use crate::shared::{
     client::AddressbookClient,
     receipt::{Write, WriteReceipt},
@@ -26,6 +27,7 @@ pub struct AddressbookDeleteCommand {
 
 impl AddressbookDeleteCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+        client.require(&[Capability::AddressbookDelete])?;
         client.delete_addressbook(&self.id)?;
 
         printer.out(WriteReceipt {

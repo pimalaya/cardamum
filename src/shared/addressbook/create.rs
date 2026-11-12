@@ -11,6 +11,7 @@ use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use crate::capability::Capability;
 use crate::shared::client::AddressbookClient;
 
 /// Create a new addressbook.
@@ -31,6 +32,15 @@ pub struct AddressbookCreateCommand {
 
 impl AddressbookCreateCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+        let mut capabilities = vec![Capability::AddressbookCreate];
+        if self.description.is_some() {
+            capabilities.push(Capability::AddressbookDescription);
+        }
+        if self.color.is_some() {
+            capabilities.push(Capability::AddressbookColor);
+        }
+        client.require(&capabilities)?;
+
         let id = client.create_addressbook(
             &self.name,
             self.description.as_deref(),

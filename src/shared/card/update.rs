@@ -12,6 +12,7 @@ use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use crate::capability::Capability;
 use crate::shared::{
     arg::{AddressbookIdArg, CardComposerArgs},
     card::{composer::CardComposer, fields::CardFieldsArgs, vcard::read_source},
@@ -59,6 +60,12 @@ pub struct CardUpdateCommand {
 
 impl CardUpdateCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+        let mut capabilities = vec![Capability::CardUpdate];
+        if self.if_match.is_some() {
+            capabilities.push(Capability::CardUpdateIfMatch);
+        }
+        client.require(&capabilities)?;
+
         if self.vcard.is_none() && self.fields.is_empty() && !self.composer.interactive {
             bail!("Nothing to update; give a vCard, a field flag, or -i to edit the card");
         }

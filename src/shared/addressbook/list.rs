@@ -11,6 +11,7 @@ use pimalaya_cli::{columns::Columns, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use crate::capability::Capability;
 use crate::shared::{addressbook::Addressbook, client::AddressbookClient};
 
 /// List every addressbook available to the active account.
@@ -22,6 +23,7 @@ pub struct AddressbookListCommand;
 
 impl AddressbookListCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+        client.require(&[Capability::AddressbookList])?;
         let addressbooks = client.list_addressbooks()?;
 
         let output = AddressbookListOutput {

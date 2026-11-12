@@ -10,6 +10,7 @@ use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use crate::capability::Capability;
 use crate::shared::{arg::AddressbookIdArg, card::project::CardFields, client::AddressbookClient};
 
 /// Read the raw vCard bytes of the given card.
@@ -33,6 +34,7 @@ pub struct CardReadCommand {
 
 impl CardReadCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+        client.require(&[Capability::CardRead])?;
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         let card = client.get_card(&addressbook_id, &self.card_id)?;
         let card = CardReadOutput {

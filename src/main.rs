@@ -12,8 +12,10 @@
 //! inspects and validates them.
 //!
 //! The command tree splits in three. The unified API (`addressbook`,
-//! `card`) is the cross-protocol least-common-denominator surface,
-//! behaving the same whatever backend serves the account.
+//! `card`) is the cross-protocol surface, serving the union of what the
+//! backends can do: [`capability`] declares each backend's level per
+//! verb, and a verb the account's backend does not serve is refused
+//! before connecting.
 //!
 //! The protocol-specific APIs (`carddav`, `jmap`, `msgraph`, `gpeople`,
 //! `vdir`) each expose the full surface of one backend, including what
@@ -64,6 +66,7 @@
 
 mod account;
 mod backend;
+mod capability;
 #[cfg(feature = "carddav")]
 mod carddav;
 mod cli;

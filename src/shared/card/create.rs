@@ -11,6 +11,7 @@ use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use crate::capability::Capability;
 use crate::shared::{
     arg::{AddressbookIdArg, CardComposerArgs},
     card::{
@@ -57,6 +58,7 @@ pub struct CardCreateCommand {
 
 impl CardCreateCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+        client.require(&[Capability::CardAdd])?;
         if self.vcard.is_none() && self.fields.is_empty() && !self.composer.interactive {
             bail!("Nothing to create; give a vCard, a field flag, or -i to compose one");
         }

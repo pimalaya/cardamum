@@ -6,7 +6,7 @@ status: current
 
 # Commands
 
-The command tree splits into three groups. The unified API (`addressbook`, `card`) is the cross-protocol least-common-denominator surface, behaving the same whatever backend serves the active account. The protocol-specific APIs each expose the full surface of one backend, including operations the unified API cannot model. The meta commands (`account`, `completion`, `manual`, `json-schema`) cover account inspection, shell completions, man pages and the JSON Schemas of the structured output.
+The command tree splits into three groups. The unified API (`addressbook`, `card`) is the cross-protocol surface, serving the union of what the backends can do, each declaring its level per capability; it behaves the same whatever backend serves the active account where that backend serves a verb. The protocol-specific APIs each expose the full surface of one backend, including operations the unified API cannot model. The meta commands (`account`, `completion`, `manual`, `json-schema`) cover account inspection, shell completions, man pages and the JSON Schemas of the structured output.
 
 ### Requirement: The top-level help orients a newcomer
 A bare `cardamum` SHALL print the top-level help, which SHALL end with the shared Pimalaya footer (`pimalaya_cli::footer`) pointing at the issue tracker and the sponsoring page, as every other Pimalaya CLI does.
@@ -16,9 +16,6 @@ Each subcommand SHALL be a clap-derived struct holding its own arguments, with a
 
 ### Requirement: The doc comment is the help page
 Each command's doc comment SHALL be its help text: the first paragraph (two lines maximum) is the short summary `-h` shows, and the full text `--help` shows SHALL end with the command's JSON output shape. `cardamum <command> --help` is therefore the canonical usage reference for both humans and agents, and the README documents no per-command usage.
-
-### Requirement: Unified commands stay least-common-denominator
-The unified `addressbook` and `card` commands SHALL expose only what every backend can model, and their documentation SHALL stay protocol-agnostic. A partial-coverage concept (CardDAV ETags, JMAP m:n memberships, Graph delta) belongs to a protocol-specific command instead of being ejected from the unified API or emulated everywhere.
 
 ### Requirement: Specific commands mirror their protocol
 A protocol-specific command set SHALL match the remote protocol's own structure and vocabulary rather than the unified API's, following Himalaya's direction. The shape follows the protocol: CardDAV (WebDAV) is a flat list of WebDAV method names, JMAP, Microsoft Graph and Google People are nested by resource with sub-verbs naming the protocol methods, and vdir is flat collection verbs plus an `item` subcommand. Verb names track the protocol, so JMAP uses `destroy` while Graph and People use `delete`.
@@ -166,6 +163,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 
 | Code | Raised when |
 |---|---|
+| `capability-missing` | the backend the account resolves to does not serve a capability the command reaches; nothing was read or written |
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
 | `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |
 | `store-uncreated` | the pimdir root holds no store; its sync engine creates it |
@@ -242,3 +240,15 @@ A field taken from a card or a server (a name, an address, an id, an error a ser
 
 ### Requirement: Listings resume from their cursor
 `card list` SHALL print `nextPage` beside `cards`: the next page number, as a string, while cards follow the page, `null` otherwise, and SHALL take it back through `--page-token`, which wins over `--page`. Whether cards follow is exact on every backend: the unified client reads one card past the page.
+
+### Requirement: Capability registry
+Each backend SHALL declare, in a table compiled into every build, each capability of the unified API (`addressbook.list`, `addressbook.create`, `addressbook.rename`, `addressbook.delete`, `addressbook.description`, `addressbook.color`, `card.list`, `card.read`, `card.add`, `card.update`, `card.remove`, `card.update.if-match`, `card.remove.if-match`) at `full`, `partial`, `server` or `none`, every level but `full` with a detail saying what differs, which server refuses, or what serves it instead. A backend declares a capability only when it gives the result every other declarer gives.
+
+### Requirement: An unserved verb is refused before connecting
+A unified command SHALL check the capabilities it reaches, those its flags reach included (`--if-match`, an addressbook's name, description or colour), against the backend the account resolves to, before reading the store or connecting, and SHALL fail with `capability-missing` naming the backend, the capability and the detail.
+
+### Requirement: An account lists what it serves
+`account capability` SHALL print, for the backend the unified commands resolve to (`--backend` honoured), every capability with its level and detail, connecting nowhere: `{"account", "backend", "capabilities": [{"name", "level", "detail"}]}`.
+
+### Requirement: The help names what each backend serves
+The `--help` of each unified leaf SHALL end with a `Backends:` footer generated from the tables: per capability the leaf reaches, the backends grouped by level, then each detail with the backends it applies to.

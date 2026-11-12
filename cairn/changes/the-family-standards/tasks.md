@@ -14,7 +14,7 @@ change: the-family-standards
 - [x] dependencies-trimmed
 - [x] every-feature-set-builds-clean
 - [ ] live-provider-tests
-- [ ] capability-shared-api
+- [x] capability-shared-api
 - [ ] the-shared-repl-and-mcp
 - [ ] release-polish
 - [ ] Log; land

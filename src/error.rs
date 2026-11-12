@@ -17,6 +17,10 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ErrorCode {
+    /// The backend the account resolves to does not serve a capability
+    /// the command reaches, refused before connecting: the caller picks
+    /// another backend or leaves the option out.
+    CapabilityMissing,
     /// The card is listed but its body is not local yet: a sync will
     /// bring it, so the caller waits rather than reports a loss.
     #[cfg(feature = "pimdir")]

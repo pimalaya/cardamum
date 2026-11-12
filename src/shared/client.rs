@@ -38,6 +38,7 @@ use pimalaya_config::secret::SecretResolver;
 use crate::{
     account::context::Account,
     backend::Backend,
+    capability::{self, Capability},
     config::{AccountConfig, Config},
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
@@ -226,6 +227,12 @@ impl AddressbookClient {
             #[cfg(feature = "gpeople")]
             BackendConfig::Gpeople(_) => Backend::Gpeople,
         }
+    }
+
+    /// Fails with `capability-missing` when the backend does not serve one
+    /// of `capabilities`, before anything connects.
+    pub fn require(&self, capabilities: &[Capability]) -> Result<()> {
+        capability::require(&self.backend().to_string(), capabilities)
     }
 
     /// Whether the backend queues a write for a sync to push rather than

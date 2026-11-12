@@ -22,9 +22,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `nextPage` to `card list --json`, the next page number while cards follow and `null` on the last page, and `--page-token`, taking it back.
 - Added `carddav.alpn`, the ALPN identifiers offered to a CardDAV server, `["http/1.1"]` by default.
 - Added config.sample.toml to releases and packages, installed as share/doc/cardamum/config.sample.toml.
+- Added `account capability`, listing what the backend an account resolves to serves of the unified API, with each level and its detail, without connecting.
+- Added a `Backends:` section to the `--help` of each `addressbook` and `card` command, naming which backend serves what.
+- Added the `--json` error code `capability-missing`.
 
 ### Changed
 
+- Changed the unified commands to refuse a verb or a flag the account's backend does not serve before connecting, with `capability-missing`, rather than once connected with an uncoded error.
 - Changed every dependency to name the features it needs, and base64 to base64-codec.
 - Changed config.sample.toml to one `[accounts.example]` table and one commented section per backend or provider, each tested to parse.
 - **Breaking:** changed `-c` to take one path per flag, never split on `:`, and stopped reading `CARDAMUM_CONFIG`.

@@ -14,6 +14,7 @@ change: the-family-standards
 - [x] dependencies-trimmed
 - [x] every-feature-set-builds-clean
 - [x] live-provider-tests
+- [x] account-check-reports-its-failure (found by the live suites: the family contract's exit 2 with the report)
 - [x] capability-shared-api
 - [x] the-shared-repl-and-mcp
 - [ ] release-polish

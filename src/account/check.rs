@@ -10,7 +10,7 @@ use std::{fmt, path::PathBuf};
 
 use anyhow::{Result, bail};
 use clap::Parser;
-use pimalaya_cli::{fields::Fields, printer::Printer, sanitize};
+use pimalaya_cli::{error::PartialOutcome, fields::Fields, printer::Printer, sanitize};
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -135,24 +135,17 @@ impl AccountCheckCommand {
             bail!("No backend matching `{backend}` is configured for this account");
         }
 
-        let failed: Vec<String> = report
-            .backends
-            .iter()
-            .filter_map(|check| {
-                let err = check.error.as_ref()?;
-                Some(format!("{}: {err}", check.backend))
-            })
-            .collect();
+        let failed = report.backends.iter().any(|check| !check.ok);
+        printer.out(report)?;
 
-        if !failed.is_empty() {
-            bail!(
-                "Account `{}` failed its check: {}",
-                report.account,
-                failed.join("; ")
-            );
+        // NOTE: the report names every backend's outcome, so a failed one
+        // ends the command with the partial-outcome status rather than a
+        // failure object.
+        if failed {
+            return Err(PartialOutcome::default().into());
         }
 
-        printer.out(report)
+        Ok(())
     }
 }
 
@@ -463,10 +456,16 @@ mod vdir_tests {
             "{out}"
         );
 
+        // NOTE: the report still prints, the failure only setting the
+        // partial-outcome exit status.
         let (result, out) = check(&dir.path().join("missing"));
-        let err = format!("{:#}", result.unwrap_err());
-        assert!(err.contains("vdir"), "{err}");
-        assert!(err.contains("does not exist"), "{err}");
-        assert!(out.is_empty(), "{out}");
+        let err = result.unwrap_err();
+        assert!(err.is::<pimalaya_cli::error::PartialOutcome>(), "{err:#}");
+        let vdir = out.lines().find(|line| line.starts_with("vdir:"));
+        let vdir = vdir.unwrap_or_default();
+        assert!(
+            vdir.contains("FAIL (") && vdir.contains("does not exist"),
+            "{out}"
+        );
     }
 }

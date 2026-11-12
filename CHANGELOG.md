@@ -77,7 +77,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 
 - Fixed a unified command spawning its secret commands again when it reopened its backend after the composer.
-- Fixed `account check` exiting 0 when a backend failed: it now fails with one error naming each failed backend and why.
+- Fixed `account check` exiting 0 when a backend failed: it now prints its report and exits 2.
 - Fixed pimdir accepting writes into an address book no source syncs, which no sync would ever push: they are now refused before anything is staged.
 - Fixed a pimdir card whose body blob is missing reporting an `etag`, which an `--if-match` could then match.
 - Fixed pimdir recognising an address book only by the exact kind `text/vcard`: a kind carrying parameters now counts.

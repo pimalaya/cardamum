@@ -84,16 +84,18 @@ pub fn json_failure(out: &Output, refusal: &str) -> Value {
     error
 }
 
-/// The failure object a `--json` `account check` run printed, failing
-/// unless it exited with 1 and its message names `backend` as failed
-/// for `refusal`. A failed backend fails the whole check, which then
-/// prints no report.
+/// The report a `--json` `account check` run printed, failing unless it
+/// exited with 2, the partial outcome, and names `backend` as failed for
+/// `refusal`.
 pub fn json_check_failure(out: &Output, backend: &str, refusal: &str) -> Value {
-    let error = json_failure(out, refusal);
-    let message = error["error"].as_str().unwrap_or_default();
-    assert!(message.contains("failed its check"), "{error}");
-    assert!(message.contains(&format!("{backend}: ")), "{error}");
-    error
+    let report = json(out, 2);
+    let backends = report["backends"].as_array().unwrap();
+    let check = backends.iter().find(|check| check["backend"] == backend);
+    let check = check.unwrap_or_else(|| panic!("{backend} not checked: {report}"));
+    let message = check["error"].as_str().unwrap_or_default();
+    assert_eq!(check["ok"], false, "{report}");
+    assert!(message.contains(refusal), "{report}");
+    report
 }
 
 /// Fails unless `report` is the `account check` output of one backend,

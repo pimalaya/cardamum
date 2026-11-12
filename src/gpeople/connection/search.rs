@@ -25,9 +25,6 @@ pub struct GpeopleConnectionSearchCommand {
 
 impl GpeopleConnectionSearchCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: GpeopleClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
-        let id_color = client.account.cards_list_table_id_color();
-
         let response = client
             .contacts_search(
                 &self.query,
@@ -43,8 +40,6 @@ impl GpeopleConnectionSearchCommand {
             .collect();
 
         printer.out(GpeoplePersonsOutput {
-            preset,
-            id_color,
             people,
             next_page_token: None,
             next_sync_token: None,

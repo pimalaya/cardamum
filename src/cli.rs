@@ -1,22 +1,24 @@
 //! # Command-line interface
 //!
-//! The clap parser: the global flags, the top-level command tree and the
-//! account resolution every command runs through.
+//! The clap parser: the global flags, the top-level command tree, and the
+//! account resolution and first-run welcome every command starts from.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::{CommandFactory, Parser, Subcommand};
 use pimalaya_cli::{
     clap::{
-        args::{AccountFlag, JsonFlag, LogFlags},
-        commands::{CompletionCommand, JsonSchemaCommand, ManualCommand},
-        parsers::path_parser,
+        args::{AccountFlag, ConfigFlags, JsonFlag, LogFlags},
+        commands::{
+            completion::CompletionCommand, json_schema::JsonSchemaCommand, manual::ManualCommand,
+        },
     },
     footer, long_version,
     printer::Printer,
+    welcome::Welcome,
 };
-use pimalaya_config::toml::TomlConfig;
+use pimalaya_config::toml::{ConfigMissingError, TomlConfig};
 
 #[cfg(feature = "carddav")]
 use crate::carddav::{cli::CarddavCommand, client::build_carddav_client};
@@ -31,7 +33,7 @@ use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
 use crate::{
     account::cli::AccountCommand,
     backend::Backend,
-    config::{AccountConfig, Config, NO_CONFIG_HINT},
+    config::{AccountConfig, Config},
     json_schema,
     shared::{
         addressbook::cli::AddressbookCommand, card::cli::CardCommand, client::AddressbookClient,
@@ -42,6 +44,10 @@ use crate::{
     account::context::Account,
     pimdir::{backend::PimdirBackend, cli::PimdirCommand},
 };
+
+/// The sample configuration as a raw file, for `curl` to fetch.
+const SAMPLE_RAW_URL: &str =
+    "https://raw.githubusercontent.com/pimalaya/cardamum/master/config.sample.toml";
 
 /// Top-level command-line interface parser.
 #[derive(Parser, Debug)]
@@ -54,15 +60,8 @@ pub struct Cli {
     /// The subcommand to run, a bare `cardamum` printing this help.
     #[command(subcommand)]
     pub cmd: Option<Command>,
-    /// Override the default configuration file path.
-    ///
-    /// Paths are shell-expanded then canonicalized. Several can be given
-    /// at once, delimited by `:` like `$PATH` in a POSIX shell: the first
-    /// one is the base and the rest are merged on top of it, which keeps
-    /// a public configuration apart from the private ones.
-    #[arg(short, long = "config", global = true, env = "CARDAMUM_CONFIG")]
-    #[arg(value_name = "PATH", value_parser = path_parser, value_delimiter = ':')]
-    pub config_paths: Vec<PathBuf>,
+    #[command(flatten)]
+    pub config: ConfigFlags,
     #[command(flatten)]
     pub account: AccountFlag,
     /// Force a specific backend for the unified commands.
@@ -120,40 +119,51 @@ pub enum Command {
 /// then takes the account named by `-a`, or the one marked `default`.
 /// Returns the leftover global config, the account name and its config.
 ///
-/// Each of the four failures names what is missing and how to fix it.
+/// A missing configuration fails with a [`ConfigMissingError`] naming the
+/// path looked at, which is where `-c` pointed, so a mistyped path shows
+/// up as itself and `main` can meet a person with the welcome.
 pub fn resolve_account(
-    _printer: &mut impl Printer,
     config_paths: &[PathBuf],
     account_name: Option<&str>,
 ) -> Result<(Config, String, AccountConfig)> {
-    let Some(mut config) = Config::from_paths_or_default(config_paths)? else {
-        bail!(
-            "No configuration found at {}, {NO_CONFIG_HINT}",
-            Config::target_path(config_paths)?.display(),
-        );
-    };
+    let mut config = Config::load(config_paths)?;
+    let (name, account_config) = config.take_account(account_name)?;
+    Ok((config, name, account_config))
+}
 
-    // NOTE: an empty name and `default` both mean the default account,
-    // resolved below rather than looked up by name.
-    let named = account_name.filter(|name| !name.is_empty() && *name != "default");
-
-    if let Some(name) = named.filter(|name| !config.accounts.contains_key(*name)) {
-        let mut names: Vec<&str> = config.accounts.keys().map(String::as_str).collect();
-        names.sort_unstable();
-
-        bail!(
-            "Account `{name}` not found, the configuration holds: {}",
-            names.join(", "),
-        );
+/// Meets a bare `cardamum`: the help when a configuration exists, the
+/// missing configuration otherwise, which a person meets as the welcome.
+pub fn meet_bare_invocation(config_paths: &[PathBuf]) -> Result<()> {
+    // NOTE: a broken file counts as a configuration, its error left to
+    // the first command reading it.
+    if let Err(err) = Config::load(config_paths)
+        && err.is::<ConfigMissingError>()
+    {
+        return Err(err);
     }
 
-    let Some((name, account_config)) = config.take_account(account_name)? else {
-        bail!(
-            "No default account found, name one with `-a <NAME>` or mark one with `default = true`"
-        );
-    };
+    Cli::command().print_help()?;
+    Ok(())
+}
 
-    Ok((config, name, account_config))
+/// The welcome a person meets when no configuration exists at `path`:
+/// the commands creating it from `sample`, the shipped sample
+/// configuration, or downloading it without one, then `addressbook list`.
+pub fn welcome<'a>(
+    path: &'a Path,
+    config_paths: &'a [PathBuf],
+    sample: Option<&'a Path>,
+) -> Welcome<'a> {
+    Welcome {
+        bin: "cardamum",
+        intro: "Welcome to Cardamum, the CLI to manage contacts.",
+        path,
+        config_paths,
+        sample,
+        sample_url: SAMPLE_RAW_URL,
+        next: "Edit it and uncomment the options you need, then list your addressbooks:",
+        command: "addressbook list",
+    }
 }
 
 impl Command {
@@ -166,54 +176,48 @@ impl Command {
     ) -> Result<()> {
         match self {
             Self::Addressbook(cmd) => {
-                let (config, _name, account_config) =
-                    resolve_account(printer, config_paths, account_name)?;
-                let client = AddressbookClient::new(config, account_config, backend)?;
+                let (config, name, account_config) = resolve_account(config_paths, account_name)?;
+                let client = AddressbookClient::new(config, name, account_config, backend)?;
                 cmd.execute(printer, client)
             }
             Self::Card(cmd) => cmd.execute(printer, config_paths, account_name, backend),
 
             #[cfg(feature = "carddav")]
             Self::Carddav(cmd) => {
-                let (config, name, account_config) =
-                    resolve_account(printer, config_paths, account_name)?;
-                let client = build_carddav_client(config, name, account_config)?;
+                let (_, name, account_config) = resolve_account(config_paths, account_name)?;
+                let client = build_carddav_client(name, account_config)?;
                 cmd.execute(printer, client)
             }
             #[cfg(feature = "jmap")]
             Self::Jmap(cmd) => {
-                let (config, name, account_config) =
-                    resolve_account(printer, config_paths, account_name)?;
-                let client = build_jmap_client(config, name, account_config)?;
+                let (_, name, account_config) = resolve_account(config_paths, account_name)?;
+                let client = build_jmap_client(name, account_config)?;
                 cmd.execute(printer, client)
             }
             #[cfg(feature = "msgraph")]
             Self::Msgraph(cmd) => {
-                let (config, name, account_config) =
-                    resolve_account(printer, config_paths, account_name)?;
-                let client = build_msgraph_client(config, name, account_config)?;
+                let (_, name, account_config) = resolve_account(config_paths, account_name)?;
+                let client = build_msgraph_client(name, account_config)?;
                 cmd.execute(printer, client)
             }
             #[cfg(feature = "gpeople")]
             Self::Gpeople(cmd) => {
-                let (config, name, account_config) =
-                    resolve_account(printer, config_paths, account_name)?;
-                let client = build_gpeople_client(config, name, account_config)?;
+                let (_, name, account_config) = resolve_account(config_paths, account_name)?;
+                let client = build_gpeople_client(name, account_config)?;
                 cmd.execute(printer, client)
             }
             #[cfg(feature = "pimdir")]
             Self::Pimdir(cmd) => {
                 let (config, name, mut account_config) =
-                    resolve_account(printer, config_paths, account_name)?;
+                    resolve_account(config_paths, account_name)?;
                 let backend = PimdirBackend::build(name, &mut account_config)?;
                 let account = Account::from(config).merge(Account::from(account_config));
                 cmd.execute(printer, &account, backend)
             }
             #[cfg(feature = "vdir")]
             Self::Vdir(cmd) => {
-                let (config, name, account_config) =
-                    resolve_account(printer, config_paths, account_name)?;
-                let client = build_vdir_client(config, name, account_config)?;
+                let (_, name, account_config) = resolve_account(config_paths, account_name)?;
+                let client = build_vdir_client(name, account_config)?;
                 cmd.execute(printer, client)
             }
 

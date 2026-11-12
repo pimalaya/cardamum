@@ -29,8 +29,6 @@ use anyhow::Result;
     feature = "gpeople"
 ))]
 use anyhow::bail;
-use crossterm::style::Color;
-use pimalaya_cli::table::ContentArrangement;
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -79,19 +77,12 @@ use url::Url;
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
-    /// Table rendering options, shared by every list command.
-    #[serde(default)]
-    pub table: TableConfig,
     /// Addressbook options, overridable per account.
     #[serde(default)]
     pub addressbook: AddressbookConfig,
     /// Card options, overridable per account.
     #[serde(default)]
     pub card: CardConfig,
-    /// `account list` rendering options, global only since the listing
-    /// stands outside any one account.
-    #[serde(default)]
-    pub account: AccountListingConfig,
     /// The accounts, keyed by their `[accounts.<name>]` table name.
     pub accounts: HashMap<String, AccountConfig>,
 }
@@ -101,6 +92,15 @@ impl TomlConfig for Config {
 
     fn project_name() -> &'static str {
         env!("CARGO_PKG_NAME")
+    }
+
+    fn sample_url() -> &'static str {
+        "https://github.com/pimalaya/cardamum/blob/master/config.sample.toml"
+    }
+
+    fn accounts(&self) -> impl Iterator<Item = (&str, bool)> {
+        let accounts = self.accounts.iter();
+        accounts.map(|(name, account)| (name.as_str(), account.default))
     }
 
     fn take_named_account(&mut self, name: &str) -> Option<(String, Self::Account)> {
@@ -119,20 +119,7 @@ impl TomlConfig for Config {
 
         entry
     }
-
-    fn take_default_account(&mut self) -> Option<(String, Self::Account)> {
-        let name = self
-            .accounts
-            .iter()
-            .find_map(|(name, account)| account.default.then(|| name.clone()))?;
-
-        self.take_named_account(&name)
-    }
 }
-
-/// How to get a configuration, for the errors meeting none.
-pub const NO_CONFIG_HINT: &str = "write one by hand: \
-     https://github.com/pimalaya/cardamum/blob/master/config.sample.toml";
 
 impl AccountConfig {
     /// Hands the account proxy to every network backend naming none of
@@ -172,9 +159,6 @@ pub struct AccountConfig {
     /// Whether a command passing no `-a <NAME>` runs against it.
     #[serde(default)]
     pub default: bool,
-    /// Table rendering options, overriding the global ones.
-    #[serde(default)]
-    pub table: TableConfig,
     /// Addressbook options, overriding the global ones.
     #[serde(default)]
     pub addressbook: AddressbookConfig,
@@ -268,6 +252,9 @@ pub struct CarddavConfig {
     /// TLS configuration.
     #[serde(default)]
     pub tls: TlsConfig,
+    /// ALPN protocol identifiers offered during the TLS handshake.
+    #[serde(default = "default_http_alpn")]
+    pub alpn: Vec<String>,
     /// Proxy the connection goes through, falling back to the account one
     /// and then to the `all_proxy`/`https_proxy` environment variables.
     #[serde(default)]
@@ -420,7 +407,7 @@ pub struct GpeopleAuthConfig {
     pub token: Secret,
 }
 
-#[cfg(any(feature = "msgraph", feature = "gpeople"))]
+#[cfg(any(feature = "carddav", feature = "msgraph", feature = "gpeople"))]
 fn default_http_alpn() -> Vec<String> {
     vec![String::from("http/1.1")]
 }
@@ -432,32 +419,6 @@ pub struct AddressbookConfig {
     /// Addressbook id the `card` commands take when their
     /// `-k/--addressbook` flag is omitted.
     pub default: Option<String>,
-    /// `addressbook list` options.
-    #[serde(default)]
-    pub list: AddressbookListConfig,
-}
-
-/// `addressbook list` options.
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct AddressbookListConfig {
-    /// Colors of the `addressbook list` table.
-    #[serde(default)]
-    pub table: AddressbookListTableConfig,
-}
-
-/// Colors of the `addressbook list` table.
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct AddressbookListTableConfig {
-    /// Color of the ID column.
-    pub id_color: Option<Color>,
-    /// Color of the NAME column.
-    pub name_color: Option<Color>,
-    /// Color of the DESC column.
-    pub description_color: Option<Color>,
-    /// Color of the COLOR column.
-    pub color_color: Option<Color>,
 }
 
 /// Card-level options.
@@ -484,86 +445,6 @@ pub struct CardListConfig {
     /// The flag wins when passed, then this value, then the hard
     /// fallback of 25.
     pub page_size: Option<u32>,
-    /// Colors of the `card list` table.
-    #[serde(default)]
-    pub table: CardListTableConfig,
-}
-
-/// Colors of the `card list` table.
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct CardListTableConfig {
-    /// Color of the ID column.
-    pub id_color: Option<Color>,
-    /// Color of the FN column.
-    pub fn_color: Option<Color>,
-    /// Color of the EMAIL column.
-    pub email_color: Option<Color>,
-    /// Color of the TEL column.
-    pub tel_color: Option<Color>,
-}
-
-/// `account list` rendering options, top-level only.
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct AccountListingConfig {
-    /// `account list` options.
-    #[serde(default)]
-    pub list: AccountListingListConfig,
-}
-
-/// `account list` options.
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct AccountListingListConfig {
-    /// Colors of the `account list` table.
-    #[serde(default)]
-    pub table: AccountListingTableConfig,
-}
-
-/// Colors of the `account list` table.
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct AccountListingTableConfig {
-    /// Color of the NAME column.
-    pub name_color: Option<Color>,
-    /// Color of the BACKENDS column.
-    pub backends_color: Option<Color>,
-    /// Color of the DEFAULT column.
-    pub default_color: Option<Color>,
-}
-
-/// Table rendering options shared by every list command.
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub struct TableConfig {
-    /// `comfy_table` preset string, `UTF8_FULL_CONDENSED` by default.
-    pub preset: Option<String>,
-    /// Column arrangement strategy, `dynamic` by default.
-    pub arrangement: Option<TableArrangementConfig>,
-}
-
-/// How a table arranges its columns.
-#[derive(Clone, Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
-pub enum TableArrangementConfig {
-    /// Fit the columns to the terminal width.
-    #[default]
-    Dynamic,
-    /// Fit the columns and stretch the table to the full width.
-    DynamicFullWidth,
-    /// Let each column take the width of its content.
-    Disabled,
-}
-
-impl From<TableArrangementConfig> for ContentArrangement {
-    fn from(arrangement: TableArrangementConfig) -> Self {
-        match arrangement {
-            TableArrangementConfig::Dynamic => ContentArrangement::Dynamic,
-            TableArrangementConfig::DynamicFullWidth => ContentArrangement::DynamicFullWidth,
-            TableArrangementConfig::Disabled => ContentArrangement::Disabled,
-        }
-    }
 }
 
 /// Proxy configuration.

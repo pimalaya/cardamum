@@ -11,9 +11,9 @@
 //! their command modules, so the registry stays coherent under any
 //! feature combination, none included.
 //!
-//! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::JsonSchemaCommand
+//! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::json_schema::JsonSchemaCommand
 
-use pimalaya_cli::{clap::commands::JsonSchemaRegistry, error::ErrorReport};
+use pimalaya_cli::{clap::commands::json_schema::JsonSchemaRegistry, error::ErrorReport};
 use schemars::JsonSchema;
 
 use crate::error::ErrorCode;

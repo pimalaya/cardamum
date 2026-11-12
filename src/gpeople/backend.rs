@@ -32,7 +32,7 @@ use crate::{
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
-        client::paginate,
+        client::window,
     },
 };
 
@@ -194,8 +194,8 @@ impl GpeopleBackend {
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
-        page: Option<u32>,
-        page_size: Option<u32>,
+        skip: usize,
+        take: Option<usize>,
     ) -> Result<Vec<Card>> {
         let mut cards = Vec::new();
         let mut page_token: Option<String> = None;
@@ -225,7 +225,7 @@ impl GpeopleBackend {
             }
         }
 
-        Ok(paginate(cards, page, page_size))
+        Ok(window(cards, skip, take))
     }
 
     /// Reads the contact `card_id`, projected onto a vCard document.

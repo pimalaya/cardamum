@@ -10,14 +10,11 @@ use clap::Parser;
 use io_webdav::rfc6578::sync_collection::{
     WebdavSyncChange, WebdavSyncCollectionOptions, WebdavSyncDelta,
 };
-use pimalaya_cli::{
-    printer::Printer,
-    table::{Cell, Row, Table},
-};
+use pimalaya_cli::{columns::Columns, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
+use crate::carddav::client::CarddavClient;
 
 /// Report the changes since a sync token (RFC 6578).
 ///
@@ -46,13 +43,12 @@ pub struct CarddavReportSyncCommand {
 
 impl CarddavReportSyncCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
         let opts = WebdavSyncCollectionOptions {
             fallback: self.fallback,
         };
         let delta = client.sync_cards(&self.addressbook_id, self.sync_token.as_deref(), opts)?;
 
-        printer.out(CarddavReportSyncOutput::new(preset, delta))
+        printer.out(CarddavReportSyncOutput::new(delta))
     }
 }
 
@@ -60,9 +56,6 @@ impl CarddavReportSyncCommand {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CarddavReportSyncOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
     /// The resources created or updated since the given token.
     pub changed: Vec<ChangeRow>,
     /// The hrefs of the resources that vanished since it.
@@ -93,9 +86,8 @@ impl From<WebdavSyncChange> for ChangeRow {
 }
 
 impl CarddavReportSyncOutput {
-    fn new(preset: String, delta: WebdavSyncDelta) -> Self {
+    fn new(delta: WebdavSyncDelta) -> Self {
         Self {
-            preset,
             changed: delta.changed.into_iter().map(ChangeRow::from).collect(),
             vanished: delta.vanished,
             sync_token: delta.sync_token,
@@ -106,38 +98,33 @@ impl CarddavReportSyncOutput {
 
 impl fmt::Display for CarddavReportSyncOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        if !self.changed.is_empty() || !self.vanished.is_empty() {
+            let mut columns = Columns::new(["STATUS", "ETAG", "HREF"]);
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("STATUS"),
-                Cell::new("HREF"),
-                Cell::new("ETAG"),
-            ]));
-        for change in &self.changed {
-            table.add_row(Row::from([
-                Cell::new("changed"),
-                Cell::new(&change.href),
-                Cell::new(change.etag.as_deref().unwrap_or("")),
-            ]));
-        }
-        for href in &self.vanished {
-            table.add_row(Row::from([
-                Cell::new("vanished"),
-                Cell::new(href),
-                Cell::new(""),
-            ]));
+            for change in &self.changed {
+                let etag = change.etag.as_deref().map(sanitize::text);
+
+                columns.push([
+                    String::from("changed"),
+                    etag.map(|etag| etag.into_owned()).unwrap_or_default(),
+                    sanitize::text(&change.href).into_owned(),
+                ]);
+            }
+
+            for href in &self.vanished {
+                columns.push([
+                    String::from("vanished"),
+                    String::new(),
+                    sanitize::text(href).into_owned(),
+                ]);
+            }
+
+            writeln!(f, "{columns}")?;
         }
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
-        writeln!(
-            f,
-            "sync-token: {}",
-            self.sync_token.as_deref().unwrap_or("(none)")
-        )?;
+        let token = self.sync_token.as_deref().map(sanitize::text);
+        let token = token.unwrap_or("(none)".into());
+        writeln!(f, "sync-token: {token}")?;
         if self.truncated {
             writeln!(
                 f,

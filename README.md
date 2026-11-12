@@ -93,15 +93,15 @@ nix run
 
 ## Configuration
 
-The configuration is loaded from the first existing path among:
+Every one of these paths that exists is loaded, each deep-merged on top of the ones before:
 
 - `$XDG_CONFIG_HOME/cardamum/config.toml`
 - `$HOME/.config/cardamum/config.toml`
 - `$HOME/.cardamumrc`
 
-Override the path with `cardamum -c <PATH>` or `CARDAMUM_CONFIG=<PATH>`, `:`-separated to deep-merge several files on top of the first. The full field reference lives in [config.sample.toml](./config.sample.toml).
+`cardamum -c <PATH>` replaces them, and can be repeated to deep-merge several files on top of the first one. The full field reference lives in [config.sample.toml](./config.sample.toml).
 
-Cardamum never writes this file: write it by hand from the sample.
+Cardamum never writes this file. Run at a terminal with none, it prints the commands creating it from the sample, then the first command to run.
 
 Secrets come from an OS keyring, a token broker such as [Ortie](https://github.com/pimalaya/ortie), any command or a raw value. Cardamum reads them but never issues or refreshes them, so a provider on OAuth 2.0 needs a broker. Ready-made blocks for common providers follow.
 
@@ -234,7 +234,7 @@ pimdir.root = "~/.local/state/neverest/example"
 
 A card that is listed but not downloaded reads as "body not fetched" until a sync hydrates it. Every write is queued and reaches the server on the next sync, and the commands say so. A queued update or deletion shows in the listing straight away; a queued create is not listed until the sync applies it, and `card create` reports its link id (its `UID`), not an id the other card commands take: the card gets one when the sync applies it. An addressbook no source syncs refuses writes, since nothing would carry them to a server. A create whose `UID` the addressbook already holds, synced or queued, is refused (`item-duplicate` under `--json`): update that card instead. An update made from the card it read (`card update` with no vCard source, or `--if-match`) is not applied over a server change the sync brings in first: the sync engine parks it instead. `cardamum pimdir status` lists every parked write of the account, with its queue row and the reason, beside how much of each addressbook is downloaded and how many creates are queued. A store of another pimdir format version than the one cardamum builds against is refused (`store-version`): one an earlier neverest wrote is reinstalled through neverest, its queued writes synced first, and a later one asks for a cardamum upgrade. A store another user can read is refused too (`store-exposed`).
 
-`cardamum pimdir search <query>` searches the account's cards through the store's search index, which the sync engine builds and refreshes after each run: free text reaches names, organization, notes and phone numbers, and the pimdir query language adds terms such as `email:@example.org`, `has:phone`, `has:birthday`, `category:friends` and `and`, `or`, `not`. It spans every addressbook of the account unless `-k` names one, sorts by name unless `--sort relevance`, and `pimdir count` takes the same query. The answer is the store as of the last refresh, so a queued write is not in it, and a line under the table says what it could not see: cards whose body is not local, matched on their summary alone, or an index lagging the store. Cardamum never builds the index: a store without one fails with `index-missing` until the sync engine runs, and a refused query is drawn with its fault (`query-refused`).
+`cardamum pimdir search <query>` searches the account's cards through the store's search index, which the sync engine builds and refreshes after each run: free text reaches names, organization, notes and phone numbers, and the pimdir query language adds terms such as `email:@example.org`, `has:phone`, `has:birthday`, `category:friends` and `and`, `or`, `not`. It spans every addressbook of the account unless `-k` names one, sorts by name unless `--sort relevance`, and `pimdir count` takes the same query. The answer is the store as of the last refresh, so a queued write is not in it, and a line under the hits says what it could not see: cards whose body is not local, matched on their summary alone, or an index lagging the store. Cardamum never builds the index: a store without one fails with `index-missing` until the sync engine runs, and a refused query is drawn with its fault (`query-refused`).
 
 ## Usage
 

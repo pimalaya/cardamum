@@ -19,7 +19,6 @@ use std::convert::Infallible;
 
 use anyhow::{Result, bail};
 use log::debug;
-#[cfg(any(feature = "jmap", feature = "msgraph", feature = "gpeople"))]
 use pimalaya_config::secret::SecretResolver;
 
 use crate::{
@@ -47,6 +46,11 @@ pub struct AddressbookClient {
     config: BackendConfig,
     /// The open backend, `None` until something needs it.
     inner: Option<BackendClient>,
+    /// The credentials resolved so far, kept so a reopened backend
+    /// spawns no secret command twice.
+    resolver: SecretResolver,
+    /// The name of the account.
+    pub name: String,
     /// Runtime account the commands read their defaults from.
     pub account: Account,
 }
@@ -113,6 +117,7 @@ impl AddressbookClient {
     /// connected here: the first call that needs the network opens it.
     pub fn new(
         config: Config,
+        name: String,
         #[allow(unused_mut)] mut account_config: AccountConfig,
         backend: Backend,
     ) -> Result<Self> {
@@ -176,8 +181,37 @@ impl AddressbookClient {
         Ok(Self {
             config: config_,
             inner: None,
+            resolver: SecretResolver::new(),
+            name,
             account,
         })
+    }
+
+    /// The backend the client speaks to, as `--backend` names it.
+    pub fn backend(&self) -> Backend {
+        match &self.config {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendConfig::Unused(never) => match *never {},
+            #[cfg(feature = "vdir")]
+            BackendConfig::Vdir(_) => Backend::Vdir,
+            #[cfg(feature = "pimdir")]
+            BackendConfig::Pimdir(_) => Backend::Pimdir,
+            #[cfg(feature = "carddav")]
+            BackendConfig::Carddav(_) => Backend::Carddav,
+            #[cfg(feature = "jmap")]
+            BackendConfig::Jmap(_) => Backend::Jmap,
+            #[cfg(feature = "msgraph")]
+            BackendConfig::Msgraph(_) => Backend::Msgraph,
+            #[cfg(feature = "gpeople")]
+            BackendConfig::Gpeople(_) => Backend::Gpeople,
+        }
     }
 
     /// Whether the backend queues a write for a sync to push rather than
@@ -224,7 +258,7 @@ impl AddressbookClient {
     fn open(&mut self) -> Result<&mut BackendClient> {
         if self.inner.is_none() {
             debug!("opening the backend connection");
-            self.inner = Some(self.config.open()?);
+            self.inner = Some(self.config.open(&mut self.resolver)?);
         }
 
         Ok(self.inner.as_mut().expect("just opened"))
@@ -232,8 +266,18 @@ impl AddressbookClient {
 }
 
 impl BackendConfig {
-    /// Opens the backend this configuration describes.
-    fn open(&self) -> Result<BackendClient> {
+    /// Opens the backend this configuration describes, its credentials
+    /// resolved through `resolver`.
+    #[cfg_attr(
+        not(any(
+            feature = "carddav",
+            feature = "jmap",
+            feature = "msgraph",
+            feature = "gpeople"
+        )),
+        allow(unused_variables)
+    )]
+    fn open(&self, resolver: &mut SecretResolver) -> Result<BackendClient> {
         match self {
             #[cfg(not(any(
                 feature = "vdir",
@@ -258,27 +302,25 @@ impl BackendConfig {
             #[cfg(feature = "carddav")]
             Self::Carddav(config) => {
                 use crate::carddav::backend::CarddavBackend;
-                let client = CarddavBackend::new(config.as_ref().clone())?;
+                let client = CarddavBackend::new(config.as_ref().clone(), resolver)?;
                 Ok(BackendClient::Carddav(Box::new(client)))
             }
             #[cfg(feature = "jmap")]
             Self::Jmap(config) => {
                 use crate::jmap::backend::JmapBackend;
-                let client = JmapBackend::new(config.as_ref().clone(), &mut SecretResolver::new())?;
+                let client = JmapBackend::new(config.as_ref().clone(), resolver)?;
                 Ok(BackendClient::Jmap(Box::new(client)))
             }
             #[cfg(feature = "msgraph")]
             Self::Msgraph(config) => {
                 use crate::msgraph::backend::MsgraphBackend;
-                let client =
-                    MsgraphBackend::new(config.as_ref().clone(), &mut SecretResolver::new())?;
+                let client = MsgraphBackend::new(config.as_ref().clone(), resolver)?;
                 Ok(BackendClient::Msgraph(Box::new(client)))
             }
             #[cfg(feature = "gpeople")]
             Self::Gpeople(config) => {
                 use crate::gpeople::backend::GpeopleBackend;
-                let client =
-                    GpeopleBackend::new(config.as_ref().clone(), &mut SecretResolver::new())?;
+                let client = GpeopleBackend::new(config.as_ref().clone(), resolver)?;
                 Ok(BackendClient::Gpeople(Box::new(client)))
             }
         }
@@ -409,6 +451,35 @@ impl AddressbookClient {
         addressbook_id: &str,
         page: Option<u32>,
         page_size: Option<u32>,
+    ) -> Result<CardPage> {
+        let (skip, take) = match page_size {
+            None => (0, None),
+            Some(0) => return Ok(CardPage::default()),
+            Some(size) => {
+                let page = page.unwrap_or(1).max(1);
+                let skip = ((page - 1) as usize).saturating_mul(size as usize);
+                // NOTE: one card past the page tells whether another follows.
+                (skip, Some(size as usize + 1))
+            }
+        };
+
+        let mut cards = self.list_cards_window(addressbook_id, skip, take)?;
+        let more = take.is_some_and(|take| cards.len() >= take);
+
+        if more {
+            cards.pop();
+        }
+
+        Ok(CardPage { cards, more })
+    }
+
+    /// Lists the `take` cards of `addressbook_id` after the first `skip`,
+    /// every card after them when `take` is `None`.
+    fn list_cards_window(
+        &mut self,
+        addressbook_id: &str,
+        skip: usize,
+        take: Option<usize>,
     ) -> Result<Vec<Card>> {
         match self.open()? {
             #[cfg(not(any(
@@ -421,17 +492,17 @@ impl AddressbookClient {
             )))]
             BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
-            BackendClient::Vdir(client) => client.list_cards(addressbook_id, page, page_size),
+            BackendClient::Vdir(client) => client.list_cards(addressbook_id, skip, take),
             #[cfg(feature = "pimdir")]
-            BackendClient::Pimdir(client) => client.list_cards(addressbook_id, page, page_size),
+            BackendClient::Pimdir(client) => client.list_cards(addressbook_id, skip, take),
             #[cfg(feature = "carddav")]
-            BackendClient::Carddav(client) => client.list_cards(addressbook_id, page, page_size),
+            BackendClient::Carddav(client) => client.list_cards(addressbook_id, skip, take),
             #[cfg(feature = "jmap")]
-            BackendClient::Jmap(client) => client.list_cards(addressbook_id, page, page_size),
+            BackendClient::Jmap(client) => client.list_cards(addressbook_id, skip, take),
             #[cfg(feature = "msgraph")]
-            BackendClient::Msgraph(client) => client.list_cards(addressbook_id, page, page_size),
+            BackendClient::Msgraph(client) => client.list_cards(addressbook_id, skip, take),
             #[cfg(feature = "gpeople")]
-            BackendClient::Gpeople(client) => client.list_cards(addressbook_id, page, page_size),
+            BackendClient::Gpeople(client) => client.list_cards(addressbook_id, skip, take),
         }
     }
 
@@ -575,10 +646,8 @@ impl AddressbookClient {
     }
 }
 
-/// Applies 1-indexed pagination to an in-memory list.
-///
-/// A `page_size` of `None` returns every item, while a size of zero or a
-/// page past the end returns nothing.
+/// The `take` items of an in-memory list after the first `skip`, every
+/// item after them when `take` is `None`.
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -587,21 +656,20 @@ impl AddressbookClient {
     feature = "vdir",
     test
 ))]
-pub fn paginate<T>(items: Vec<T>, page: Option<u32>, page_size: Option<u32>) -> Vec<T> {
-    let Some(size) = page_size else {
-        return items;
-    };
+pub fn window<T>(items: Vec<T>, skip: usize, take: Option<usize>) -> Vec<T> {
+    let items = items.into_iter().skip(skip);
 
-    if size == 0 {
-        return Vec::new();
+    match take {
+        Some(take) => items.take(take).collect(),
+        None => items.collect(),
     }
+}
 
-    let page = page.unwrap_or(1).max(1);
-    let skip = ((page - 1) as usize).saturating_mul(size as usize);
-
-    if skip >= items.len() {
-        return Vec::new();
-    }
-
-    items.into_iter().skip(skip).take(size as usize).collect()
+/// One page of a card listing.
+#[derive(Debug, Default)]
+pub struct CardPage {
+    /// The cards of the page.
+    pub cards: Vec<Card>,
+    /// Whether more cards follow the page.
+    pub more: bool,
 }

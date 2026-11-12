@@ -1,23 +1,17 @@
 //! # Item list command
 //!
-//! Lists the raw items of a collection, of any kind, as a table or JSON.
+//! Lists the raw items of a collection, of any kind, as text or JSON.
 
 use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
 use io_vdir::item::VdirItem;
-use pimalaya_cli::{
-    printer::Printer,
-    table::{Cell, Color, Row, Table},
-};
+use pimalaya_cli::{columns::Columns, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{
-    shared::table::style_from_preset,
-    vdir::{client::VdirClient, item::input::kind_str},
-};
+use crate::vdir::{client::VdirClient, item::input::kind_str};
 
 /// List every item in the given collection, of any kind.
 ///
@@ -35,26 +29,18 @@ impl VdirItemListCommand {
         let path = client.collection_path(&self.collection)?;
         let items = client.list_items(path)?;
 
-        let table = VdirItemListOutput {
-            preset: client.account.table_preset().to_string(),
-            id_color: client.account.cards_list_table_id_color(),
+        let output = VdirItemListOutput {
             rows: items.into_iter().filter_map(ItemRow::from_item).collect(),
         };
 
-        printer.out(table)
+        printer.out(output)
     }
 }
 
-/// The item listing, as the table and the JSON both render it.
+/// The item listing, as the text and the JSON both render it.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VdirItemListOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
     /// The items the collection holds.
     #[serde(rename = "items")]
     pub rows: Vec<ItemRow>,
@@ -88,29 +74,21 @@ impl ItemRow {
 
 impl fmt::Display for VdirItemListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        if self.rows.is_empty() {
+            return Ok(());
+        }
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("ID"),
-                Cell::new("KIND"),
-                Cell::new("SIZE"),
-                Cell::new("PATH"),
-            ]))
-            .add_rows(self.rows.iter().map(|item| {
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(&item.id).fg(self.id_color))
-                    .add_cell(Cell::new(item.kind))
-                    .add_cell(Cell::new(item.size))
-                    .add_cell(Cell::new(&item.path));
-                row
-            }));
+        let mut columns = Columns::new(["ID", "KIND", "SIZE", "PATH"]);
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
-        Ok(())
+        for item in &self.rows {
+            columns.push([
+                sanitize::text(&item.id).into_owned(),
+                item.kind.to_string(),
+                item.size.to_string(),
+                sanitize::text(&item.path).into_owned(),
+            ]);
+        }
+
+        write!(f, "{columns}")
     }
 }

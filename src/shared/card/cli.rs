@@ -52,23 +52,23 @@ impl CardCommand {
             // configuration is what it is for.
             Self::Build(cmd) => cmd.execute(printer, config_paths, account_name),
             Self::List(cmd) => {
-                let client = client(printer, config_paths, account_name, backend)?;
+                let client = client(config_paths, account_name, backend)?;
                 cmd.execute(printer, client)
             }
             Self::Read(cmd) => {
-                let client = client(printer, config_paths, account_name, backend)?;
+                let client = client(config_paths, account_name, backend)?;
                 cmd.execute(printer, client)
             }
             Self::Create(cmd) => {
-                let client = client(printer, config_paths, account_name, backend)?;
+                let client = client(config_paths, account_name, backend)?;
                 cmd.execute(printer, client)
             }
             Self::Update(cmd) => {
-                let client = client(printer, config_paths, account_name, backend)?;
+                let client = client(config_paths, account_name, backend)?;
                 cmd.execute(printer, client)
             }
             Self::Delete(cmd) => {
-                let client = client(printer, config_paths, account_name, backend)?;
+                let client = client(config_paths, account_name, backend)?;
                 cmd.execute(printer, client)
             }
         }
@@ -78,12 +78,11 @@ impl CardCommand {
 /// Resolves the account a card command runs against, and opens a client
 /// on the backend serving it.
 fn client(
-    printer: &mut impl Printer,
     config_paths: &[PathBuf],
     account_name: Option<&str>,
     backend: Backend,
 ) -> Result<AddressbookClient> {
-    let (config, _name, account_config) = resolve_account(printer, config_paths, account_name)?;
+    let (config, name, account_config) = resolve_account(config_paths, account_name)?;
 
-    AddressbookClient::new(config, account_config, backend)
+    AddressbookClient::new(config, name, account_config, backend)
 }

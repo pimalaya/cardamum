@@ -9,7 +9,7 @@ change: the-family-standards
 - [x] published-dependencies
 - [x] the-api-is-unified (owner, 2026-11-12, relayed by another session: Himalaya's rename, landed before the wizard leaves)
 - [x] the-wizard-leaves
-- [ ] the-shared-kit
+- [x] the-shared-kit
 - [ ] the-sample-is-tested-and-shipped
 - [ ] dependencies-trimmed
 - [ ] every-feature-set-builds-clean

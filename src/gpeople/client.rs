@@ -1,7 +1,7 @@
 //! # People client
 //!
-//! Wraps [`io_gpeople::v1::client::GpeopleClientStd`] with the merged
-//! [`Account`] the commands render through.
+//! Wraps [`io_gpeople::v1::client::GpeopleClientStd`] for the People
+//! commands.
 
 use std::ops::{Deref, DerefMut};
 
@@ -10,16 +10,11 @@ use io_gpeople::v1::client::{GpeopleClientStd, GpeopleClientStdConnectOptions};
 use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 
-use crate::{
-    account::context::Account,
-    config::{AccountConfig, Config, ProxyConfig},
-};
+use crate::config::{AccountConfig, ProxyConfig};
 
-/// The connected People client and the account it runs for.
+/// The connected People client.
 pub struct GpeopleClient {
     inner: GpeopleClientStd,
-    /// The merged account config the command runs against.
-    pub account: Account,
 }
 
 impl Deref for GpeopleClient {
@@ -36,11 +31,10 @@ impl DerefMut for GpeopleClient {
     }
 }
 
-/// Opens the People client of the account, alongside its merged config.
+/// Opens the People client of the account.
 ///
 /// Bails when the account has no `[gpeople]` block.
 pub fn build_gpeople_client(
-    config: Config,
     name: String,
     mut account_config: AccountConfig,
 ) -> Result<GpeopleClient> {
@@ -56,6 +50,5 @@ pub fn build_gpeople_client(
     };
     let inner = GpeopleClientStd::connect(token.expose_secret(), options)?;
 
-    let account = Account::from(config).merge(Account::from(account_config));
-    Ok(GpeopleClient { inner, account })
+    Ok(GpeopleClient { inner })
 }

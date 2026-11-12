@@ -30,7 +30,7 @@ use crate::{
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
-        client::paginate,
+        client::window,
     },
 };
 
@@ -163,12 +163,12 @@ impl MsgraphBackend {
     }
 
     /// Lists the contacts of the folder, each projected onto a vCard
-    /// document, applying 1-indexed pagination.
+    /// document, the `take` after the first `skip`.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
-        page: Option<u32>,
-        page_size: Option<u32>,
+        skip: usize,
+        take: Option<usize>,
     ) -> Result<Vec<Card>> {
         let params = MsgraphContactsListParams {
             top: Some(100),
@@ -200,7 +200,7 @@ impl MsgraphBackend {
             }
         }
 
-        Ok(paginate(cards, page, page_size))
+        Ok(window(cards, skip, take))
     }
 
     /// Reads the contact `card_id`, projected onto a vCard document.

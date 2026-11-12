@@ -1,11 +1,11 @@
 //! # Card entries
 //!
-//! The card table the `query` and `multiget` REPORT commands print.
+//! The card list the `query` and `multiget` REPORT commands print.
 
 use std::fmt;
 
 use io_webdav::rfc6352::card::CarddavCardEntry;
-use pimalaya_cli::table::{Cell, Color, Row, Table};
+use pimalaya_cli::{columns::Columns, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 use vcard::{
@@ -14,24 +14,13 @@ use vcard::{
     value::VcardValue,
 };
 
-use crate::shared::table::style_from_preset;
-
 /// Cards returned by a `query` or `multiget` REPORT.
 ///
-/// The table shows ids, formatted names and ETags; the raw vCard body
+/// The text lists ids, ETags and formatted names; the raw vCard body
 /// rides in `contents` for `--json`.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CarddavCardEntriesOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
-    /// Color of the FN column.
-    #[serde(skip)]
-    pub fn_color: Color,
     /// The cards the REPORT returned.
     #[serde(rename = "cards")]
     pub rows: Vec<EntryRow>,
@@ -50,7 +39,7 @@ pub struct EntryRow {
     pub etag: Option<String>,
     /// The raw vCard, as text.
     pub contents: String,
-    /// The first `FN` of the vCard, for the table only.
+    /// The first `FN` of the vCard, for the text output only.
     #[serde(skip)]
     pub fn_value: Option<String>,
 }
@@ -68,29 +57,30 @@ impl From<CarddavCardEntry> for EntryRow {
 
 impl fmt::Display for CarddavCardEntriesOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        if !self.rows.is_empty() {
+            let mut columns = Columns::new(["ID", "ETAG", "FN"]);
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("ID"),
-                Cell::new("FN"),
-                Cell::new("ETAG"),
-            ]))
-            .add_rows(self.rows.iter().map(|entry| {
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(&entry.id).fg(self.id_color))
-                    .add_cell(Cell::new(entry.fn_value.as_deref().unwrap_or("")).fg(self.fn_color))
-                    .add_cell(Cell::new(entry.etag.as_deref().unwrap_or("")));
-                row
-            }));
+            for entry in &self.rows {
+                let text = |value: &Option<String>| match value {
+                    Some(value) => sanitize::text(value).into_owned(),
+                    None => String::new(),
+                };
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
+                columns.push([
+                    sanitize::text(&entry.id).into_owned(),
+                    text(&entry.etag),
+                    text(&entry.fn_value),
+                ]);
+            }
+
+            write!(f, "{columns}")?;
+        }
 
         if self.truncated {
+            if !self.rows.is_empty() {
+                writeln!(f)?;
+            }
+
             writeln!(f, "The server truncated the result: more cards match.")?;
         }
 

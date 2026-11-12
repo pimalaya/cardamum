@@ -21,9 +21,6 @@ pub struct JmapAddressBookGetCommand {
 
 impl JmapAddressBookGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: JmapClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
-        let id_color = client.account.addressbooks_list_table_id_color();
-
         let opts = JmapAddressBookGetOptions {
             ids: (!self.ids.is_empty()).then_some(self.ids),
             ..Default::default()
@@ -31,8 +28,6 @@ impl JmapAddressBookGetCommand {
         let out = client.address_book_get(opts)?;
 
         printer.out(JmapAddressBooksOutput {
-            preset,
-            id_color,
             books: out.address_books,
             state: out.new_state,
         })

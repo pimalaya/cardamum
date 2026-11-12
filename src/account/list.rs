@@ -1,26 +1,18 @@
 //! # Account list command
 //!
-//! Lists the configured accounts as a colored table or as JSON, without
+//! Lists the configured accounts as aligned columns or as JSON, without
 //! reaching any backend.
 
 use std::{fmt, path::PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
-use crossterm::style::Color as CrosstermColor;
-use pimalaya_cli::{
-    printer::Printer,
-    table::{Cell, Color, ContentArrangement, Row, Table},
-};
+use pimalaya_cli::{columns::Columns, printer::Printer};
 use pimalaya_config::toml::TomlConfig;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{
-    account::context::map_color_or,
-    config::{AccountConfig, Config, NO_CONFIG_HINT, TableArrangementConfig},
-    shared::table::{DEFAULT_PRESET, style_from_preset},
-};
+use crate::config::{AccountConfig, Config};
 
 /// List all accounts declared in the configuration.
 ///
@@ -34,26 +26,7 @@ pub struct AccountListCommand;
 
 impl AccountListCommand {
     pub fn execute(self, printer: &mut impl Printer, config_paths: &[PathBuf]) -> Result<()> {
-        let config = load_config(config_paths)?;
-
-        let preset = config
-            .table
-            .preset
-            .clone()
-            .unwrap_or_else(|| DEFAULT_PRESET.to_string());
-        let arrangement = config
-            .table
-            .arrangement
-            .clone()
-            .unwrap_or(TableArrangementConfig::Dynamic)
-            .into();
-
-        let table_cfg = &config.account.list.table;
-        let colors = AccountColors {
-            name: map_color_or(table_cfg.name_color, CrosstermColor::Green),
-            backends: map_color_or(table_cfg.backends_color, CrosstermColor::Blue),
-            default: map_color_or(table_cfg.default_color, CrosstermColor::Reset),
-        };
+        let config = Config::load(config_paths)?;
 
         let mut accounts: Vec<AccountRow> = config
             .accounts
@@ -62,33 +35,7 @@ impl AccountListCommand {
             .collect();
         accounts.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let table = AccountListOutput {
-            preset,
-            arrangement,
-            colors,
-            accounts,
-        };
-
-        printer.out(table)
-    }
-}
-
-/// Effective color of each column of the table.
-#[derive(Clone, Copy, Debug)]
-struct AccountColors {
-    name: Color,
-    backends: Color,
-    default: Color,
-}
-
-/// Loads the configuration, pointing at the sample when none exists.
-fn load_config(paths: &[PathBuf]) -> Result<Config> {
-    match Config::from_paths_or_default(paths)? {
-        Some(config) => Ok(config),
-        None => anyhow::bail!(
-            "No configuration found at {}, {NO_CONFIG_HINT}",
-            Config::target_path(paths)?.display(),
-        ),
+        printer.out(AccountListOutput { accounts })
     }
 }
 
@@ -140,46 +87,26 @@ impl AccountRow {
     }
 }
 
-/// Table of accounts, and the JSON shape `account list` prints.
+/// The accounts, and the JSON shape `account list` prints.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountListOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// The column arrangement the table is drawn with.
-    #[serde(skip)]
-    pub arrangement: ContentArrangement,
-    #[serde(skip)]
-    colors: AccountColors,
     /// The accounts, sorted by name.
     pub accounts: Vec<AccountRow>,
 }
 
 impl fmt::Display for AccountListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        let mut columns = Columns::new(["NAME", "BACKENDS", "DEFAULT"]);
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_content_arrangement(self.arrangement.clone())
-            .set_header(Row::from(vec![
-                Cell::new("NAME"),
-                Cell::new("BACKENDS"),
-                Cell::new("DEFAULT"),
-            ]))
-            .add_rows(self.accounts.iter().map(|account| {
-                let mut row = Row::new();
-                row.max_height(1);
-                row.add_cell(Cell::new(&account.name).fg(self.colors.name));
-                row.add_cell(Cell::new(account.backends.join(", ")).fg(self.colors.backends));
-                row.add_cell(
-                    Cell::new(if account.default { "yes" } else { "" }).fg(self.colors.default),
-                );
-                row
-            }));
+        for account in &self.accounts {
+            columns.push([
+                account.name.clone(),
+                account.backends.join(","),
+                String::from(if account.default { "yes" } else { "" }),
+            ]);
+        }
 
-        writeln!(f)?;
-        writeln!(f, "{table}")
+        write!(f, "{columns}")
     }
 }

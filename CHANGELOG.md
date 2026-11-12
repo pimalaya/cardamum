@@ -18,12 +18,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   The sync engine builds and refreshes the index, cardamum only reads it. A hit carries the `card list` fields, its address book, what matched and a snippet; `-k` narrows to one address book, `--sort name|relevance` orders.
 - Added `pimdir count`, counting the cards a pimdir query matches.
 - Added the `--json` error codes `index-missing`, `index-outdated`, `index-version`, `index-fts5-missing`, `query-refused` and `query-unanswerable`, raised by `pimdir search` and `pimdir count`.
+- Added a welcome for a first run: a person at a terminal meeting no configuration is shown the commands creating it from the shipped sample, then the first command to run.
+- Added `nextPage` to `card list --json`, the next page number while cards follow and `null` on the last page, and `--page-token`, taking it back.
+- Added `carddav.alpn`, the ALPN identifiers offered to a CardDAV server, `["http/1.1"]` by default.
 
 ### Changed
 
+- **Breaking:** changed `-c` to take one path per flag, never split on `:`, and stopped reading `CARDAMUM_CONFIG`.
+
+  Without `-c`, every canonical path that exists is loaded, each deep-merged on top of the ones before.
+- **Breaking:** changed every text output to plain text: no border, no colour, nothing sized to the terminal.
+
+  `card list` prints one line per card, the account and the addressbook above, the page and the next one below. `-s 0` lists every card. `table.preset`, `table.arrangement` and every `*-color` key are gone, refused under `card.list` and `addressbook`.
+- Changed account resolution to refuse several accounts marked `default`, naming them.
 - Changed the `pimdir` feature to build io-pimdir's search, adding ical-rs, mime-rs and ariadne to the binary.
 - **Breaking:** changed every write printing a confirmation to print a receipt instead of `{"message": ...}` under `--json`: `addressbook update|delete` and `card delete` print `{id, queued}`, the item acted on and whether the write waits for a sync; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-group members` `{id, added, removed}` and `card build -o` `{path, size}`. The text form keeps its sentence. Every command now has a schema under `json-schema` (pimalaya-cli 0.3).
-- Bumped pimalaya-cli to 0.3.2, pimalaya-config to 0.3, io-jmap to 0.7 and io-pim-discovery to 0.11. The `--json` failure object always carries `code`, `null` when none applies.
+- Bumped pimalaya-cli and pimalaya-config to 0.4, io-jmap to 0.7 and io-pim-discovery to 0.11. The `--json` failure object always carries `code`, `null` when none applies.
 
 - Bumped rustls-webpki to 0.103.16 and webpki-root-certs to 1.0.11, fixing RUSTSEC-2026-0382 and RUSTSEC-2026-0383.
 - Changed piped `--json` output to print one value per line, each schema of `json-schema` to carry an `$id` naming the contract version (`v0.3`), and added `cardamum-error`, the schema of the JSON failure object (pimalaya-cli `55b6693`). The wire objects of `gpeople`, `jmap` and `msgraph` are now described as JSON objects, and the abandoned arm of `card create` and `card update`, which `--json` never prints, is now `{}` rather than `null`.
@@ -55,6 +65,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed a unified command spawning its secret commands again when it reopened its backend after the composer.
 - Fixed `account check` exiting 0 when a backend failed: it now fails with one error naming each failed backend and why.
 - Fixed pimdir accepting writes into an address book no source syncs, which no sync would ever push: they are now refused before anything is staged.
 - Fixed a pimdir card whose body blob is missing reporting an `etag`, which an `--if-match` could then match.

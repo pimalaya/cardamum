@@ -7,7 +7,7 @@ use core::fmt;
 use anyhow::{Result, anyhow};
 use clap::Parser;
 use io_jmap::rfc8620::session::JmapSession;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{fields::Fields, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -40,28 +40,15 @@ pub struct JmapSessionGetOutput(
 impl fmt::Display for JmapSessionGetOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let session = &self.0;
-        writeln!(f, "username: {}", session.username)?;
-        writeln!(f, "api-url: {}", session.api_url)?;
-        writeln!(f, "state: {}", session.state)?;
-        writeln!(
-            f,
-            "accounts: {}",
-            session
-                .accounts
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ")
-        )?;
-        writeln!(
-            f,
-            "capabilities: {}",
-            session
-                .capabilities
-                .keys()
-                .cloned()
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
+        let accounts = session.accounts.keys().cloned().collect::<Vec<_>>();
+        let capabilities = session.capabilities.keys().cloned().collect::<Vec<_>>();
+
+        let mut fields = Fields::default();
+        fields.push("Username", sanitize::text(&session.username));
+        fields.push("API URL", sanitize::text(session.api_url.as_ref()));
+        fields.push("State", sanitize::text(&session.state));
+        fields.push("Accounts", sanitize::text(&accounts.join(", ")));
+        fields.push("Capabilities", sanitize::text(&capabilities.join(", ")));
+        write!(f, "{fields}")
     }
 }

@@ -41,10 +41,7 @@ use pimalaya_stream::{
 use secrecy::ExposeSecret;
 use url::Url;
 
-use crate::{
-    account::context::Account,
-    config::{AccountConfig, CarddavAuthConfig, CarddavConfig, Config, ProxyConfig, TlsConfig},
-};
+use crate::config::{AccountConfig, CarddavAuthConfig, CarddavConfig, ProxyConfig};
 
 /// DNS resolver the discovery mechanisms query.
 const DEFAULT_RESOLVER: &str = "tcp://1.1.1.1:53";
@@ -56,17 +53,15 @@ const GOOGLE_API_ORIGIN: &str = "https://www.googleapis.com/";
 
 /// CardDAV client the protocol-specific commands run against.
 ///
-/// Derefs to the io-webdav client, and carries the merged account so
-/// commands can reach its display settings.
+/// Derefs to the io-webdav client.
 pub struct CarddavClient {
     inner: Inner,
-    pub account: Account,
 }
 
 impl CarddavClient {
-    /// Pairs a connected io-webdav client with its account.
-    pub fn new(inner: Inner, account: Account) -> Self {
-        Self { inner, account }
+    /// Wraps a connected io-webdav client.
+    pub fn new(inner: Inner) -> Self {
+        Self { inner }
     }
 }
 
@@ -84,11 +79,10 @@ impl DerefMut for CarddavClient {
     }
 }
 
-/// Merges the resolved config and account, then opens the client.
+/// Opens the CardDAV client of the account.
 ///
 /// Bails when the account carries no `[carddav]` block.
 pub fn build_carddav_client(
-    config: Config,
     name: String,
     mut account_config: AccountConfig,
 ) -> Result<CarddavClient> {
@@ -96,9 +90,8 @@ pub fn build_carddav_client(
         .carddav
         .take()
         .ok_or_else(|| anyhow!("CardDAV config is missing for account `{name}`"))?;
-    let account = Account::from(config).merge(Account::from(account_config));
     let inner = open_carddav_client(carddav_config, &mut SecretResolver::new())?;
-    Ok(CarddavClient::new(inner, account))
+    Ok(CarddavClient::new(inner))
 }
 
 /// Opens a [`WebdavClientStd`](io_webdav::client::WebdavClientStd) from a
@@ -115,11 +108,12 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
         server,
         home,
         tls,
+        alpn,
         proxy,
         auth,
     } = config;
 
-    let tls = tls_with_http_alpn(tls);
+    let tls = tls.into_tls(alpn);
     let auth = build_auth(auth, resolver)?;
     let proxy = ProxyConfig::resolve(proxy, resolver)?;
 
@@ -295,11 +289,6 @@ pub fn parse_carddav_server(server: &str) -> Result<Url> {
     };
 
     Ok(url)
-}
-
-/// Builds the TLS configuration, negotiating HTTP/1.1 through ALPN.
-pub fn tls_with_http_alpn(config: TlsConfig) -> Tls {
-    config.into_tls(vec!["http/1.1".into()])
 }
 
 /// Resolves the configured credential into a WebDAV auth scheme.

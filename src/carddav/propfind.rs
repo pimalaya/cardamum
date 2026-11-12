@@ -9,13 +9,16 @@ use anyhow::Result;
 use clap::Parser;
 use io_webdav::rfc6352::{addressbook::CarddavAddressbook, card::CarddavCardRef};
 use pimalaya_cli::{
+    columns::Columns,
+    fields::Fields,
     printer::Printer,
-    table::{Cell, Color, Row, Table},
+    records::{Record, Records},
+    sanitize,
 };
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
+use crate::carddav::client::CarddavClient;
 
 /// PROPFIND the home-set or an addressbook.
 ///
@@ -36,28 +39,18 @@ pub struct CarddavPropfindCommand {
 
 impl CarddavPropfindCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
-
         match self.addressbook_id {
             None => {
-                let id_color = client.account.addressbooks_list_table_id_color();
-                let name_color = client.account.addressbooks_list_table_name_color();
                 let books = client.list_addressbooks()?;
                 printer.out(CarddavPropfindOutput::Addressbooks(
                     CarddavPropfindAddressbooksOutput {
-                        preset,
-                        id_color,
-                        name_color,
                         rows: books.into_iter().map(AddressbookRow::from).collect(),
                     },
                 ))
             }
             Some(id) => {
-                let id_color = client.account.cards_list_table_id_color();
                 let enumerated = client.enum_cards(&id)?;
                 printer.out(CarddavPropfindOutput::Cards(CarddavPropfindCardsOutput {
-                    preset,
-                    id_color,
                     rows: enumerated.refs.into_iter().map(CardRefRow::from).collect(),
                     truncated: enumerated.truncated,
                 }))
@@ -92,15 +85,6 @@ impl fmt::Display for CarddavPropfindOutput {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CarddavPropfindAddressbooksOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
-    /// Color of the NAME column.
-    #[serde(skip)]
-    pub name_color: Color,
     /// The addressbook collections under the home-set.
     #[serde(rename = "addressbooks")]
     pub rows: Vec<AddressbookRow>,
@@ -139,34 +123,24 @@ impl From<CarddavAddressbook> for AddressbookRow {
 
 impl fmt::Display for CarddavPropfindAddressbooksOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        let mut records = Records::default();
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("ID"),
-                Cell::new("NAME"),
-                Cell::new("COLOR"),
-                Cell::new("CTAG"),
-                Cell::new("SYNC-TOKEN"),
-            ]))
-            .add_rows(self.rows.iter().map(|book| {
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(&book.id).fg(self.id_color))
-                    .add_cell(
-                        Cell::new(book.display_name.as_deref().unwrap_or("")).fg(self.name_color),
-                    )
-                    .add_cell(Cell::new(book.color.as_deref().unwrap_or("")))
-                    .add_cell(Cell::new(book.ctag.as_deref().unwrap_or("")))
-                    .add_cell(Cell::new(book.sync_token.as_deref().unwrap_or("")));
-                row
-            }));
+        for book in &self.rows {
+            let mut fields = Fields::default();
+            fields.push("Name", text(&book.display_name));
+            fields.push("Color", text(&book.color));
+            fields.push("CTag", text(&book.ctag));
+            fields.push("Sync token", text(&book.sync_token));
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
-        Ok(())
+            records.push(Record {
+                title: sanitize::text(&book.id).into_owned(),
+                state: Vec::new(),
+                fields,
+                body: String::new(),
+            });
+        }
+
+        write!(f, "{records}")
     }
 }
 
@@ -174,12 +148,6 @@ impl fmt::Display for CarddavPropfindAddressbooksOutput {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CarddavPropfindCardsOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
     /// The card resources the addressbook holds.
     #[serde(rename = "cards")]
     pub rows: Vec<CardRefRow>,
@@ -211,25 +179,32 @@ impl From<CarddavCardRef> for CardRefRow {
 
 impl fmt::Display for CarddavPropfindCardsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        if !self.rows.is_empty() {
+            let mut columns = Columns::new(["ID", "ETAG"]);
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([Cell::new("ID"), Cell::new("ETAG")]))
-            .add_rows(self.rows.iter().map(|card| {
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(&card.id).fg(self.id_color))
-                    .add_cell(Cell::new(card.etag.as_deref().unwrap_or("")));
-                row
-            }));
+            for card in &self.rows {
+                columns.push([sanitize::text(&card.id).into_owned(), text(&card.etag)]);
+            }
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
+            write!(f, "{columns}")?;
+        }
+
         if self.truncated {
+            if !self.rows.is_empty() {
+                writeln!(f)?;
+            }
+
             writeln!(f, "truncated: the server cut the listing short")?;
         }
+
         Ok(())
+    }
+}
+
+/// Renders an optional server value, sanitized, or nothing.
+fn text(value: &Option<String>) -> String {
+    match value {
+        Some(value) => sanitize::text(value).into_owned(),
+        None => String::new(),
     }
 }

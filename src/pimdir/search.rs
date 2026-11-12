@@ -9,8 +9,10 @@ use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use io_pimdir::client::search::{PimdirSearchClock, PimdirSearchOptions, PimdirSearchSort};
 use pimalaya_cli::{
+    fields::Fields,
     printer::Printer,
-    table::{Cell, Color, ColumnConstraint, ContentArrangement, Row, Table, sanitize},
+    records::{Record, Records},
+    sanitize,
 };
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -21,7 +23,6 @@ use crate::{
         backend::PimdirBackend,
         index::{PimdirCardCoverage, PimdirCardHit, parse_query},
     },
-    shared::table::style_from_preset,
 };
 
 /// Search the account's cards with the pimdir query language.
@@ -37,7 +38,7 @@ use crate::{
 /// The answer comes from the store's search index, which the sync engine
 /// builds and refreshes after each run: a card is found once it is synced
 /// and indexed, and a queued write shows in no answer. A line under the
-/// table says what the answer could not see: cards whose body is not
+/// list says what the answer could not see: cards whose body is not
 /// local, the index lagging the store.
 ///
 /// JSON output: `{"hits": [{...card list row, "matched", "snippet"}],
@@ -87,12 +88,6 @@ impl PimdirSearchCommand {
         let page = backend.search_cards(query, self.addressbook.as_deref(), &options)?;
 
         printer.out(PimdirSearchOutput {
-            preset: account.table_preset().to_string(),
-            arrangement: account.table_arrangement(),
-            id_color: account.cards_list_table_id_color(),
-            fn_color: account.cards_list_table_fn_color(),
-            email_color: account.cards_list_table_email_color(),
-            tel_color: account.cards_list_table_tel_color(),
             hits: page.hits,
             more: page.more,
             coverage: page.coverage,
@@ -123,24 +118,6 @@ impl From<PimdirSearchSortArg> for PimdirSearchSort {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PimdirSearchOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// How the table arranges its content.
-    #[serde(skip)]
-    pub arrangement: ContentArrangement,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
-    /// Color of the FN column.
-    #[serde(skip)]
-    pub fn_color: Color,
-    /// Color of the EMAIL column.
-    #[serde(skip)]
-    pub email_color: Color,
-    /// Color of the TEL column.
-    #[serde(skip)]
-    pub tel_color: Color,
     /// The cards of this page.
     pub hits: Vec<PimdirCardHit>,
     /// Whether cards follow this page.
@@ -151,54 +128,44 @@ pub struct PimdirSearchOutput {
 
 impl fmt::Display for PimdirSearchOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        let mut records = Records::default();
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_content_arrangement(self.arrangement.clone())
-            .set_header(Row::from([
-                "ID",
-                "FN",
-                "EMAIL",
-                "TEL",
-                "ADDRESSBOOK",
-                "MATCHED",
-                "SNIPPET",
-            ]))
-            .add_rows(self.hits.iter().map(|hit| {
-                let card = &hit.card;
-                let text =
-                    |value: &Option<String>| sanitize(value.as_deref().unwrap_or("")).into_owned();
-                let matched = match hit.matched {
-                    Some(matched) => matched.to_string(),
-                    None => String::new(),
-                };
-                let snippet = hit
-                    .snippet
-                    .as_deref()
-                    .unwrap_or_default()
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ");
+        for hit in &self.hits {
+            let card = &hit.card;
+            let text = |value: &Option<String>| match value {
+                Some(value) => sanitize::text(value).into_owned(),
+                None => String::new(),
+            };
 
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(sanitize(&card.id)).fg(self.id_color))
-                    .add_cell(Cell::new(text(&card.fn_value)).fg(self.fn_color))
-                    .add_cell(Cell::new(text(&card.email)).fg(self.email_color))
-                    .add_cell(Cell::new(text(&card.tel)).fg(self.tel_color))
-                    .add_cell(Cell::new(sanitize(&card.addressbook_id)))
-                    .add_cell(Cell::new(matched))
-                    .add_cell(Cell::new(sanitize(&snippet)));
-                row
-            }));
+            let mut fields = Fields::default();
+            fields.push("Name", text(&card.fn_value));
+            fields.push("Email", text(&card.email));
+            fields.push("Phone", text(&card.tel));
+            fields.push("Addressbook", sanitize::text(&card.addressbook_id));
 
-        if let Some(column) = table.column_mut(0) {
-            column.set_constraint(ColumnConstraint::ContentWidth);
+            if let Some(matched) = hit.matched {
+                fields.push("Matched", matched);
+            }
+
+            let snippet = hit.snippet.as_deref().unwrap_or_default();
+            let snippet = snippet.split_whitespace().collect::<Vec<_>>().join(" ");
+
+            records.push(Record {
+                title: sanitize::text(&card.id).into_owned(),
+                state: Vec::new(),
+                fields,
+                body: sanitize::text(&snippet).into_owned(),
+            });
         }
 
-        writeln!(f)?;
-        writeln!(f, "{table}")?;
-        write!(f, "{}", self.coverage)
+        write!(f, "{records}")?;
+
+        let coverage = self.coverage.to_string();
+
+        if !records.items.is_empty() && !coverage.is_empty() {
+            writeln!(f)?;
+        }
+
+        f.write_str(&coverage)
     }
 }

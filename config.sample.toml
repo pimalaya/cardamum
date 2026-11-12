@@ -1,14 +1,14 @@
 # ================================================================================
 # `cardamum` configuration file.
 #
-# Loaded from the first valid path among:
+# Every one of these paths that exists is loaded, each deep-merged on top of
+# the ones before:
 #   - $XDG_CONFIG_HOME/cardamum/config.toml
 #   - $HOME/.config/cardamum/config.toml
 #   - $HOME/.cardamumrc
 #
-# Override with `cardamum -c <PATH>` or `CARDAMUM_CONFIG=<PATH>`. Multiple paths
-# can be passed at once, separated by `:`; the first one is the base and the
-# rest are deep-merged on top of it.
+# `cardamum -c <PATH>` replaces them, and can be repeated to deep-merge several
+# files on top of the first one.
 #
 # Cardamum never writes this file: keep the backend you need and delete the
 # rest. Ready-made blocks for named providers live in the README.
@@ -17,16 +17,6 @@
 # --------------------------------------------------------------------------------
 # Global config
 # --------------------------------------------------------------------------------
-
-# Borders of every table, `UTF8_FULL_CONDENSED` by default. Presets are listed
-# at https://docs.rs/comfy-table/latest/comfy_table/presets/index.html
-#table.preset = "││──╞═╪╡┆    ┬┴┌┐└┘"
-
-# How columns are sized, `dynamic` by default. See
-# https://docs.rs/comfy-table/latest/comfy_table/enum.ContentArrangement.html
-#table.arrangement = "dynamic"
-#table.arrangement = "dynamic-full-width"
-#table.arrangement = "disabled"
 
 # Command a card is edited through, spawned on the path of a temporary vCard
 # file it edits in place, with every stream inherited. `card build -i`,
@@ -60,38 +50,6 @@
 # Addressbook the `card` commands act on when their `-k/--addressbook` flag
 # is omitted.
 #addressbook.default = "Contacts"
-
-# --------------------------------------------------------------------------------
-# Table rendering: addressbooks list
-#
-# One color per column of `addressbook list`, `reset` taking the terminal's own.
-# --------------------------------------------------------------------------------
-
-#addressbook.list.table.id-color = "red"
-#addressbook.list.table.name-color = "green"
-#addressbook.list.table.description-color = "reset"
-#addressbook.list.table.color-color = "reset"
-
-# --------------------------------------------------------------------------------
-# Table rendering: cards list
-#
-# One color per column of `card list`.
-# --------------------------------------------------------------------------------
-
-#card.list.table.id-color = "red"
-#card.list.table.fn-color = "green"
-#card.list.table.email-color = "blue"
-#card.list.table.tel-color = "dark-yellow"
-
-# --------------------------------------------------------------------------------
-# Table rendering: account list
-#
-# One color per column of `account list`, which has no per-account override.
-# --------------------------------------------------------------------------------
-
-#account.list.table.name-color = "green"
-#account.list.table.backends-color = "blue"
-#account.list.table.default-color = "reset"
 
 # --------------------------------------------------------------------------------
 # Accounts

@@ -30,16 +30,10 @@ pub struct CarddavReportMultigetCommand {
 
 impl CarddavReportMultigetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
-        let id_color = client.account.cards_list_table_id_color();
-        let fn_color = client.account.cards_list_table_fn_color();
         let ids: Vec<&str> = self.card_ids.iter().map(String::as_str).collect();
         let entries = client.multiget_cards(&self.addressbook_id, &ids)?;
 
         printer.out(CarddavCardEntriesOutput {
-            preset,
-            id_color,
-            fn_color,
             rows: entries.into_iter().map(EntryRow::from).collect(),
             truncated: false,
         })

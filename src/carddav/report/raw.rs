@@ -16,14 +16,11 @@ use io_webdav::{
     rfc4918::{GETETAG, WebdavMultistatus, report::WebdavReport},
     rfc6352::addressbook::ADDRESS_DATA,
 };
-use pimalaya_cli::{
-    printer::Printer,
-    table::{Cell, Row, Table},
-};
+use pimalaya_cli::{columns::Columns, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
+use crate::carddav::client::CarddavClient;
 
 /// Run a REPORT with an arbitrary XML body against an addressbook.
 ///
@@ -49,7 +46,6 @@ pub struct CarddavReportRawCommand {
 
 impl CarddavReportRawCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
         let body = read_xml(&self.xml)?;
 
         let home = client
@@ -69,7 +65,6 @@ impl CarddavReportRawCommand {
         let multistatus = run_report(&mut client, coroutine)?;
 
         printer.out(CarddavReportRawOutput {
-            preset,
             sync_token: multistatus.sync_token,
             responses: multistatus.responses.iter().map(EntryRow::from).collect(),
         })
@@ -128,9 +123,6 @@ fn run_report(
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CarddavReportRawOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
     /// One entry per multistatus response.
     pub responses: Vec<EntryRow>,
     /// The `sync-token` the multistatus carried, when it carried one.
@@ -167,33 +159,32 @@ impl From<&io_webdav::rfc4918::WebdavResponseEntry> for EntryRow {
 
 impl fmt::Display for CarddavReportRawOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        if !self.responses.is_empty() {
+            let mut columns = Columns::new(["STATUS", "DATA-BYTES", "ETAG", "HREF"]);
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("HREF"),
-                Cell::new("STATUS"),
-                Cell::new("ETAG"),
-                Cell::new("DATA-BYTES"),
-            ]))
-            .add_rows(self.responses.iter().map(|entry| {
+            for entry in &self.responses {
                 let status = entry.status.map(|s| s.to_string()).unwrap_or_default();
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(&entry.href))
-                    .add_cell(Cell::new(status))
-                    .add_cell(Cell::new(entry.etag.as_deref().unwrap_or("")))
-                    .add_cell(Cell::new(entry.data_bytes));
-                row
-            }));
+                let etag = entry.etag.as_deref().map(sanitize::text);
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
-        if let Some(token) = &self.sync_token {
-            writeln!(f, "sync-token: {token}")?;
+                columns.push([
+                    status,
+                    entry.data_bytes.to_string(),
+                    etag.map(|etag| etag.into_owned()).unwrap_or_default(),
+                    sanitize::text(&entry.href).into_owned(),
+                ]);
+            }
+
+            write!(f, "{columns}")?;
         }
+
+        if let Some(token) = &self.sync_token {
+            if !self.responses.is_empty() {
+                writeln!(f)?;
+            }
+
+            writeln!(f, "sync-token: {}", sanitize::text(token))?;
+        }
+
         Ok(())
     }
 }

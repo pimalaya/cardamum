@@ -42,7 +42,7 @@ use crate::{
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
-        client::paginate,
+        client::window,
     },
 };
 
@@ -169,12 +169,13 @@ impl JmapBackend {
         Ok(())
     }
 
-    /// Lists the AddressBook's cards as vCard documents, 1-indexed pages.
+    /// Lists the AddressBook's cards as vCard documents, the `take` after
+    /// the first `skip`.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
-        page: Option<u32>,
-        page_size: Option<u32>,
+        skip: usize,
+        take: Option<usize>,
     ) -> Result<Vec<Card>> {
         let opts = JmapContactCardQueryOptions {
             filter: Some(JmapContactCardFilter {
@@ -192,7 +193,7 @@ impl JmapBackend {
             .collect::<Result<Vec<_>, _>>()
             .map_err(Error::msg)?;
 
-        Ok(paginate(cards, page, page_size))
+        Ok(window(cards, skip, take))
     }
 
     /// Reads the ContactCard `card_id`, converted to a vCard document.

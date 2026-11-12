@@ -6,7 +6,7 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{columns::Columns, fields::Fields, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -87,46 +87,53 @@ pub struct PimdirParkedStatus {
 
 impl fmt::Display for PimdirStatusOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f)?;
+        let account = match &self.account {
+            Some(account) => sanitize::text(account).into_owned(),
+            None => String::from("none, the store groups no account"),
+        };
+        let accounts = match self.accounts.as_slice() {
+            [] => String::from("none"),
+            accounts => sanitize::text(&accounts.join(", ")).into_owned(),
+        };
 
-        match &self.account {
-            Some(account) => writeln!(f, "Reading account: {account}")?,
-            None => writeln!(f, "Reading account: none, the store groups no account")?,
-        }
+        let mut fields = Fields::default();
+        fields.push("Reading account", account);
+        fields.push("Grouped accounts", accounts);
+        write!(f, "{fields}")?;
 
-        match self.accounts.as_slice() {
-            [] => writeln!(f, "Grouped accounts: none")?,
-            accounts => writeln!(f, "Grouped accounts: {}", accounts.join(", "))?,
-        }
+        if !self.addressbooks.is_empty() {
+            let header = ["ID", "CARDS", "DOWNLOADED", "QUEUED", "NAME"];
+            let mut columns = Columns::new(header);
 
-        writeln!(f)?;
-
-        for addressbook in &self.addressbooks {
-            write!(
-                f,
-                "  {} ({}): {}/{} cards downloaded",
-                addressbook.name, addressbook.id, addressbook.hydrated, addressbook.total
-            )?;
-
-            match addressbook.queued {
-                0 => writeln!(f)?,
-                queued => writeln!(f, ", {queued} queued for the next sync")?,
+            for addressbook in &self.addressbooks {
+                columns.push([
+                    sanitize::text(&addressbook.id).into_owned(),
+                    addressbook.total.to_string(),
+                    addressbook.hydrated.to_string(),
+                    addressbook.queued.to_string(),
+                    sanitize::text(&addressbook.name).into_owned(),
+                ]);
             }
+
+            writeln!(f)?;
+            write!(f, "{columns}")?;
         }
 
-        if self.parked.is_empty() {
-            return Ok(());
-        }
+        if !self.parked.is_empty() {
+            let mut columns = Columns::new(["ROW", "ACTION", "ADDRESSBOOK", "ERROR"]);
 
-        writeln!(f)?;
-        writeln!(f, "Parked, never applied:")?;
+            for parked in &self.parked {
+                columns.push([
+                    parked.row.to_string(),
+                    sanitize::text(&parked.action).into_owned(),
+                    sanitize::text(&parked.addressbook_id).into_owned(),
+                    sanitize::text(&parked.error).into_owned(),
+                ]);
+            }
 
-        for parked in &self.parked {
-            writeln!(
-                f,
-                "  ROW {} {} in {}: {}",
-                parked.row, parked.action, parked.addressbook_id, parked.error
-            )?;
+            writeln!(f)?;
+            write!(f, "{columns}")?;
+            writeln!(f, "Parked by the store's owner, never applied")?;
         }
 
         Ok(())

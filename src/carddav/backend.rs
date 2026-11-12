@@ -21,7 +21,7 @@ use crate::{
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
-        client::paginate,
+        client::window,
         uuid::uuid_v4,
     },
 };
@@ -39,9 +39,8 @@ impl CarddavBackend {
     ///
     /// Discovery runs when the block needs it, see
     /// [`open_carddav_client`](crate::carddav::client::open_carddav_client).
-    pub fn new(config: CarddavConfig) -> Result<Self> {
-        let inner =
-            crate::carddav::client::open_carddav_client(config, &mut SecretResolver::new())?;
+    pub fn new(config: CarddavConfig, resolver: &mut SecretResolver) -> Result<Self> {
+        let inner = crate::carddav::client::open_carddav_client(config, resolver)?;
         Ok(Self { inner })
     }
 
@@ -102,12 +101,12 @@ impl CarddavBackend {
         Ok(())
     }
 
-    /// Lists the cards inside `addressbook_id`, paginated 1-indexed.
+    /// Lists the `take` cards inside `addressbook_id` after the first `skip`.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
-        page: Option<u32>,
-        page_size: Option<u32>,
+        skip: usize,
+        take: Option<usize>,
     ) -> Result<Vec<Card>> {
         let opts = CarddavCardListOptions::default();
         let cards = self
@@ -117,7 +116,7 @@ impl CarddavBackend {
             .into_iter()
             .map(|entry| into_card(addressbook_id, entry))
             .collect();
-        Ok(paginate(cards, page, page_size))
+        Ok(window(cards, skip, take))
     }
 
     /// Fetches `card_id` from `addressbook_id`.

@@ -1,7 +1,6 @@
 //! # JMAP client
 //!
-//! Wraps [`JmapClientStd`] with the merged [`Account`] the commands read
-//! their rendering options from, its JMAP session already discovered.
+//! Wraps [`JmapClientStd`], its JMAP session already discovered.
 
 use std::ops::{Deref, DerefMut};
 
@@ -10,16 +9,13 @@ use io_jmap::client::{JmapClientStd, JmapClientStdConnectOptions};
 use pimalaya_config::secret::SecretResolver;
 
 use crate::{
-    account::context::Account,
-    config::{AccountConfig, Config, ProxyConfig, parse_server},
+    config::{AccountConfig, ProxyConfig, parse_server},
     jmap::backend::jmap_http_auth,
 };
 
-/// A connected io-jmap client paired with the account it runs for.
+/// A connected io-jmap client.
 pub struct JmapClient {
     inner: JmapClientStd,
-    /// The merged account, source of the table and color options.
-    pub account: Account,
 }
 
 impl Deref for JmapClient {
@@ -36,14 +32,10 @@ impl DerefMut for JmapClient {
     }
 }
 
-/// Opens the JMAP client, fetches its session and merges the [`Account`].
+/// Opens the JMAP client and fetches its session.
 ///
 /// Bails when the account declares no `[jmap]` block.
-pub fn build_jmap_client(
-    config: Config,
-    name: String,
-    mut account_config: AccountConfig,
-) -> Result<JmapClient> {
+pub fn build_jmap_client(name: String, mut account_config: AccountConfig) -> Result<JmapClient> {
     let jmap_config = account_config
         .jmap
         .take()
@@ -64,6 +56,5 @@ pub fn build_jmap_client(
     let mut inner = JmapClientStd::connect(&url, http_auth, options)?;
     inner.session_get(&url)?;
 
-    let account = Account::from(config).merge(Account::from(account_config));
-    Ok(JmapClient { inner, account })
+    Ok(JmapClient { inner })
 }

@@ -21,9 +21,6 @@ pub struct JmapContactCardGetCommand {
 
 impl JmapContactCardGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: JmapClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
-        let id_color = client.account.cards_list_table_id_color();
-
         let opts = JmapContactCardGetOptions {
             ids: Some(self.ids),
             ..Default::default()
@@ -31,8 +28,6 @@ impl JmapContactCardGetCommand {
         let out = client.contact_card_get(opts)?;
 
         printer.out(JmapContactCardsOutput {
-            preset,
-            id_color,
             cards: out.cards,
             state: out.new_state,
         })

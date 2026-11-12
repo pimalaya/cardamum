@@ -1,17 +1,15 @@
 //! # People rendering
 //!
 //! The reports the People commands print: people and contact groups as
-//! tables, single objects as key/value lines, the raw People JSON under
-//! `--json`.
+//! columns, single objects as `Label: value` lines, the raw People JSON
+//! under `--json`.
 
 use core::fmt;
 
 use io_gpeople::v1::rest::{contact_groups::GpeopleContactGroup, people::GpeoplePerson};
-use pimalaya_cli::table::{Cell, Color, Row, Table};
+use pimalaya_cli::{columns::Columns, fields::Fields, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
-
-use crate::shared::table::style_from_preset;
 
 /// Display name of a person (display name, else unstructured name).
 pub fn person_name(person: &GpeoplePerson) -> &str {
@@ -46,17 +44,11 @@ pub fn person_phone(person: &GpeoplePerson) -> &str {
 
 /// A list of people: connections, other contacts or search results.
 ///
-/// The table shows ID / NAME / EMAIL / PHONE; `--json` emits the raw
+/// The text lists ID / EMAIL / PHONE / NAME; `--json` emits the raw
 /// People person objects, plus any page and sync tokens.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GpeoplePersonsOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
     /// The raw People person objects.
     #[serde(rename = "people")]
     #[schemars(with = "Vec<serde_json::Value>")]
@@ -71,31 +63,27 @@ pub struct GpeoplePersonsOutput {
 
 impl fmt::Display for GpeoplePersonsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        if !self.people.is_empty() {
+            let mut columns = Columns::new(["ID", "EMAIL", "PHONE", "NAME"]);
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("ID"),
-                Cell::new("NAME"),
-                Cell::new("EMAIL"),
-                Cell::new("PHONE"),
-            ]))
-            .add_rows(self.people.iter().map(|person| {
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(person.id()).fg(self.id_color))
-                    .add_cell(Cell::new(person_name(person)))
-                    .add_cell(Cell::new(person_email(person)))
-                    .add_cell(Cell::new(person_phone(person)));
-                row
-            }));
+            for person in &self.people {
+                columns.push([
+                    sanitize::text(person.id()),
+                    sanitize::text(person_email(person)),
+                    sanitize::text(person_phone(person)),
+                    sanitize::text(person_name(person)),
+                ]);
+            }
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
+            write!(f, "{columns}")?;
+
+            if self.next_sync_token.is_some() || self.next_page_token.is_some() {
+                writeln!(f)?;
+            }
+        }
+
         if let Some(token) = &self.next_sync_token {
-            writeln!(f, "sync-token: {token}")?;
+            writeln!(f, "sync-token: {}", sanitize::text(token))?;
         }
         if self.next_page_token.is_some() {
             writeln!(f, "(more people available: follow nextPageToken)")?;
@@ -114,10 +102,12 @@ pub struct GpeoplePersonOutput(
 impl fmt::Display for GpeoplePersonOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let person = &self.0;
-        writeln!(f, "id: {}", person.id())?;
-        writeln!(f, "name: {}", person_name(person))?;
-        writeln!(f, "email: {}", person_email(person))?;
-        writeln!(f, "phone: {}", person_phone(person))
+        let mut fields = Fields::default();
+        fields.push("Id", sanitize::text(person.id()));
+        fields.push("Name", sanitize::text(person_name(person)));
+        fields.push("Email", sanitize::text(person_email(person)));
+        fields.push("Phone", sanitize::text(person_phone(person)));
+        write!(f, "{fields}")
     }
 }
 
@@ -140,17 +130,11 @@ pub fn group_name(group: &GpeopleContactGroup) -> &str {
 
 /// A list of contact groups.
 ///
-/// The table shows ID / NAME / TYPE / MEMBERS; `--json` emits the raw
+/// The text lists ID / TYPE / MEMBERS / NAME; `--json` emits the raw
 /// People group objects, plus any tokens.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GpeopleContactGroupsOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
     /// The raw People contact group objects.
     #[serde(rename = "contactGroups")]
     #[schemars(with = "Vec<serde_json::Value>")]
@@ -165,34 +149,31 @@ pub struct GpeopleContactGroupsOutput {
 
 impl fmt::Display for GpeopleContactGroupsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        if !self.groups.is_empty() {
+            let mut columns = Columns::new(["ID", "TYPE", "MEMBERS", "NAME"]);
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("ID"),
-                Cell::new("NAME"),
-                Cell::new("TYPE"),
-                Cell::new("MEMBERS"),
-            ]))
-            .add_rows(self.groups.iter().map(|group| {
+            for group in &self.groups {
                 let group_type = group
                     .group_type
                     .as_ref()
                     .map(|kind| format!("{kind:?}"))
                     .unwrap_or_default();
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(group_id(group)).fg(self.id_color))
-                    .add_cell(Cell::new(group_name(group)))
-                    .add_cell(Cell::new(group_type))
-                    .add_cell(Cell::new(member_count(group)));
-                row
-            }));
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
+                columns.push([
+                    sanitize::text(group_id(group)).into_owned(),
+                    group_type,
+                    member_count(group),
+                    sanitize::text(group_name(group)).into_owned(),
+                ]);
+            }
+
+            write!(f, "{columns}")?;
+
+            if self.next_page_token.is_some() {
+                writeln!(f)?;
+            }
+        }
+
         if self.next_page_token.is_some() {
             writeln!(f, "(more groups available: follow nextPageToken)")?;
         }
@@ -210,10 +191,12 @@ pub struct GpeopleContactGroupOutput(
 impl fmt::Display for GpeopleContactGroupOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let group = &self.0;
-        writeln!(f, "id: {}", group_id(group))?;
-        writeln!(f, "name: {}", group_name(group))?;
-        writeln!(f, "resource-name: {}", group.resource_name)?;
-        writeln!(f, "members: {}", member_count(group))
+        let mut fields = Fields::default();
+        fields.push("Id", sanitize::text(group_id(group)));
+        fields.push("Name", sanitize::text(group_name(group)));
+        fields.push("Resource name", sanitize::text(&group.resource_name));
+        fields.push("Members", member_count(group));
+        write!(f, "{fields}")
     }
 }
 

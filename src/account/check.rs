@@ -10,7 +10,7 @@ use std::{fmt, path::PathBuf};
 
 use anyhow::{Result, bail};
 use clap::Parser;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{fields::Fields, printer::Printer, sanitize};
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -22,10 +22,7 @@ use pimalaya_config::toml::TomlConfig;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{
-    backend::Backend,
-    config::{Config, NO_CONFIG_HINT},
-};
+use crate::{backend::Backend, config::Config};
 
 /// Validate the account configuration.
 ///
@@ -49,21 +46,8 @@ impl AccountCheckCommand {
         account_name: Option<&str>,
         backend: Backend,
     ) -> Result<()> {
-        let mut config = match Config::from_paths_or_default(config_paths)? {
-            Some(config) => config,
-            None => bail!(
-                "No configuration found at {}, {NO_CONFIG_HINT}",
-                Config::target_path(config_paths)?.display(),
-            ),
-        };
-
-        let (name, account_config) = config
-            .take_account(account_name)?
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "No default account found, name one with `-a <NAME>` or mark one with `default = true`"
-                )
-            })?;
+        let mut config = Config::load(config_paths)?;
+        let (name, account_config) = config.take_account(account_name)?;
 
         let mut report = AccountCheckOutput {
             account: name,
@@ -289,14 +273,17 @@ impl BackendCheck {
 
 impl fmt::Display for AccountCheckOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Account: {}", self.account)?;
+        let mut fields = Fields::default();
+        fields.push("Account", &self.account);
+
         for check in &self.backends {
             match &check.error {
-                None => writeln!(f, "  {}: OK", check.backend)?,
-                Some(err) => writeln!(f, "  {}: FAIL ({err})", check.backend)?,
+                None => fields.push(check.backend, "OK"),
+                Some(err) => fields.push(check.backend, format!("FAIL ({})", sanitize::text(err))),
             }
         }
-        Ok(())
+
+        write!(f, "{fields}")
     }
 }
 
@@ -447,7 +434,12 @@ mod vdir_tests {
 
         let (result, out) = check(dir.path());
         result.unwrap();
-        assert!(out.contains("vdir: OK"), "{out}");
+        let vdir = out.lines().find(|line| line.starts_with("vdir:"));
+        assert_eq!(
+            vdir.map(|line| line.split_whitespace().last()),
+            Some(Some("OK")),
+            "{out}"
+        );
 
         let (result, out) = check(&dir.path().join("missing"));
         let err = format!("{:#}", result.unwrap_err());

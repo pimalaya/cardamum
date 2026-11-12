@@ -1,15 +1,17 @@
 //! # Contact rendering
 //!
-//! Table and JSON shapes of the contact commands.
+//! Text and JSON shapes of the contact commands.
 
 use core::fmt;
 
 use io_msgraph::v1::rest::users::contacts::MsgraphContact;
-use pimalaya_cli::table::{Cell, Color, Row, Table};
+use pimalaya_cli::{
+    fields::Fields,
+    records::{Record, Records},
+    sanitize,
+};
 use schemars::JsonSchema;
 use serde::Serialize;
-
-use crate::shared::table::style_from_preset;
 
 /// Display name of a contact, or the empty string.
 pub fn contact_name(contact: &MsgraphContact) -> &str {
@@ -33,17 +35,12 @@ pub fn contact_phone(contact: &MsgraphContact) -> &str {
 
 /// A page of contacts.
 ///
-/// The table shows ID, NAME, EMAIL and PHONE, while `--json` emits the raw
-/// Graph contact objects plus any next-page link.
+/// The text prints each contact by its id with its name, email and phone,
+/// while `--json` emits the raw Graph contact objects plus any next-page
+/// link.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MsgraphContactsOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
     /// The raw Graph contact objects.
     #[serde(rename = "contacts")]
     #[schemars(with = "Vec<serde_json::Value>")]
@@ -55,32 +52,27 @@ pub struct MsgraphContactsOutput {
 
 impl fmt::Display for MsgraphContactsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        let mut records = Records::default();
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("ID"),
-                Cell::new("NAME"),
-                Cell::new("EMAIL"),
-                Cell::new("PHONE"),
-            ]))
-            .add_rows(self.contacts.iter().map(|contact| {
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(&contact.id).fg(self.id_color))
-                    .add_cell(Cell::new(contact_name(contact)))
-                    .add_cell(Cell::new(contact_email(contact)))
-                    .add_cell(Cell::new(contact_phone(contact)));
-                row
-            }));
+        for contact in &self.contacts {
+            records.push(Record {
+                title: sanitize::text(&contact.id).into_owned(),
+                state: Vec::new(),
+                fields: contact_fields(contact),
+                body: String::new(),
+            });
+        }
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
+        write!(f, "{records}")?;
+
         if self.next_link.is_some() {
+            if !records.items.is_empty() {
+                writeln!(f)?;
+            }
+
             writeln!(f, "(more contacts available: raise --top)")?;
         }
+
         Ok(())
     }
 }
@@ -95,9 +87,18 @@ pub struct MsgraphContactOutput(
 impl fmt::Display for MsgraphContactOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let contact = &self.0;
-        writeln!(f, "id: {}", contact.id)?;
-        writeln!(f, "display-name: {}", contact_name(contact))?;
-        writeln!(f, "email: {}", contact_email(contact))?;
-        writeln!(f, "mobile-phone: {}", contact_phone(contact))
+        let mut fields = Fields::default();
+        fields.push("Id", sanitize::text(&contact.id));
+        fields.rows.extend(contact_fields(contact).rows);
+        write!(f, "{fields}")
     }
+}
+
+/// The name, first email and mobile phone of a contact, sanitized.
+fn contact_fields(contact: &MsgraphContact) -> Fields<'static> {
+    let mut fields = Fields::default();
+    fields.push("Name", sanitize::text(contact_name(contact)));
+    fields.push("Email", sanitize::text(contact_email(contact)));
+    fields.push("Phone", sanitize::text(contact_phone(contact)));
+    fields
 }

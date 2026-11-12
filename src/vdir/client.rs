@@ -1,7 +1,7 @@
 //! # Vdir client
 //!
-//! Wraps [`io_vdir::client::VdirClient`] and carries the merged [`Account`]
-//! alongside it, which is what the commands render from.
+//! Wraps [`io_vdir::client::VdirClient`], resolving collection names to
+//! their paths under the vdir root.
 
 use std::{
     ops::{Deref, DerefMut},
@@ -11,22 +11,18 @@ use std::{
 use anyhow::{Result, anyhow, bail};
 use io_vdir::{client::VdirClient as Inner, path::VdirPath};
 
-use crate::{
-    account::context::Account,
-    config::{AccountConfig, Config, VdirConfig},
-};
+use crate::config::{AccountConfig, VdirConfig};
 
-/// The vdir client a command runs against, plus its account.
+/// The vdir client a command runs against.
 pub struct VdirClient {
     inner: Inner,
-    pub account: Account,
 }
 
 impl VdirClient {
     /// Opens the client rooted at the configured home directory.
-    pub fn new(config: VdirConfig, account: Account) -> Self {
+    pub fn new(config: VdirConfig) -> Self {
         let inner = Inner::new(config.home_dir);
-        Self { inner, account }
+        Self { inner }
     }
 
     /// Resolves a collection name to its path under the vdir root.
@@ -56,18 +52,13 @@ impl DerefMut for VdirClient {
     }
 }
 
-/// Merges the global and account configs, then opens the vdir client.
+/// Opens the vdir client of the account.
 ///
 /// Bails when the account declares no `[vdir]` block.
-pub fn build_vdir_client(
-    config: Config,
-    name: String,
-    mut account_config: AccountConfig,
-) -> Result<VdirClient> {
+pub fn build_vdir_client(name: String, mut account_config: AccountConfig) -> Result<VdirClient> {
     let vdir_config = account_config
         .vdir
         .take()
         .ok_or_else(|| anyhow!("Vdir config is missing for account `{name}`"))?;
-    let account = Account::from(config).merge(Account::from(account_config));
-    Ok(VdirClient::new(vdir_config, account))
+    Ok(VdirClient::new(vdir_config))
 }

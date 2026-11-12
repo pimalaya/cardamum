@@ -31,9 +31,6 @@ pub struct MsgraphContactListCommand {
 
 impl MsgraphContactListCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
-        let id_color = client.account.cards_list_table_id_color();
-
         let params = MsgraphContactsListParams {
             top: self.top,
             select: self.select.as_deref(),
@@ -45,8 +42,6 @@ impl MsgraphContactListCommand {
             .response;
 
         printer.out(MsgraphContactsOutput {
-            preset,
-            id_color,
             contacts: page.value,
             next_link: page.next_link,
         })

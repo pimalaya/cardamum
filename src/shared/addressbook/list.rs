@@ -1,22 +1,17 @@
 //! # Addressbook list command
 //!
-//! Lists the addressbooks the account exposes, as a colored table or as
+//! Lists the addressbooks the account exposes, as aligned columns or as
 //! JSON.
 
 use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::{
-    printer::Printer,
-    table::{Cell, Color, Row, Table},
-};
+use pimalaya_cli::{columns::Columns, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::shared::{
-    addressbook::Addressbook, client::AddressbookClient, table::style_from_preset,
-};
+use crate::shared::{addressbook::Addressbook, client::AddressbookClient};
 
 /// List every addressbook available to the active account.
 ///
@@ -29,38 +24,18 @@ impl AddressbookListCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
         let addressbooks = client.list_addressbooks()?;
 
-        let table = AddressbookListOutput {
-            preset: client.account.table_preset().to_string(),
-            id_color: client.account.addressbooks_list_table_id_color(),
-            name_color: client.account.addressbooks_list_table_name_color(),
-            description_color: client.account.addressbooks_list_table_description_color(),
-            color_color: client.account.addressbooks_list_table_color_color(),
+        let output = AddressbookListOutput {
             rows: addressbooks.into_iter().map(From::from).collect(),
         };
 
-        printer.out(table)
+        printer.out(output)
     }
 }
 
-/// Table of addressbooks, and the JSON shape the command prints.
+/// The addressbooks of the account, and the JSON shape the command prints.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddressbookListOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
-    /// Color of the NAME column.
-    #[serde(skip)]
-    pub name_color: Color,
-    /// Color of the DESC column.
-    #[serde(skip)]
-    pub description_color: Color,
-    /// Color of the COLOR column.
-    #[serde(skip)]
-    pub color_color: Color,
     /// The addressbooks the account exposes.
     #[serde(rename = "addressbooks")]
     pub rows: Vec<AddressbookRow>,
@@ -97,32 +72,22 @@ impl From<Addressbook> for AddressbookRow {
 
 impl fmt::Display for AddressbookListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        // NOTE: a name is free text, so it reads last; a description is
+        // left to the JSON.
+        let mut columns = Columns::new(["ID", "DEFAULT", "COLOR", "NAME"]);
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("ID"),
-                Cell::new("NAME"),
-                Cell::new("DESC"),
-                Cell::new("COLOR"),
-            ]))
-            .add_rows(self.rows.iter().map(|book| {
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(&book.id).fg(self.id_color))
-                    .add_cell(Cell::new(&book.name).fg(self.name_color))
-                    .add_cell(
-                        Cell::new(book.description.as_deref().unwrap_or(""))
-                            .fg(self.description_color),
-                    )
-                    .add_cell(Cell::new(book.color.as_deref().unwrap_or("")).fg(self.color_color));
-                row
-            }));
+        for book in &self.rows {
+            let default = if book.default { "yes" } else { "" };
+            let color = book.color.as_deref().map(sanitize::text);
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
-        Ok(())
+            columns.push([
+                sanitize::text(&book.id).into_owned(),
+                default.to_string(),
+                color.map(|color| color.into_owned()).unwrap_or_default(),
+                sanitize::text(&book.name).into_owned(),
+            ]);
+        }
+
+        write!(f, "{columns}")
     }
 }

@@ -82,28 +82,50 @@ mod shared;
 #[cfg(feature = "vdir")]
 mod vdir;
 
+use std::{path::PathBuf, process};
+
 use anyhow::Result;
-use clap::{CommandFactory, Parser};
-use pimalaya_cli::{error::ErrorReport, log::Logger, printer::StdoutPrinter};
+use clap::Parser;
+use pimalaya_cli::{
+    error::{EXIT_FAILURE, ErrorReport},
+    log::Logger,
+    printer::StdoutPrinter,
+    welcome::{is_wanted, shipped_sample},
+};
+use pimalaya_config::toml::ConfigMissingError;
 
 use crate::{cli::Cli, error::ErrorCode};
 
 fn main() {
     let cli = Cli::parse();
     let mut printer = StdoutPrinter::new(&cli.json);
+    let config_paths = cli.config.paths.clone();
     let result = execute(cli, &mut printer);
+
+    // A person missing a configuration meets the welcome, a script or a
+    // JSON caller the error.
+    if let Err(err) = &result
+        && let Some(missing) = err.downcast_ref::<ConfigMissingError>()
+        && is_wanted(&printer)
+    {
+        let sample = shipped_sample("cardamum");
+        let welcome = cli::welcome(&missing.path, &config_paths, sample.as_deref());
+        eprint!("{welcome}");
+        process::exit(EXIT_FAILURE);
+    }
+
     ErrorReport::<ErrorCode>::eval_coded(&mut printer, result);
 }
 
+/// Runs the subcommand, or meets a bare `cardamum`.
 fn execute(cli: Cli, printer: &mut StdoutPrinter) -> Result<()> {
     Logger::try_init(&cli.log)?;
-    let config = cli.config_paths.as_ref();
+    let config: &[PathBuf] = &cli.config.paths;
     let account = cli.account.name.as_deref();
     let backend = cli.backend;
 
     let Some(cmd) = cli.cmd else {
-        Cli::command().print_help()?;
-        return Ok(());
+        return cli::meet_bare_invocation(config);
     };
 
     cmd.execute(printer, config, account, backend)

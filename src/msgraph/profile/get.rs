@@ -7,7 +7,7 @@ use core::fmt;
 use anyhow::Result;
 use clap::Parser;
 use io_msgraph::v1::rest::users::MsgraphUser;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{fields::Fields, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -36,17 +36,16 @@ pub struct MsgraphProfileGetOutput(
 impl fmt::Display for MsgraphProfileGetOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let user = &self.0;
-        writeln!(f, "id: {}", user.id)?;
-        writeln!(
-            f,
-            "display-name: {}",
-            user.display_name.as_deref().unwrap_or("")
-        )?;
-        writeln!(f, "mail: {}", user.mail.as_deref().unwrap_or(""))?;
-        writeln!(
-            f,
-            "user-principal-name: {}",
-            user.user_principal_name.as_deref().unwrap_or("")
-        )
+        let text = |value: &Option<String>| match value {
+            Some(value) => sanitize::text(value).into_owned(),
+            None => String::new(),
+        };
+
+        let mut fields = Fields::default();
+        fields.push("Id", sanitize::text(&user.id));
+        fields.push("Display name", text(&user.display_name));
+        fields.push("Mail", text(&user.mail));
+        fields.push("User principal name", text(&user.user_principal_name));
+        write!(f, "{fields}")
     }
 }

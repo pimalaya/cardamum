@@ -62,9 +62,6 @@ pub struct CarddavReportQueryCommand {
 
 impl CarddavReportQueryCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
-        let id_color = client.account.cards_list_table_id_color();
-        let fn_color = client.account.cards_list_table_fn_color();
         let opts = CarddavCardListOptions {
             limit: self.limit,
             filter: self.filter()?,
@@ -72,9 +69,6 @@ impl CarddavReportQueryCommand {
         let ok = client.list_cards(&self.addressbook_id, &opts)?;
 
         printer.out(CarddavCardEntriesOutput {
-            preset,
-            id_color,
-            fn_color,
             rows: ok.cards.into_iter().map(EntryRow::from).collect(),
             truncated: ok.truncated,
         })

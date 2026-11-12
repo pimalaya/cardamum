@@ -55,7 +55,7 @@ A unified write SHALL say whether it reached the server or was queued for a sync
 A queued creation SHALL get no placeholder id (`q<id>`, `0`, `""`): `card create` reports the card's link id, which `card read` does not accept until a sync applies the create and the card lists under its public id.
 
 ### Requirement: A displayed count is the server's
-A table SHALL NOT render an absent value as a default that reads as fact. A count the API returns only on request SHALL be requested, or left blank.
+A text output SHALL NOT render an absent value as a default that reads as fact. A count the API returns only on request SHALL be requested, or left blank.
 
 ### Requirement: A command resolves its addressbook before acting
 A unified command SHALL resolve the addressbook it was given before reading or writing through it, and SHALL fail naming it when it does not exist. Listing an unknown addressbook SHALL NOT read as empty, and writing into one SHALL NOT create it.
@@ -82,9 +82,6 @@ A field renamed onto a provider's own wire key SHALL keep that spelling, a conta
 Every output type SHALL be registered in [json_schema.rs](../../src/json_schema.rs) under its CLI invocation path, hyphen-joined and prefixed `cardamum-`, and the `json-schema` command (aliased `json-schemas`) SHALL print one or write one file per entry. A registered key naming no command is a test failure, so the registry cannot drift from the tree; `cardamum-error`, the failure object every command prints, is the one key naming none.
 
 A wire object the protocol crate exposes without a `JsonSchema` of its own SHALL be described as a JSON object of any shape rather than left out: the payload is the provider's to define, and claiming a shape we do not own would be worse than claiming none.
-
-### Requirement: comfy-table is reached through the toolkit
-Table rendering SHALL go through `pimalaya_cli::table` rather than a direct `comfy-table` dependency, so the toolkit owns the version every Pimalaya CLI draws with.
 
 ### Requirement: A card is edited through a command, never through a pipe
 A composer SHALL be a command the configuration names, spawned on the path of a temporary file holding the vCard, with stdin, stdout and stderr all inherited. Cardamum SHALL capture none of the command's streams: a composer that spawns an editor would otherwise hand it a pipe instead of the terminal, and the editor hangs or writes where nothing reads. The command edits the file in place, and cardamum reads it back once the command exits.
@@ -227,3 +224,21 @@ The output of `pimdir search` and `pimdir count` SHALL carry the coverage of the
 
 ### Requirement: A pimdir index or query failure is coded
 A store with no search index SHALL fail both commands with the code `index-missing`, an index another version built with `index-outdated`, one of another draft or shape with `index-version`, and a SQLite lacking FTS5 with `index-fts5-missing`, each saying the store's sync engine builds or rebuilds the index and none advising to delete anything. A query the language refuses SHALL fail with `query-refused`: in plain output the SEARCH §8.4 fault drawn over the query, under `--json` the §8.4 code, span and expectations in `error`. An accepted query the index cannot answer SHALL fail with `query-unanswerable`.
+
+### Requirement: Text output is plain text
+A text output SHALL be plain text: no border, no colour, nothing sized to or truncated for the terminal, and it SHALL end with a newline. A list of short rows prints as aligned columns, a list of wide items as records, a single item as `Label:  value` fields (pimalaya-cli `Columns`, `Records`, `Fields`).
+
+### Requirement: Help is plain text
+`--help` and `-h` SHALL print without colour, each paragraph on one line, never wrapped to the terminal width.
+
+### Requirement: A query error is drawn without colour
+The report `pimdir search` and `pimdir count` draw over a query they refuse SHALL carry no colour escape, on a terminal as in the `--json` error string.
+
+### Requirement: Plain output is printable
+A field taken from a card or a server (a name, an address, an id, an error a server wrote) SHALL have its control characters and bidi controls replaced before it is printed as text (pimalaya-cli `sanitize::text`). JSON strings and the raw bytes a command is asked for SHALL remain unchanged.
+
+### Requirement: A card page names its context and its next page
+`card list` SHALL print `Account: <name> (<backend>)` and `Addressbook: <id>` above the cards, a blank line, one line per card with no column header (`id  email  phone  name`, the free-text name last, `-` for an empty cell), a blank line, then `Page: <n>, cards <a> to <b>` (`card <a>` for one, `empty` for none, `all` when unpaged) followed by `, the last` when no card follows, and `Next page: --page <n>` while one does, the values aligned in one column.
+
+### Requirement: Listings resume from their cursor
+`card list` SHALL print `nextPage` beside `cards`: the next page number, as a string, while cards follow the page, `null` otherwise, and SHALL take it back through `--page-token`, which wins over `--page`. Whether cards follow is exact on every backend: the unified client reads one card past the page.

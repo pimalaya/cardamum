@@ -9,16 +9,15 @@ use anyhow::Result;
 use clap::Parser;
 use io_msgraph::v1::rest::users::contacts::delta::MsgraphContactDelta;
 use pimalaya_cli::{
+    fields::Fields,
     printer::Printer,
-    table::{Cell, Color, Row, Table},
+    records::{Record, Records},
+    sanitize,
 };
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{
-    msgraph::{client::MsgraphClient, contacts::render::contact_name},
-    shared::table::style_from_preset,
-};
+use crate::msgraph::{client::MsgraphClient, contacts::render::contact_name};
 
 /// List one page of the contacts changed or removed since the last round
 /// (the Graph incremental sync).
@@ -55,9 +54,6 @@ pub struct MsgraphContactDeltaCommand {
 
 impl MsgraphContactDeltaCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
-        let id_color = client.account.cards_list_table_id_color();
-
         let page = match &self.delta_link {
             Some(link) => client.contacts_delta_from_link(link)?,
             None => client.contacts_delta(self.folder.as_deref(), self.select.as_deref())?,
@@ -65,8 +61,6 @@ impl MsgraphContactDeltaCommand {
         .response;
 
         printer.out(MsgraphContactDeltaOutput {
-            preset,
-            id_color,
             contacts: page.value,
             next_link: page.next_link,
             delta_link: page.delta_link,
@@ -78,12 +72,6 @@ impl MsgraphContactDeltaCommand {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MsgraphContactDeltaOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
     /// The raw Graph contact deltas of this page.
     #[serde(rename = "contacts")]
     #[schemars(with = "Vec<serde_json::Value>")]
@@ -98,37 +86,41 @@ pub struct MsgraphContactDeltaOutput {
 
 impl fmt::Display for MsgraphContactDeltaOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        let mut records = Records::default();
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("STATUS"),
-                Cell::new("ID"),
-                Cell::new("NAME"),
-            ]))
-            .add_rows(self.contacts.iter().map(|delta| {
-                let status = if delta.removed.is_some() {
-                    "removed"
-                } else {
-                    "changed"
-                };
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(status))
-                    .add_cell(Cell::new(&delta.contact.id).fg(self.id_color))
-                    .add_cell(Cell::new(contact_name(&delta.contact)));
-                row
-            }));
+        for delta in &self.contacts {
+            let status = if delta.removed.is_some() {
+                "removed"
+            } else {
+                "changed"
+            };
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
+            // A removed contact carries its id alone.
+            let mut fields = Fields::default();
+            let name = contact_name(&delta.contact);
+            if !name.is_empty() {
+                fields.push("Name", sanitize::text(name));
+            }
+
+            records.push(Record {
+                title: sanitize::text(&delta.contact.id).into_owned(),
+                state: vec![String::from(status)],
+                fields,
+                body: String::new(),
+            });
+        }
+
+        write!(f, "{records}")?;
+
+        if !records.items.is_empty() && (self.delta_link.is_some() || self.next_link.is_some()) {
+            writeln!(f)?;
+        }
+
         if let Some(delta_link) = &self.delta_link {
-            writeln!(f, "delta-link: {delta_link}")?;
+            writeln!(f, "delta-link: {}", sanitize::text(delta_link))?;
         }
         if let Some(next_link) = &self.next_link {
-            writeln!(f, "next-link: {next_link}")?;
+            writeln!(f, "next-link: {}", sanitize::text(next_link))?;
             writeln!(f, "(page truncated: pass the next-link to --delta-link)")?;
         }
         Ok(())

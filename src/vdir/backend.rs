@@ -14,7 +14,7 @@ use crate::{
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
-        client::paginate,
+        client::window,
     },
 };
 
@@ -96,12 +96,13 @@ impl VdirBackend {
         Ok(())
     }
 
-    /// Lists the vCard items inside `addressbook_id`, 1-indexed paging.
+    /// Lists the `take` vCard items inside `addressbook_id` after the first
+    /// `skip`.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
-        page: Option<u32>,
-        page_size: Option<u32>,
+        skip: usize,
+        take: Option<usize>,
     ) -> Result<Vec<Card>> {
         let path = self.addressbook_path(addressbook_id)?;
         let items = self.inner.list_items(path)?;
@@ -120,7 +121,7 @@ impl VdirBackend {
             })
             .collect();
 
-        Ok(paginate(cards, page, page_size))
+        Ok(window(cards, skip, take))
     }
 
     /// Fetches `card_id` from `addressbook_id`.

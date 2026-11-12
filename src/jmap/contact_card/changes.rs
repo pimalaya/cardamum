@@ -23,12 +23,10 @@ pub struct JmapContactCardChangesCommand {
 
 impl JmapContactCardChangesCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: JmapClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
         let out = client
             .contact_card_changes(self.since_state, JmapContactCardChangesOptions::default())?;
 
         printer.out(JmapChangesOutput {
-            preset,
             created: out.created,
             updated: out.updated,
             destroyed: out.destroyed,

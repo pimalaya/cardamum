@@ -1,16 +1,20 @@
 //! # JMAP renderers
 //!
-//! The output types of the `jmap` commands: a table or a summary block
-//! on a terminal, the raw JMAP objects under `--json`.
+//! The output types of the `jmap` commands: plain-text lists and
+//! `Label: value` lines on a terminal, the raw JMAP objects under
+//! `--json`.
 
 use core::fmt;
 
 use io_jmap::rfc9610::{address_book::JmapAddressBook, contact_card::JmapContactCard};
-use pimalaya_cli::table::{Cell, Color, Row, Table};
+use pimalaya_cli::{
+    columns::Columns,
+    fields::Fields,
+    records::{Record, Records},
+    sanitize,
+};
 use schemars::JsonSchema;
 use serde::Serialize;
-
-use crate::shared::table::style_from_preset;
 
 /// JSContact `name.full` of a card, or the empty string.
 pub fn card_name(card: &JmapContactCard) -> &str {
@@ -35,12 +39,6 @@ pub fn card_books(card: &JmapContactCard) -> String {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapAddressBooksOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
     /// The raw JMAP AddressBook objects.
     #[serde(rename = "list")]
     #[schemars(with = "Vec<serde_json::Value>")]
@@ -51,30 +49,31 @@ pub struct JmapAddressBooksOutput {
 
 impl fmt::Display for JmapAddressBooksOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        let mut records = Records::default();
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("ID"),
-                Cell::new("NAME"),
-                Cell::new("DESC"),
-                Cell::new("DEFAULT"),
-            ]))
-            .add_rows(self.books.iter().map(|book| {
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(book.id.as_deref().unwrap_or("")).fg(self.id_color))
-                    .add_cell(Cell::new(book.name.as_deref().unwrap_or("")))
-                    .add_cell(Cell::new(book.description.as_deref().unwrap_or("")))
-                    .add_cell(Cell::new(book.is_default));
-                row
-            }));
+        for book in &self.books {
+            let mut fields = Fields::default();
+            fields.push("Name", text(book.name.as_deref()));
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
-        writeln!(f, "state: {}", self.state)
+            let state = if book.is_default {
+                vec![String::from("default")]
+            } else {
+                Vec::new()
+            };
+
+            records.push(Record {
+                title: text(book.id.as_deref()),
+                state,
+                fields,
+                body: text_lines(book.description.as_deref()),
+            });
+        }
+
+        if !records.items.is_empty() {
+            writeln!(f, "{records}")?;
+        }
+
+        writeln!(f, "state: {}", sanitize::text(&self.state))
     }
 }
 
@@ -88,14 +87,12 @@ pub struct JmapAddressBookOutput(
 impl fmt::Display for JmapAddressBookOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let book = &self.0;
-        writeln!(f, "id: {}", book.id.as_deref().unwrap_or(""))?;
-        writeln!(f, "name: {}", book.name.as_deref().unwrap_or(""))?;
-        writeln!(
-            f,
-            "description: {}",
-            book.description.as_deref().unwrap_or("")
-        )?;
-        writeln!(f, "is-default: {}", book.is_default)
+        let mut fields = Fields::default();
+        fields.push("Id", text(book.id.as_deref()));
+        fields.push("Name", text(book.name.as_deref()));
+        fields.push("Description", text_lines(book.description.as_deref()));
+        fields.push("Default", if book.is_default { "yes" } else { "no" });
+        write!(f, "{fields}")
     }
 }
 
@@ -104,12 +101,6 @@ impl fmt::Display for JmapAddressBookOutput {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapContactCardsOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the ID column.
-    #[serde(skip)]
-    pub id_color: Color,
     /// The raw JMAP ContactCard objects.
     #[serde(rename = "list")]
     #[schemars(with = "Vec<serde_json::Value>")]
@@ -120,28 +111,21 @@ pub struct JmapContactCardsOutput {
 
 impl fmt::Display for JmapContactCardsOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        if !self.cards.is_empty() {
+            let mut columns = Columns::new(["ID", "ADDRESS-BOOKS", "NAME"]);
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("ID"),
-                Cell::new("NAME"),
-                Cell::new("ADDRESS-BOOKS"),
-            ]))
-            .add_rows(self.cards.iter().map(|card| {
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(card.id.as_deref().unwrap_or("")).fg(self.id_color))
-                    .add_cell(Cell::new(card_name(card)))
-                    .add_cell(Cell::new(card_books(card)));
-                row
-            }));
+            for card in &self.cards {
+                columns.push([
+                    text(card.id.as_deref()),
+                    sanitize::text(&card_books(card)).into_owned(),
+                    sanitize::text(card_name(card)).into_owned(),
+                ]);
+            }
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
-        writeln!(f, "state: {}", self.state)
+            writeln!(f, "{columns}")?;
+        }
+
+        writeln!(f, "state: {}", sanitize::text(&self.state))
     }
 }
 
@@ -170,21 +154,23 @@ impl fmt::Display for JmapContactCardOutput {
         // itself decided, so most of these are absent after a write.
         // Printing an empty slot for each would read as data loss.
         let card = &self.0;
+        let mut fields = Fields::default();
+
         if let Some(id) = card.id.as_deref() {
-            writeln!(f, "id: {id}")?;
+            fields.push("Id", sanitize::text(id));
         }
 
         let name = card_name(card);
         if !name.is_empty() {
-            writeln!(f, "name: {name}")?;
+            fields.push("Name", sanitize::text(name));
         }
 
         let books = card_books(card);
         if !books.is_empty() {
-            writeln!(f, "address-books: {books}")?;
+            fields.push("Address books", sanitize::text(&books));
         }
 
-        Ok(())
+        write!(f, "{fields}")
     }
 }
 
@@ -192,9 +178,6 @@ impl fmt::Display for JmapContactCardOutput {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapChangesOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
     /// Ids created since the given state.
     pub created: Vec<String>,
     /// Ids updated since it.
@@ -209,28 +192,39 @@ pub struct JmapChangesOutput {
 
 impl fmt::Display for JmapChangesOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        let changes = [
+            ("created", &self.created),
+            ("updated", &self.updated),
+            ("destroyed", &self.destroyed),
+        ];
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([Cell::new("STATUS"), Cell::new("ID")]));
-        for id in &self.created {
-            table.add_row(Row::from([Cell::new("created"), Cell::new(id)]));
-        }
-        for id in &self.updated {
-            table.add_row(Row::from([Cell::new("updated"), Cell::new(id)]));
-        }
-        for id in &self.destroyed {
-            table.add_row(Row::from([Cell::new("destroyed"), Cell::new(id)]));
+        if changes.iter().any(|(_, ids)| !ids.is_empty()) {
+            let mut columns = Columns::new(["STATUS", "ID"]);
+
+            for (status, ids) in changes {
+                for id in ids {
+                    columns.push([String::from(status), sanitize::text(id).into_owned()]);
+                }
+            }
+
+            writeln!(f, "{columns}")?;
         }
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
-        writeln!(f, "new-state: {}", self.new_state)?;
+        writeln!(f, "new-state: {}", sanitize::text(&self.new_state))?;
         if self.has_more_changes {
             writeln!(f, "(more changes: run changes again from new-state)")?;
         }
         Ok(())
     }
+}
+
+/// Renders an optional server value on one line, sanitized, or nothing.
+fn text(value: Option<&str>) -> String {
+    value.map(sanitize::text).unwrap_or_default().into_owned()
+}
+
+/// Renders an optional server text, sanitized line by line, or nothing.
+fn text_lines(value: Option<&str>) -> String {
+    let lines = value.unwrap_or_default().lines().map(sanitize::text);
+    lines.collect::<Vec<_>>().join("\n")
 }

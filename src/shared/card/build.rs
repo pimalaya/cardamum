@@ -103,7 +103,7 @@ impl CardBuildCommand {
         }
 
         let composer = CardComposer {
-            command: card_composer(printer, config_paths, account_name, composer.composer)?,
+            command: card_composer(config_paths, account_name, composer.composer)?,
         };
 
         let Some(draft) = composer.edit(printer, &seeded)? else {
@@ -125,7 +125,6 @@ impl CardBuildCommand {
 /// the command looking for a configuration: building a card is otherwise
 /// something a machine holding none can do.
 fn card_composer(
-    printer: &mut impl Printer,
     config_paths: &[PathBuf],
     account_name: Option<&str>,
     flag: Option<String>,
@@ -134,7 +133,7 @@ fn card_composer(
         return Ok(CommandConfig::Shell(line));
     }
 
-    let (config, _name, account_config) = resolve_account(printer, config_paths, account_name)?;
+    let (config, _name, account_config) = resolve_account(config_paths, account_name)?;
     let account = Account::from(config).merge(Account::from(account_config));
 
     account.card_composer(None)

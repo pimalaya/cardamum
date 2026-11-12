@@ -1,6 +1,6 @@
 //! # Collection list command
 //!
-//! Lists the collections under the vdir root, as a table or as JSON.
+//! Lists the collections under the vdir root, as text or as JSON.
 
 use std::fmt;
 
@@ -8,13 +8,15 @@ use anyhow::Result;
 use clap::Parser;
 use io_vdir::collection::VdirCollection;
 use pimalaya_cli::{
+    fields::Fields,
     printer::Printer,
-    table::{Cell, Color, Row, Table},
+    records::{Record, Records},
+    sanitize,
 };
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{shared::table::style_from_preset, vdir::client::VdirClient};
+use crate::vdir::client::VdirClient;
 
 /// List every collection under the configured vdir root.
 ///
@@ -27,26 +29,18 @@ impl VdirCollectionListCommand {
     pub fn execute(self, printer: &mut impl Printer, client: VdirClient) -> Result<()> {
         let collections = client.list_collections()?;
 
-        let table = VdirCollectionListOutput {
-            preset: client.account.table_preset().to_string(),
-            name_color: client.account.addressbooks_list_table_name_color(),
+        let output = VdirCollectionListOutput {
             rows: collections.into_iter().map(From::from).collect(),
         };
 
-        printer.out(table)
+        printer.out(output)
     }
 }
 
-/// The collection listing, as the table and the JSON both render it.
+/// The collection listing, as the text and the JSON both render it.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct VdirCollectionListOutput {
-    /// The `comfy_table` preset the table is drawn with.
-    #[serde(skip)]
-    pub preset: String,
-    /// Color of the NAME column.
-    #[serde(skip)]
-    pub name_color: Color,
     /// The collections under the vdir root.
     #[serde(rename = "collections")]
     pub rows: Vec<CollectionRow>,
@@ -82,29 +76,23 @@ impl From<VdirCollection> for CollectionRow {
 
 impl fmt::Display for VdirCollectionListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut table = Table::new();
+        let mut records = Records::default();
 
-        table
-            .load_style(style_from_preset(&self.preset))
-            .set_header(Row::from([
-                Cell::new("ID"),
-                Cell::new("NAME"),
-                Cell::new("PATH"),
-            ]))
-            .add_rows(self.rows.iter().map(|c| {
-                let mut row = Row::new();
-                row.max_height(1)
-                    .add_cell(Cell::new(&c.id))
-                    .add_cell(
-                        Cell::new(c.display_name.as_deref().unwrap_or("")).fg(self.name_color),
-                    )
-                    .add_cell(Cell::new(&c.path));
-                row
-            }));
+        for collection in &self.rows {
+            let name = collection.display_name.as_deref().unwrap_or_default();
 
-        writeln!(f)?;
-        write!(f, "{table}")?;
-        writeln!(f)?;
-        Ok(())
+            let mut fields = Fields::default();
+            fields.push("Name", sanitize::text(name));
+            fields.push("Path", sanitize::text(&collection.path));
+
+            records.push(Record {
+                title: sanitize::text(&collection.id).into_owned(),
+                state: Vec::new(),
+                fields,
+                body: String::new(),
+            });
+        }
+
+        write!(f, "{records}")
     }
 }

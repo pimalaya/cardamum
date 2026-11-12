@@ -21,9 +21,6 @@ pub struct MsgraphContactFolderListCommand {
 
 impl MsgraphContactFolderListCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
-        let id_color = client.account.addressbooks_list_table_id_color();
-
         let params = MsgraphContactFoldersListParams {
             top: self.top,
             ..Default::default()
@@ -31,8 +28,6 @@ impl MsgraphContactFolderListCommand {
         let page = client.contact_folders_list(&params)?.response;
 
         printer.out(MsgraphContactFoldersOutput {
-            preset,
-            id_color,
             folders: page.value,
             next_link: page.next_link,
         })

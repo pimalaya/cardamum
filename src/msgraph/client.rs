@@ -1,7 +1,7 @@
 //! # Microsoft Graph client
 //!
-//! Wraps [`io_msgraph::v1::client::MsgraphClientStd`] with the merged
-//! [`Account`], which every Graph command reads for its rendering options.
+//! Wraps [`io_msgraph::v1::client::MsgraphClientStd`] for the Graph
+//! commands.
 
 use std::ops::{Deref, DerefMut};
 
@@ -10,15 +10,11 @@ use io_msgraph::v1::client::{MsgraphClientStd, MsgraphClientStdConnectOptions};
 use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 
-use crate::{
-    account::context::Account,
-    config::{AccountConfig, Config, ProxyConfig},
-};
+use crate::config::{AccountConfig, ProxyConfig};
 
-/// The connected Graph client, plus the account it runs for.
+/// The connected Graph client.
 pub struct MsgraphClient {
     inner: MsgraphClientStd,
-    pub account: Account,
 }
 
 impl Deref for MsgraphClient {
@@ -35,12 +31,10 @@ impl DerefMut for MsgraphClient {
     }
 }
 
-/// Builds the merged [`Account`] from the resolved config and account,
-/// then opens the Graph client.
+/// Opens the Graph client of the account.
 ///
 /// Bails when the account declares no `[msgraph]` block.
 pub fn build_msgraph_client(
-    config: Config,
     name: String,
     mut account_config: AccountConfig,
 ) -> Result<MsgraphClient> {
@@ -57,6 +51,5 @@ pub fn build_msgraph_client(
     };
     let inner = MsgraphClientStd::connect(token.expose_secret(), options)?;
 
-    let account = Account::from(config).merge(Account::from(account_config));
-    Ok(MsgraphClient { inner, account })
+    Ok(MsgraphClient { inner })
 }

@@ -222,7 +222,7 @@ impl PimdirBackend {
         )
     }
 
-    /// Lists the cards inside `addressbook_id`, 1-indexed paging.
+    /// Lists the `take` cards inside `addressbook_id` after the first `skip`.
     ///
     /// The order is the store's own contacts one, display name ascending.
     /// An unhydrated card lists as a preview projected from its stored
@@ -234,20 +234,15 @@ impl PimdirBackend {
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
-        page: Option<u32>,
-        page_size: Option<u32>,
+        mut skip: usize,
+        take: Option<usize>,
     ) -> Result<Vec<Card>> {
         self.known_collection(addressbook_id)?;
 
-        let (mut skip, take) = match page_size {
-            None => (0, None),
-            Some(0) => return Ok(Vec::new()),
-            Some(size) => {
-                let page = page.unwrap_or(1).max(1);
-                let skip = ((page - 1) as usize).saturating_mul(size as usize);
-                (skip, Some(size as usize))
-            }
-        };
+        if take == Some(0) {
+            return Ok(Vec::new());
+        }
+
         let mut cards = Vec::new();
 
         self.scan(addressbook_id, |item| {
@@ -843,7 +838,7 @@ mod tests {
         assert_eq!(link, "urn:uuid:c1");
         drain(&dir);
 
-        let cards = backend.list_cards("book", None, None).unwrap();
+        let cards = backend.list_cards("book", 0, None).unwrap();
         assert_eq!(cards.len(), 1);
         let fields = CardFields::project(&cards[0].contents);
         assert_eq!(fields.full_name.as_deref(), Some("Jane Doe"));
@@ -892,7 +887,7 @@ mod tests {
         backend.create_card("book", JANE.to_vec()).unwrap();
         drain(&dir);
 
-        let listed = backend.list_cards("book", None, None).unwrap();
+        let listed = backend.list_cards("book", 0, None).unwrap();
         let id = listed[0].id.clone();
         let etag = backend.get_card("book", &id).unwrap().etag.unwrap();
         assert_eq!(listed[0].etag.as_deref(), Some(etag.as_str()));
@@ -920,9 +915,7 @@ mod tests {
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
         drain(&dir);
-        let id = backend.list_cards("book", None, None).unwrap()[0]
-            .id
-            .clone();
+        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
 
         let err = backend.delete_card("book", &id, Some("stale")).unwrap_err();
         assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));
@@ -933,9 +926,7 @@ mod tests {
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
         drain(&dir);
-        let id = backend.list_cards("book", None, None).unwrap()[0]
-            .id
-            .clone();
+        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
 
         let update = backend.update_card("book", &id, JANE.to_vec(), Some("stale"));
         let err = update.unwrap_err().to_string();
@@ -952,7 +943,7 @@ mod tests {
             .delete_card("book", &id, Some(&format!("\"{etag}\"")))
             .unwrap();
         assert_eq!(pending(&backend), 1);
-        assert!(backend.list_cards("book", None, None).unwrap().is_empty());
+        assert!(backend.list_cards("book", 0, None).unwrap().is_empty());
 
         drain(&dir);
         assert!(backend.get_card("book", &id).is_err());
@@ -984,11 +975,7 @@ mod tests {
 
     /// The listing as it was before it streamed: every summary, then
     /// every card built with its body, then the page cut in memory.
-    fn eager(
-        backend: &PimdirBackend,
-        page: Option<u32>,
-        page_size: Option<u32>,
-    ) -> Result<Vec<Card>> {
+    fn eager(backend: &PimdirBackend, skip: usize, take: Option<usize>) -> Result<Vec<Card>> {
         let mut all = Vec::new();
         backend.scan("book", |item| {
             all.push(item);
@@ -1000,14 +987,14 @@ mod tests {
             .map(|item| backend.card_from_item("book", item))
             .collect::<Result<Vec<_>>>()?;
 
-        Ok(crate::shared::client::paginate(cards, page, page_size))
+        Ok(crate::shared::client::window(cards, skip, take))
     }
 
     /// Every page comes out as it did when the whole address book was
     /// read first: same cards, same order, same bodies and versions.
     fn assert_streams_as_it_listed(backend: &mut PimdirBackend) {
         let mut listed = 0;
-        for page_size in [
+        for take in [
             None,
             Some(0),
             Some(1),
@@ -1016,10 +1003,10 @@ mod tests {
             Some(10),
             Some(100),
         ] {
-            for page in [None, Some(0), Some(1), Some(2), Some(5), Some(9), Some(50)] {
-                let streamed = backend.list_cards("book", page, page_size).unwrap();
-                let expected = eager(backend, page, page_size).unwrap();
-                assert_eq!(streamed, expected, "page {page:?} of {page_size:?}");
+            for skip in [0, 1, 2, 5, 9, 50, 400] {
+                let streamed = backend.list_cards("book", skip, take).unwrap();
+                let expected = eager(backend, skip, take).unwrap();
+                assert_eq!(streamed, expected, "{take:?} after {skip}");
                 listed += streamed.len();
             }
         }
@@ -1034,7 +1021,7 @@ mod tests {
         // NOTE: the pending queue folds in as it did, a staged update
         // and a staged removal included.
         let ids: Vec<String> = backend
-            .list_cards("book", None, None)
+            .list_cards("book", 0, None)
             .unwrap()
             .into_iter()
             .map(|card| card.id)
@@ -1045,7 +1032,7 @@ mod tests {
         assert!(ids.len() > 4 * SCAN_BATCH);
         backend.delete_card("book", &ids[11], None).unwrap();
         assert_streams_as_it_listed(&mut backend);
-        assert_eq!(backend.list_cards("book", None, None).unwrap().len(), 39);
+        assert_eq!(backend.list_cards("book", 0, None).unwrap().len(), 39);
     }
 
     /// Makes the bodies of `ids` unreadable: each blob loses every
@@ -1076,12 +1063,12 @@ mod tests {
     fn a_page_reads_no_body_but_its_own() {
         let (_dir, mut backend) = book(40);
         let order: Vec<String> = backend
-            .list_cards("book", None, None)
+            .list_cards("book", 0, None)
             .unwrap()
             .into_iter()
             .map(|card| card.id)
             .collect();
-        let page = backend.list_cards("book", Some(3), Some(5)).unwrap();
+        let page = backend.list_cards("book", 10, Some(5)).unwrap();
         assert_eq!(
             page.iter().map(|card| card.id.clone()).collect::<Vec<_>>(),
             order[10..15]
@@ -1090,9 +1077,9 @@ mod tests {
         poison(&backend, &order[..10]);
         poison(&backend, &order[15..]);
 
-        assert_eq!(backend.list_cards("book", Some(3), Some(5)).unwrap(), page);
-        assert!(eager(&backend, Some(3), Some(5)).is_err());
-        assert!(backend.list_cards("book", Some(2), Some(5)).is_err());
+        assert_eq!(backend.list_cards("book", 10, Some(5)).unwrap(), page);
+        assert!(eager(&backend, 10, Some(5)).is_err());
+        assert!(backend.list_cards("book", 5, Some(5)).is_err());
     }
 
     /// A card in the address book `local`, which the device keeps and no
@@ -1149,13 +1136,11 @@ mod tests {
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
         drain(&dir);
-        let id = backend.list_cards("book", None, None).unwrap()[0]
-            .id
-            .clone();
+        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
         let hash = backend.item("book", &id).unwrap().object.unwrap();
         std::fs::remove_file(backend.inner.reader.blobs().path(&hash).unwrap()).unwrap();
 
-        let listed = backend.list_cards("book", None, None).unwrap();
+        let listed = backend.list_cards("book", 0, None).unwrap();
         assert_eq!(listed[0].etag, None);
 
         let err = backend.delete_card("book", &id, Some(&hash.0)).unwrap_err();
@@ -1195,7 +1180,7 @@ mod tests {
             .map(|book| book.id)
             .collect();
         assert_eq!(ids, ["versioned"]);
-        assert!(backend.list_cards("calendar", None, None).is_err());
+        assert!(backend.list_cards("calendar", 0, None).is_err());
     }
 
     /// One CLI view is one account: with nothing configured a store
@@ -1261,6 +1246,7 @@ mod tests {
     fn client(dir: &tempfile::TempDir) -> crate::shared::client::AddressbookClient {
         crate::shared::client::AddressbookClient::new(
             crate::config::Config::default(),
+            String::from("work"),
             crate::config::AccountConfig {
                 pimdir: Some(PimdirConfig {
                     root: dir.path().to_path_buf(),
@@ -1287,9 +1273,7 @@ mod tests {
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
         drain(&dir);
-        let id = backend.list_cards("book", None, None).unwrap()[0]
-            .id
-            .clone();
+        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
         let joe = String::from_utf8(card(1, "Joe Bloggs")).unwrap();
         let roe = String::from_utf8(JANE.to_vec())
             .unwrap()
@@ -1344,7 +1328,7 @@ mod tests {
         assert_eq!(code_of(&err), Some(ErrorCode::ItemDuplicate), "{err:#}");
         assert_eq!(pending(&backend), 0);
         assert_eq!(objects(&dir), before, "a refused create leaves no body");
-        assert_eq!(backend.list_cards("book", None, None).unwrap().len(), 1);
+        assert_eq!(backend.list_cards("book", 0, None).unwrap().len(), 1);
     }
 
     /// Every file of the store's blob tree, sorted.
@@ -1420,9 +1404,7 @@ mod tests {
     fn an_edit_whose_body_a_sync_replaced_is_parked() {
         let (dir, mut backend) = store();
         pulled(&dir, "book", JANE);
-        let id = backend.list_cards("book", None, None).unwrap()[0]
-            .id
-            .clone();
+        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
         let read = backend.get_card("book", &id).unwrap();
         let rename = |name: &str| {
             String::from_utf8(JANE.to_vec())
@@ -1472,7 +1454,7 @@ mod tests {
             pulled(&dir, book, JANE);
 
             let mut backend = open(account);
-            let id = backend.list_cards(book, None, None).unwrap()[0].id.clone();
+            let id = backend.list_cards(book, 0, None).unwrap()[0].id.clone();
             let read = backend.get_card(book, &id).unwrap();
             backend
                 .update_card(book, &id, rename("Jane Roe"), read.etag.as_deref())
@@ -1506,10 +1488,11 @@ mod tests {
         );
 
         let text = status.to_string();
-        assert!(
-            text.contains(&format!("ROW {} update in work/book", parked.row)),
-            "{text}"
-        );
+        let row = parked.row.to_string();
+        let parked_line = [row.as_str(), "update", "work/book"];
+        let mut lines = text.lines();
+        let found = lines.any(|line| line.split_whitespace().take(3).eq(parked_line));
+        assert!(found, "{text}");
         assert!(text.contains(&parked.error), "{text}");
 
         let json = serde_json::to_value(&status).unwrap();

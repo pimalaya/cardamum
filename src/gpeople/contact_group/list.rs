@@ -26,9 +26,6 @@ pub struct GpeopleContactGroupListCommand {
 
 impl GpeopleContactGroupListCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: GpeopleClient) -> Result<()> {
-        let preset = client.account.table_preset().to_string();
-        let id_color = client.account.addressbooks_list_table_id_color();
-
         let params = GpeopleContactGroupsListParams {
             page_size: self.page_size,
             sync_token: self.sync_token.as_deref(),
@@ -45,8 +42,6 @@ impl GpeopleContactGroupListCommand {
         let page = client.contact_groups_list(&fields, &params)?.response;
 
         printer.out(GpeopleContactGroupsOutput {
-            preset,
-            id_color,
             groups: page.contact_groups,
             next_page_token: page.next_page_token,
             next_sync_token: page.next_sync_token,

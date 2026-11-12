@@ -36,7 +36,7 @@ strip = "symbols"
 panic = "abort"
 
 [build-dependencies]
-pimalaya-cli = { version = "0.3", default-features = false, features = ["build"] }
+pimalaya-cli = { version = "0.3.2", default-features = false, features = ["build"] }
 
 [dev-dependencies]
 tempfile = "3"
@@ -53,16 +53,16 @@ crossterm = { version = "0.29", default-features = false, features = ["serde"] }
 env_logger = "0.11"
 getrandom = "0.4"
 io-http = { version = "0.6", default-features = false }
-io-jmap = { version = "0.6", default-features = false, features = ["client"], optional = true }
-io-msgraph = { version = "0.6", default-features = false, features = ["client"], optional = true }
-io-gpeople = { version = "0.5", default-features = false, features = ["client"], optional = true }
+io-jmap = { version = "0.7", default-features = false, features = ["client"], optional = true }
+io-msgraph = { version = "0.7.1", default-features = false, features = ["client"], optional = true }
+io-gpeople = { version = "0.6", default-features = false, features = ["client"], optional = true }
 io-pim-discovery = { version = "0.11", default-features = false, features = ["autoconfig", "pacc", "rfc6764", "rfc8620", "stream"] }
-io-pimdir = { version = "0.9", default-features = false, features = ["client"], optional = true }
+io-pimdir = { version = "0.10", default-features = false, features = ["client"], optional = true }
 io-vdir = { version = "0.2", default-features = false, features = ["client", "serde"], optional = true }
 io-webdav = { version = "0.7", default-features = false, features = ["client"], optional = true }
 log = "0.4"
 percent-encoding = "2"
-pimalaya-cli = { version = "0.3", default-features = false, features = ["prompt", "table", "terminal"] }
+pimalaya-cli = { version = "0.3.2", default-features = false, features = ["prompt", "table", "terminal"] }
 pimalaya-config = { version = "0.3", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
 schemars = "1"
@@ -73,8 +73,3 @@ shellexpand = "3.1"
 url = { version = "2.5", features = ["serde"] }
 vcard-rs = { version = "0.6", default-features = false, features = ["parser"] }
 
-[patch.crates-io]
-io-http = { git = "https://github.com/pimalaya/io-http", rev = "e1815307771c1ec65a86b77256d46c33241d3038" }
-io-msgraph = { git = "https://github.com/pimalaya/io-msgraph", rev = "2ae26370aefa671c16316dbad98107634436bce6" }
-io-pimdir = { git = "https://github.com/pimalaya/io-pimdir", rev = "5c18a026b9c85b470984192452c2aa66e060a3fe" }
-pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "f976e40cb609194e21cd8df8a089f86a1cd510fd" }

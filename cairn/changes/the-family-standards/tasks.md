@@ -6,7 +6,7 @@ change: the-family-standards
 # Tasks
 
 - [x] Cairn housekeeping: json-error-code, shared-output-free-of-pimdir, pimdir-honours-if-match and machine-output-contract archived; cli-alignment-leftovers abandoned (B3 and G2 to the-shared-kit, A2 to published-dependencies); pimdir-release-api-followups landed and logged (its pins to published-dependencies)
-- [ ] published-dependencies
+- [x] published-dependencies
 - [ ] the-wizard-leaves
 - [ ] the-shared-kit
 - [ ] the-sample-is-tested-and-shipped

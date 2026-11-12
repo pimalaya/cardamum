@@ -1,11 +1,25 @@
 //! # Addressbook client
 //!
-//! The cross-protocol client behind the shared addressbook and card
+//! The cross-protocol client behind the unified addressbook and card
 //! commands.
 //!
 //! It holds exactly one of the compiled-in backends and dispatches every
-//! shared method to it, the glue itself living in the backend submodule
-//! of each protocol module.
+//! unified method to it, the glue itself living in the backend submodule
+//! of each protocol module. A build without any backend keeps the client,
+//! the unified command tree being the same in every build, with no arm to
+//! read its arguments.
+
+#![cfg_attr(
+    not(any(
+        feature = "vdir",
+        feature = "pimdir",
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "gpeople"
+    )),
+    allow(dead_code, unused_variables)
+)]
 
 #[cfg(not(any(
     feature = "vdir",
@@ -654,7 +668,7 @@ impl AddressbookClient {
     feature = "msgraph",
     feature = "gpeople",
     feature = "vdir",
-    test
+    all(test, feature = "pimdir")
 ))]
 pub fn window<T>(items: Vec<T>, skip: usize, take: Option<usize>) -> Vec<T> {
     let items = items.into_iter().skip(skip);

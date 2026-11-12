@@ -22,3 +22,9 @@ Every dependency, build and dev ones included, SHALL take `default-features = fa
 
 ### Requirement: Hosts are ASCII
 A server or proxy URL with a special scheme (`http`, `https`) SHALL be refused when its host is not ASCII, its Punycode form working: IDNA goes through `idna_adapter` 1.0.0, without the ICU4X crates.
+
+### Requirement: Feature-gated backends
+Every backend SHALL sit behind its own cargo feature (`carddav`, `jmap`, `msgraph`, `gpeople`, `vdir`, `pimdir`), so a build ships only the protocols it needs. A protocol command and its backend adapter compile only when its feature is on; the unified command tree compiles in every build.
+
+### Requirement: Every backend builds alone
+clippy `--all-targets -D warnings` SHALL pass on the default build, all features, `rustls-ring` with no backend, `native-tls,jmap`, `rustls-ring,vdir,pimdir` and each backend alone with `rustls-ring`, checked in CI.

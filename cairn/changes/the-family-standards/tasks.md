@@ -12,7 +12,7 @@ change: the-family-standards
 - [x] the-shared-kit
 - [x] the-sample-is-tested-and-shipped
 - [x] dependencies-trimmed
-- [ ] every-feature-set-builds-clean
+- [x] every-feature-set-builds-clean
 - [ ] live-provider-tests
 - [ ] capability-shared-api
 - [ ] the-shared-repl-and-mcp

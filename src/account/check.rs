@@ -39,6 +39,17 @@ use crate::{backend::Backend, config::Config};
 pub struct AccountCheckCommand;
 
 impl AccountCheckCommand {
+    #[cfg_attr(
+        not(any(
+            feature = "vdir",
+            feature = "pimdir",
+            feature = "carddav",
+            feature = "jmap",
+            feature = "msgraph",
+            feature = "gpeople"
+        )),
+        allow(unused_mut, unused_variables)
+    )]
     pub fn execute(
         self,
         printer: &mut impl Printer,
@@ -255,6 +266,17 @@ pub struct BackendCheck {
 }
 
 impl BackendCheck {
+    #[cfg_attr(
+        not(any(
+            feature = "vdir",
+            feature = "pimdir",
+            feature = "carddav",
+            feature = "jmap",
+            feature = "msgraph",
+            feature = "gpeople"
+        )),
+        allow(dead_code)
+    )]
     fn from(backend: &'static str, result: Result<()>) -> Self {
         match result {
             Ok(()) => Self {

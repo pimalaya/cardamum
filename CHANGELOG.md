@@ -21,9 +21,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added a welcome for a first run: a person at a terminal meeting no configuration is shown the commands creating it from the shipped sample, then the first command to run.
 - Added `nextPage` to `card list --json`, the next page number while cards follow and `null` on the last page, and `--page-token`, taking it back.
 - Added `carddav.alpn`, the ALPN identifiers offered to a CardDAV server, `["http/1.1"]` by default.
+- Added config.sample.toml to releases and packages, installed as share/doc/cardamum/config.sample.toml.
 
 ### Changed
 
+- Changed config.sample.toml to one `[accounts.example]` table and one commented section per backend or provider, each tested to parse.
 - **Breaking:** changed `-c` to take one path per flag, never split on `:`, and stopped reading `CARDAMUM_CONFIG`.
 
   Without `-c`, every canonical path that exists is loaded, each deep-merged on top of the ones before.

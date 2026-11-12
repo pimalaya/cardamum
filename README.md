@@ -93,15 +93,21 @@ nix run
 
 ## Configuration
 
-Every one of these paths that exists is loaded, each deep-merged on top of the ones before:
+Cardamum reads a TOML configuration you write, and never writes one. [config.sample.toml](./config.sample.toml) holds one account: the options every account shares with their values, then one commented section per backend or provider, yours to uncomment: CardDAV, CardDAV without credentials, Google CardDAV, JMAP, Fastmail, Microsoft Graph, Google People, vdir and pimdir. The OAuth 2.0 sections read their token from [Ortie](https://github.com/pimalaya/ortie), whose sample has the matching sections. Releases and packages ship it as share/doc/cardamum/config.sample.toml.
 
-- `$XDG_CONFIG_HOME/cardamum/config.toml`
-- `$HOME/.config/cardamum/config.toml`
-- `$HOME/.cardamumrc`
+Run without a configuration at a terminal, Cardamum welcomes you with the commands copying the shipped sample in place, or downloading it when none ships, then the first command to run. Under `--json` or in a script, it fails naming the path it looked at and the sample.
 
-`cardamum -c <PATH>` replaces them, and can be repeated to deep-merge several files on top of the first one. The full field reference lives in [config.sample.toml](./config.sample.toml).
+A configuration is loaded from every existing path among the following, each one deep-merged on top of the ones before, so /.cardamumrc overrides the others:
 
-Cardamum never writes this file. Run at a terminal with none, it prints the commands creating it from the sample, then the first command to run.
+- /cardamum/config.toml
+- /.config/cardamum/config.toml
+- /.cardamumrc
+
+At most one account may be marked `default = true` across them.
+
+Override those paths with `-c <PATH>`. Repeat it to merge several files, such as `-c public.toml -c private.toml`: the first one is the base and the next ones are deep-merged on top. Each `-c` takes one path, never split, and no environment variable is read.
+
+To add an account, add an `[accounts.<name>]` table to your configuration. `cardamum account list` and `cardamum account check` inspect and validate the accounts declared.
 
 Secrets come from an OS keyring, a token broker such as [Ortie](https://github.com/pimalaya/ortie), any command or a raw value. Cardamum reads them but never issues or refreshes them, so a provider on OAuth 2.0 needs a broker. Ready-made blocks for common providers follow.
 

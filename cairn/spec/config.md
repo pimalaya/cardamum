@@ -60,3 +60,6 @@ The configuration SHALL hold no colour and no table shape: `table.preset`, `tabl
 
 ### Requirement: A CardDAV account names its ALPN identifiers
 `carddav.alpn` SHALL list the ALPN protocol identifiers offered during the TLS handshake, `["http/1.1"]` by default, as `jmap`, `msgraph` and `gpeople` do.
+
+### Requirement: One sample configuration, with a section per backend
+config.sample.toml SHALL hold one `[accounts.example]` table, the options every account shares active at their defaults, then one commented section per backend or provider (CardDAV, CardDAV without credentials, Google CardDAV, JMAP, Fastmail, Microsoft Graph, Google People, vdir, pimdir). A test SHALL parse every variant pimalaya-config's `sample::variants` derives from it through the loader `-c` uses, `example` resolving as the default account and declaring a backend.

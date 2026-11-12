@@ -10,3 +10,6 @@ Cardamum is an application, the top layer of the Pimalaya stack: it drives the s
 
 ### Requirement: Released dependencies, patched only while unreleased
 Dependencies SHALL name released versions. A `[patch.crates-io]` entry is allowed only while a needed change rides unreleased upstream, the cairn change adding it SHALL say what it waits on (Cargo.toml carrying no comment in its dependency or patch sections), and it SHALL be dropped as that crate publishes.
+
+### Requirement: The sample ships beside the binary
+Packages and release archives SHALL install config.sample.toml as share/doc/cardamum/config.sample.toml, where the welcome finds it, and install.sh SHALL copy it under its prefix.

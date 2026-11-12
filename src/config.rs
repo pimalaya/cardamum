@@ -719,4 +719,80 @@ mod tests {
         assert_eq!(carddav.url, "socks5h://localhost:1080");
         assert_eq!(jmap.url, "http://proxy.example.org:3128");
     }
+    /// The commented sections of config.sample.toml, each a provider or a
+    /// backend a user uncomments.
+    #[cfg(all(
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "gpeople",
+        feature = "vdir",
+        feature = "pimdir"
+    ))]
+    const SECTIONS: [&str; 9] = [
+        "# CardDAV",
+        "# CardDAV without credentials",
+        "# Google CardDAV",
+        "# JMAP",
+        "# Fastmail",
+        "# Microsoft Graph",
+        "# Google People",
+        "# vdir",
+        "# pimdir",
+    ];
+
+    /// Checks config.sample.toml: one `[accounts.example]` table and no
+    /// other, its sections each parsed through the loader `-c` uses with
+    /// every variant on top, `example` resolving as the default account
+    /// and declaring a backend.
+    #[cfg(all(
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "gpeople",
+        feature = "vdir",
+        feature = "pimdir"
+    ))]
+    #[test]
+    fn the_sample_configuration_parses_with_each_variant() {
+        use std::{fs, io::Write};
+
+        use pimalaya_config::{
+            sample::{Variant, variants},
+            toml::TomlConfig,
+        };
+        use tempfile::NamedTempFile;
+
+        use super::Config;
+
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.sample.toml");
+        let sample = fs::read_to_string(&path).unwrap();
+        let headers: Vec<_> = sample.lines().filter(|l| l.starts_with('[')).collect();
+        assert_eq!(headers, ["[accounts.example]"]);
+
+        for Variant { name, text } in variants(&sample, &SECTIONS) {
+            let context = format!("config.sample.toml with {name} uncommented");
+
+            let mut file = NamedTempFile::new().unwrap();
+            file.write_all(text.as_bytes()).unwrap();
+
+            let mut config = Config::load(&[file.path().to_path_buf()])
+                .unwrap_or_else(|err| panic!("{context}: {err:?}"));
+            let (account, account_config) = config
+                .take_account(None)
+                .unwrap_or_else(|err| panic!("{context}: {err:?}"));
+
+            let blocks = [
+                account_config.carddav.is_some(),
+                account_config.jmap.is_some(),
+                account_config.msgraph.is_some(),
+                account_config.gpeople.is_some(),
+                account_config.vdir.is_some(),
+                account_config.pimdir.is_some(),
+            ];
+
+            assert_eq!(account, "example", "{context}");
+            assert!(blocks.contains(&true), "{context}: no backend declared");
+        }
+    }
 }

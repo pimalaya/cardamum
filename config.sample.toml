@@ -1,193 +1,92 @@
-# ================================================================================
-# `cardamum` configuration file.
+[accounts.example]
+default = true				# the account commands run on without -a
+
+card.list.page-size = 25		# cards per page, absent -s, 0 listing every card
+#card.composer = "tcard edit"		# the command -i edits a card through, on its path
+#card.composer = ["tcard", "edit"]	# the same, as a program and its arguments
+#addressbook.default = "Contacts"	# the addressbook the card commands take without -k
+
+#proxy.url = "socks5h://localhost:1080"	# a SOCKS5 proxy for every network backend
+#proxy.url = "http://localhost:3128"	# an HTTP one, all_proxy and https_proxy otherwise
+
+#proxy = { url = "socks5h://localhost:1080", username = "alice", password.command = "exit 127" }	# with credentials
+
+# CardDAV
 #
-# Every one of these paths that exists is loaded, each deep-merged on top of
-# the ones before:
-#   - $XDG_CONFIG_HOME/cardamum/config.toml
-#   - $HOME/.config/cardamum/config.toml
-#   - $HOME/.cardamumrc
+#carddav.server = "https://dav.example.org/dav"		# the DAV context root, where the principal walk starts
+##carddav.server = "dav.example.org"			# its /.well-known/carddav, over https
+##carddav.discover = "example.org"			# a domain, resolved on every run through PACC, SRV and .well-known
+##carddav.home = "https://dav.example.org/dav/alice/"	# the addressbook home set, skipping every discovery step
+#carddav.auth.basic.username = "alice@example.org"	# HTTP Basic; or bearer.token, or auth = "none"
+#carddav.auth.basic.password.command = "exit 127"	# prints the password
+##carddav.auth.basic.password.raw = "secret"		# the password itself
+#carddav.alpn = ["http/1.1"]				# the ALPN id rustls offers
+##carddav.alpn = []					# none
+##carddav.tls.provider = "rustls"			# rustls, the build's first TLS otherwise
+##carddav.tls.provider = "native-tls"			# the platform's TLS
+##carddav.tls.rustls.crypto = "ring"			# rustls on ring, the build's first otherwise
+##carddav.tls.rustls.crypto = "aws"			# rustls on aws-lc-rs
+##carddav.tls.cert = "/path/to/cert.pem"		# a PEM certificate to trust
+##carddav.proxy.url = "socks5h://localhost:1080"	# the proxy keys, for CardDAV alone
+
+# CardDAV without credentials
 #
-# `cardamum -c <PATH>` replaces them, and can be repeated to deep-merge several
-# files on top of the first one.
+#carddav.server = "http://localhost:5232"	# a local server such as Radicale
+#carddav.auth = "none"				# no Authorization header
+
+# Google CardDAV
 #
-# Cardamum never writes this file: keep the backend you need and delete the
-# rest. Ready-made blocks for named providers live in the README.
-# ================================================================================
+#carddav.discover = "gmail.com"								# Google's entry point, found authenticated
+#carddav.auth.bearer.token.command = ["ortie", "token", "show", "-a", "example"]	# an access token, from Ortie's Google section
 
-# --------------------------------------------------------------------------------
-# Global config
-# --------------------------------------------------------------------------------
-
-# Command a card is edited through, spawned on the path of a temporary vCard
-# file it edits in place, with every stream inherited. `card build -i`,
-# `card create -i` and `card update -i` all go through it, and
-# `--composer <COMMAND>` overrides it for one invocation.
+# JMAP
 #
-# The path is appended as the last argument, so a shell line takes it there
-# too. The command must block until the edit is done: use `code --wait`, not
-# `code`.
+#jmap.server = "https://jmap.example.org/jmap/session"	# the session URL, fetched as is
+##jmap.server = "jmap.example.org"			# its /.well-known/jmap, over https
+#jmap.auth.basic.username = "alice@example.org"		# HTTP Basic; or bearer.token, or header
+#jmap.auth.basic.password.command = "exit 127"		# prints the password
+##jmap.auth.basic.password.raw = "secret"		# the password itself
+#jmap.alpn = ["http/1.1"]				# the ALPN id rustls offers
+##jmap.alpn = []					# none
+##jmap.tls.provider = "native-tls"			# as carddav.tls
+##jmap.tls.rustls.crypto = "aws"			# as carddav.tls.rustls
+##jmap.tls.cert = "/path/to/cert.pem"			# as carddav.tls
+##jmap.proxy.url = "socks5h://localhost:1080"		# the proxy keys, for JMAP alone
+
+# Fastmail
 #
-# What it leaves in the file is the decision, and nothing is asked after it: a
-# card that came back changed is written, one the command emptied or left
-# untouched is an edit given up on, and a non-zero exit is a failure. Use
-# `card build -i` to look at the card before sending it.
+#jmap.server = "https://api.fastmail.com/jmap/session"				# Fastmail's JMAP session
+#jmap.auth.bearer.token.command = ["ortie", "token", "show", "-a", "example"]	# Ortie's Fastmail token, or an API token
+
+# Microsoft Graph
 #
-# tCard (https://github.com/pimalaya/tcard) projects the card as a TOML form,
-# opens $VISUAL or $EDITOR on it and folds the edits back onto the card's own
-# bytes. It reads no configuration file of its own, so set $VISUAL or $EDITOR
-# in your shell. Its --version flag does not apply here: cardamum hands it a
-# card that already declares one, picked by `card create --vcard-version`.
-#card.composer = "tcard edit"
-#card.composer = ["tcard", "edit"]
+#msgraph.auth.token.command = ["ortie", "token", "show", "-a", "example"]	# an access token, from Ortie's Graph section
+##msgraph.auth.token.raw = "secret"						# the token itself, short-lived
+#msgraph.user-id = "me"					# the signed-in user's contacts
+##msgraph.user-id = "bob@example.org"			# another user's, by user id or principal name
+#msgraph.alpn = ["http/1.1"]				# the ALPN id rustls offers
+##msgraph.alpn = []					# none
+##msgraph.tls.provider = "native-tls"			# as carddav.tls
+##msgraph.tls.rustls.crypto = "aws"			# as carddav.tls.rustls
+##msgraph.tls.cert = "/path/to/cert.pem"		# as carddav.tls
+##msgraph.proxy.url = "socks5h://localhost:1080"	# the proxy keys, for Graph alone
+
+# Google People
 #
-# Any editor works, the card then being raw vCard rather than a form.
-#card.composer = "nvim"
+#gpeople.auth.token.command = ["ortie", "token", "show", "-a", "example"]	# an access token, from Ortie's Google section
+##gpeople.auth.token.raw = "secret"						# the token itself, short-lived
+#gpeople.alpn = ["http/1.1"]				# the ALPN id rustls offers
+##gpeople.alpn = []					# none
+##gpeople.tls.provider = "native-tls"			# as carddav.tls
+##gpeople.tls.rustls.crypto = "aws"			# as carddav.tls.rustls
+##gpeople.tls.cert = "/path/to/cert.pem"		# as carddav.tls
+##gpeople.proxy.url = "socks5h://localhost:1080"	# the proxy keys, for People alone
 
-# Default page size for `card list`. The `-s/--page-size` flag wins when
-# passed, then this value, then the hard fallback of 25.
-#card.list.page-size = 50
-
-# Addressbook the `card` commands act on when their `-k/--addressbook` flag
-# is omitted.
-#addressbook.default = "Contacts"
-
-# --------------------------------------------------------------------------------
-# Accounts
+# vdir
 #
-# One block per account, each declaring one backend. Secrets accept either a
-# `command` (a shell command line, or a program plus its arguments) or a `raw`
-# plaintext value. An OAuth 2.0 token is issued and refreshed by an external
-# tool such as `ortie`, which the command reads it from.
-# --------------------------------------------------------------------------------
+#vdir.home-dir = "~/.local/share/vdirsyncer/contacts"	# a directory per addressbook, a .vcf file per card
 
-# --------------------------------------------------------------------------------
-# Vdir backend
+# pimdir
 #
-# Local addressbook collections stored on disk; see
-# <https://vdirsyncer.pimutils.org/en/stable/vdir.html>. Each immediate
-# subdirectory of `home-dir` is one addressbook.
-# --------------------------------------------------------------------------------
-
-[accounts.vdir-example]
-# When `--account` is missing, use this account as the default one.
-default = true
-vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
-
-# --------------------------------------------------------------------------------
-# pimdir backend
-#
-# A local pimdir store, the offline cache a sync engine such as Neverest fills.
-# It is a cache, not a server: a card whose body has not been fetched yet still
-# lists but cannot be read until a sync hydrates it, and every write is staged
-# for the next sync to push.
-# --------------------------------------------------------------------------------
-
-#[accounts.pimdir-example]
-# The store directory, holding `pimdir.db` and `objects/`. It must already exist:
-# creating a store is the sync engine's job.
-#pimdir.root = "~/.local/share/pimdir"
-# The account the collections are grouped under, for a store shared by several
-# accounts or domains. Unset reads the store's one account; a store grouping
-# several is refused until one is named.
-#pimdir.account = "personal"
-
-# --------------------------------------------------------------------------------
-# CardDAV backend
-#
-# The addressbook home set is resolved from the first field set, each skipping
-# more work than the next: `home` is the pre-resolved home set URL, `server` the
-# context root the principal walk starts from, and `discover` a bare domain
-# resolved at runtime through PACC, `.well-known` then RFC 6764 SRV.
-#
-# Discovery costs DNS and HTTP round-trips on every run. `server` accepts a full
-# URL, a bare domain or `domain:port`, a bare authority defaulting to `https`.
-# --------------------------------------------------------------------------------
-
-[accounts.carddav-example]
-carddav.discover = "example.org"
-carddav.server = "https://carddav.example.org/dav/addressbooks"
-#carddav.home = "https://carddav.example.org/dav/addressbooks/user/me/default"
-
-# Basic authentication (RFC 7617).
-carddav.auth.basic.username = "username"
-carddav.auth.basic.password.command = "pass show example"
-#carddav.auth.basic.password.command = ["pass", "show", "example"]
-#carddav.auth.basic.password.raw = "password"
-
-# Bearer authentication (RFC 6750), mainly for OAuth 2.0.
-#carddav.auth.bearer.token.command = "ortie token show"
-#carddav.auth.bearer.token.raw = "oauth2-token"
-
-# No credentials, for a server that asks for none.
-#carddav.auth = "none"
-
-# TLS configuration. A `cert` path expands `~` and any environment variable.
-#carddav.tls.provider = "rustls"
-#carddav.tls.rustls.crypto = "ring"
-#carddav.tls.cert = "~/.local/share/ca/example.pem"
-
-# Proxy the network backends of this account connect through, absent their own
-# `<backend>.proxy` block (same keys). Without any, the `all_proxy` and
-# `https_proxy` environment variables are read. The URL takes `socks5://`,
-# `socks5h://` or `http://`.
-#proxy.url = "socks5h://localhost:1080"
-#proxy.username = "alice"
-#proxy.password.command = "pass show proxy"
-#carddav.proxy.url = "http://proxy.example.org:3128"
-
-# --------------------------------------------------------------------------------
-# JMAP backend (RFC 8620 + RFC 9610)
-#
-# `server` accepts a bare authority (discovered via `GET /.well-known/jmap`) or
-# a full session URL. Authentication is one of `header` (raw Authorization
-# value), `bearer` (token) or `basic` (username + password).
-# --------------------------------------------------------------------------------
-
-[accounts.jmap-example]
-jmap.server = "fastmail.com"
-#jmap.server = "https://api.fastmail.com/jmap/session"
-
-jmap.auth.bearer.token.command = "ortie token show"
-#jmap.auth.header.raw = "Bearer oauth2-token"
-#jmap.auth.basic.username = "username"
-#jmap.auth.basic.password.command = "pass show example"
-
-# TLS configuration.
-#jmap.tls.provider = "rustls"
-#jmap.tls.rustls.crypto = "ring"
-
-# ALPN identifiers offered during the TLS handshake, `[]` to skip the
-# negotiation. Rustls only; native-tls ignores them.
-#jmap.alpn = ["http/1.1"]
-
-# --------------------------------------------------------------------------------
-# Microsoft Graph backend
-#
-# The Graph API is OAuth 2.0 bearer-token only. `user-id` defaults to `me` (the
-# authenticated user).
-# --------------------------------------------------------------------------------
-
-[accounts.msgraph-example]
-#msgraph.user-id = "me"
-msgraph.auth.token.command = "ortie token show"
-#msgraph.auth.token.raw = "oauth2-token"
-
-# TLS configuration, and the ALPN identifiers offered during the handshake,
-# `[]` skipping the negotiation. Rustls only; native-tls ignores them.
-#msgraph.tls.provider = "rustls"
-#msgraph.alpn = ["http/1.1"]
-
-# --------------------------------------------------------------------------------
-# Google People backend
-#
-# The People API is OAuth 2.0 bearer-token only.
-# --------------------------------------------------------------------------------
-
-[accounts.gpeople-example]
-gpeople.auth.token.command = "ortie token show"
-#gpeople.auth.token.raw = "oauth2-token"
-
-# TLS configuration, and the ALPN identifiers offered during the handshake,
-# `[]` skipping the negotiation. Rustls only; native-tls ignores them.
-#gpeople.tls.provider = "rustls"
-#gpeople.alpn = ["http/1.1"]
+#pimdir.root = "~/.local/state/neverest"	# the store neverest syncs, on Linux
+##pimdir.account = "example"		# the account to read, for a store holding several

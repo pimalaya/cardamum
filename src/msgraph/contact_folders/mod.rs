@@ -1,6 +1,6 @@
 //! # Contact folders
 //!
-//! The Graph contact folder resource, which the shared API surfaces as
+//! The Graph contact folder resource, which the unified API surfaces as
 //! addressbooks.
 
 pub mod child_folders;

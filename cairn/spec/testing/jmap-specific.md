@@ -1,6 +1,6 @@
 # JMAP specific API: test report
 
-The `jmap` protocol-specific subcommands (nested by JMAP object type), distinct from the shared `addressbook` / `card` report ([jmap-fastmail.md](jmap-fastmail.md)).
+The `jmap` protocol-specific subcommands (nested by JMAP object type), distinct from the unified `addressbook` / `card` report ([jmap-fastmail.md](jmap-fastmail.md)).
 
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; io-jmap 0.2)
 - account: `fastmail-jmap` (Bearer, token from the config's `token.command`)
@@ -38,8 +38,8 @@ The `jmap` protocol-specific subcommands (nested by JMAP object type), distinct 
 
 ### Behaviour (not bugs)
 
-- **The specific API is raw JSContact / JMAP**, not vCard: `contact-card create` / `update` take a raw JSContact body (`update` a patch, whose top-level keys may be dotted JSON pointers such as `name/full`), and `--json` prints the raw JMAP object. No vcard-rs projection is involved, which is why the projection defects that block the shared `card create` on Fastmail (J5, J6 in [jmap-fastmail.md](jmap-fastmail.md)) do not affect this surface: a raw JSContact body carrying the RFC 9553 `"@type": "Link"` is accepted here.
-- **`get` and `query` surface the JMAP state token**, which `changes` consumes for incremental sync on both object types: the JMAP-native sync the shared API hides.
+- **The specific API is raw JSContact / JMAP**, not vCard: `contact-card create` / `update` take a raw JSContact body (`update` a patch, whose top-level keys may be dotted JSON pointers such as `name/full`), and `--json` prints the raw JMAP object. No vcard-rs projection is involved, which is why the projection defects that block the unified `card create` on Fastmail (J5, J6 in [jmap-fastmail.md](jmap-fastmail.md)) do not affect this surface: a raw JSContact body carrying the RFC 9553 `"@type": "Link"` is accepted here.
+- **`get` and `query` surface the JMAP state token**, which `changes` consumes for incremental sync on both object types: the JMAP-native sync the unified API hides.
 - **Fastmail forbids AddressBook create / update / destroy** over JMAP (J1, matching the shared-API report); the commands surface the server's `Forbidden` and work against servers that allow it (self-hosted Cyrus or Stalwart).
 
 ### Observations
@@ -51,4 +51,4 @@ The `jmap` protocol-specific subcommands (nested by JMAP object type), distinct 
 
 ## Verdict
 
-The JMAP specific API is sound where it runs: `session get`, AddressBook `get` and `changes` (mutations forbidden by Fastmail, surfaced cleanly), the full ContactCard surface (raw JSContact create, get, query with free-text and limit, patch update in both spellings, incremental `changes`, destroy) and the raw `request` passthrough, all validated live with marked throwaway cards and cleaned up afterwards. The two defects this run found, **S4** (`contact-card copy` aborting on a clap short-option collision, so that verb had never run) and **S1** (create and update printing empty fields instead of what the server returned), were both fixed the same day and re-verified, along with the two smaller observations S2 and S3; see the [jmap-cli-alignment](../../log/2026-08-09-jmap-cli-alignment.md) log entry. Nothing here blocks writing a real contact, and unlike the shared API on this account, nothing here depends on the vcard-rs projection.
+The JMAP specific API is sound where it runs: `session get`, AddressBook `get` and `changes` (mutations forbidden by Fastmail, surfaced cleanly), the full ContactCard surface (raw JSContact create, get, query with free-text and limit, patch update in both spellings, incremental `changes`, destroy) and the raw `request` passthrough, all validated live with marked throwaway cards and cleaned up afterwards. The two defects this run found, **S4** (`contact-card copy` aborting on a clap short-option collision, so that verb had never run) and **S1** (create and update printing empty fields instead of what the server returned), were both fixed the same day and re-verified, along with the two smaller observations S2 and S3; see the [jmap-cli-alignment](../../log/2026-08-09-jmap-cli-alignment.md) log entry. Nothing here blocks writing a real contact, and unlike the unified API on this account, nothing here depends on the vcard-rs projection.

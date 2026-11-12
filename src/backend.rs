@@ -1,7 +1,7 @@
 //! # Backend selector
 //!
 //! The value of the global `--backend` flag, naming which backend a
-//! shared command runs against.
+//! unified command runs against.
 //!
 //! `Auto` takes the first configured backend in the command's own
 //! priority order, a named value pins that one and bails when the
@@ -13,7 +13,7 @@ use std::{fmt, str::FromStr};
 use anyhow::{Error, bail};
 use clap::Parser;
 
-/// The backend a shared command targets.
+/// The backend a unified command targets.
 #[derive(Clone, Copy, Debug, Default, Parser, PartialEq, Eq)]
 pub enum Backend {
     /// The first backend the account configures, in priority order.
@@ -41,37 +41,37 @@ pub enum Backend {
 
 #[allow(unused)]
 impl Backend {
-    /// Whether the CardDAV arm of a shared command is allowed to run.
+    /// Whether the CardDAV arm of a unified command is allowed to run.
     #[cfg(feature = "carddav")]
     pub fn allows_carddav(self) -> bool {
         matches!(self, Self::Auto | Self::Carddav)
     }
 
-    /// Whether the JMAP arm of a shared command is allowed to run.
+    /// Whether the JMAP arm of a unified command is allowed to run.
     #[cfg(feature = "jmap")]
     pub fn allows_jmap(self) -> bool {
         matches!(self, Self::Auto | Self::Jmap)
     }
 
-    /// Whether the Microsoft Graph arm of a shared command may run.
+    /// Whether the Microsoft Graph arm of a unified command may run.
     #[cfg(feature = "msgraph")]
     pub fn allows_msgraph(self) -> bool {
         matches!(self, Self::Auto | Self::Msgraph)
     }
 
-    /// Whether the Google People arm of a shared command may run.
+    /// Whether the Google People arm of a unified command may run.
     #[cfg(feature = "gpeople")]
     pub fn allows_gpeople(self) -> bool {
         matches!(self, Self::Auto | Self::Gpeople)
     }
 
-    /// Whether the pimdir arm of a shared command is allowed to run.
+    /// Whether the pimdir arm of a unified command is allowed to run.
     #[cfg(feature = "pimdir")]
     pub fn allows_pimdir(self) -> bool {
         matches!(self, Self::Auto | Self::Pimdir)
     }
 
-    /// Whether the vdir arm of a shared command is allowed to run.
+    /// Whether the vdir arm of a unified command is allowed to run.
     #[cfg(feature = "vdir")]
     pub fn allows_vdir(self) -> bool {
         matches!(self, Self::Auto | Self::Vdir)

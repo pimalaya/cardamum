@@ -3,9 +3,9 @@
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; io-vdir 0.1)
 - account: a throwaway `[accounts.vdir]` in a temp config (`--config <scratch>/vdir.toml`, never `~/.cardamumrc`) with `vdir.home-dir` under the scratch directory and `addressbook.default = contacts`
 - date: 2026-08-09 (re-run; first run 2026-07-18)
-- method: a **fake local instance**, so no live provider and no golden-rule concern. Exercised the shared API (`addressbook`, `card`) and the vdir-specific subcommands (`vdir create/rename/delete/list` plus `vdir item …`), cross-checking the two against each other and against the on-disk layout, then deleted the whole instance and both temp configs.
+- method: a **fake local instance**, so no live provider and no golden-rule concern. Exercised the unified API (`addressbook`, `card`) and the vdir-specific subcommands (`vdir create/rename/delete/list` plus `vdir item …`), cross-checking the two against each other and against the on-disk layout, then deleted the whole instance and both temp configs.
 
-## Results: shared API
+## Results: unified API
 
 | Command | Variants tested | Result |
 | --- | --- | --- |
@@ -31,13 +31,13 @@
 | `vdir item create` | vCard (sniffed → `.vcf`), iCalendar (sniffed → `.ics`), stdin | ✅ the right extension per kind |
 | `vdir item list` | base, `--json`, unknown collection | ✅ ID / KIND / SIZE / PATH, listing **both** kinds; unknown → "Collection `nope` not found" |
 | `vdir item get` | vCard, iCalendar | ✅ byte-faithful |
-| `vdir item update` | content change, **absent id** | ✅ overwrites and keeps the kind (`.ics` stays `.ics`); **an absent id fails properly**, unlike the shared `card update` (V5) |
+| `vdir item update` | content change, **absent id** | ✅ overwrites and keeps the kind (`.ics` stays `.ics`); **an absent id fails properly**, unlike the unified `card update` (V5) |
 | `vdir item copy` / `move` | a → b copy, a → b move | ✅ copy leaves both, move drops the source |
 | `vdir item delete` | `<id>` | ✅ file removed |
 
-**Item value-add, re-confirmed:** in a collection holding one vCard and one iCalendar item, `vdir item list` shows both with their kind while the shared `card list` shows only the vCard.
+**Item value-add, re-confirmed:** in a collection holding one vCard and one iCalendar item, `vdir item list` shows both with their kind while the unified `card list` shows only the vCard.
 
-**Interop, re-confirmed:** a collection created with `vdir create` is immediately usable by the shared `card create -k`, and a card written through the shared API appears in `vdir item list`. Both APIs operate on the same directories.
+**Interop, re-confirmed:** a collection created with `vdir create` is immediately usable by the unified `card create -k`, and a card written through the unified API appears in `vdir item list`. Both APIs operate on the same directories.
 
 ## Findings
 
@@ -48,7 +48,7 @@ The specific surface is clean. Every defect below was on the **shared** arm, eac
 - **V5: `card update <absent-id>` created the file: FIXED.** Exactly the CardDAV F5 defect, fixed there this morning by reading the card first: on vdir the shared update called `store_item` with whatever id it was given, so `card update -k contacts absent-id …` wrote `absent-id.vcf` and reported success, while the specific `vdir item update` on the same id failed properly. The shared update now locates the item first, and an unknown id fails on that lookup with no file created.
 - **V6: `card create -k <unknown>` created the collection: FIXED.** A typo in `-k` invented an addressbook and hid the card inside it, where every other backend refuses to write into a book that does not exist (Fastmail 404, Graph 400, People 404). The shared path resolver now checks the directory, so the write fails with "Addressbook `x` not found" and nothing is created.
 - **V7: `card list -k <unknown>` printed an empty table and exited 0: FIXED.** An unknown addressbook was indistinguishable from an empty one, where every other backend errors and the specific `vdir item list` names the missing collection. Same resolver, same message.
-- **V8: `addressbook delete -k <unknown>` surfaced a raw OS error: FIXED.** It leaked `No such file or directory (os error 2)`, the V4 fix from July having given only the specific commands a friendly message through `VdirClient::collection_path`. The shared arm now does the same check.
+- **V8: `addressbook delete -k <unknown>` surfaced a raw OS error: FIXED.** It leaked `No such file or directory (os error 2)`, the V4 fix from July having given only the specific commands a friendly message through `VdirClient::collection_path`. The unified arm now does the same check.
 - **V1 (carried over from July): clearing collection metadata was a silent no-op: FIXED.** `addressbook update -k <id> -d ""` reported success and left the `description` file in place, the vdir twin of the CardDAV F4 that io-webdav fixed this morning with `DAV:remove`: io-vdir wrote a file per present non-empty value and had no removal path. Its collection update now writes the collection it is handed, absent or empty values having their file removed, which is what taking a whole `VdirCollection` rather than a patch already promised. Re-verified: clearing removes the files and the values come back when set again.
 - **V2 (carried over from July): `card update --if-match` was silently ignored: FIXED.** vdir has no ETag, which is fine, but msgraph and jmap bail on the same flag rather than accept and drop it, and accepting a guard nobody honours is the least honest of the three options. It bails now, and the backends spec gained the requirement.
 
@@ -65,4 +65,4 @@ The specific surface is clean. Every defect below was on the **shared** arm, eac
 
 ## Verdict
 
-The vdir-specific surface is in good shape: collections, the kind-aware `item` subcommand (vCard and iCalendar), copy and move, byte-faithful get and update, and friendly errors for a missing collection throughout. The shared arm was where the work was: **six defects**, four of them new (V5 to V8) and all of the same family this round has been clearing on the network backends, plus the two carried over from July (V1, V2). The pattern was consistent, and telling: the shared commands wrote through to the filesystem without first asking whether the thing they addressed exists, so an unknown collection was created, an absent card was created, an unknown collection listed as empty, and a raw OS error escaped. All six are fixed and re-verified, the shared arm now doing the same check the specific one has done since July; see the [vdir-write-guards](../../log/2026-08-09-vdir-write-guards.md) log entry. **V9**, `account check` exiting 0 when a backend reported FAIL, was not vdir's to fix and was fixed for every backend on 2026-10-30.
+The vdir-specific surface is in good shape: collections, the kind-aware `item` subcommand (vCard and iCalendar), copy and move, byte-faithful get and update, and friendly errors for a missing collection throughout. The unified arm was where the work was: **six defects**, four of them new (V5 to V8) and all of the same family this round has been clearing on the network backends, plus the two carried over from July (V1, V2). The pattern was consistent, and telling: the unified commands wrote through to the filesystem without first asking whether the thing they addressed exists, so an unknown collection was created, an absent card was created, an unknown collection listed as empty, and a raw OS error escaped. All six are fixed and re-verified, the unified arm now doing the same check the specific one has done since July; see the [vdir-write-guards](../../log/2026-08-09-vdir-write-guards.md) log entry. **V9**, `account check` exiting 0 when a backend reported FAIL, was not vdir's to fix and was fixed for every backend on 2026-10-30.

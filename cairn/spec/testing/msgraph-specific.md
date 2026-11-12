@@ -1,6 +1,6 @@
 # Microsoft Graph specific API: test report
 
-The `msgraph` protocol-specific subcommands (nested by Graph resource), distinct from the shared `addressbook` / `card` report ([msgraph-microsoft.md](msgraph-microsoft.md)).
+The `msgraph` protocol-specific subcommands (nested by Graph resource), distinct from the unified `addressbook` / `card` report ([msgraph-microsoft.md](msgraph-microsoft.md)).
 
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; io-msgraph 0.2)
 - account: `msgraph` (Bearer OAuth, token from the config's `token.command`)
@@ -39,10 +39,10 @@ The `msgraph` protocol-specific subcommands (nested by Graph resource), distinct
 
 ### Behaviour (not bugs)
 
-- **The specific API is raw Graph**, not vCard: `contacts create` / `update` take a raw Graph contact JSON body (file, inline or `-`), and `--json` prints the raw Graph contact, folder or user. None of the vCard projection is involved, which is why the shared API's provider quirks (M1, M4) do not appear here.
-- **S1: Graph does not list the default Contacts folder** through the folders endpoint, it being addressed implicitly, so `contact-folders list` shows only user-created folders while the shared `addressbook list` shows both.
+- **The specific API is raw Graph**, not vCard: `contacts create` / `update` take a raw Graph contact JSON body (file, inline or `-`), and `--json` prints the raw Graph contact, folder or user. None of the vCard projection is involved, which is why the unified API's provider quirks (M1, M4) do not appear here.
+- **S1: Graph does not list the default Contacts folder** through the folders endpoint, it being addressed implicitly, so `contact-folders list` shows only user-created folders while the unified `addressbook list` shows both.
 - List and delta are **single-page**, matching raw Graph: `--top` sizes the page, and a truncated delta page now prints its `next-link` alongside the note, so it goes back through `--delta-link` like any other round.
-- `contacts update` is a genuine PATCH: the fields absent from the body are left alone, which is the raw-faithful counterpart of the shared API's delta.
+- `contacts update` is a genuine PATCH: the fields absent from the body are left alone, which is the raw-faithful counterpart of the unified API's delta.
 
 ### Observations
 

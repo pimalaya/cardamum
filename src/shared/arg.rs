@@ -1,10 +1,10 @@
 //! # Shared arguments
 //!
-//! Clap arguments reused across the shared API commands.
+//! Clap arguments reused across the unified API commands.
 
 use clap::Parser;
 
-/// Names the addressbook a shared API command operates on.
+/// Names the addressbook a unified API command operates on.
 #[derive(Debug, Parser)]
 pub struct AddressbookIdArg {
     /// Addressbook the command operates on.

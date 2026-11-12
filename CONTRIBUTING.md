@@ -15,7 +15,7 @@ Everything below documents only what differs from the Pimalaya standards.
 
 Cardamum owns no protocol code. It aggregates the backends, renders the results and reads the configuration, and everything on the wire belongs to the crate that speaks that protocol: [io-webdav](https://github.com/pimalaya/io-webdav) for CardDAV, [io-jmap](https://github.com/pimalaya/io-jmap), [io-msgraph](https://github.com/pimalaya/io-msgraph), [io-people](https://github.com/pimalaya/io-people), [io-vdir](https://github.com/pimalaya/io-vdir) and [io-pimdir](https://github.com/pimalaya/io-pimdir).
 
-The cross-backend layer is owned here rather than by an aggregator crate: the shared types live in src/shared, and each backend maps them onto its protocol crate through its own backend.rs. A concept only one protocol has belongs to that protocol's command family, not to the shared API.
+The cross-backend layer is owned here rather than by an aggregator crate: the shared types live in src/shared, and each backend maps them onto its protocol crate through its own backend.rs. A concept only one protocol has belongs to that protocol's command family, not to the unified API.
 
 ## Feature matrix
 

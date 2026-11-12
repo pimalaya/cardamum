@@ -5,7 +5,7 @@
 - date: 2026-08-09 (first full run, covering the specific surface for the first time; the 2026-07-18 run reached the shared card verbs only, and the specific one was token-blocked)
 - method: Google forbids creating addressbooks (G3), so per the [golden-rule fallback](provider-test-plan.md) everything ran on uniquely-marked throwaway contacts (`FN:Cardamum *`, `UID:cardamum-google-test-*`) inside the single `default` book, deleted afterwards. The book's card ids were captured before the run and diffed after: the account is back to its pre-run state, and no pre-existing contact was read, printed or written.
 
-## Results: shared API
+## Results: unified API
 
 | Command | Variants tested | Result |
 | --- | --- | --- |

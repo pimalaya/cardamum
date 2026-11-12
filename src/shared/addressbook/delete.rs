@@ -18,7 +18,7 @@ use crate::shared::{
 pub struct AddressbookDeleteCommand {
     /// Addressbook to delete.
     ///
-    /// Mandatory: unlike the other shared commands, a deletion never falls
+    /// Mandatory: unlike the other unified commands, a deletion never falls
     /// back to the `addressbook.default` config.
     #[arg(short = 'k', long = "addressbook", value_name = "ADDRESSBOOK-ID")]
     pub id: String,

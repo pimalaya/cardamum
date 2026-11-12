@@ -1,6 +1,6 @@
 //! # Addressbook commands
 //!
-//! Dispatches the shared API addressbook subcommands to the account client.
+//! Dispatches the unified API addressbook subcommands to the account client.
 
 use anyhow::Result;
 use clap::Subcommand;
@@ -14,7 +14,7 @@ use crate::shared::{
     client::AddressbookClient,
 };
 
-/// Manage addressbooks using the shared API.
+/// Manage addressbooks using the unified API.
 ///
 /// Runs against the first backend defined for the default account, or for
 /// the account named by `--account`.

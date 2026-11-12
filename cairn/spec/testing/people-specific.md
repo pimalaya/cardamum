@@ -1,6 +1,6 @@
 # Google People specific API: test report
 
-The `people` protocol-specific subcommands (nested by People resource), distinct from the shared `addressbook` / `card` report ([google-people.md](google-people.md)).
+The `people` protocol-specific subcommands (nested by People resource), distinct from the unified `addressbook` / `card` report ([google-people.md](google-people.md)).
 
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; io-people 0.2)
 - account: `people` (Bearer OAuth over the `contacts` scope, token from the config's `token.command`)
@@ -40,10 +40,10 @@ The `people` protocol-specific subcommands (nested by People resource), distinct
 
 ### Behaviour (not bugs)
 
-- **The specific API is raw People**, not vCard: `connection create` / `update` take a raw person JSON body, `update` deriving its `updatePersonFields` mask from the body's top-level keys, and `--json` prints the raw People payload. None of the vCard projection is involved, so the shared API's quirks (P3, P6, P8) do not appear here.
+- **The specific API is raw People**, not vCard: `connection create` / `update` take a raw person JSON body, `update` deriving its `updatePersonFields` mask from the body's top-level keys, and `--json` prints the raw People payload. None of the vCard projection is involved, so the unified API's quirks (P3, P6, P8) do not appear here.
 - **S1: the account's token carries the `contacts` scope only.** `profile get` needs `profile` and the `other-contact` surface needs `contacts.other.readonly`; both fail with a 403 that names the missing scope. Those three commands stay untested until the grant is widened, which is a token matter rather than a code one.
 - **S3: an incremental `connection list --sync-token` came back empty** after a contact was updated between the two calls, on three successive attempts. A raw `people request get "people/me/connections?syncToken=…"` returns the same empty page, so the CLI is faithful and the lag is Google's.
-- `contact-group members` is the People-native way to move a contact between books, the shared API having no such verb: memberships are m:n and a contact never leaves `myContacts`.
+- `contact-group members` is the People-native way to move a contact between books, the unified API having no such verb: memberships are m:n and a contact never leaves `myContacts`.
 
 ### Observations
 

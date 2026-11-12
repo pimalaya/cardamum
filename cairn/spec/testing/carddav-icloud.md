@@ -5,7 +5,7 @@
 - date: 2026-08-09 (re-run covering both the shared and the specific surface; first run 2026-07-18)
 - method: iCloud forbids creating addressbooks over CardDAV (I1), so per the [golden-rule fallback](provider-test-plan.md) everything ran inside the account's single existing book (`card`) on uniquely-marked throwaway contacts (`FN:Cardamum *`, `UID:cardamum-icloud-*`), each deleted afterwards. The book's card ids were captured before the run and diffed after: the account is byte-for-byte back to its pre-run state, and no pre-existing card was read, printed or written. Mutating the real addressbook's own metadata was deliberately not tested, since the account has no throwaway collection to do it in.
 
-## Results: shared API
+## Results: unified API
 
 | Command | Variants tested | Result |
 | --- | --- | --- |
@@ -63,4 +63,4 @@
 
 ## Verdict
 
-The shared surface works on iCloud within what the provider allows: the whole card lifecycle (list / create / read / update / delete, paging, `--json`, `--if-match`) passes, and addressbook management is server-side forbidden (I1) rather than broken. The specific surface is validated in full except MKCOL, including the guarded `put`, the raw-XML escape hatch and incremental `report sync`. This run earned its keep twice over: it caught that this morning's `If-Match: *` guard made `card update` fail on every iCloud account, and it exposed **I5**, a PROPPATCH whose multistatus was never inspected, so an update the server never applied reported success. Both are fixed and re-verified on both providers, along with the error-body noise the run kept tripping over. What remains is provider behaviour cardamum cannot change: the ignored `If-Match` on DELETE (I7) and the 2xx on deleting an absent card (I6).
+The unified surface works on iCloud within what the provider allows: the whole card lifecycle (list / create / read / update / delete, paging, `--json`, `--if-match`) passes, and addressbook management is server-side forbidden (I1) rather than broken. The specific surface is validated in full except MKCOL, including the guarded `put`, the raw-XML escape hatch and incremental `report sync`. This run earned its keep twice over: it caught that this morning's `If-Match: *` guard made `card update` fail on every iCloud account, and it exposed **I5**, a PROPPATCH whose multistatus was never inspected, so an update the server never applied reported success. Both are fixed and re-verified on both providers, along with the error-body noise the run kept tripping over. What remains is provider behaviour cardamum cannot change: the ignored `If-Match` on DELETE (I7) and the 2xx on deleting an absent card (I6).

@@ -11,7 +11,7 @@ created: 2026-09-26
 
 ## Why
 
-#25 asks for a card search. The shared `card` API stays least-common-denominator until the 2027 query work, where a single grammar shared with Himalaya and owned by the pimdir search spec reaches every backend. Until then search is per protocol: JMAP (`contact-card query --text`), Google (`connection search`), Microsoft (`contacts list --filter`) already have one, vdir has no protocol to mirror, and pimdir waits for 2027. CardDAV is the gap: `report query` always sends the match-all filter.
+#25 asks for a card search. The unified `card` API stays least-common-denominator until the 2027 query work, where a single grammar shared with Himalaya and owned by the pimdir search spec reaches every backend. Until then search is per protocol: JMAP (`contact-card query --text`), Google (`connection search`), Microsoft (`contacts list --filter`) already have one, vdir has no protocol to mirror, and pimdir waits for 2027. CardDAV is the gap: `report query` always sends the match-all filter.
 
 ## What
 

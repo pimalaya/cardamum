@@ -82,9 +82,9 @@ pub struct Cli {
     pub config_paths: Vec<PathBuf>,
     #[command(flatten)]
     pub account: AccountFlag,
-    /// Force a specific backend for the shared commands.
+    /// Force a specific backend for the unified commands.
     ///
-    /// Only the shared commands `addressbook` and `card` consume it, the
+    /// Only the unified commands `addressbook` and `card` consume it, the
     /// protocol-specific ones always use their own backend. The default
     /// `auto` picks the first configured backend they support, an
     /// explicit value uses that one alone and bails when the account
@@ -97,7 +97,7 @@ pub struct Cli {
     pub log: LogFlags,
 }
 
-/// The top-level commands: the shared API, one family per protocol,
+/// The top-level commands: the unified API, one family per protocol,
 /// then the meta commands.
 #[derive(Debug, Subcommand)]
 pub enum Command {

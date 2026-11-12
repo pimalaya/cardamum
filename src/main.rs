@@ -11,13 +11,13 @@
 //! [`config`] parses the TOML accounts and renders a generated one back,
 //! [`account`] inspects and validates them.
 //!
-//! The command tree splits in three. The shared API (`addressbook`,
+//! The command tree splits in three. The unified API (`addressbook`,
 //! `card`) is the cross-protocol least-common-denominator surface,
 //! behaving the same whatever backend serves the account.
 //!
 //! The protocol-specific APIs (`carddav`, `jmap`, `msgraph`, `gpeople`,
 //! `vdir`) each expose the full surface of one backend, including what
-//! the shared API cannot model. The meta commands (`configure`,
+//! the unified API cannot model. The meta commands (`configure`,
 //! `account`, `completions`, `manuals`) cover the rest.
 //!
 //! pimdir is a store rather than a protocol: its `pimdir` family reports
@@ -25,12 +25,12 @@
 //! search index (`search`, `count`), and its operator commands ship as
 //! the separate pimdir binary.
 //!
-//! The shared commands run over [`shared::client`]'s
+//! The unified commands run over [`shared::client`]'s
 //! `AddressbookClient`, one `BackendClient` variant per compiled-in
 //! backend. The global `--backend` flag ([`backend`]) picks it: `auto`
 //! takes the first configured one, a named value bails without it.
 //!
-//! Each shared method matches the active backend and calls its
+//! Each unified method matches the active backend and calls its
 //! per-protocol backend.rs adapter, which maps the shared
 //! [`shared::addressbook`] and [`shared::card`] types onto that protocol
 //! crate's client.

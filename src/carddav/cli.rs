@@ -19,7 +19,7 @@ use crate::carddav::{
 /// 6578) run directly against the active account's endpoint, plus the
 /// discovery chain. Each command is named after its protocol
 /// counterpart and surfaces the native ids, ETags, CTags and sync
-/// tokens the shared `addressbook` and `card` API hides.
+/// tokens the unified `addressbook` and `card` API hides.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum CarddavCommand {

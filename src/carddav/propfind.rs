@@ -20,7 +20,7 @@ use crate::{carddav::client::CarddavClient, shared::table::style_from_preset};
 /// PROPFIND the home-set or an addressbook.
 ///
 /// Without an addressbook, lists the addressbook collections with their
-/// DAV properties, including the CTag and sync token the shared
+/// DAV properties, including the CTag and sync token the unified
 /// `addressbook list` hides. With one, enumerates its card resources
 /// with ids and ETags but no bodies: the lightweight `getetag` PROPFIND.
 ///

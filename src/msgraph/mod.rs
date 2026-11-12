@@ -1,6 +1,6 @@
 //! # Microsoft Graph
 //!
-//! The Graph arm of the shared-API client ([`backend`]) and the
+//! The Graph arm of the unified-API client ([`backend`]) and the
 //! Graph-specific command tree ([`cli`]). The contact to vCard projection
 //! they rest on is io-msgraph's `vcard` feature.
 

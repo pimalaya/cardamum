@@ -1,6 +1,6 @@
 //! # JMAP backend
 //!
-//! The JMAP arm of the shared-API client: maps the shared addressbook
+//! The JMAP arm of the unified-API client: maps the unified addressbook
 //! and card operations onto io-jmap calls (RFC 9610), converting
 //! ContactCards to vCard documents through [`project`].
 //!
@@ -46,7 +46,7 @@ use crate::{
     },
 };
 
-/// The shared-API backend, over an io-jmap client with a live session.
+/// The unified-API backend, over an io-jmap client with a live session.
 pub struct JmapBackend {
     pub inner: JmapClientStd,
 }

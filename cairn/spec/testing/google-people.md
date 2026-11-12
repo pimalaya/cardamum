@@ -24,7 +24,7 @@
 
 ### Bugs / issues
 
-- **None in cardamum.** The shared surface passes over Bearer OAuth, including the guards added since the first run. **P8** below is a Google limitation the CLI used to paper over, and now reports.
+- **None in cardamum.** The unified surface passes over Bearer OAuth, including the guards added since the first run. **P8** below is a Google limitation the CLI used to paper over, and now reports.
 
 ### Provider-specific behaviour (not bugs)
 
@@ -46,4 +46,4 @@
 
 ## Verdict
 
-The Google People backend passes the shared surface over Bearer OAuth: contact-group list / create / rename / delete and card create / read / update / delete / list, with aliases, `--json`, paging, the etag precondition and every flag guard, plus the empty-`-k` and flagless-update guards added this round. The one thing this run turned up, **P8**, is a Google limitation rather than a defect: a property living in the provider-side stash cannot be removed, so an update that drops it leaves it in place. The server is immovable, verified down to a raw PATCH, so the fix was to stop claiming otherwise: the command now names what stayed. **P7**, the HTML error page, is fixed upstream in io-people. See the [people-honest-writes](../../log/2026-08-09-people-honest-writes.md) log entry.
+The Google People backend passes the unified surface over Bearer OAuth: contact-group list / create / rename / delete and card create / read / update / delete / list, with aliases, `--json`, paging, the etag precondition and every flag guard, plus the empty-`-k` and flagless-update guards added this round. The one thing this run turned up, **P8**, is a Google limitation rather than a defect: a property living in the provider-side stash cannot be removed, so an update that drops it leaves it in place. The server is immovable, verified down to a raw PATCH, so the fix was to stop claiming otherwise: the command now names what stayed. **P7**, the HTML error page, is fixed upstream in io-people. See the [people-honest-writes](../../log/2026-08-09-people-honest-writes.md) log entry.

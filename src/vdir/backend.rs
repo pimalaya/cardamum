@@ -1,6 +1,6 @@
 //! # Vdir backend
 //!
-//! Vdir arm of the shared-API client, mapping the shared addressbook and
+//! Vdir arm of the unified-API client, mapping the unified addressbook and
 //! card operations onto [`io_vdir::client::VdirClient`] calls against the
 //! configured home directory.
 
@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-/// Vdir backend of the shared-API client, rooted at the home directory.
+/// Vdir backend of the unified-API client, rooted at the home directory.
 pub struct VdirBackend {
     pub inner: VdirClient,
 }

@@ -6,7 +6,7 @@ status: current
 
 # Commands
 
-The command tree splits into three groups. The shared API (`addressbook`, `card`) is the cross-protocol least-common-denominator surface, behaving the same whatever backend serves the active account. The protocol-specific APIs each expose the full surface of one backend, including operations the shared API cannot model. The meta commands (`configure`, `account`, `completion`, `manual`, `json-schema`) cover account generation and inspection, shell completions, man pages and the JSON Schemas of the structured output.
+The command tree splits into three groups. The unified API (`addressbook`, `card`) is the cross-protocol least-common-denominator surface, behaving the same whatever backend serves the active account. The protocol-specific APIs each expose the full surface of one backend, including operations the unified API cannot model. The meta commands (`configure`, `account`, `completion`, `manual`, `json-schema`) cover account generation and inspection, shell completions, man pages and the JSON Schemas of the structured output.
 
 ### Requirement: The top-level help orients a newcomer
 The top-level help SHALL frame the first run in its long description, naming the bare invocation and `cardamum configure` as the two ways to generate an account, and SHALL end with the shared Pimalaya footer (`pimalaya_cli::footer`) pointing at the issue tracker and the sponsoring page, as every other Pimalaya CLI does.
@@ -17,11 +17,11 @@ Each subcommand SHALL be a clap-derived struct holding its own arguments, with a
 ### Requirement: The doc comment is the help page
 Each command's doc comment SHALL be its help text: the first paragraph (two lines maximum) is the short summary `-h` shows, and the full text `--help` shows SHALL end with the command's JSON output shape. `cardamum <command> --help` is therefore the canonical usage reference for both humans and agents, and the README documents no per-command usage.
 
-### Requirement: Shared commands stay least-common-denominator
-The shared `addressbook` and `card` commands SHALL expose only what every backend can model, and their documentation SHALL stay protocol-agnostic. A partial-coverage concept (CardDAV ETags, JMAP m:n memberships, Graph delta) belongs to a protocol-specific command instead of being ejected from the shared API or emulated everywhere.
+### Requirement: Unified commands stay least-common-denominator
+The unified `addressbook` and `card` commands SHALL expose only what every backend can model, and their documentation SHALL stay protocol-agnostic. A partial-coverage concept (CardDAV ETags, JMAP m:n memberships, Graph delta) belongs to a protocol-specific command instead of being ejected from the unified API or emulated everywhere.
 
 ### Requirement: Specific commands mirror their protocol
-A protocol-specific command set SHALL match the remote protocol's own structure and vocabulary rather than the shared API's, following Himalaya's direction. The shape follows the protocol: CardDAV (WebDAV) is a flat list of WebDAV method names, JMAP, Microsoft Graph and Google People are nested by resource with sub-verbs naming the protocol methods, and vdir is flat collection verbs plus an `item` subcommand. Verb names track the protocol, so JMAP uses `destroy` while Graph and People use `delete`.
+A protocol-specific command set SHALL match the remote protocol's own structure and vocabulary rather than the unified API's, following Himalaya's direction. The shape follows the protocol: CardDAV (WebDAV) is a flat list of WebDAV method names, JMAP, Microsoft Graph and Google People are nested by resource with sub-verbs naming the protocol methods, and vdir is flat collection verbs plus an `item` subcommand. Verb names track the protocol, so JMAP uses `destroy` while Graph and People use `delete`.
 
 pimdir is a store rather than a protocol: its `pimdir` family covers `status`, what a reader can tell of the store behind the account, and `search` and `count`, the store's search index queried in the pimdir SEARCH language. The operator commands (retrying or cancelling a parked action, the retained items) ship as the separate `pimdir` binary in io-pimdir.
 
@@ -50,7 +50,7 @@ The shared `-k/--addressbook` resolver SHALL reject an empty id rather than pass
 When a backend cannot carry out part of a write, and the protocol offers no way to insist, the command SHALL report what was left undone rather than print a plain success. On Google People an unmappable vCard property lives in a `clientData` entry the API will not clear, so an update dropping one keeps it, and the command names it.
 
 ### Requirement: A queued write says it is queued
-A shared write SHALL say whether it reached the server or was queued for a sync. On pimdir, `card create`, `card update` and `card delete` SHALL say the write is queued and that the next sync carries it, never that the card was created, updated or deleted. Only the printed text SHALL say so: the `--json` output SHALL keep the shape every backend prints, with no `queued` field, a queued write being a pimdir detail that shared outputs do not carry.
+A unified write SHALL say whether it reached the server or was queued for a sync. On pimdir, `card create`, `card update` and `card delete` SHALL say the write is queued and that the next sync carries it, never that the card was created, updated or deleted. Only the printed text SHALL say so: the `--json` output SHALL keep the shape every backend prints, with no `queued` field, a queued write being a pimdir detail that unified outputs do not carry.
 
 A queued creation SHALL get no placeholder id (`q<id>`, `0`, `""`): `card create` reports the card's link id, which `card read` does not accept until a sync applies the create and the card lists under its public id.
 
@@ -58,7 +58,7 @@ A queued creation SHALL get no placeholder id (`q<id>`, `0`, `""`): `card create
 A table SHALL NOT render an absent value as a default that reads as fact. A count the API returns only on request SHALL be requested, or left blank.
 
 ### Requirement: A command resolves its addressbook before acting
-A shared command SHALL resolve the addressbook it was given before reading or writing through it, and SHALL fail naming it when it does not exist. Listing an unknown addressbook SHALL NOT read as empty, and writing into one SHALL NOT create it.
+A unified command SHALL resolve the addressbook it was given before reading or writing through it, and SHALL fail naming it when it does not exist. Listing an unknown addressbook SHALL NOT read as empty, and writing into one SHALL NOT create it.
 
 ### Requirement: A rejected write is legible
 A rejected protocol write SHALL surface as prose: the server's own error type and description, plus the properties it named, never a Rust `Debug` rendering of the error value. Where the rejection has a known cause the user can act on, the message SHALL name it, as the CardDAV missing-UID hint and the JMAP `vCardProps` hint do.
@@ -67,7 +67,7 @@ A rejected protocol write SHALL surface as prose: the server's own error type an
 All output, data and errors alike, SHALL go to stdout through the printer, distinguished by the exit code; `--json` switches every command to JSON. stderr carries logs and interactive prompts only, so redirecting stdout is always safe.
 
 ### Requirement: A data command answers a named output type
-A command returning data SHALL hand the printer a dedicated type named `<Domain><Target><Verb>Output`, deriving `Display`, `Serialize` and `JsonSchema`, with every public field documented. A write with no payload of its own SHALL print a receipt rather than a sentence: a shared write `{id, queued}` (`WriteReceipt`), the id of the item acted on and whether a sync engine applies the write later, a write in a protocol namespace `{id}` (`IdReceipt`) or `{ids}` (`IdsReceipt`), the ids as they are after the write (a renamed collection's new one), and a `card build -o` `{path, size}`. The sentence is the text form only; data a confirmation used to word (an ETag, member counts) is a key of its own.
+A command returning data SHALL hand the printer a dedicated type named `<Domain><Target><Verb>Output`, deriving `Display`, `Serialize` and `JsonSchema`, with every public field documented. A write with no payload of its own SHALL print a receipt rather than a sentence: a unified write `{id, queued}` (`WriteReceipt`), the id of the item acted on and whether a sync engine applies the write later, a write in a protocol namespace `{id}` (`IdReceipt`) or `{ids}` (`IdsReceipt`), the ids as they are after the write (a renamed collection's new one), and a `card build -o` `{path, size}`. The sentence is the text form only; data a confirmation used to word (an ETag, member counts) is a key of its own.
 
 Every runnable command SHALL be described in the `json-schema` registry, a command printing one of two types through both (`OneOf`), which a test checks over the clap command tree.
 

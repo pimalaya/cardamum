@@ -230,7 +230,7 @@ fn connect_vdir(vdir_config: &crate::config::VdirConfig) -> Result<()> {
 
 /// Opens the pimdir store, reads its collection list and probes a producer.
 ///
-/// That exercises the index the shared commands read through and the
+/// That exercises the index the unified commands read through and the
 /// staging lock their writes take, a local store having no handshake nor
 /// authentication to check.
 #[cfg(feature = "pimdir")]

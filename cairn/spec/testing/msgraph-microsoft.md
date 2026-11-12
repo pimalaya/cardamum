@@ -24,7 +24,7 @@
 
 ### Bugs / issues
 
-- **None.** The shared surface passes end to end over Bearer OAuth, including the guards added since the first run.
+- **None.** The unified surface passes end to end over Bearer OAuth, including the guards added since the first run.
 
 ### Provider-specific behaviour (not bugs)
 
@@ -44,4 +44,4 @@
 
 ## Verdict
 
-The Microsoft Graph backend passes the whole shared surface over Bearer OAuth: addressbook list / create / update / delete and card create / read / update / delete / list, with aliases, `--json`, paging and every flag guard. Nothing was found to fix. The cross-checks this round's other runs prompted all come out clean here: an update on an absent id fails without creating anything (unlike the CardDAV defect F5), a delete of an absent id fails properly (unlike iCloud, I6), and a property the provider cannot model survives through the stash (unlike Fastmail JMAP, J6). **M1 to M4** are Graph behaviours to know; **M5**, the unguarded empty `-k` carried over from the first run, is now fixed for every backend.
+The Microsoft Graph backend passes the whole unified surface over Bearer OAuth: addressbook list / create / update / delete and card create / read / update / delete / list, with aliases, `--json`, paging and every flag guard. Nothing was found to fix. The cross-checks this round's other runs prompted all come out clean here: an update on an absent id fails without creating anything (unlike the CardDAV defect F5), a delete of an absent id fails properly (unlike iCloud, I6), and a property the provider cannot model survives through the stash (unlike Fastmail JMAP, J6). **M1 to M4** are Graph behaviours to know; **M5**, the unguarded empty `-k` carried over from the first run, is now fixed for every backend.

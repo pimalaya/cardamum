@@ -1,6 +1,6 @@
 //! # CardDAV backend
 //!
-//! Maps the shared addressbook and card operations onto
+//! Maps the unified addressbook and card operations onto
 //! [`io_webdav::client::WebdavClientStd`] calls (RFC 6352).
 
 use std::collections::BTreeSet;
@@ -26,7 +26,7 @@ use crate::{
     },
 };
 
-/// CardDAV arm of the shared-API client.
+/// CardDAV arm of the unified-API client.
 ///
 /// Wraps a connected io-webdav client whose addressbook home-set is
 /// already resolved.

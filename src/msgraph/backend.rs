@@ -1,6 +1,6 @@
 //! # Microsoft Graph backend
 //!
-//! The Graph arm of the shared-API client, mapping the addressbook and card
+//! The Graph arm of the unified-API client, mapping the addressbook and card
 //! operations onto [`io_msgraph::v1::client::MsgraphClientStd`] calls and
 //! projecting contacts onto vCard documents through io-msgraph's `vcard`
 //! feature.
@@ -38,7 +38,7 @@ use crate::{
 /// addresses by omitting the folder segment.
 pub const CONTACTS_FOLDER: &str = "contacts";
 
-/// Microsoft Graph backend of the shared-API client.
+/// Microsoft Graph backend of the unified-API client.
 pub struct MsgraphBackend {
     pub inner: MsgraphClientStd,
 }

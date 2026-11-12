@@ -1,4 +1,4 @@
-//! # Shared API
+//! # Unified API
 //!
 //! Protocol-agnostic addressbook and card commands, run against whichever
 //! backend the active account defines.

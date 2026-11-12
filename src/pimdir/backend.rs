@@ -1,6 +1,6 @@
 //! # Pimdir backend
 //!
-//! Pimdir arm of the shared-API client, mapping the shared addressbook
+//! Pimdir arm of the unified-API client, mapping the unified addressbook
 //! and card operations onto a local pimdir store.
 //!
 //! Reads build cards from the stored contact summary (pimdir STORAGE
@@ -53,7 +53,7 @@ const SCAN_BATCH: usize = 500;
 #[cfg(test)]
 const SCAN_BATCH: usize = 7;
 
-/// Pimdir backend of the shared-API client, over an opened local store.
+/// Pimdir backend of the unified-API client, over an opened local store.
 pub struct PimdirBackend {
     pub(crate) inner: PimdirClient,
 }
@@ -1273,7 +1273,7 @@ mod tests {
         .unwrap()
     }
 
-    /// A pimdir write reaches the server on the next sync, so the shared
+    /// A pimdir write reaches the server on the next sync, so the unified
     /// commands say it is queued, never that the card was written, while
     /// their JSON stays the shape every backend prints.
     #[test]

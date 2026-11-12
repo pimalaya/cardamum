@@ -1,6 +1,6 @@
 //! # Google People backend
 //!
-//! The People arm of the shared-API client: thin glue mapping the shared
+//! The People arm of the unified-API client: thin glue mapping the unified
 //! addressbook and card operations onto
 //! [`io_gpeople::v1::client::GpeopleClientStd`] calls, projecting persons
 //! onto vCard documents through io-gpeople's `vcard` feature.
@@ -39,7 +39,7 @@ use crate::{
 /// Contact group id of myContacts, the group every contact belongs to.
 pub const MY_CONTACTS_GROUP: &str = "myContacts";
 
-/// Google People backend of the shared-API client.
+/// Google People backend of the unified-API client.
 pub struct GpeopleBackend {
     pub inner: GpeopleClientStd,
 }

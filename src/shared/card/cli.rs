@@ -1,6 +1,6 @@
 //! # Card commands
 //!
-//! Dispatches the shared API card subcommands, resolving the account
+//! Dispatches the unified API card subcommands, resolving the account
 //! each one runs against, or none at all.
 
 use std::path::PathBuf;
@@ -21,7 +21,7 @@ use crate::{
     },
 };
 
-/// Manage vCards using the shared API.
+/// Manage vCards using the unified API.
 ///
 /// Runs against the first backend defined for the default account, or for
 /// the account named by `--account`.

@@ -81,7 +81,7 @@ struct AccountColors {
     default: Color,
 }
 
-/// Loads the configuration, pointing at the wizard when none exists.
+/// Loads the configuration, pointing at the sample when none exists.
 fn load_config(paths: &[PathBuf]) -> Result<Config> {
     match Config::from_paths_or_default(paths)? {
         Some(config) => Ok(config),

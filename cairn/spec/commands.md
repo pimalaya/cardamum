@@ -6,13 +6,13 @@ status: current
 
 # Commands
 
-The command tree splits into three groups. The unified API (`addressbook`, `card`) is the cross-protocol least-common-denominator surface, behaving the same whatever backend serves the active account. The protocol-specific APIs each expose the full surface of one backend, including operations the unified API cannot model. The meta commands (`configure`, `account`, `completion`, `manual`, `json-schema`) cover account generation and inspection, shell completions, man pages and the JSON Schemas of the structured output.
+The command tree splits into three groups. The unified API (`addressbook`, `card`) is the cross-protocol least-common-denominator surface, behaving the same whatever backend serves the active account. The protocol-specific APIs each expose the full surface of one backend, including operations the unified API cannot model. The meta commands (`account`, `completion`, `manual`, `json-schema`) cover account inspection, shell completions, man pages and the JSON Schemas of the structured output.
 
 ### Requirement: The top-level help orients a newcomer
-The top-level help SHALL frame the first run in its long description, naming the bare invocation and `cardamum configure` as the two ways to generate an account, and SHALL end with the shared Pimalaya footer (`pimalaya_cli::footer`) pointing at the issue tracker and the sponsoring page, as every other Pimalaya CLI does.
+A bare `cardamum` SHALL print the top-level help, which SHALL end with the shared Pimalaya footer (`pimalaya_cli::footer`) pointing at the issue tracker and the sponsoring page, as every other Pimalaya CLI does.
 
 ### Requirement: Subcommands carry their own data and chain
-Each subcommand SHALL be a clap-derived struct holding its own arguments, with an `execute(self, printer, client)` method. `Command::execute` in [cli.rs](../../src/cli.rs) is the single dispatch point: it resolves the account (proposing the wizard when no config exists), builds the appropriate client, and hands it to the subcommand.
+Each subcommand SHALL be a clap-derived struct holding its own arguments, with an `execute(self, printer, client)` method. `Command::execute` in [cli.rs](../../src/cli.rs) is the single dispatch point: it resolves the account, builds the appropriate client, and hands it to the subcommand.
 
 ### Requirement: The doc comment is the help page
 Each command's doc comment SHALL be its help text: the first paragraph (two lines maximum) is the short summary `-h` shows, and the full text `--help` shows SHALL end with the command's JSON output shape. `cardamum <command> --help` is therefore the canonical usage reference for both humans and agents, and the README documents no per-command usage.

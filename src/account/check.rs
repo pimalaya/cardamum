@@ -22,8 +22,6 @@ use pimalaya_config::toml::TomlConfig;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-#[cfg(feature = "wizard")]
-use crate::config::AccountConfig;
 use crate::{
     backend::Backend,
     config::{Config, NO_CONFIG_HINT},
@@ -161,54 +159,6 @@ impl AccountCheckCommand {
 
         printer.out(report)
     }
-}
-
-/// Tests every backend the account configures, failing on the first error.
-///
-/// The wizard runs it over a freshly built account, so a bad credential
-/// or endpoint stops the process instead of yielding a configuration
-/// that cannot connect.
-#[cfg(feature = "wizard")]
-pub fn test_account(account_config: &AccountConfig) -> Result<()> {
-    #[cfg(any(
-        feature = "carddav",
-        feature = "jmap",
-        feature = "msgraph",
-        feature = "gpeople"
-    ))]
-    let mut resolver = SecretResolver::new();
-
-    #[cfg(feature = "vdir")]
-    if let Some(vdir_config) = &account_config.vdir {
-        connect_vdir(vdir_config)?;
-    }
-
-    #[cfg(feature = "pimdir")]
-    if let Some(pimdir_config) = &account_config.pimdir {
-        connect_pimdir(pimdir_config)?;
-    }
-
-    #[cfg(feature = "carddav")]
-    if let Some(carddav_config) = &account_config.carddav {
-        connect_carddav(carddav_config, &mut resolver)?;
-    }
-
-    #[cfg(feature = "jmap")]
-    if let Some(jmap_config) = &account_config.jmap {
-        connect_jmap(jmap_config, &mut resolver)?;
-    }
-
-    #[cfg(feature = "msgraph")]
-    if let Some(msgraph_config) = &account_config.msgraph {
-        connect_msgraph(msgraph_config, &mut resolver)?;
-    }
-
-    #[cfg(feature = "gpeople")]
-    if let Some(gpeople_config) = &account_config.gpeople {
-        connect_gpeople(gpeople_config, &mut resolver)?;
-    }
-
-    Ok(())
 }
 
 /// Checks the vdir home is a directory, a local tree having nothing to

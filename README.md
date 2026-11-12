@@ -22,8 +22,7 @@ CLI to manage contacts, written in Rust
 - **Unified API**: `addressbook` and `card` work the same whichever backend serves the account.
 - **Protocol-specific APIs**: `carddav`, `jmap`, `msgraph`, `gpeople` and `vdir` each expose what only that backend has, down to a raw request escape hatch.
 - **Offline store report and search**: `pimdir status` shows what the local pimdir store holds for the account, and the queued writes its sync engine parked rather than applied; `pimdir search` and `pimdir count` find cards by any word of them through the store's search index.
-- **Discovery**: an email address is enough to find a provider's server, through SRV records, `.well-known` and the provider configuration documents.
-- **Interactive wizard**: `cardamum configure` turns an email address into a tested account.
+- **Discovery**: a domain is enough to find a provider's CardDAV server (`carddav.discover`), through the provider configuration document, SRV records and `.well-known`.
 - **Multi-account**: one TOML file, one block per account, several files deep-merged when you want secrets apart.
 - **JSON output**: every command switches to JSON with `--json`, and `cardamum json-schema` describes what each one emits, for scripts and other tools.
 - Full standard, blocking client with **TLS** support:
@@ -33,8 +32,6 @@ CLI to manage contacts, written in Rust
 
 > [!TIP]
 > Each backend sits behind its own cargo feature. `carddav`, `jmap`, `msgraph`, `gpeople`, `vdir` and `pimdir` are all enabled by default. Build with `--no-default-features` and pick the ones you need.
->
-> The default `wizard` feature brings the interactive `configure`; leave it out of a scripted or embedded build that never prompts.
 >
 > The default `vendored` feature builds SQLite and OpenSSL from source; leave it out (`--no-default-features --features …`) to link the system ones.
 
@@ -104,9 +101,7 @@ The configuration is loaded from the first existing path among:
 
 Override the path with `cardamum -c <PATH>` or `CARDAMUM_CONFIG=<PATH>`, `:`-separated to deep-merge several files on top of the first. The full field reference lives in [config.sample.toml](./config.sample.toml).
 
-`cardamum configure` generates an account, and a bare `cardamum` offers it when it finds no configuration. It asks one question, taking an email address, a server URL or a local folder path, then picks the best way to your contacts it discovered (your provider's own API, JMAP, then CardDAV) and shows it in plain words, the alternatives one change away. A password or an API token is typed once, tested at once, then stored in your keyring; OAuth 2.0 hands off to [Ortie](https://github.com/pimalaya/ortie) when it is installed. When nothing is discovered, it asks for the server URL instead (`https://`, `carddavs://` or `jmaps://`, encrypted servers only).
-
-The account is then written here, an `[accounts.<name>]` block appended when the file already exists.
+Cardamum never writes this file: write it by hand from the sample.
 
 Secrets come from an OS keyring, a token broker such as [Ortie](https://github.com/pimalaya/ortie), any command or a raw value. Cardamum reads them but never issues or refreshes them, so a provider on OAuth 2.0 needs a broker. Ready-made blocks for common providers follow.
 
@@ -248,7 +243,6 @@ Run `cardamum --help` for the full command tree, and `cardamum <command> --help`
 A few real command lines:
 
 ```sh
-cardamum configure
 cardamum addressbook list
 cardamum card list --addressbook personal
 cardamum card read --addressbook personal <CARD-ID>

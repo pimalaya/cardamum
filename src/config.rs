@@ -3,9 +3,7 @@
 //! The TOML configuration file: the options shared by every account, the
 //! accounts themselves and their per-backend blocks.
 //!
-//! It also renders an account back to TOML, which is how the wizard
-//! writes what it discovered. The reference document, key by key, is
-//! config.sample.toml.
+//! The reference document, key by key, is config.sample.toml.
 
 use std::collections::HashMap;
 #[cfg(any(
@@ -18,7 +16,6 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[cfg(any(
-    feature = "wizard",
     feature = "carddav",
     feature = "jmap",
     feature = "msgraph",
@@ -70,22 +67,16 @@ use pimalaya_stream::{
     feature = "gpeople"
 ))]
 use secrecy::SecretString;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 #[cfg(any(feature = "carddav", feature = "jmap"))]
 use url::Url;
-
-/// Whether a value is still what [`Default`] made it, so the serializer
-/// can leave it out of a generated document.
-fn is_default<T: Default + PartialEq>(value: &T) -> bool {
-    *value == T::default()
-}
 
 /// The whole configuration file: the options shared by every account,
 /// then the accounts themselves.
 ///
 /// `deny_unknown_fields` is omitted so a neighbouring tool can share the
 /// same file without bouncing off an unknown top-level key.
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Config {
     /// Table rendering options, shared by every list command.
@@ -139,125 +130,11 @@ impl TomlConfig for Config {
     }
 }
 
-/// The documented sample configuration, shown in the welcome banner and
-/// pointed at when no configuration is found.
-#[cfg(feature = "wizard")]
-pub const CONFIG_SAMPLE_URL: &str =
-    "https://github.com/pimalaya/cardamum/blob/master/config.sample.toml";
-
 /// How to get a configuration, for the errors meeting none.
-#[cfg(feature = "wizard")]
-pub const NO_CONFIG_HINT: &str = "run `cardamum configure` to generate one, or write it by hand: \
-     https://github.com/pimalaya/cardamum/blob/master/config.sample.toml";
-
-/// How to get a configuration, for the errors meeting none.
-#[cfg(not(feature = "wizard"))]
 pub const NO_CONFIG_HINT: &str = "write one by hand: \
      https://github.com/pimalaya/cardamum/blob/master/config.sample.toml";
 
-/// The order a rendered account groups its keys in, most defining
-/// first: what the account is, its backend, then the rendering options.
-///
-/// A key outside this list still renders, after the listed ones, so a
-/// field added to [`AccountConfig`] can never go missing from a
-/// generated document because nobody updated this table.
-#[cfg(feature = "wizard")]
-const RENDER_ORDER: [&str; 11] = [
-    "default",
-    "proxy",
-    "vdir",
-    "pimdir",
-    "carddav",
-    "jmap",
-    "msgraph",
-    "gpeople",
-    "addressbook",
-    "card",
-    "table",
-];
-
-/// The keys naming what a backend group points at, lifted to the top of
-/// their group.
-///
-/// Serialized alphabetically, `carddav.server` would read under the
-/// `carddav.auth` credential authenticating against it.
-#[cfg(feature = "wizard")]
-const ENDPOINT_KEYS: [&str; 5] = ["discover", "server", "home", "home-dir", "root"];
-
 impl AccountConfig {
-    /// Renders this account as an `[accounts.<name>]` block, ready to be
-    /// written to a configuration file or appended to one.
-    ///
-    /// What it adds to the serializer is reading order, dotted keys
-    /// coming out alphabetically: groups are reordered
-    /// ([`RENDER_ORDER`]), each endpoint is lifted to the top of its own
-    /// ([`ENDPOINT_KEYS`]), and a blank line separates them.
-    #[cfg(feature = "wizard")]
-    pub fn render(&self, name: &str) -> Result<String> {
-        // NOTE: borrowed rather than built into a `Config`, which would
-        // mean cloning the account (and so deriving `Clone` down every
-        // backend config) to render it. The emitter only looks for an
-        // `accounts` table, so any shape carrying one will do.
-        #[derive(Serialize)]
-        struct AccountDocument<'a> {
-            accounts: HashMap<&'a str, &'a AccountConfig>,
-        }
-
-        let document = AccountDocument {
-            accounts: HashMap::from([(name, self)]),
-        };
-        let rendered = pimalaya_config::toml::to_string(&document)?;
-
-        let (header, body) = match rendered.split_once('\n') {
-            Some((header, body)) => (header, body),
-            None => return Ok(rendered),
-        };
-
-        let mut groups: Vec<(String, Vec<&str>)> = Vec::new();
-
-        for line in body.lines().filter(|line| !line.trim().is_empty()) {
-            let key = line.split(['.', ' ']).next().unwrap_or(line).to_string();
-
-            match groups.iter_mut().find(|(name, _)| *name == key) {
-                Some((_, lines)) => lines.push(line),
-                None => groups.push((key, vec![line])),
-            }
-        }
-
-        groups.sort_by_key(|(key, _)| {
-            RENDER_ORDER
-                .iter()
-                .position(|known| known == key)
-                .unwrap_or(RENDER_ORDER.len())
-        });
-
-        let mut document = format!("{header}\n");
-
-        for (index, (_, mut lines)) in groups.into_iter().enumerate() {
-            if index > 0 {
-                document.push('\n');
-            }
-
-            // NOTE: the endpoint is what the group is about, so it reads
-            // first; the credentials and the quirks qualify it.
-            lines.sort_by_key(|line| {
-                let field = line.split(['.', ' ']).nth(1).unwrap_or_default();
-
-                ENDPOINT_KEYS
-                    .iter()
-                    .position(|known| *known == field)
-                    .unwrap_or(ENDPOINT_KEYS.len())
-            });
-
-            for line in lines {
-                document.push_str(line);
-                document.push('\n');
-            }
-        }
-
-        Ok(document)
-    }
-
     /// Hands the account proxy to every network backend naming none of
     /// its own.
     #[cfg(any(
@@ -289,11 +166,11 @@ impl AccountConfig {
 }
 
 /// Account configuration.
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct AccountConfig {
     /// Whether a command passing no `-a <NAME>` runs against it.
-    #[serde(default, skip_serializing_if = "is_default")]
+    #[serde(default)]
     pub default: bool,
     /// Table rendering options, overriding the global ones.
     #[serde(default)]
@@ -312,7 +189,7 @@ pub struct AccountConfig {
         feature = "msgraph",
         feature = "gpeople"
     ))]
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub proxy: Option<ProxyConfig>,
     /// The local vdir home this account reads.
     #[cfg(feature = "vdir")]
@@ -336,7 +213,7 @@ pub struct AccountConfig {
 
 /// Vdir configuration.
 #[cfg(feature = "vdir")]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct VdirConfig {
     /// Directory holding the account's collections, one addressbook per
@@ -347,7 +224,7 @@ pub struct VdirConfig {
 
 /// pimdir configuration.
 #[cfg(feature = "pimdir")]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct PimdirConfig {
     /// The store directory, holding `pimdir.db` and `objects/`.
@@ -368,7 +245,7 @@ pub struct PimdirConfig {
 
 /// CardDAV configuration.
 #[cfg(feature = "carddav")]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CarddavConfig {
     /// Bare domain resolved to a server URL on every run.
@@ -393,7 +270,7 @@ pub struct CarddavConfig {
     pub tls: TlsConfig,
     /// Proxy the connection goes through, falling back to the account one
     /// and then to the `all_proxy`/`https_proxy` environment variables.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub proxy: Option<ProxyConfig>,
     /// Authentication configuration.
     pub auth: CarddavAuthConfig,
@@ -401,7 +278,7 @@ pub struct CarddavConfig {
 
 /// CardDAV authentication configuration.
 #[cfg(feature = "carddav")]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CarddavAuthConfig {
     /// No credentials, for a server that asks for none.
@@ -420,7 +297,7 @@ pub enum CarddavAuthConfig {
 
 /// JMAP configuration (RFC 8620 + RFC 9610).
 #[cfg(feature = "jmap")]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct JmapConfig {
     /// The JMAP server address.
@@ -442,7 +319,7 @@ pub struct JmapConfig {
     pub alpn: Vec<String>,
     /// Proxy the connection goes through, falling back to the account one
     /// and then to the `all_proxy`/`https_proxy` environment variables.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub proxy: Option<ProxyConfig>,
     /// Authentication configuration.
     pub auth: JmapAuthConfig,
@@ -450,7 +327,7 @@ pub struct JmapConfig {
 
 /// JMAP authentication configuration.
 #[cfg(feature = "jmap")]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum JmapAuthConfig {
     /// A whole Authorization header value, sent verbatim.
@@ -469,7 +346,7 @@ pub enum JmapAuthConfig {
 
 /// Microsoft Graph configuration.
 #[cfg(feature = "msgraph")]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct MsgraphConfig {
     /// Graph user id owning the contacts, `me` by default.
@@ -489,7 +366,7 @@ pub struct MsgraphConfig {
     pub alpn: Vec<String>,
     /// Proxy the connection goes through, falling back to the account one
     /// and then to the `all_proxy`/`https_proxy` environment variables.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub proxy: Option<ProxyConfig>,
     /// Authentication configuration.
     pub auth: MsgraphAuthConfig,
@@ -497,7 +374,7 @@ pub struct MsgraphConfig {
 
 /// Microsoft Graph authentication configuration.
 #[cfg(feature = "msgraph")]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct MsgraphAuthConfig {
     /// OAuth 2.0 access token sent as `Bearer <token>`, the only
@@ -512,7 +389,7 @@ fn default_msgraph_user_id() -> String {
 
 /// Google People configuration.
 #[cfg(feature = "gpeople")]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct GpeopleConfig {
     /// TLS configuration.
@@ -527,7 +404,7 @@ pub struct GpeopleConfig {
     pub alpn: Vec<String>,
     /// Proxy the connection goes through, falling back to the account one
     /// and then to the `all_proxy`/`https_proxy` environment variables.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub proxy: Option<ProxyConfig>,
     /// Authentication configuration.
     pub auth: GpeopleAuthConfig,
@@ -535,7 +412,7 @@ pub struct GpeopleConfig {
 
 /// Google People authentication configuration.
 #[cfg(feature = "gpeople")]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct GpeopleAuthConfig {
     /// OAuth 2.0 access token sent as `Bearer <token>`, the only
@@ -549,7 +426,7 @@ fn default_http_alpn() -> Vec<String> {
 }
 
 /// Addressbook-level options.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AddressbookConfig {
     /// Addressbook id the `card` commands take when their
@@ -561,7 +438,7 @@ pub struct AddressbookConfig {
 }
 
 /// `addressbook list` options.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AddressbookListConfig {
     /// Colors of the `addressbook list` table.
@@ -570,7 +447,7 @@ pub struct AddressbookListConfig {
 }
 
 /// Colors of the `addressbook list` table.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AddressbookListTableConfig {
     /// Color of the ID column.
@@ -584,7 +461,7 @@ pub struct AddressbookListTableConfig {
 }
 
 /// Card-level options.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CardConfig {
     /// Command a card is edited through, spawned on the path of a
@@ -599,7 +476,7 @@ pub struct CardConfig {
 }
 
 /// `card list` options.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CardListConfig {
     /// Default `-s/--page-size` value.
@@ -613,7 +490,7 @@ pub struct CardListConfig {
 }
 
 /// Colors of the `card list` table.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CardListTableConfig {
     /// Color of the ID column.
@@ -627,7 +504,7 @@ pub struct CardListTableConfig {
 }
 
 /// `account list` rendering options, top-level only.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AccountListingConfig {
     /// `account list` options.
@@ -636,7 +513,7 @@ pub struct AccountListingConfig {
 }
 
 /// `account list` options.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AccountListingListConfig {
     /// Colors of the `account list` table.
@@ -645,7 +522,7 @@ pub struct AccountListingListConfig {
 }
 
 /// Colors of the `account list` table.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AccountListingTableConfig {
     /// Color of the NAME column.
@@ -657,7 +534,7 @@ pub struct AccountListingTableConfig {
 }
 
 /// Table rendering options shared by every list command.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TableConfig {
     /// `comfy_table` preset string, `UTF8_FULL_CONDENSED` by default.
@@ -667,7 +544,7 @@ pub struct TableConfig {
 }
 
 /// How a table arranges its columns.
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum TableArrangementConfig {
     /// Fit the columns to the terminal width.
@@ -700,7 +577,7 @@ impl From<TableArrangementConfig> for ContentArrangement {
     feature = "msgraph",
     feature = "gpeople"
 ))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct ProxyConfig {
     /// The proxy URL.
@@ -762,7 +639,7 @@ impl ProxyConfig {
     feature = "msgraph",
     feature = "gpeople"
 ))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct TlsConfig {
     /// The TLS implementation the connection uses.
@@ -785,7 +662,7 @@ pub struct TlsConfig {
     feature = "msgraph",
     feature = "gpeople"
 ))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum TlsProviderConfig {
     /// The pure-Rust rustls stack.
@@ -801,7 +678,7 @@ pub enum TlsProviderConfig {
     feature = "msgraph",
     feature = "gpeople"
 ))]
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct RustlsConfig {
     /// The crypto provider rustls builds on.
@@ -815,7 +692,7 @@ pub struct RustlsConfig {
     feature = "msgraph",
     feature = "gpeople"
 ))]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum RustlsCryptoConfig {
     /// aws-lc-rs.

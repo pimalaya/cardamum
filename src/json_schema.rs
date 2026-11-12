@@ -39,11 +39,6 @@ pub fn registry() -> JsonSchemaRegistry {
         };
     }
 
-    #[cfg(feature = "wizard")]
-    insert!(
-        "cardamum-configure",
-        crate::wizard::configure::ConfigureOutput
-    );
     insert!(
         "cardamum-account-list",
         crate::account::list::AccountListOutput

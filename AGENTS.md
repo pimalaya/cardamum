@@ -36,6 +36,5 @@ Check the structure yourself against the strict rules (CAIRN.md §8): a discover
 - Never adjust production code to fit a test: adjust the test to match correct behaviour.
 - Never print a secret in output, a log line or a test fixture.
 - No em dashes in prose, per the Pimalaya guidelines.
-- The wizard mirrors Himalaya's, requirement for requirement. When a wizard question comes up, read himalaya/cairn/spec/wizard.md first and keep the two aligned.
 - The pimdir derivations (link id, summary, sort key, content hash) are io-pimdir's own and never reimplemented here, because Neverest writes into the same store through the same crate.
 - A user-facing change also lands in CHANGELOG.md, which is a release-scoped roll-up over the Cairn log, not a replacement for it.

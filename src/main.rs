@@ -6,10 +6,10 @@
 //!
 //! ## Layout
 //!
-//! The frontend: main dispatches and meets the bare invocation, [`cli`]
-//! declares the parser and resolves the account a command runs against,
-//! [`config`] parses the TOML accounts and renders a generated one back,
-//! [`account`] inspects and validates them.
+//! The frontend: main dispatches and prints the help on a bare
+//! invocation, [`cli`] declares the parser and resolves the account a
+//! command runs against, [`config`] parses the TOML accounts, [`account`]
+//! inspects and validates them.
 //!
 //! The command tree splits in three. The unified API (`addressbook`,
 //! `card`) is the cross-protocol least-common-denominator surface,
@@ -17,8 +17,8 @@
 //!
 //! The protocol-specific APIs (`carddav`, `jmap`, `msgraph`, `gpeople`,
 //! `vdir`) each expose the full surface of one backend, including what
-//! the unified API cannot model. The meta commands (`configure`,
-//! `account`, `completions`, `manuals`) cover the rest.
+//! the unified API cannot model. The meta commands (`account`,
+//! `completions`, `manuals`, `json-schema`) cover the rest.
 //!
 //! pimdir is a store rather than a protocol: its `pimdir` family reports
 //! on the store (`status`, the parked writes included) and queries its
@@ -53,11 +53,6 @@
 //! the properties that have no slot, through the `vcard` features of
 //! io-msgraph and io-gpeople, which Neverest shares.
 //!
-//! The [`wizard`]: one prompt takes an email address, a server URL or a
-//! folder path, io-pim-discovery turns it into ranked options, the best
-//! one is reviewed, then signed in and tested as it is typed. A file, an
-//! appended block or a document on stdout is then configure's call.
-//!
 //! Output follows the Pimalaya rule: data and errors go to stdout
 //! through the printer, `--json` switching every command to JSON, and
 //! stderr carries logs only.
@@ -86,20 +81,12 @@ mod pimdir;
 mod shared;
 #[cfg(feature = "vdir")]
 mod vdir;
-#[cfg(feature = "wizard")]
-mod wizard;
-
-use std::{
-    io::{IsTerminal, stdin},
-    path::PathBuf,
-};
 
 use anyhow::Result;
 use clap::{CommandFactory, Parser};
-use pimalaya_cli::{error::ErrorReport, log::Logger, printer::Printer, printer::StdoutPrinter};
-use pimalaya_config::toml::TomlConfig;
+use pimalaya_cli::{error::ErrorReport, log::Logger, printer::StdoutPrinter};
 
-use crate::{cli::Cli, config::Config, error::ErrorCode};
+use crate::{cli::Cli, error::ErrorCode};
 
 fn main() {
     let cli = Cli::parse();
@@ -115,39 +102,9 @@ fn execute(cli: Cli, printer: &mut StdoutPrinter) -> Result<()> {
     let backend = cli.backend;
 
     let Some(cmd) = cli.cmd else {
-        return meet_bare_invocation(printer, config, account.is_some());
+        Cli::command().print_help()?;
+        return Ok(());
     };
 
     cmd.execute(printer, config, account, backend)
-}
-
-/// Meets a bare `cardamum`, which is where a newcomer lands.
-///
-/// A missing configuration raises the offer, everything else gets the
-/// help: a script, a JSON caller, `--account`, which reads as a
-/// half-typed command, and a file that fails to parse, which counts as a
-/// configuration so the offer never writes over a broken one.
-fn meet_bare_invocation(
-    printer: &mut StdoutPrinter,
-    config_paths: &[PathBuf],
-    named_account: bool,
-) -> Result<()> {
-    let configured = Config::from_paths_or_default(config_paths)
-        .ok()
-        .flatten()
-        .is_some();
-
-    if !configured && !named_account && !printer.is_json() && stdin().is_terminal() {
-        let path = Config::target_path(config_paths)?;
-
-        // NOTE: nothing to run after the offer, so a declined one falls
-        // back to the help; the wizard says what to run next when it ran.
-        if cli::offer_configuration(printer, config_paths, &path)? {
-            return Ok(());
-        }
-    }
-
-    Cli::command().print_help()?;
-
-    Ok(())
 }

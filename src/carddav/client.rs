@@ -209,14 +209,13 @@ fn run_well_known(
 
 /// Discovers a CardDAV server URL for `domain`, first hit winning.
 ///
-/// Tries PACC, then the RFC 6764 chain. Silent: the wizard wraps the
-/// individual mechanisms with its own spinners.
-pub fn discover_server(domain: &str, tls: &Tls) -> Option<Url> {
+/// Tries PACC, then the RFC 6764 chain.
+fn discover_server(domain: &str, tls: &Tls) -> Option<Url> {
     discover_via_pacc(domain, tls).or_else(|| discover_via_rfc6764(domain, tls))
 }
 
 /// PACC discovery of the CardDAV URL (draft-ietf-mailmaint-pacc).
-pub fn discover_via_pacc(domain: &str, tls: &Tls) -> Option<Url> {
+fn discover_via_pacc(domain: &str, tls: &Tls) -> Option<Url> {
     let resolver = Url::parse(DEFAULT_RESOLVER).expect("DEFAULT_RESOLVER must be a valid URL");
     let mut client = DiscoveryPaccClientStd::new(resolver).with_tls(tls.clone());
     let config = client.discover(domain).ok()?;
@@ -229,7 +228,7 @@ pub fn discover_via_pacc(domain: &str, tls: &Tls) -> Option<Url> {
 /// Resolves the SRV record (secure first), its TXT `path` context, then
 /// `.well-known` on the resolved host, falling back to
 /// `https://<domain>` when the domain publishes nothing.
-pub fn discover_via_rfc6764(domain: &str, tls: &Tls) -> Option<Url> {
+fn discover_via_rfc6764(domain: &str, tls: &Tls) -> Option<Url> {
     let resolver = Url::parse(DEFAULT_RESOLVER).expect("DEFAULT_RESOLVER must be a valid URL");
     let mut client = DiscoveryWebdavClientStd::new(resolver).with_tls(tls.clone());
     client.resolve(domain, DiscoveryDavService::Carddav).ok()
@@ -239,7 +238,7 @@ pub fn discover_via_rfc6764(domain: &str, tls: &Tls) -> Option<Url> {
 ///
 /// Google serves CardDAV behind a non-standard authenticated entry
 /// point rather than the records RFC 6764 relies on.
-pub fn is_google(domain: &str) -> bool {
+fn is_google(domain: &str) -> bool {
     matches!(
         domain.to_ascii_lowercase().as_str(),
         "gmail.com" | "googlemail.com"

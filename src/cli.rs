@@ -3,15 +3,10 @@
 //! The clap parser: the global flags, the top-level command tree and the
 //! account resolution every command runs through.
 
-use std::{
-    io::{IsTerminal, stdin},
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use clap::{CommandFactory, Parser, Subcommand};
-#[cfg(feature = "wizard")]
-use pimalaya_cli::prompt;
 use pimalaya_cli::{
     clap::{
         args::{AccountFlag, JsonFlag, LogFlags},
@@ -33,8 +28,6 @@ use crate::jmap::{cli::JmapCommand, client::build_jmap_client};
 use crate::msgraph::{cli::MsgraphCommand, client::build_msgraph_client};
 #[cfg(feature = "vdir")]
 use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
-#[cfg(feature = "wizard")]
-use crate::wizard::{self, configure::ConfigureCommand};
 use crate::{
     account::cli::AccountCommand,
     backend::Backend,
@@ -54,21 +47,11 @@ use crate::{
 #[derive(Parser, Debug)]
 #[command(name = env!("CARGO_PKG_NAME"))]
 #[command(author, version, about)]
-#[command(long_about = concat!(
-    "CLI to manage contacts.\n\n",
-    "First time here? Run `cardamum` with no command: it offers to generate an ",
-    "account discovered from your email address, which `cardamum configure` does ",
-    "again later. Everything discovery does not cover is written by hand.",
-))]
 #[command(long_version = long_version!())]
 #[command(after_help = footer!())]
 #[command(propagate_version = true, infer_subcommands = true)]
 pub struct Cli {
-    /// The subcommand to run.
-    ///
-    /// Omitted, a bare `cardamum` offers to generate a configuration when
-    /// it finds none, since running the binary with no argument is what a
-    /// newcomer does first, and shows this help otherwise.
+    /// The subcommand to run, a bare `cardamum` printing this help.
     #[command(subcommand)]
     pub cmd: Option<Command>,
     /// Override the default configuration file path.
@@ -123,10 +106,6 @@ pub enum Command {
     #[cfg(feature = "vdir")]
     #[command(subcommand)]
     Vdir(VdirCommand),
-    /// Configure an account interactively.
-    #[cfg(feature = "wizard")]
-    #[command(visible_alias = "wizard")]
-    Configure(ConfigureCommand),
     #[command(subcommand)]
     Account(AccountCommand),
     #[command(alias = "completions")]
@@ -137,75 +116,21 @@ pub enum Command {
     JsonSchema(JsonSchemaCommand),
 }
 
-/// Welcomes, then offers to generate a first configuration. Returns
-/// whether the wizard ran.
-///
-/// Raised from the two places nothing can happen without a
-/// configuration: a bare invocation, and a command needing an account.
-/// It is a hook rather than a gate, so what happens after a declined
-/// offer is the caller's business.
-#[cfg(feature = "wizard")]
-pub fn offer_configuration(
-    printer: &mut impl Printer,
-    config_paths: &[PathBuf],
-    path: &Path,
-) -> Result<bool> {
-    wizard::configure::print_welcome(path);
-
-    if !prompt::bool("Create a configuration with a default account?", true)? {
-        return Ok(false);
-    }
-
-    ConfigureCommand.execute(printer, config_paths)?;
-
-    Ok(true)
-}
-
-/// Offers nothing in a build without the wizard, so the caller falls back
-/// to what it does when the offer is declined.
-#[cfg(not(feature = "wizard"))]
-pub fn offer_configuration(
-    _printer: &mut impl Printer,
-    _config_paths: &[PathBuf],
-    _path: &Path,
-) -> Result<bool> {
-    Ok(false)
-}
-
 /// Resolves the account a command runs against: loads the merged config,
 /// then takes the account named by `-a`, or the one marked `default`.
 /// Returns the leftover global config, the account name and its config.
 ///
-/// A missing configuration raises the offer rather than an error, and
-/// the command carries on either way. Each of the three failures names
-/// what is missing and how to pick an account.
+/// Each of the four failures names what is missing and how to fix it.
 pub fn resolve_account(
-    printer: &mut impl Printer,
+    _printer: &mut impl Printer,
     config_paths: &[PathBuf],
     account_name: Option<&str>,
 ) -> Result<(Config, String, AccountConfig)> {
-    let mut config = match Config::from_paths_or_default(config_paths)? {
-        Some(config) => config,
-        None => {
-            let path = Config::target_path(config_paths)?;
-
-            // NOTE: a cron job cannot answer a prompt and a JSON consumer
-            // wants a failure it can read, so both skip the offer.
-            if !printer.is_json() && stdin().is_terminal() {
-                offer_configuration(printer, config_paths, &path)?;
-            }
-
-            // NOTE: the wizard may print the account instead of writing
-            // it, so having run it proves nothing: look the
-            // configuration up again and fail the ordinary way.
-            match Config::from_paths_or_default(config_paths)? {
-                Some(config) => config,
-                None => bail!(
-                    "No configuration found at {}, {NO_CONFIG_HINT}",
-                    path.display(),
-                ),
-            }
-        }
+    let Some(mut config) = Config::from_paths_or_default(config_paths)? else {
+        bail!(
+            "No configuration found at {}, {NO_CONFIG_HINT}",
+            Config::target_path(config_paths)?.display(),
+        );
     };
 
     // NOTE: an empty name and `default` both mean the default account,
@@ -292,8 +217,6 @@ impl Command {
                 cmd.execute(printer, client)
             }
 
-            #[cfg(feature = "wizard")]
-            Self::Configure(cmd) => cmd.execute(printer, config_paths),
             Self::Account(cmd) => cmd.execute(printer, config_paths, account_name, backend),
             Self::Completion(cmd) => cmd.execute(printer, Cli::command()),
             Self::Manual(cmd) => cmd.execute(printer, Cli::command()),

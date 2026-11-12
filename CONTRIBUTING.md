@@ -13,36 +13,35 @@ Everything below documents only what differs from the Pimalaya standards.
 
 ## Where changes belong
 
-Cardamum owns no protocol code. It aggregates the backends, renders the results and reads the configuration, and everything on the wire belongs to the crate that speaks that protocol: [io-webdav](https://github.com/pimalaya/io-webdav) for CardDAV, [io-jmap](https://github.com/pimalaya/io-jmap), [io-msgraph](https://github.com/pimalaya/io-msgraph), [io-people](https://github.com/pimalaya/io-people), [io-vdir](https://github.com/pimalaya/io-vdir) and [io-pimdir](https://github.com/pimalaya/io-pimdir).
+Cardamum owns no protocol code. It aggregates the backends, renders the results and reads the configuration, and everything on the wire belongs to the crate that speaks that protocol: [io-webdav](https://github.com/pimalaya/io-webdav) for CardDAV, [io-jmap](https://github.com/pimalaya/io-jmap), [io-msgraph](https://github.com/pimalaya/io-msgraph), [io-gpeople](https://github.com/pimalaya/io-gpeople), [io-vdir](https://github.com/pimalaya/io-vdir) and [io-pimdir](https://github.com/pimalaya/io-pimdir).
 
-The cross-backend layer is owned here rather than by an aggregator crate: the shared types live in src/shared, and each backend maps them onto its protocol crate through its own backend.rs. A concept only one protocol has belongs to that protocol's command family, not to the unified API.
+The cross-backend layer is owned here rather than by an aggregator crate: the shared types live in src/shared, and each backend maps them onto its protocol crate through its own backend.rs. A verb some backends serve with the same result joins the unified API, each backend declaring its level in src/capability.rs (`full`, `partial`, `server` or `none`); a concept only one protocol has, or one whose result differs, belongs to that protocol's command family.
 
 ## Feature matrix
 
-Each backend sits behind its own cargo feature, and exactly one TLS provider must be on. The default set is `carddav`, `jmap`, `msgraph`, `people`, `vdir` and `rustls-ring`; `pimdir` is opt-in.
+Each backend sits behind its own cargo feature, and a network backend needs a TLS provider. The default set is every backend, `rustls-ring` and `vendored`.
 
 | Feature       | What it pulls in                                                     |
 |---------------|----------------------------------------------------------------------|
-| `carddav`     | io-webdav: the CardDAV backend and its discovery                     |
+| `carddav`     | io-webdav and io-pim-discovery: the CardDAV backend and its discovery |
 | `jmap`        | io-jmap and the vcard-rs JSContact codec                             |
 | `msgraph`     | io-msgraph: the Microsoft Graph contacts API                         |
-| `people`      | io-people: the Google People API                                     |
+| `gpeople`     | io-gpeople: the Google People API                                    |
 | `vdir`        | io-vdir: the local vdir home                                         |
 | `pimdir`      | io-pimdir: the local pimdir store                                    |
 | `rustls-ring` | the default TLS provider                                             |
 | `rustls-aws`  | Rustls with the aws-lc crypto provider                               |
 | `native-tls`  | the platform TLS stack                                               |
+| `vendored`    | SQLite and OpenSSL built from source rather than linked              |
 
-The shared client is fully cfg-gated, so a change touching a feature gate or an import is built against a narrower set before it lands, the default one hiding what a single-backend build breaks:
+The unified client is fully cfg-gated, so a change touching a feature gate or an import is checked against the feature matrix before it lands, the default build hiding what a single-backend build breaks. The CI `features` job runs clippy over every set, each backend alone included; locally:
 
 ```sh
-cargo build
-cargo build --no-default-features --features rustls-ring,carddav
-cargo build --no-default-features --features rustls-ring,jmap
-cargo build --no-default-features --features rustls-ring,vdir
-cargo build --no-default-features --features rustls-ring,pimdir
+cargo clippy --all-targets --no-default-features --features rustls-ring -- -D warnings
+cargo clippy --all-targets --no-default-features --features rustls-ring,carddav -- -D warnings
+cargo clippy --all-targets --no-default-features --features rustls-ring,pimdir -- -D warnings
 ```
 
 ## Testing against a real server
 
-Providers disagree on what they advertise and on what they then honour, so a backend change is verified by hand against a real account, `cardamum -a <account> account check` first for the connection, then the commands it touches. The reports live in [cairn/spec/testing](./cairn/spec/testing), one file per provider: add yours there, and never paste a secret into one.
+Providers disagree on what they advertise and on what they then honour. The live suites (tests/google.rs, tests/microsoft.rs, tests/fastmail.rs) run on every push: `cargo test --test google -- --ignored anonymous::` touches no account, `credentialed::` reads the test accounts and needs their secrets. A backend change beyond them is verified by hand against a real account, `cardamum -a <account> account check` first for the connection, then the commands it touches. The reports live in [cairn/spec/testing](./cairn/spec/testing), one file per provider: add yours there, and never paste a secret into one.

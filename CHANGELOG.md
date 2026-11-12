@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `repl`, a session running the CLI's commands over one account, the unified client connecting once.
 - Added `mcp`, a Model Context Protocol server exposing the unified API as tools, the writes listed under `--allow-write` only.
 - Added the `--json` error code `stdin-taken`, for a command reading stdin inside a session.
+- Added MIGRATION.md, the changes to act on coming from 0.3.
 
 ### Changed
 

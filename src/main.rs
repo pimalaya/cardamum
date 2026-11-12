@@ -6,10 +6,12 @@
 //!
 //! ## Layout
 //!
-//! The frontend: main dispatches and prints the help on a bare
-//! invocation, [`cli`] declares the parser and resolves the account a
-//! command runs against, [`config`] parses the TOML accounts, [`account`]
-//! inspects and validates them.
+//! The frontend: main dispatches, meeting a person missing a
+//! configuration with the welcome, [`cli`] declares the parser and
+//! resolves the account a command runs against, [`config`] parses the
+//! TOML accounts, [`account`] inspects and validates them. Every command
+//! runs over a [`session`], which keeps the unified client across the
+//! commands of a [`repl`] and the tool calls of an [`mcp`] server.
 //!
 //! The command tree splits in three. The unified API (`addressbook`,
 //! `card`) is the cross-protocol surface, serving the union of what the
@@ -19,8 +21,8 @@
 //!
 //! The protocol-specific APIs (`carddav`, `jmap`, `msgraph`, `gpeople`,
 //! `vdir`) each expose the full surface of one backend, including what
-//! the unified API cannot model. The meta commands (`account`,
-//! `completions`, `manuals`, `json-schema`) cover the rest.
+//! the unified API cannot model. The meta commands (`account`, `repl`,
+//! `mcp`, `completion`, `manual`, `json-schema`) cover the rest.
 //!
 //! pimdir is a store rather than a protocol: its `pimdir` family reports
 //! on the store (`status`, the parked writes included) and queries its
@@ -57,7 +59,8 @@
 //!
 //! Output follows the Pimalaya rule: data and errors go to stdout
 //! through the printer, `--json` switching every command to JSON, and
-//! stderr carries logs only.
+//! stderr carries logs only. Text is plain: pimalaya-cli's columns,
+//! records and fields, no border, no colour.
 //!
 //! Each command's doc comment is its `--help` text and ends with its
 //! JSON output shape, so `cardamum <command> --help` is the canonical

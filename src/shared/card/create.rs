@@ -7,7 +7,7 @@ use core::fmt;
 
 use anyhow::{Result, bail};
 use clap::Parser;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -148,9 +148,13 @@ impl fmt::Display for CardCreatedOutput {
             true => writeln!(
                 f,
                 "Card `{}` queued for creation; the next sync creates it",
-                self.id
+                sanitize::text(&self.id)
             ),
-            false => writeln!(f, "Card `{}` successfully created", self.id),
+            false => writeln!(
+                f,
+                "Card `{}` successfully created",
+                sanitize::text(&self.id)
+            ),
         }
     }
 }

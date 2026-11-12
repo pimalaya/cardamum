@@ -7,7 +7,7 @@ use core::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -61,6 +61,10 @@ pub struct AddressbookCreateOutput {
 
 impl fmt::Display for AddressbookCreateOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Addressbook `{}` successfully created", self.id)
+        writeln!(
+            f,
+            "Addressbook `{}` successfully created",
+            sanitize::text(&self.id)
+        )
     }
 }

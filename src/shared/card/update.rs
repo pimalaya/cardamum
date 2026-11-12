@@ -8,7 +8,7 @@ use core::fmt;
 
 use anyhow::{Result, bail};
 use clap::Parser;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -173,9 +173,13 @@ impl fmt::Display for CardUpdatedOutput {
             true => write!(
                 f,
                 "Card `{}` update queued; the next sync applies it",
-                self.id
+                sanitize::text(&self.id)
             )?,
-            false => write!(f, "Card `{}` successfully updated", self.id)?,
+            false => write!(
+                f,
+                "Card `{}` successfully updated",
+                sanitize::text(&self.id)
+            )?,
         }
 
         // NOTE: the write landed, but not all of it: saying so beats a

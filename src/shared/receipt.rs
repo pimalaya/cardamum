@@ -11,6 +11,7 @@
 
 use std::fmt;
 
+use pimalaya_cli::sanitize;
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -35,6 +36,7 @@ impl fmt::Display for WriteReceipt {
         let Self {
             id, what, write, ..
         } = self;
+        let id = sanitize::text(id);
         match self.queued {
             true => writeln!(
                 f,
@@ -99,7 +101,7 @@ pub struct IdReceipt {
 ))]
 impl fmt::Display for IdReceipt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{}: {}", self.done, self.id)
+        writeln!(f, "{}: {}", self.done, sanitize::text(&self.id))
     }
 }
 
@@ -117,7 +119,7 @@ pub struct IdsReceipt {
 #[cfg(feature = "jmap")]
 impl fmt::Display for IdsReceipt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{}: {}", self.done, self.ids.join(", "))
+        writeln!(f, "{}: {}", self.done, sanitize::text(&self.ids.join(", ")))
     }
 }
 

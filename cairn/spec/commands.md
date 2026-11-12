@@ -234,7 +234,7 @@ A text output SHALL be plain text: no border, no colour, nothing sized to or tru
 The report `pimdir search` and `pimdir count` draw over a query they refuse SHALL carry no colour escape, on a terminal as in the `--json` error string.
 
 ### Requirement: Plain output is printable
-A field taken from a card or a server (a name, an address, an id, an error a server wrote) SHALL have its control characters and bidi controls replaced before it is printed as text (pimalaya-cli `sanitize::text`). JSON strings and the raw bytes a command is asked for SHALL remain unchanged.
+A field taken from a card or a server (a name, an address, an id, an error a server wrote) SHALL have its control characters and bidi controls replaced before it is printed as text (pimalaya-cli `sanitize::text`), the write confirmations included. The `card read` view SHALL replace them in the card too, keeping tabs and line feeds and reading CRLF as LF. JSON strings and the raw bytes a command is asked for SHALL remain unchanged.
 
 ### Requirement: A card page names its context and its next page
 `card list` SHALL print `Account: <name> (<backend>)` and `Addressbook: <id>` above the cards, a blank line, one line per card with no column header (`id  email  phone  name`, the free-text name last, `-` for an empty cell), a blank line, then `Page: <n>, cards <a> to <b>` (`card <a>` for one, `empty` for none, `all` when unpaged) followed by `, the last` when no card follows, and `Next page: --page <n>` while one does, the values aligned in one column.

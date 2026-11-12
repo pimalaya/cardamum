@@ -65,6 +65,45 @@ pub struct CardReadOutput {
 
 impl fmt::Display for CardReadOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.contents)
+        // NOTE: the card is the server's text: its layout is kept, CRLF
+        // read as LF, and a character that could drive the terminal is
+        // replaced. `--json` keeps the bytes.
+        let contents = self.contents.replace("\r\n", "\n");
+        let printable = contents.chars().map(|c| match c {
+            '\t' | '\n' => c,
+            c if c.is_control() => char::REPLACEMENT_CHARACTER,
+            '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}' => char::REPLACEMENT_CHARACTER,
+            c => c,
+        });
+
+        for c in printable {
+            write!(f, "{c}")?;
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A card is the server's text: an escape sequence or a bidi override
+    /// in it never reaches the terminal, while the JSON keeps its bytes.
+    #[test]
+    fn the_text_view_defuses_what_could_drive_the_terminal() {
+        let contents = "BEGIN:VCARD\r\nFN:Ada\x1b]52;c;AAAA\x07\u{202e}\r\nEND:VCARD\r\n";
+        let output = CardReadOutput {
+            id: String::from("ada"),
+            etag: None,
+            contents: contents.to_string(),
+            fields: CardFields::default(),
+        };
+
+        let expected = "BEGIN:VCARD\nFN:Ada\u{fffd}]52;c;AAAA\u{fffd}\u{fffd}\nEND:VCARD\n";
+        assert_eq!(output.to_string(), expected);
+
+        let json = serde_json::to_value(&output).unwrap();
+        assert_eq!(json["contents"], contents);
     }
 }

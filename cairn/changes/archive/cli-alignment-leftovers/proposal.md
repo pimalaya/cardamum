@@ -1,7 +1,7 @@
 ---
 cairn: change
 id: cli-alignment-leftovers
-status: active
+status: abandoned
 created: 2026-10-18
 ---
 
@@ -22,3 +22,7 @@ pimalaya-cli will take over two local copies once its changes land: wizard-save-
 ## What
 
 Close each item above, one task each. C3 and C4 are pimdir behaviour, so they fold into the pimdir spec; the rest are config and dependency hygiene.
+
+## Closed
+
+Abandoned on 2026-11-12, nothing landing under this id: C3 and C4 landed with pimdir-release-alignment (2026-10-30), H1 and H2 went obsolete with the wizard and pimalaya-cli's abandoned shared-account-resolution, and B3, G2 and A2 moved to the-family-standards. tasks.md says where each went.

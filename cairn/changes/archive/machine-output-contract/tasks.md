@@ -13,4 +13,4 @@ change: machine-output-contract
 - [x] Wrap the `request` passthrough response under `response`
 - [x] CHANGELOG
 - [x] Fold into cairn/spec/commands.md; log; land
-- [ ] Move to the pimalaya-cli 0.3.0 release once published
+- [x] Move to the pimalaya-cli 0.3.0 release once published: superseded by the-family-standards, which moves to pimalaya-cli 0.4

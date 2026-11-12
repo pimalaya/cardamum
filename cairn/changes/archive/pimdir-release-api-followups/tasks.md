@@ -15,11 +15,11 @@ On the io-pimdir API of 2026-10-30 (the-producer-stages-its-own-body, errors-car
 
 Waiting on the io-pimdir changes of 2026-10-30 being pushed:
 
-- [ ] Return the io-pimdir `[patch.crates-io]` entry from the local path to a git rev (Cargo.toml, the io-pimdir entry of Cargo.lock)
+- [x] Return the io-pimdir `[patch.crates-io]` entry from the local path to a git rev (Cargo.toml, the io-pimdir entry of Cargo.lock): pinned since, now at 5c18a02
 
-Waiting on the user publishing the dependency chain:
+Waiting on the user publishing the dependency chain, which io-pimdir 0.10.0 completed on 2026-11-11:
 
-- [ ] Drop `[patch.crates-io]` (io-http, io-msgraph, io-pimdir, io-webdav, pimalaya-cli) and set the `io-pimdir` requirement to the released version (Cargo.toml)
-- [ ] CHANGELOG [Unreleased]: dependency entries name released versions, no git revisions
+- [x] Moved to the-family-standards, phase published-dependencies: drop `[patch.crates-io]` (io-http, io-msgraph, io-pimdir, io-webdav, pimalaya-cli) and set the `io-pimdir` requirement to the released version (Cargo.toml)
+- [x] Moved to the-family-standards, phase published-dependencies: CHANGELOG [Unreleased] dependency entries name released versions, no git revisions
 
-- [ ] Log; land
+- [x] Log; land

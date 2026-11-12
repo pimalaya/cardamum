@@ -163,6 +163,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 
 | Code | Raised when |
 |---|---|
+| `stdin-taken` | a command inside a session (`repl`, `mcp`) would read its input off stdin, which carries the session's commands |
 | `capability-missing` | the backend the account resolves to does not serve a capability the command reaches; nothing was read or written |
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
 | `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |

@@ -27,6 +27,7 @@ impl ContactJsonArg {
     /// else is the JSON itself.
     pub fn read(self) -> Result<MsgraphContact> {
         let raw = if self.body == "-" {
+            pimalaya_cli::session::check_stdin(crate::error::ErrorCode::StdinTaken)?;
             let mut buf = String::new();
             stdin()
                 .read_to_string(&mut buf)

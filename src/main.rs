@@ -77,15 +77,18 @@ mod gpeople;
 #[cfg(feature = "jmap")]
 mod jmap;
 mod json_schema;
+mod mcp;
 #[cfg(feature = "msgraph")]
 mod msgraph;
 #[cfg(feature = "pimdir")]
 mod pimdir;
+mod repl;
+mod session;
 mod shared;
 #[cfg(feature = "vdir")]
 mod vdir;
 
-use std::{path::PathBuf, process};
+use std::process;
 
 use anyhow::Result;
 use clap::Parser;
@@ -98,7 +101,11 @@ use pimalaya_cli::{
 use pimalaya_config::toml::ConfigMissingError;
 use simd_cpu::SimdCpu;
 
-use crate::{cli::Cli, error::ErrorCode};
+use crate::{
+    cli::Cli,
+    error::ErrorCode,
+    session::{Session, SessionAccount},
+};
 
 fn main() {
     // NOTE: the vCard codecs read the installed CPU token, the portable
@@ -128,13 +135,20 @@ fn main() {
 /// Runs the subcommand, or meets a bare `cardamum`.
 fn execute(cli: Cli, printer: &mut StdoutPrinter) -> Result<()> {
     Logger::try_init(&cli.log)?;
-    let config: &[PathBuf] = &cli.config.paths;
-    let account = cli.account.name.as_deref();
-    let backend = cli.backend;
-
-    let Some(cmd) = cli.cmd else {
-        return cli::meet_bare_invocation(config);
+    let account = SessionAccount {
+        config_paths: &cli.config.paths,
+        name: cli.account.name.as_deref(),
+        backend: cli.backend,
     };
 
-    cmd.execute(printer, config, account, backend)
+    let Some(cmd) = cli.cmd else {
+        return cli::meet_bare_invocation(account.config_paths);
+    };
+
+    let mut session = Session {
+        account,
+        ..Default::default()
+    };
+
+    cmd.execute(printer, &mut session)
 }

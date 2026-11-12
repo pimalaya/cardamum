@@ -17,6 +17,10 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ErrorCode {
+    /// A command would read its input off stdin inside a session, where
+    /// stdin carries the commands: the caller passes it as an argument or
+    /// a file path.
+    StdinTaken,
     /// The backend the account resolves to does not serve a capability
     /// the command reaches, refused before connecting: the caller picks
     /// another backend or leaves the option out.

@@ -32,6 +32,7 @@ use crate::shared::uuid::uuid_v4;
 /// here.
 pub fn read_source(source: &str) -> Result<Vec<u8>> {
     if source == "-" {
+        pimalaya_cli::session::check_stdin(crate::error::ErrorCode::StdinTaken)?;
         let mut buf = Vec::new();
         stdin()
             .read_to_end(&mut buf)
@@ -42,7 +43,9 @@ pub fn read_source(source: &str) -> Result<Vec<u8>> {
 
     let path = PathBuf::from(source);
 
-    if path.is_file() {
+    // NOTE: an MCP server takes its input from the agent, never a local
+    // file the agent names.
+    if path.is_file() && !crate::mcp::paths_closed() {
         let contents = fs::read(&path)
             .with_context(|| format!("Read vCard from `{}` error", path.display()))?;
 

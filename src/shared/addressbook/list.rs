@@ -22,7 +22,7 @@ use crate::shared::{addressbook::Addressbook, client::AddressbookClient};
 pub struct AddressbookListCommand;
 
 impl AddressbookListCommand {
-    pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, client: &mut AddressbookClient) -> Result<()> {
         client.require(&[Capability::AddressbookList])?;
         let addressbooks = client.list_addressbooks()?;
 

@@ -33,7 +33,7 @@ pub struct CardReadCommand {
 }
 
 impl CardReadCommand {
-    pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, client: &mut AddressbookClient) -> Result<()> {
         client.require(&[Capability::CardRead])?;
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         let card = client.get_card(&addressbook_id, &self.card_id)?;

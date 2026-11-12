@@ -15,8 +15,9 @@ use pimalaya_cli::{
         },
     },
     footer, long_version,
+    mcp::exit_on_failure,
     printer::Printer,
-    welcome::Welcome,
+    welcome::{Welcome, is_wanted},
 };
 use pimalaya_config::toml::{ConfigMissingError, TomlConfig};
 
@@ -34,10 +35,12 @@ use crate::{
     account::cli::AccountCommand,
     backend::Backend,
     config::{AccountConfig, Config},
+    error::ErrorCode,
     json_schema,
-    shared::{
-        addressbook::cli::AddressbookCommand, card::cli::CardCommand, client::AddressbookClient,
-    },
+    mcp::McpCommand,
+    repl::ReplCommand,
+    session::Session,
+    shared::{addressbook::cli::AddressbookCommand, card::cli::CardCommand},
 };
 #[cfg(feature = "pimdir")]
 use crate::{
@@ -105,6 +108,8 @@ pub enum Command {
     #[cfg(feature = "vdir")]
     #[command(subcommand)]
     Vdir(VdirCommand),
+    Repl(ReplCommand),
+    Mcp(McpCommand),
     #[command(subcommand)]
     Account(AccountCommand),
     #[command(alias = "completions")]
@@ -167,20 +172,17 @@ pub fn welcome<'a>(
 }
 
 impl Command {
-    pub fn execute(
-        self,
-        printer: &mut impl Printer,
-        config_paths: &[PathBuf],
-        account_name: Option<&str>,
-        backend: Backend,
-    ) -> Result<()> {
+    /// Runs the command over `session`, whose account the protocol
+    /// commands resolve and whose unified client the unified ones keep.
+    pub fn execute(self, printer: &mut impl Printer, session: &mut Session) -> Result<()> {
+        let account = session.account;
+        let (config_paths, account_name) = (account.config_paths, account.name);
+
         match self {
             Self::Addressbook(cmd) => {
-                let (config, name, account_config) = resolve_account(config_paths, account_name)?;
-                let client = AddressbookClient::new(config, name, account_config, backend)?;
-                cmd.execute(printer, client)
+                session.run_unified(printer, |p, client| cmd.execute(p, client))
             }
-            Self::Card(cmd) => cmd.execute(printer, config_paths, account_name, backend),
+            Self::Card(cmd) => cmd.execute(printer, session),
 
             #[cfg(feature = "carddav")]
             Self::Carddav(cmd) => {
@@ -221,7 +223,19 @@ impl Command {
                 cmd.execute(printer, client)
             }
 
-            Self::Account(cmd) => cmd.execute(printer, config_paths, account_name, backend),
+            Self::Account(cmd) => cmd.execute(printer, config_paths, account_name, account.backend),
+            Self::Repl(cmd) => cmd.execute(&*printer, session),
+            Self::Mcp(cmd) => {
+                // NOTE: stdout carries protocol messages only, so a failure
+                // goes to stderr, a person missing a configuration aside.
+                match cmd.execute(session) {
+                    Err(err) if err.is::<ConfigMissingError>() && is_wanted(&*printer) => Err(err),
+                    result => {
+                        exit_on_failure::<ErrorCode, _>(result);
+                        Ok(())
+                    }
+                }
+            }
             Self::Completion(cmd) => cmd.execute(printer, Cli::command()),
             Self::Manual(cmd) => cmd.execute(printer, Cli::command()),
             Self::JsonSchema(cmd) => cmd.execute(printer, json_schema::registry()),

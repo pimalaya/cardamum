@@ -38,7 +38,7 @@ pub struct AddressbookUpdateCommand {
 }
 
 impl AddressbookUpdateCommand {
-    pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, client: &mut AddressbookClient) -> Result<()> {
         let mut capabilities = Vec::new();
         if self.name.is_some() {
             capabilities.push(Capability::AddressbookRename);

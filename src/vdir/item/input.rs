@@ -28,6 +28,7 @@ impl ItemInputArg {
     /// taken as literal item contents.
     pub fn read(self) -> Result<Vec<u8>> {
         if self.input == "-" {
+            pimalaya_cli::session::check_stdin(crate::error::ErrorCode::StdinTaken)?;
             let mut buf = Vec::new();
             stdin()
                 .read_to_end(&mut buf)

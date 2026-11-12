@@ -32,7 +32,7 @@ pub enum AddressbookCommand {
 }
 
 impl AddressbookCommand {
-    pub fn execute(self, printer: &mut impl Printer, client: AddressbookClient) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, client: &mut AddressbookClient) -> Result<()> {
         match self {
             Self::List(cmd) => cmd.execute(printer, client),
             Self::Create(cmd) => cmd.execute(printer, client),

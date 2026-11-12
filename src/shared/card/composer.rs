@@ -18,7 +18,7 @@ use std::{
 
 use anyhow::{Context, Error, Result, anyhow, bail};
 use log::{debug, info};
-use pimalaya_cli::{printer::Printer, prompt};
+use pimalaya_cli::{printer::Printer, prompt, session};
 use pimalaya_config::command::{self, CommandConfig};
 
 use crate::shared::{card::vcard::check, uuid::uuid_v4};
@@ -47,6 +47,16 @@ impl CardComposer {
         // output has no terminal to edit in either.
         if printer.is_json() {
             bail!("Cannot run a composer under --json; pass the vCard explicitly instead");
+        }
+
+        // NOTE: a session reads its commands off the terminal the editor
+        // would take, and pimalaya-cli installs no Ctrl-C handler, so an
+        // interrupted editor would end the session with it.
+        if session::in_session() {
+            bail!(
+                "Cannot run a composer inside a session; pass the vCard or the field \
+                 flags instead"
+            );
         }
 
         let path = temp_dir().join(format!("cardamum-{}.vcf", uuid_v4()?));

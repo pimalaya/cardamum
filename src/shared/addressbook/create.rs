@@ -31,7 +31,7 @@ pub struct AddressbookCreateCommand {
 }
 
 impl AddressbookCreateCommand {
-    pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, client: &mut AddressbookClient) -> Result<()> {
         let mut capabilities = vec![Capability::AddressbookCreate];
         if self.description.is_some() {
             capabilities.push(Capability::AddressbookDescription);

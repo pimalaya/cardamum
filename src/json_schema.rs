@@ -364,7 +364,7 @@ mod tests {
     }
 
     /// The commands printing nothing a schema could describe.
-    const SILENT: &[&str] = &["cardamum"];
+    const SILENT: &[&str] = &["cardamum", "cardamum-repl", "cardamum-mcp"];
 
     #[test]
     fn every_command_is_described() {

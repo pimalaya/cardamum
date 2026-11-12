@@ -38,7 +38,7 @@ pub struct CardDeleteCommand {
 }
 
 impl CardDeleteCommand {
-    pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, client: &mut AddressbookClient) -> Result<()> {
         let mut capabilities = vec![Capability::CardRemove];
         if self.if_match.is_some() {
             capabilities.push(Capability::CardRemoveIfMatch);

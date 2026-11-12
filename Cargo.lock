@@ -1216,6 +1216,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shellexpand",
+ "shlex",
  "thiserror",
  "toml",
  "unicode-width",

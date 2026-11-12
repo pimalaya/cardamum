@@ -50,7 +50,7 @@ pub struct CardListCommand {
 }
 
 impl CardListCommand {
-    pub fn execute(self, printer: &mut impl Printer, mut client: AddressbookClient) -> Result<()> {
+    pub fn execute(self, printer: &mut impl Printer, client: &mut AddressbookClient) -> Result<()> {
         client.require(&[Capability::CardList])?;
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         let page = match &self.page_token.token {

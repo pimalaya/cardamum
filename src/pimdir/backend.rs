@@ -1281,14 +1281,14 @@ mod tests {
         let mut out = Captured::default();
 
         CardCreateCommand::parse_from(["create", "-k", "book", &joe])
-            .execute(&mut out, client(&dir))
+            .execute(&mut out, &mut client(&dir))
             .unwrap();
         assert!(out.text.contains("queued"), "{}", out.text);
         assert!(!out.text.contains("successfully"), "{}", out.text);
         assert_eq!(out.json, serde_json::json!({ "id": "urn:uuid:card-1" }));
 
         CardUpdateCommand::parse_from(["update", "-k", "book", &id, &roe])
-            .execute(&mut out, client(&dir))
+            .execute(&mut out, &mut client(&dir))
             .unwrap();
         assert!(out.text.contains("queued"), "{}", out.text);
         assert!(!out.text.contains("successfully"), "{}", out.text);
@@ -1298,7 +1298,7 @@ mod tests {
         );
 
         CardDeleteCommand::parse_from(["delete", "-k", "book", &id])
-            .execute(&mut out, client(&dir))
+            .execute(&mut out, &mut client(&dir))
             .unwrap();
         assert!(out.text.contains("queued"), "{}", out.text);
         assert!(!out.text.contains("successfully"), "{}", out.text);
@@ -1527,7 +1527,7 @@ mod tests {
             "sed -i.bak s/Doe/Roe/",
             &jane,
         ])
-        .execute(&mut out, client(&dir))
+        .execute(&mut out, &mut client(&dir))
         .unwrap_err();
         assert_eq!(code_of(&err), Some(ErrorCode::ItemDuplicate), "{err:#}");
 

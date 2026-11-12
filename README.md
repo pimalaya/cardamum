@@ -25,6 +25,7 @@ CLI to manage contacts, written in Rust
 - **Discovery**: a domain is enough to find a provider's CardDAV server (`carddav.discover`), through the provider configuration document, SRV records and `.well-known`.
 - **Multi-account**: one TOML file, one block per account, several files deep-merged when you want secrets apart.
 - **JSON output**: every command switches to JSON with `--json`, and `cardamum json-schema` describes what each one emits, for scripts and other tools.
+- **REPL and MCP**: `cardamum repl` runs commands over one account in a session, and `cardamum mcp` serves the unified API to an AI agent over the Model Context Protocol, reads only unless `--allow-write`.
 - Full standard, blocking client with **TLS** support:
   - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature, enabled by default)
   - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)

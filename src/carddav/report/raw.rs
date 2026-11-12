@@ -77,6 +77,7 @@ impl CarddavReportRawCommand {
 /// `<` is taken as inline XML.
 fn read_xml(source: &str) -> Result<Vec<u8>> {
     if source == "-" {
+        pimalaya_cli::session::check_stdin(crate::error::ErrorCode::StdinTaken)?;
         let mut buf = Vec::new();
         stdin()
             .read_to_end(&mut buf)

@@ -21,7 +21,7 @@ native-tls = ["pimalaya-stream/native-tls", "io-pim-discovery?/native-tls", "io-
 rustls-aws = ["pimalaya-stream/rustls-aws", "io-pim-discovery?/rustls-aws", "io-webdav?/rustls-aws", "io-jmap?/rustls-aws", "io-msgraph?/rustls-aws", "io-gpeople?/rustls-aws"]
 rustls-ring = ["pimalaya-stream/rustls-ring", "io-pim-discovery?/rustls-ring", "io-webdav?/rustls-ring", "io-jmap?/rustls-ring", "io-msgraph?/rustls-ring", "io-gpeople?/rustls-ring"]
 carddav = ["dep:io-webdav", "dep:io-pim-discovery"]
-jmap = ["dep:io-jmap", "vcard-rs/jscontact", "dep:base64"]
+jmap = ["dep:io-jmap", "vcard-rs/jscontact", "dep:base64-codec"]
 msgraph = ["dep:io-msgraph", "io-msgraph/vcard"]
 gpeople = ["dep:io-gpeople", "io-gpeople/vcard"]
 vdir = ["dep:io-vdir"]
@@ -39,18 +39,16 @@ pimalaya-cli = { version = "0.4", default-features = false, features = ["build"]
 
 [dev-dependencies]
 pimalaya-config = { version = "0.4", default-features = false, features = ["sample"] }
-tempfile = "3"
-toml = "1.1"
+tempfile = { version = "3", default-features = false }
+toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
 
 [dependencies]
-anyhow = "1"
-ariadne = { version = "0.6", optional = true }
-base64 = { version = "0.23", optional = true }
+anyhow = { version = "1", default-features = false, features = ["std"] }
+ariadne = { version = "0.6", default-features = false, optional = true }
+base64-codec = { version = "0.1", default-features = false, features = ["alloc"], optional = true }
 clap = { version = "4.4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage"] }
-clap_complete = "4.4"
-clap_mangen = "0.3"
-env_logger = "0.11"
-getrandom = "0.4"
+getrandom = { version = "0.4", default-features = false }
+idna_adapter = { version = "=1.0.0", default-features = false }
 io-http = { version = "0.6", default-features = false }
 io-jmap = { version = "0.7", default-features = false, features = ["client"], optional = true }
 io-msgraph = { version = "0.7.1", default-features = false, features = ["client"], optional = true }
@@ -59,18 +57,17 @@ io-pim-discovery = { version = "0.11", default-features = false, features = ["pa
 io-pimdir = { version = "0.10", default-features = false, features = ["client"], optional = true }
 io-vdir = { version = "0.2", default-features = false, features = ["client", "serde"], optional = true }
 io-webdav = { version = "0.7", default-features = false, features = ["client"], optional = true }
-log = "0.4"
-percent-encoding = "2"
+log = { version = "0.4", default-features = false }
 pimalaya-cli = { version = "0.4", default-features = false, features = ["prompt", "terminal"] }
 pimalaya-config = { version = "0.4", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.3", default-features = false, features = ["std"] }
-schemars = "1"
-secrecy = "0.10"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-url = { version = "2.5", features = ["serde"] }
+schemars = { version = "1", default-features = false, features = ["derive", "std"] }
+secrecy = { version = "0.10", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive", "std"] }
+serde_json = { version = "1", default-features = false, features = ["std"] }
+simd-cpu = { version = "0.1", default-features = false, features = ["std"] }
+url = { version = "2.5", default-features = false, features = ["serde"] }
 vcard-rs = { version = "0.6", default-features = false, features = ["parser"] }
-
 
 [patch.crates-io]
 pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "0fbe5dd597ec48419eac87a9372c0c0d1f40f6f3" }

@@ -93,10 +93,15 @@ use pimalaya_cli::{
     welcome::{is_wanted, shipped_sample},
 };
 use pimalaya_config::toml::ConfigMissingError;
+use simd_cpu::SimdCpu;
 
 use crate::{cli::Cli, error::ErrorCode};
 
 fn main() {
+    // NOTE: the vCard codecs read the installed CPU token, the portable
+    // baseline until one is installed.
+    let _ = SimdCpu::install_detected();
+
     let cli = Cli::parse();
     let mut printer = StdoutPrinter::new(&cli.json);
     let config_paths = cli.config.paths.clone();

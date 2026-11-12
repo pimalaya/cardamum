@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Changed every dependency to name the features it needs, and base64 to base64-codec.
 - Changed config.sample.toml to one `[accounts.example]` table and one commented section per backend or provider, each tested to parse.
 - **Breaking:** changed `-c` to take one path per flag, never split on `:`, and stopped reading `CARDAMUM_CONFIG`.
 
@@ -61,6 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 
+- Removed IDNA for server and proxy hosts: an `http` or `https` URL with a non-ASCII host is refused, its Punycode form working.
 - **Breaking:** removed the `configure` command and its `wizard` alias, with the `wizard` cargo feature.
 
   A bare `cardamum` prints the help, and a command meeting no configuration fails naming the path it looked at and the documented sample.

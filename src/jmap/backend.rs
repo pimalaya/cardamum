@@ -12,7 +12,7 @@
 use std::collections::BTreeMap;
 
 use anyhow::{Error, Result, anyhow, bail};
-use base64::{Engine, prelude::BASE64_STANDARD};
+use base64_codec::codec::Base64Codec;
 use io_jmap::{
     client::{JmapClientStd, JmapClientStdConnectOptions},
     rfc9610::{
@@ -326,7 +326,10 @@ pub fn jmap_http_auth(
         JmapAuthConfig::Basic { username, password } => {
             let password = resolver.resolve(password)?;
             let creds = format!("{}:{}", username, password.expose_secret());
-            let encoded = BASE64_STANDARD.encode(creds.into_bytes());
+            let mut encoded = Vec::new();
+            Base64Codec::default().encode_vec(creds.as_bytes(), &mut encoded);
+            // NOTE: the base64 alphabet is ASCII, so this never falls back.
+            let encoded = String::from_utf8(encoded).unwrap_or_default();
             Ok(format!("Basic {encoded}").into())
         }
     }
@@ -388,5 +391,24 @@ fn card_write_error(verb: &str, err: &JmapContactCardSetItemError, unmapped: &[S
             "{msg}. {hint}; the card carries {}, which JMAP has no home for on this server",
             names.join(", ")
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pimalaya_config::secret::{Secret, SecretResolver};
+    use secrecy::{ExposeSecret, SecretString};
+
+    use super::jmap_http_auth;
+    use crate::config::JmapAuthConfig;
+
+    #[test]
+    fn basic_auth_is_standard_padded_base64() {
+        let auth = JmapAuthConfig::Basic {
+            username: String::from("user"),
+            password: Secret::Raw(SecretString::from("pa\u{e9}ss")),
+        };
+        let header = jmap_http_auth(auth, &mut SecretResolver::new()).unwrap();
+        assert_eq!(header.expose_secret(), "Basic dXNlcjpwYcOpc3M=");
     }
 }

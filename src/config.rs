@@ -795,4 +795,20 @@ mod tests {
             assert!(blocks.contains(&true), "{context}: no backend declared");
         }
     }
+    /// A host is ASCII: an `https` server naming a non-ASCII one is refused
+    /// when parsed, its Punycode form working.
+    #[cfg(feature = "jmap")]
+    #[test]
+    fn a_non_ascii_host_is_refused() {
+        use super::parse_server;
+
+        let schemes = ["http", "https", "jmap", "jmaps"];
+        assert!(parse_server("https://b\u{fc}cher.example/jmap", "https", &schemes).is_err());
+        assert!(parse_server("b\u{fc}cher.example", "https", &schemes).is_err());
+
+        let url = parse_server("https://xn--bcher-kva.example/jmap", "https", &schemes).unwrap();
+        assert_eq!(url.host_str(), Some("xn--bcher-kva.example"));
+        let url = parse_server("xn--bcher-kva.example", "https", &schemes).unwrap();
+        assert_eq!(url.host_str(), Some("xn--bcher-kva.example"));
+    }
 }

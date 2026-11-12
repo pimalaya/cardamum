@@ -13,7 +13,7 @@ change: the-family-standards
 - [x] the-sample-is-tested-and-shipped
 - [x] dependencies-trimmed
 - [x] every-feature-set-builds-clean
-- [ ] live-provider-tests
+- [x] live-provider-tests
 - [x] capability-shared-api
 - [x] the-shared-repl-and-mcp
 - [ ] release-polish

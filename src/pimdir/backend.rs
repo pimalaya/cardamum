@@ -356,7 +356,14 @@ impl PimdirBackend {
     ///
     /// The next sync applies it as a tombstone and pushes a server-side
     /// delete. `if_match` gates it as it gates
-    /// [`update_card`](Self::update_card).
+    /// [`update_card`](Self::update_card), and the action names the body
+    /// it matched the same way (pimdir STORAGE §15.3), so the owner parks
+    /// a delete decided over a body a sync replaced before the drain.
+    ///
+    /// It states no resolution: over a conflicted card the owner parks
+    /// it, as it parks an update, rather than delete a diverging body
+    /// nobody saw. The partial supports the gate passed it with are
+    /// logged.
     pub fn delete_card(
         &mut self,
         addressbook_id: &str,
@@ -368,16 +375,20 @@ impl PimdirBackend {
         let item = self.item(addressbook_id, card_id)?;
         check_version(self.version(&item)?, addressbook_id, card_id, if_match)?;
         let seq = item.seq;
-        let action = PimdirAction::Remove { seq };
-        let mut producer = self.inner.producer()?;
-        let partials = producer
-            .check(addressbook_id, &action)
-            .map_err(|err| refusal(err, "Stage the pimdir action"))?;
-        producer
+        // NOTE: the version matched, so the item's body is the one read.
+        let read = if_match.and(item.object);
+        let action = PimdirAction::Remove {
+            seq,
+            if_match: read,
+            resolves: None,
+        };
+        let enqueued = self
+            .inner
+            .producer()?
             .enqueue(addressbook_id, &action, None)
             .map_err(|err| refusal(err, "Stage the pimdir action"))?;
 
-        for partial in &partials {
+        for partial in &enqueued.partial {
             warn!("{partial}");
         }
         Ok(())
@@ -553,8 +564,8 @@ impl PimdirBackend {
 
     /// Stages a body and the action naming it as one step.
     ///
-    /// `PimdirProducer::enqueue_with_body_checked` checks the action
-    /// first: the gate of pimdir STORAGE §15.6 and, for an `add`, a link id
+    /// `PimdirProducer::enqueue_with_body` checks the action first: the
+    /// gate of pimdir STORAGE §15.6, run once, and, for an `add`, a link id
     /// the address book holds live or has queued, which the owner would
     /// park at drain (§15.3). Only then does it write the body under its
     /// staging lock, named by the store's own hash, and append the row
@@ -570,7 +581,7 @@ impl PimdirBackend {
         let enqueued = self
             .inner
             .producer()?
-            .enqueue_with_body_checked(collection, contents, action)
+            .enqueue_with_body(collection, contents, action)
             .map_err(|err| refusal(err, "Stage the pimdir action"))?;
 
         for partial in &enqueued.partial {
@@ -1429,6 +1440,130 @@ mod tests {
         );
     }
 
+    /// A queued delete names the body it was decided over (pimdir STORAGE
+    /// §15.3): a server change a sync brings in before the drain parks the
+    /// delete, rather than removing a body nobody read.
+    #[test]
+    fn a_delete_whose_body_a_sync_replaced_is_parked() {
+        let (dir, mut backend) = store();
+        pulled(&dir, "book", JANE);
+        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
+        let read = backend.get_card("book", &id).unwrap();
+        let renamed = String::from_utf8(JANE.to_vec())
+            .unwrap()
+            .replace("Jane Doe", "Jane Poe")
+            .into_bytes();
+
+        backend
+            .delete_card("book", &id, read.etag.as_deref())
+            .unwrap();
+        pulled(&dir, "book", &renamed);
+
+        let mut owner = io_pimdir::client::PimdirStore::open(dir.path())
+            .unwrap()
+            .for_source("carddav");
+        let report = owner.drain().unwrap();
+        assert_eq!((report.applied, report.parked), (0, 1), "{report:?}");
+        assert_eq!(backend.get_card("book", &id).unwrap().contents, renamed);
+
+        let status = backend.status().unwrap();
+        assert_eq!(status.parked.len(), 1, "{:?}", status.parked);
+        assert_eq!(status.parked[0].action, "remove");
+    }
+
+    /// A write over a conflicted card states no resolution, so the owner
+    /// parks it (pimdir STORAGE §15.2, §15.3) rather than settle a
+    /// conflict nobody decided: the card and its diverging body stay.
+    #[test]
+    fn a_write_over_a_conflicted_card_is_parked() {
+        use io_pimdir::{
+            change::PimdirWriteOp,
+            collection::PimdirCollectionId,
+            object::PimdirObject,
+            placement::{PimdirBase, PimdirHandle, PimdirPlacement, PimdirStatus},
+        };
+
+        let (dir, mut backend) = store();
+        let rename = |name: &str| {
+            String::from_utf8(JANE.to_vec())
+                .unwrap()
+                .replace("Jane Doe", name)
+                .into_bytes()
+        };
+        // The card as `source` holds it under `handle`, in sync with its
+        // own server at `revision`.
+        let pull = |source: &str, handle: &str, body: &[u8], revision: &str| {
+            let mut store = io_pimdir::client::PimdirStore::open(dir.path())
+                .unwrap()
+                .for_source(source);
+            let hash = store.hash(body);
+            let derived = contact::derive(body);
+            store
+                .write(vec![
+                    PimdirWriteOp::StoreObject {
+                        object: PimdirObject {
+                            hash: hash.clone(),
+                            size: body.len(),
+                        },
+                        body: Some(body.to_vec()),
+                    },
+                    PimdirWriteOp::UpsertPlacement(PimdirPlacement {
+                        collection: PimdirCollectionId::from("book"),
+                        handle: PimdirHandle(handle.into()),
+                        link_id: Some(derived.link_id),
+                        object: Some(hash.clone()),
+                        level: PimdirLevel::Full,
+                        summary: derived.summary,
+                        sort_key: Default::default(),
+                        flags: PimdirFlags::default(),
+                        status: PimdirStatus::Clean,
+                        conflict_revision: None,
+                        conflict_object: None,
+                        base: Some(PimdirBase {
+                            flags: PimdirFlags::default(),
+                            revision: Some(revision.into()),
+                            object: Some(hash),
+                        }),
+                        origin: None,
+                    }),
+                ])
+                .unwrap()
+        };
+
+        // NOTE: two sources hold the card and each pulls another edit of
+        // it, so the second meets a divergence nobody decided.
+        pull("phone", "1", JANE, "v1");
+        pull("carddav", "jane.vcf", JANE, "e1");
+        pull("phone", "1", &rename("Jane Roe"), "v2");
+        let written = pull("carddav", "jane.vcf", &rename("Jane Poe"), "e2");
+        assert_eq!(written.conflicted.len(), 1, "no conflict to write over");
+
+        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
+        let read = backend.get_card("book", &id).unwrap();
+        assert_eq!(read.contents, rename("Jane Roe"));
+
+        backend
+            .update_card("book", &id, rename("Jane Zoe"), read.etag.as_deref())
+            .unwrap();
+        backend
+            .delete_card("book", &id, read.etag.as_deref())
+            .unwrap();
+
+        let mut owner = io_pimdir::client::PimdirStore::open(dir.path())
+            .unwrap()
+            .for_source("carddav");
+        let report = owner.drain().unwrap();
+        assert_eq!((report.applied, report.parked), (0, 2), "{report:?}");
+        assert_eq!(
+            backend.get_card("book", &id).unwrap().contents,
+            rename("Jane Roe")
+        );
+
+        let status = backend.status().unwrap();
+        let parked: Vec<_> = status.parked.iter().map(|row| &row.action).collect();
+        assert_eq!(parked, ["update", "remove"]);
+    }
+
     /// A guarded edit the owner parks, its body replaced by a sync before
     /// the drain, shows in `pimdir status` with its row and the reason it
     /// never applied, and only in the status of the account it targets.
@@ -1639,7 +1774,7 @@ mod tests {
 
         let (dir, backend) = store();
         drop(backend);
-        rewrite(dir.path(), FORMAT_VERSION, "storage-draft-08");
+        rewrite(dir.path(), FORMAT_VERSION, "storage-draft-09");
 
         let err = match PimdirBackend::new(PimdirConfig {
             root: dir.path().to_path_buf(),
@@ -1650,7 +1785,7 @@ mod tests {
         };
         assert_eq!(code_of(&err), Some(ErrorCode::StoreVersion), "{err:#}");
         let message = format!("{err:#}");
-        assert!(message.contains("storage-draft-08"), "{message}");
+        assert!(message.contains("storage-draft-09"), "{message}");
         assert!(message.contains("until nothing is queued"), "{message}");
         assert!(message.contains("neverest init"), "{message}");
         assert!(!message.contains("delete"), "{message}");

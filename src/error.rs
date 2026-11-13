@@ -64,6 +64,11 @@ pub enum ErrorCode {
     /// once on a check, which does not wait. The caller tries again.
     #[cfg(feature = "pimdir")]
     StoreBusy,
+    /// The store's staging lock file was replaced while a write held it
+    /// (pimdir STORAGE §8): nothing was queued, and the caller tries
+    /// again once no other process is setting the store up.
+    #[cfg(feature = "pimdir")]
+    LockReplaced,
     /// A source syncing the address book does not support the write
     /// (pimdir STORAGE §15.6): nothing was queued.
     #[cfg(feature = "pimdir")]
@@ -116,6 +121,7 @@ impl ErrorCode {
             "store-hash-algo" => Some(Self::StoreHashAlgo),
             "store-exposed" => Some(Self::StoreExposed),
             "store-busy" => Some(Self::StoreBusy),
+            "lock-replaced" => Some(Self::LockReplaced),
             "unsupported" => Some(Self::Unsupported),
             "item-duplicate" => Some(Self::ItemDuplicate),
             "action-malformed" => Some(Self::ActionMalformed),
@@ -149,7 +155,7 @@ mod tests {
         let failures = [
             PimdirError::Uncreated,
             PimdirError::Version {
-                found: Some("storage-draft-08".into()),
+                found: Some("storage-draft-09".into()),
             },
             PimdirError::Version { found: None },
             PimdirError::Foreign,
@@ -165,6 +171,7 @@ mod tests {
             },
             PimdirError::Exposed("pimdir.db".into()),
             PimdirError::Busy,
+            PimdirError::LockReplaced("objects.lock".into()),
             PimdirError::Unsupported(PimdirRefusal {
                 capability: "contacts.card.add".into(),
                 source: "carddav".into(),
@@ -180,7 +187,7 @@ mod tests {
             PimdirError::IndexOutdated("index.db".into()),
             PimdirError::IndexVersion {
                 path: "index.db".into(),
-                version: Some("search-draft-08".into()),
+                version: Some("search-draft-09".into()),
                 shape: None,
             },
             PimdirError::Fts5 { version: "3.40.0" },

@@ -22,7 +22,7 @@ use crate::pimdir::{
 /// answers from the same index, with what the count could not see.
 ///
 /// JSON output: `{"count", "coverage": {"complete", "bodiless",
-/// "unindexed", "behind", "filling"}}`.
+/// "missing", "unparseable", "unindexed", "behind", "filling"}}`.
 #[derive(Debug, Parser)]
 pub struct PimdirCountCommand {
     /// Address book to count in, every one of the account's when omitted.

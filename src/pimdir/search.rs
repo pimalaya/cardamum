@@ -42,8 +42,8 @@ use crate::{
 /// local, the index lagging the store.
 ///
 /// JSON output: `{"hits": [{...card list row, "matched", "snippet"}],
-/// "more", "coverage": {"complete", "bodiless", "unindexed", "behind",
-/// "filling"}}`.
+/// "more", "coverage": {"complete", "bodiless", "missing", "unparseable",
+/// "unindexed", "behind", "filling"}}`.
 #[derive(Debug, Parser)]
 pub struct PimdirSearchCommand {
     /// Address book to search, every one of the account's when omitted.

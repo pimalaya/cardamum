@@ -294,6 +294,13 @@ pub struct PimdirCardCoverage {
     /// Cards in scope whose body is not local, matched on their summary
     /// alone.
     pub bodiless: u64,
+    /// Cards in scope whose body the index could not read, counted when
+    /// a term of the query reads card bodies: matched on their summary
+    /// until the sync engine reads them.
+    pub missing: u64,
+    /// Cards in scope whose body no parser accepted, counted when a term
+    /// of the query reads card bodies: matched on their summary alone.
+    pub unparseable: u64,
     /// Cards in scope whose last change the index has not folded in.
     pub unindexed: u64,
     /// How many changes the store drew since the index was refreshed,
@@ -310,11 +317,22 @@ impl From<&PimdirSearchCoverage> for PimdirCardCoverage {
             PimdirSearchTemporal::Bounded { filling, .. } => *filling,
         };
 
+        let local = &coverage.local;
+        // NOTE: these two count against an answer only for a kind whose
+        // bodies a term of the query reads (pimdir SEARCH §8.2).
+        let read = local
+            .kinds
+            .iter()
+            .filter(|(kind, _)| local.reads.kinds.contains(*kind))
+            .map(|(_, unread)| unread);
+
         Self {
-            complete: coverage.is_complete() && coverage.local.behind == 0,
-            bodiless: coverage.local.bodiless.values().sum(),
-            unindexed: coverage.local.unindexed,
-            behind: coverage.local.behind,
+            complete: coverage.is_complete(),
+            bodiless: local.kinds.values().map(|unread| unread.bodiless).sum(),
+            missing: read.clone().map(|unread| unread.missing).sum(),
+            unparseable: read.map(|unread| unread.unparseable).sum(),
+            unindexed: local.unindexed,
+            behind: local.behind,
             filling,
         }
     }
@@ -334,6 +352,18 @@ impl fmt::Display for PimdirCardCoverage {
             parts.push(format!(
                 "{} card(s) have no local body and matched on their summary alone",
                 self.bodiless
+            ));
+        }
+        if self.missing > 0 {
+            parts.push(format!(
+                "{} card(s) have a body the index could not read and matched on their summary alone",
+                self.missing
+            ));
+        }
+        if self.unparseable > 0 {
+            parts.push(format!(
+                "{} card(s) have a body that does not parse and matched on their summary alone",
+                self.unparseable
             ));
         }
         if self.filling {
@@ -914,7 +944,7 @@ mod tests {
         let path = dir.path().join("index.db");
         assert!(!dir.path().join("index.db-wal").exists());
         let mut db = std::fs::read(&path).unwrap();
-        let (from, to) = (FORMAT_VERSION.as_bytes(), b"search-draft-08");
+        let (from, to) = (FORMAT_VERSION.as_bytes(), b"search-draft-09");
         let mut found = false;
         for at in 0..=db.len() - from.len() {
             if &db[at..at + from.len()] == from {
@@ -926,7 +956,7 @@ mod tests {
         std::fs::write(&path, &db).unwrap();
 
         let err = assert_refused(&backend, ErrorCode::IndexVersion);
-        assert!(err.contains("search-draft-08"), "{err}");
+        assert!(err.contains("search-draft-09"), "{err}");
         assert_eq!(std::fs::read(&path).unwrap(), db, "the index was rebuilt");
     }
 
@@ -938,11 +968,55 @@ mod tests {
         assert_eq!(coverage.to_string(), "");
     }
 
+    /// A card the index could not read, or could not parse, leaves an
+    /// answer incomplete only when a term of the query reads card bodies
+    /// (pimdir SEARCH §8.2), and the line then names it.
+    #[test]
+    fn an_unread_body_counts_when_a_term_reads_it() {
+        use io_pimdir::search::coverage::{PimdirSearchLocal, PimdirSearchUnread};
+
+        let unread = PimdirSearchUnread {
+            missing: 1,
+            unparseable: 2,
+            ..Default::default()
+        };
+        let coverage = |text: &str| {
+            PimdirCardCoverage::from(&PimdirSearchCoverage {
+                local: PimdirSearchLocal {
+                    kinds: [(String::from("text/vcard"), unread)].into(),
+                    reads: query(text).reads(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+        };
+
+        let summary = coverage("email:@example.org");
+        assert!(summary.complete, "{summary:?}");
+        assert_eq!((summary.missing, summary.unparseable), (0, 0));
+        assert_eq!(summary.to_string(), "");
+
+        let body = coverage("has:phone");
+        assert!(!body.complete, "{body:?}");
+        assert_eq!((body.missing, body.unparseable), (1, 2));
+        let line = body.to_string();
+        assert!(
+            line.contains("1 card(s) have a body the index could not read"),
+            "{line}"
+        );
+        assert!(
+            line.contains("2 card(s) have a body that does not parse"),
+            "{line}"
+        );
+    }
+
     #[test]
     fn coverage_renders_as_camel_case_json() {
         let coverage = PimdirCardCoverage {
             complete: false,
             bodiless: 2,
+            missing: 4,
+            unparseable: 5,
             unindexed: 1,
             behind: 3,
             filling: true,
@@ -953,6 +1027,8 @@ mod tests {
             serde_json::json!({
                 "complete": false,
                 "bodiless": 2,
+                "missing": 4,
+                "unparseable": 5,
                 "unindexed": 1,
                 "behind": 3,
                 "filling": true,
@@ -961,6 +1037,8 @@ mod tests {
         let line = coverage.to_string();
         for part in [
             "2 card(s) have no local body",
+            "4 card(s) have a body the index could not read",
+            "5 card(s) have a body that does not parse",
             "a first sync is still listing an address book",
             "1 card(s) changed since the index was refreshed",
             "the index is 3 change(s) behind the store",

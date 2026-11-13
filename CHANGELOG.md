@@ -37,6 +37,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed every dependency to name the features it needs, and base64 to base64-codec.
 - Changed config.sample.toml to one `[accounts.example]` table and one commented section per backend or provider, each tested to parse.
 - **Breaking:** changed `-c` to take one path per flag, never split on `:`, and stopped reading `CARDAMUM_CONFIG`.
+- **Breaking:** changed a command line the grammar refuses under `--json` to print on stdout the failure object coded `usage-invalid`, where clap printed its text on stderr; it still exits 2, the family exit contract (pimalaya-cli) keeping 2 for a refused command line and 3 for a partial outcome. A refused REPL line and an MCP tool call whose arguments the grammar refuses carry `usage-invalid` too.
 
   Without `-c`, every canonical path that exists is loaded, each deep-merged on top of the ones before.
 - **Breaking:** changed every text output to plain text: no border, no colour, nothing sized to the terminal.
@@ -83,7 +84,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed `card read` printing a card's control characters as is, which could drive the terminal: the text view replaces them, CRLF read as LF, and `--json` keeps the bytes.
 - Fixed the write confirmations printing a server-given id as is.
 - Fixed a unified command spawning its secret commands again when it reopened its backend after the composer.
-- Fixed `account check` exiting 0 when a backend failed: it now prints its report and exits 2.
+- Fixed `account check` exiting 0 when a backend failed: it now prints its report and exits 3.
 - Fixed pimdir accepting writes into an address book no source syncs, which no sync would ever push: they are now refused before anything is staged.
 - Fixed a pimdir card whose body blob is missing reporting an `etag`, which an `--if-match` could then match.
 - Fixed pimdir recognising an address book only by the exact kind `text/vcard`: a kind carrying parameters now counts.

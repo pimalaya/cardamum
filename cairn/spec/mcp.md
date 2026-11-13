@@ -16,3 +16,6 @@ Inside the MCP server, a vCard source SHALL be taken as text, a local path namin
 
 ### Requirement: Tool annotations say what a tool does
 A reading tool SHALL be `readOnlyHint`, an update or a delete `destructiveHint`, and every tool `openWorldHint: false`, no cardamum tool reaching people beyond the account's own data.
+
+### Requirement: A call the grammar refuses is a usage failure
+A tool call whose arguments the tool's input schema admits but its command's grammar refuses (a `page-size` of `-1`) SHALL answer a result with `isError`, its failure object coded `usage-invalid` (`pimalaya_cli::error::usage_error`), the server going on.

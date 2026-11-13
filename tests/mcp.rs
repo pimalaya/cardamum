@@ -2,8 +2,8 @@
 //!
 //! The built binary's `mcp` server over a vdir account: it introduces
 //! itself, lists the reading tools alone unless `--allow-write`, answers a
-//! call with the command's JSON, and takes a card as text, never as a
-//! local path.
+//! call with the command's JSON, takes a card as text, never as a local
+//! path, and fails a value the grammar refuses as `usage-invalid`.
 
 #![cfg(feature = "vdir")]
 
@@ -152,4 +152,27 @@ fn a_card_is_taken_as_text_never_as_a_local_path() {
     assert_eq!(cards.len(), 2, "{cards:?}");
     assert!(cards.iter().any(|card| card.contains("FN:Bob")));
     assert!(!cards.iter().any(|card| card.contains("eve")));
+}
+
+/// A value the tool's schema admits but its command's grammar refuses
+/// fails the call with the failure object coded `usage-invalid`.
+#[test]
+fn a_value_the_grammar_refuses_is_a_usage_failure() {
+    let (home, config) = vdir();
+    let list = call(
+        1,
+        "card_list",
+        json!({"addressbook": "personal", "page-size": -1}),
+    );
+    let answers = serve(&home, &config, &[], &[list]);
+
+    let result = &answers[1]["result"];
+    assert_eq!(result["isError"], true, "{result}");
+    let text = result["content"][0]["text"].as_str().unwrap();
+    let failure: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(failure["code"], "usage-invalid", "{failure}");
+    assert!(
+        failure["error"].as_str().unwrap().contains("--page-size"),
+        "{failure}"
+    );
 }

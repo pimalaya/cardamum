@@ -33,7 +33,7 @@ use crate::{backend::Backend, config::Config, error::ErrorCode};
 ///
 /// The report is printed whole, each backend with its outcome and, when
 /// it failed, its code and why. A failed backend exits the command with
-/// status 2, the report being the output rather than a failure object.
+/// status 3, the report being the output rather than a failure object.
 ///
 /// JSON output: `{"account", "backends": [{"backend", "ok", "code",
 /// "error"}]}`.
@@ -478,7 +478,8 @@ mod vdir_tests {
         // partial-outcome exit status.
         let (result, out) = check(&dir.path().join("missing"));
         let err = result.unwrap_err();
-        assert!(err.is::<pimalaya_cli::error::PartialOutcome>(), "{err:#}");
+        let partial = pimalaya_cli::error::partial_outcome_of(&err);
+        assert_eq!(partial.map(|partial| partial.status()), Some(3), "{err:#}");
         let vdir = out.lines().find(|line| line.starts_with("vdir:"));
         let vdir = vdir.unwrap_or_default();
         assert!(

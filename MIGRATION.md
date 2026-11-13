@@ -26,7 +26,8 @@ What a script reads off `--json` barely moves; the text output changes everywher
 ### JSON output
 
 - **`card list` prints `nextPage`** beside `cards`: the next page number while cards follow, `null` on the last page. Give it back through `--page-token`.
-- **A failed `account check` prints its report and exits 2**, `ok: false`, the error and its `code` (`store-busy`, `store-uncreated`...) on each failed backend, where it printed one failure object and exited 1. Read which backends passed from `backends`.
+- **A failed `account check` prints its report and exits 3**, `ok: false`, the error and its `code` (`store-busy`, `store-uncreated`...) on each failed backend, where it printed one failure object and exited 1. Read which backends passed from `backends`.
+- **A command line the grammar refuses under `--json` prints the failure object**, `{"code":"usage-invalid","error":…}` on stdout, and still exits 2, where clap printed its text on stderr.
 
 ### Commands that now fail earlier
 

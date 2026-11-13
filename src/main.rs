@@ -94,8 +94,8 @@ mod vdir;
 use std::process;
 
 use anyhow::Result;
-use clap::Parser;
 use pimalaya_cli::{
+    clap::parse,
     error::{EXIT_FAILURE, ErrorReport},
     log::Logger,
     printer::StdoutPrinter,
@@ -115,7 +115,7 @@ fn main() {
     // baseline until one is installed.
     let _ = SimdCpu::install_detected();
 
-    let cli = Cli::parse();
+    let cli = parse::<Cli>();
     let mut printer = StdoutPrinter::new(&cli.json);
     let config_paths = cli.config.paths.clone();
     let result = execute(cli, &mut printer);

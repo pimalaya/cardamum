@@ -85,10 +85,10 @@ pub fn json_failure(out: &Output, refusal: &str) -> Value {
 }
 
 /// The report a `--json` `account check` run printed, failing unless it
-/// exited with 2, the partial outcome, and names `backend` as failed for
+/// exited with 3, the partial outcome, and names `backend` as failed for
 /// `refusal`.
 pub fn json_check_failure(out: &Output, backend: &str, refusal: &str) -> Value {
-    let report = json(out, 2);
+    let report = json(out, 3);
     let backends = report["backends"].as_array().unwrap();
     let check = backends.iter().find(|check| check["backend"] == backend);
     let check = check.unwrap_or_else(|| panic!("{backend} not checked: {report}"));

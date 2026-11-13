@@ -291,8 +291,8 @@ impl fmt::Display for PimdirCardMatched {
 pub struct PimdirCardCoverage {
     /// Whether the answer is the whole answer: every other field at rest.
     pub complete: bool,
-    /// Cards in scope whose body is not local, matched on their summary
-    /// alone.
+    /// Cards in scope whose body is not local, counted when a term of the
+    /// query reads card bodies: matched on their summary alone.
     pub bodiless: u64,
     /// Cards in scope whose body the index could not read, counted when
     /// a term of the query reads card bodies: matched on their summary
@@ -318,17 +318,23 @@ impl From<&PimdirSearchCoverage> for PimdirCardCoverage {
         };
 
         let local = &coverage.local;
-        // NOTE: these two count against an answer only for a kind whose
-        // bodies a term of the query reads (pimdir SEARCH §8.2).
+        let reads = &local.reads;
+        // NOTE: a body out of sight counts against an answer only for a
+        // kind whose bodies a term of the query reads (pimdir SEARCH §8.2).
         let read = local
             .kinds
             .iter()
-            .filter(|(kind, _)| local.reads.kinds.contains(*kind))
+            .filter(|(kind, _)| reads.kinds.contains(*kind))
             .map(|(_, unread)| unread);
+        let bodiless = local
+            .kinds
+            .iter()
+            .filter(|(kind, _)| reads.kinds.contains(*kind) || reads.counts_bodiless(kind))
+            .map(|(_, unread)| unread.bodiless);
 
         Self {
             complete: coverage.is_complete(),
-            bodiless: local.kinds.values().map(|unread| unread.bodiless).sum(),
+            bodiless: bodiless.sum(),
             missing: read.clone().map(|unread| unread.missing).sum(),
             unparseable: read.map(|unread| unread.unparseable).sum(),
             unindexed: local.unindexed,
@@ -687,6 +693,53 @@ mod tests {
         assert!(line.contains("1 card(s) have no local body"), "{line}");
     }
 
+    /// A card whose body is not local counts against an answer only when
+    /// a term of the query reads card bodies (pimdir SEARCH §8.2): a
+    /// query of summary terms alone is whole without it.
+    #[test]
+    fn a_bodiless_card_counts_only_against_a_term_reading_it() {
+        let (_dir, backend) = indexed_store();
+
+        for (text, cards) in [("email:@example.org", 4), ("kind:contact", 5)] {
+            let (count, coverage) = backend.count_cards(query(text), None).unwrap();
+            assert_eq!(count, cards, "{text}");
+            assert!(coverage.complete, "{text}: {coverage:?}");
+            assert_eq!(coverage.bodiless, 0, "{text}");
+            assert_eq!(coverage.to_string(), "", "{text}");
+        }
+
+        let (count, coverage) = backend.count_cards(query("has:phone"), None).unwrap();
+        assert_eq!(count, 1);
+        assert!(!coverage.complete, "{coverage:?}");
+        assert_eq!(coverage.bodiless, 1);
+        let line = coverage.to_string();
+        assert!(line.contains("1 card(s) have no local body"), "{line}");
+    }
+
+    /// A group that is a conjunct of the whole query narrows the coverage
+    /// as its terms do bare (pimdir SEARCH §8.2), under the scope added
+    /// here: Erin, bodiless in `book`, is out of an answer over `team`.
+    #[test]
+    fn a_group_narrows_the_coverage_as_its_terms_do() {
+        let (_dir, backend) = indexed_store();
+
+        for text in [
+            "collection:team offsite",
+            "(collection:team) offsite",
+            "(collection:team offsite)",
+            "((collection:team) (offsite))",
+        ] {
+            assert_eq!(names(&backend, text, None), ["Dave Petit"], "{text}");
+            let coverage = page(&backend, text, None).coverage;
+            assert_eq!(coverage.bodiless, 0, "{text}");
+            assert!(coverage.complete, "{text}: {coverage:?}");
+        }
+
+        let negated = page(&backend, "-(collection:book) offsite", None).coverage;
+        assert_eq!(negated.bodiless, 1);
+        assert!(!negated.complete, "{negated:?}");
+    }
+
     /// `-k` narrows the hits to one address book and the coverage with
     /// them: Erin, bodiless, is in `book` alone.
     #[test]
@@ -944,7 +997,7 @@ mod tests {
         let path = dir.path().join("index.db");
         assert!(!dir.path().join("index.db-wal").exists());
         let mut db = std::fs::read(&path).unwrap();
-        let (from, to) = (FORMAT_VERSION.as_bytes(), b"search-draft-09");
+        let (from, to) = (FORMAT_VERSION.as_bytes(), b"search-draft-10");
         let mut found = false;
         for at in 0..=db.len() - from.len() {
             if &db[at..at + from.len()] == from {
@@ -956,7 +1009,7 @@ mod tests {
         std::fs::write(&path, &db).unwrap();
 
         let err = assert_refused(&backend, ErrorCode::IndexVersion);
-        assert!(err.contains("search-draft-09"), "{err}");
+        assert!(err.contains("search-draft-10"), "{err}");
         assert_eq!(std::fs::read(&path).unwrap(), db, "the index was rebuilt");
     }
 

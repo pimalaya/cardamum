@@ -155,7 +155,7 @@ mod tests {
         let failures = [
             PimdirError::Uncreated,
             PimdirError::Version {
-                found: Some("storage-draft-09".into()),
+                found: Some("storage-draft-10".into()),
             },
             PimdirError::Version { found: None },
             PimdirError::Foreign,
@@ -187,7 +187,7 @@ mod tests {
             PimdirError::IndexOutdated("index.db".into()),
             PimdirError::IndexVersion {
                 path: "index.db".into(),
-                version: Some("search-draft-09".into()),
+                version: Some("search-draft-10".into()),
                 shape: None,
             },
             PimdirError::Fts5 { version: "3.40.0" },

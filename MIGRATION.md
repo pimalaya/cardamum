@@ -35,12 +35,12 @@ What a script reads off `--json` barely moves; the text output changes everywher
 
 ### The pimdir store
 
-- **A store an earlier neverest wrote is refused**, with the `store-version` code: this release reads a store of pimdir storage-draft-10 alone, and nothing migrates a draft store. Run the neverest that wrote it until nothing is queued, upgrade neverest to a release on the same draft, move the store aside, then run `neverest init` and sync again. Do not delete the store first: its queued writes live there alone. A search index of an earlier draft is refused with `index-version` until the sync engine rebuilds it.
+- **A store an earlier neverest wrote is refused**, with the `store-version` code: this release reads a store of pimdir storage-draft-11 alone, and nothing migrates a draft store. Run the neverest that wrote it until nothing is queued, upgrade neverest to a release on the same draft, move the store aside, then run `neverest init` and sync again. Do not delete the store first: its queued writes live there alone. A search index of an earlier draft is refused with `index-version` until the sync engine rebuilds it.
 - **A write queued over a card that changed is parked, not applied.** `card update` and `card delete` given `--if-match` name the version they matched on the write they queue, so a sync changing the card before applying it parks the write; and a `card update` or a `card delete` of a card in conflict is parked too, the card and its diverging body kept, where a delete settled the conflict. The command still answers that the write is queued: read `cardamum pimdir status` after a sync, which lists every parked write with the reason.
 
 ### New
 
-- `cardamum pimdir search` and `cardamum pimdir count` answer from the store's search index, with the coverage of the answer: under `--json`, `coverage` carries `complete`, `bodiless`, `missing`, `unparseable`, `unindexed`, `behind` and `filling`.
+- `cardamum pimdir search` and `cardamum pimdir count` answer from the store's search index, with the coverage of the answer: under `--json`, `coverage` carries `complete`, `bodiless`, `missing`, `unparseable`, `unindexed`, `behind` and `filling`, the three counts of bodies out of sight standing at 0 under a query none of whose terms reads a card's body.
 - `cardamum repl` runs commands over one account in a session, the unified client connecting once; it refuses the composer (`-i`) and stdin input (`stdin-taken`).
 - `cardamum mcp` serves the unified API to an AI agent over the Model Context Protocol, the writes only with `--allow-write`.
 - `cardamum account capability`.

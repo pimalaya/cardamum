@@ -22,7 +22,7 @@ use pimalaya_config::toml::TomlConfig;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{backend::Backend, config::Config};
+use crate::{backend::Backend, config::Config, error::ErrorCode};
 
 /// Validate the account configuration.
 ///
@@ -31,10 +31,12 @@ use crate::{backend::Backend, config::Config};
 /// check walks the same handshake and authentication path the other
 /// commands take, so a bad credential surfaces here.
 ///
-/// A backend that fails fails the command, with one error naming each
-/// failed backend and why.
+/// The report is printed whole, each backend with its outcome and, when
+/// it failed, its code and why. A failed backend exits the command with
+/// status 2, the report being the output rather than a failure object.
 ///
-/// JSON output: `{"account", "backends": [{"backend", "ok", "error"}]}`.
+/// JSON output: `{"account", "backends": [{"backend", "ok", "code",
+/// "error"}]}`.
 #[derive(Debug, Parser)]
 pub struct AccountCheckCommand;
 
@@ -254,7 +256,10 @@ pub struct BackendCheck {
     pub backend: &'static str,
     /// Whether it answered.
     pub ok: bool,
-    /// Why it did not, when it did not.
+    /// The stable code of the failure, `null` when it answered or the
+    /// failure carries none.
+    pub code: Option<ErrorCode>,
+    /// Why it did not, `null` when it did.
     pub error: Option<String>,
 }
 
@@ -275,11 +280,13 @@ impl BackendCheck {
             Ok(()) => Self {
                 backend,
                 ok: true,
+                code: None,
                 error: None,
             },
             Err(err) => Self {
                 backend,
                 ok: false,
+                code: pimalaya_cli::error::code_of(&err),
                 error: Some(format!("{err:#}")),
             },
         }
@@ -378,6 +385,17 @@ mod tests {
             Some(crate::error::ErrorCode::StoreBusy),
             "{err:#}"
         );
+
+        // NOTE: the report carries the code too, as the failure object
+        // of any other command would.
+        let check = BackendCheck::from("pimdir", connect_pimdir(&config));
+        let check = serde_json::to_value(check).unwrap();
+        assert_eq!(check["code"], "store-busy", "{check}");
+
+        drop(collector);
+        let check = BackendCheck::from("pimdir", connect_pimdir(&config));
+        let check = serde_json::to_value(check).unwrap();
+        assert_eq!(check.get("code"), Some(&serde_json::Value::Null), "{check}");
 
         let objects = dir.path().join("objects");
         let left: Vec<_> = match std::fs::read_dir(&objects) {

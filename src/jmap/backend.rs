@@ -133,7 +133,7 @@ impl JmapBackend {
             id.to_string(),
             JmapAddressBookUpdate {
                 name: patch.name,
-                description: patch.description.flatten(),
+                description: patch.description,
                 ..Default::default()
             },
         )]);

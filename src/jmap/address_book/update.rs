@@ -37,7 +37,7 @@ impl JmapAddressBookUpdateCommand {
             self.id.clone(),
             JmapAddressBookUpdate {
                 name: self.name,
-                description: self.description,
+                description: self.description.map(Some),
                 ..Default::default()
             },
         )]);

@@ -26,7 +26,20 @@ A provider field that means nothing outside the account (Google external ids, mi
 Every vCard line the projection neither manages nor mints SHALL be stashed verbatim in a provider custom-data slot and spliced back on read, so a property no provider field models survives a round-trip instead of being dropped on the next write. Google People uses a `clientData` entry keyed `cardamum.vcard`; Microsoft Graph uses a `singleValueExtendedProperty` named `cardamum-vcard`. The remainder SHALL be recomputed from the incoming vCard on every write, so the stash never drifts.
 
 ### Requirement: Oversized lines stay local
-A stashed line longer than `MAX_STASH_LINE` (8 KiB, in practice a base64 `PHOTO` blob) SHALL NOT be sent server-side. It stays only in the local document of record, so an oversized inline photo never risks the whole write against an undocumented provider size limit.
+A stashed line longer than `MAX_STASH_LINE` (8 KiB, in practice a base64 `PHOTO` blob) SHALL NOT be sent server-side. It stays only in the local document of record, so an oversized inline photo never risks the whole write against an undocumented provider size limit. On Google People, a create or an update leaving such a line out SHALL log a warning naming the card and each property left out (`GpeoplePersonVcard::dropped`), the receipt of the unified command staying the one every backend prints (see [backends.md](backends.md), "Unified outputs carry no backend details").
+
+#### Scenario: A photo too long for the stash
+- GIVEN a vCard whose `PHOTO` line is longer than 8 KiB
+- WHEN it is created on a People address book
+- THEN the request carries no `PHOTO`, and a warning reads ``card `<id>` stored without PHOTO: too long for the server``
+
+### Requirement: A People update keeps what the vCard cannot show
+A People update replaces each field of its mask whole, and a managed field holds more than its vCard shows: a further organization or occupation, a relation of another type, a custom type, a sub-field without a vCard slot, the client data of other clients. `update_card` SHALL re-attach all of it from the person it just read, in the fields of the mask only, through io-gpeople's `GpeoplePerson::merge_unprojected`, between computing the mask and sending the update, and SHALL carry no merge of its own.
+
+#### Scenario: A second organization survives an edit of the first
+- GIVEN a person holding the organizations Acme (symbol `ACM`) and Initech, and a `clientData` entry of another client
+- WHEN the card is updated with `ORG` changed to Globex and a new `X-PET` line
+- THEN the update sends Globex with its symbol `ACM`, then Initech, and the other client's entry beside the stash
 
 ### Requirement: Slot shape differs per provider
 Microsoft Graph has *fixed* slots (a bounded set of emails, phones and IM addresses) and rejects bodies that overflow them, so the first properties win and the overflow lands in the stash remainder like any unmanaged line, surviving on the server and restoring on read. Google People fields are true lists, so every vCard property of a managed kind projects without truncation.

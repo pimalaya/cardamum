@@ -7,7 +7,7 @@ use core::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -45,25 +45,20 @@ impl CarddavPutCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
         let contents = read_source(&self.vcard)?;
 
-        let etag = if self.if_none_match.is_some() {
-            client
-                .create_card(&self.addressbook_id, &self.card_id, contents)?
-                .etag
+        let (id, etag) = if self.if_none_match.is_some() {
+            let created = client.create_card(&self.addressbook_id, &self.card_id, contents)?;
+            (created.id, created.etag)
         } else {
-            client
-                .update_card(
-                    &self.addressbook_id,
-                    &self.card_id,
-                    contents,
-                    self.if_match.as_deref(),
-                )?
-                .etag
+            let updated = client.update_card(
+                &self.addressbook_id,
+                &self.card_id,
+                contents,
+                self.if_match.as_deref(),
+            )?;
+            (updated.id, updated.etag)
         };
 
-        printer.out(CarddavPutOutput {
-            id: self.card_id,
-            etag,
-        })
+        printer.out(CarddavPutOutput { id, etag })
     }
 }
 
@@ -80,6 +75,7 @@ pub struct CarddavPutOutput {
 impl fmt::Display for CarddavPutOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let etag = self.etag.as_deref().unwrap_or("(none)");
-        writeln!(f, "Card `{}` successfully put (etag {etag})", self.id)
+        let id = sanitize::text(&self.id);
+        writeln!(f, "Card `{id}` successfully put (etag {etag})")
     }
 }

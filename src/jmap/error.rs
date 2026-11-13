@@ -15,7 +15,7 @@ use io_jmap::rfc9610::{
 /// The parts of a JMAP set error worth showing.
 pub trait JmapSetError {
     /// The error type as JMAP spells it, e.g. `invalidProperties`.
-    fn type_name(&self) -> &'static str;
+    fn type_name(&self) -> &str;
     /// The optional human-readable detail the server sent along.
     fn description(&self) -> Option<&str>;
     /// The property names at fault, empty outside `invalidProperties`.
@@ -41,7 +41,7 @@ pub fn format_set_error<E: JmapSetError>(err: &E) -> String {
 }
 
 impl JmapSetError for JmapAddressBookSetItemError {
-    fn type_name(&self) -> &'static str {
+    fn type_name(&self) -> &str {
         match self {
             Self::AddressBookHasContents { .. } => "addressBookHasContents",
             Self::Forbidden { .. } => "forbidden",
@@ -49,7 +49,8 @@ impl JmapSetError for JmapAddressBookSetItemError {
             Self::InvalidPatch { .. } => "invalidPatch",
             Self::WillDestroy { .. } => "willDestroy",
             Self::InvalidProperties { .. } => "invalidProperties",
-            Self::Unknown => "unknown",
+            Self::Other { type_name, .. } if type_name.is_empty() => "unknown",
+            Self::Other { type_name, .. } => type_name,
         }
     }
 
@@ -60,8 +61,8 @@ impl JmapSetError for JmapAddressBookSetItemError {
             | Self::NotFound { description }
             | Self::InvalidPatch { description }
             | Self::WillDestroy { description }
-            | Self::InvalidProperties { description, .. } => description.as_deref(),
-            Self::Unknown => None,
+            | Self::InvalidProperties { description, .. }
+            | Self::Other { description, .. } => description.as_deref(),
         }
     }
 
@@ -74,7 +75,7 @@ impl JmapSetError for JmapAddressBookSetItemError {
 }
 
 impl JmapSetError for JmapContactCardSetItemError {
-    fn type_name(&self) -> &'static str {
+    fn type_name(&self) -> &str {
         match self {
             Self::BlobNotFound { .. } => "blobNotFound",
             Self::Forbidden { .. } => "forbidden",
@@ -82,7 +83,8 @@ impl JmapSetError for JmapContactCardSetItemError {
             Self::InvalidPatch { .. } => "invalidPatch",
             Self::WillDestroy { .. } => "willDestroy",
             Self::InvalidProperties { .. } => "invalidProperties",
-            Self::Unknown => "unknown",
+            Self::Other { type_name, .. } if type_name.is_empty() => "unknown",
+            Self::Other { type_name, .. } => type_name,
         }
     }
 
@@ -93,8 +95,8 @@ impl JmapSetError for JmapContactCardSetItemError {
             | Self::NotFound { description }
             | Self::InvalidPatch { description }
             | Self::WillDestroy { description }
-            | Self::InvalidProperties { description, .. } => description.as_deref(),
-            Self::Unknown => None,
+            | Self::InvalidProperties { description, .. }
+            | Self::Other { description, .. } => description.as_deref(),
         }
     }
 
@@ -107,21 +109,22 @@ impl JmapSetError for JmapContactCardSetItemError {
 }
 
 impl JmapSetError for JmapContactCardCopyItemError {
-    fn type_name(&self) -> &'static str {
+    fn type_name(&self) -> &str {
         match self {
             Self::AlreadyExists { .. } => "alreadyExists",
             Self::NotFound { .. } => "notFound",
             Self::InvalidProperties { .. } => "invalidProperties",
-            Self::Unknown => "unknown",
+            Self::Other { type_name, .. } if type_name.is_empty() => "unknown",
+            Self::Other { type_name, .. } => type_name,
         }
     }
 
     fn description(&self) -> Option<&str> {
         match self {
-            Self::AlreadyExists { description }
+            Self::AlreadyExists { description, .. }
             | Self::NotFound { description }
-            | Self::InvalidProperties { description, .. } => description.as_deref(),
-            Self::Unknown => None,
+            | Self::InvalidProperties { description, .. }
+            | Self::Other { description, .. } => description.as_deref(),
         }
     }
 

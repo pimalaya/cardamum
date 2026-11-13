@@ -46,14 +46,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed account resolution to refuse several accounts marked `default`, naming them.
 - Changed the `pimdir` feature to build io-pimdir's search, adding ical-rs, mime-rs and ariadne to the binary.
 - **Breaking:** changed every write printing a confirmation to print a receipt instead of `{"message": ...}` under `--json`: `addressbook update|delete` and `card delete` print `{id, queued}`, the item acted on and whether the write waits for a sync; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-group members` `{id, added, removed}` and `card build -o` `{path, size}`. The text form keeps its sentence. Every command now has a schema under `json-schema` (pimalaya-cli 0.3).
-- Bumped pimalaya-cli and pimalaya-config to 0.4, io-jmap to 0.7 and io-pim-discovery to 0.11. The `--json` failure object always carries `code`, `null` when none applies.
+- Bumped pimalaya-cli and pimalaya-config to 0.4, io-jmap to 0.8 and io-pim-discovery to 0.12. The `--json` failure object always carries `code`, `null` when none applies.
 
 - Bumped rustls-webpki to 0.103.16 and webpki-root-certs to 1.0.11, fixing RUSTSEC-2026-0382 and RUSTSEC-2026-0383.
 - Changed piped `--json` output to print one value per line, each schema of `json-schema` to carry an `$id` naming the contract version (`v0.3`), and added `cardamum-error`, the schema of the JSON failure object (pimalaya-cli `55b6693`). The wire objects of `gpeople`, `jmap` and `msgraph` are now described as JSON objects, and the abandoned arm of `card create` and `card update`, which `--json` never prints, is now `{}` rather than `null`.
 - **Breaking:** changed the `--json` output of `gpeople request`, `jmap request` and `msgraph request` to wrap the raw response as `{"response": …}`, so the payload is an object even when the server answers no body (`null`) or an array.
 - Changed `card list` on pimdir to stream the store rather than load it: it holds one batch of rows and the page it prints instead of every card body of the address book, reads the bodies of that page only, and stops once the page is full. The output is unchanged.
-- Changed io-pimdir to 0.12 (pimdir storage-draft-11, sync-draft-11 and search-draft-11), io-msgraph to 0.7.1, io-gpeople to 0.6 and io-http to 0.6, so cardamum shares one io-pimdir and one store schema with neverest, himalaya and calendula: an empty mail date is stored as no date, a band round keeps undated mail, and opening a store creates the `items_by_sort_global` index a page across collections walks. A response whose head passes 64 KiB or whose body passes 256 MiB now fails the exchange with a typed error instead of growing the buffer without bound,, a connection closing mid-body fails rather than spinning, and People and Graph fold vCard lines over 75 octets.
-- Bumped io-webdav to 0.7. An address book outside the home set is listed and addressed by its path rather than its last segment, a request the server closed the connection on is resent once, and a CardDAV multistatus is parsed 3.4 to 9 times faster, without quadratic copies and nested 64 levels at most.
+- Changed io-pimdir to 0.12 (pimdir storage-draft-11, sync-draft-11 and search-draft-11), io-msgraph to 0.8, io-gpeople to 0.7 and io-http to 0.7, so cardamum shares one io-pimdir and one store schema with neverest, himalaya and calendula: an empty mail date is stored as no date, a band round keeps undated mail, and opening a store creates the `items_by_sort_global` index a page across collections walks. A response whose head passes 64 KiB or whose body passes 256 MiB now fails the exchange with a typed error instead of growing the buffer without bound,, a connection closing mid-body fails rather than spinning, and People and Graph fold vCard lines over 75 octets.
+- Bumped io-webdav to 0.8. An address book outside the home set is listed and addressed by its path rather than its last segment, a request the server closed the connection on is resent once, and a CardDAV multistatus is parsed 3.4 to 9 times faster, without quadratic copies and nested 64 levels at most.
+
+  A CardDAV answer that is not one whole multistatus document fails instead of listing fewer cards, and a weak ETag is kept whole.
+- Bumped io-vdir to 0.3.
+
+  A vdir listing leaves out a card removed while it lists and holds regular files only, and an id that is empty or holds a path separator is refused.
+- Changed `carddav put` to print the id the write answered, percent-encoded as a listing shows it, where it echoed its argument.
+- Changed a JMAP set error of a type io-jmap does not model to be named as the server sent it, where it read `unknown`.
 - Bumped vcard-rs to 0.6.
 
   A 3.0 or 4.0 line longer than 75 octets that `card build`, `card create` or `card update` writes or edits is now folded.
@@ -90,6 +97,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed pimdir recognising an address book only by the exact kind `text/vcard`: a kind carrying parameters now counts.
 - Fixed `card create` on pimdir reporting as queued a card whose `UID` the address book already holds, synced or queued, which the sync then parked: it is now refused with `item-duplicate`, leaving nothing in the store, and `-i` keeps the composer file.
 - Fixed a pimdir `card update` made from the card it read (no vCard source, or `--if-match`) overwriting, unmerged, a server change a sync brought in before applying it: the queued update now names the body it was made against, and the sync engine parks it instead.
+- Fixed `card update` on Google People erasing what a vCard cannot show of the fields it changes: a further organization, a relation of another type, a custom type, a sub-field without a vCard slot.
+- Fixed `card create` and `card update` on Google People leaving out a property longer than 8 KiB without a word: a warning names it.
+- Fixed `addressbook update --description ""` on JMAP leaving the description in place: it is cleared.
+- Fixed the Microsoft Graph listings following a next page link off the Graph origin with the account's token: such a link is refused.
 
 ## [0.3.0] - 2026-10-02
 

@@ -19,11 +19,9 @@ use io_msgraph::v1::{
             MsgraphContact, list::MsgraphContactsListParams, vcard::MSGRAPH_CONTACT_STASH_EXPAND,
         },
     },
-    send::MsgraphSend,
 };
 use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
-use url::Url;
 
 use crate::{
     config::{MsgraphConfig, ProxyConfig},
@@ -91,11 +89,7 @@ impl MsgraphBackend {
             }
 
             match page.next_link {
-                Some(next) => {
-                    let url = parse_graph_url(&next)?;
-                    let auth = self.inner.auth.clone();
-                    page = self.inner.run(MsgraphSend::get(&auth, url))?.response;
-                }
+                Some(next) => page = self.inner.page_get(&next, None)?.response,
                 None => break,
             }
         }
@@ -191,11 +185,7 @@ impl MsgraphBackend {
             );
 
             match current.next_link {
-                Some(next) => {
-                    let url = parse_graph_url(&next)?;
-                    let auth = self.inner.auth.clone();
-                    current = self.inner.run(MsgraphSend::get(&auth, url))?.response;
-                }
+                Some(next) => current = self.inner.page_get(&next, None)?.response,
                 None => break,
             }
         }
@@ -292,9 +282,4 @@ fn into_card(addressbook_id: &str, contact: MsgraphContact) -> Card {
 /// Decodes raw card bytes as UTF-8 vCard text.
 fn into_vcard_text(contents: Vec<u8>) -> Result<String> {
     String::from_utf8(contents).map_err(|_| anyhow::anyhow!("Card contents are not valid UTF-8"))
-}
-
-/// Parses an OData paging link served by Graph.
-fn parse_graph_url(raw: &str) -> Result<Url> {
-    Url::parse(raw).map_err(|err| anyhow::anyhow!("Invalid Graph page URL `{raw}`: {err}"))
 }

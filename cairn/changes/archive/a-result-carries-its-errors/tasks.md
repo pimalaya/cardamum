@@ -63,13 +63,13 @@ change: a-result-carries-its-errors
 
 ## Phase 4, CardDAV rows (after io-webdav's a-listing-returns-what-it-could-not-read is pushed and pinned)
 
-- [ ] Pin io-webdav to that commit.
-- [ ] src/carddav/backend.rs:105-120: each unread row an entry (`card-unreadable`, its status coding `permission-denied` for a 403); `truncated` an entry with a `null` id and no code.
-- [ ] A scripted multistatus test with a 403 row and a 507 row.
-- [ ] Spec: "A listing is whole or fails" says it. Commit `feat: list the CardDAV rows a listing could not read`.
+- [x] Pin io-webdav to that commit. Linked as `{ path = "../io-webdav" }` at its local 4ecb2ab until pushed (owner ruling); `cargo update -p io-webdav`.
+- [x] src/carddav/backend.rs:105-120: each unread row an entry (`card-unreadable`, its status coding `permission-denied` for a 403); `truncated` an entry with a `null` id and no code. io-webdav landed the plan's names as `WebdavUnreadableEntry` and `unreadable`; a row is coded by `carddav::client::row_code` (the Phase 2 reader's status rule over an empty body) from its own status or a refused property's, the refused properties in `sources`; entries on the first page only (`first_page`). `carddav report multiget` reads `.cards` of io-webdav's new `CarddavCardMultigetOk`, its output unchanged.
+- [x] A scripted multistatus test with a 403 row and a 507 row. `a_carddav_listing_names_the_rows_it_could_not_read` (a card, a 403 row, a refused `address-data`, a data-less row, a 507 row) fails with the rows dropped; `a_carddav_listing_prints_its_entries_on_the_first_page_only`.
+- [x] Spec: "A listing is whole or fails" says it. With "Each backend names the cards it could not read", the `card-unreadable` and `permission-denied` rows and the listing requirement of commands.md. Commit `feat: list the CardDAV rows a listing could not read`.
 
 ## Landing
 
-- [ ] CHANGELOG (Added, **Breaking:**, Changed, Fixed as in the proposal), MIGRATION.md ("JSON output"), README exit statuses, doc comments of the outputs.
-- [ ] Delta folded into cairn/spec/commands.md, backends.md and mcp.md; log cairn/log/2026-11-14-a-result-carries-its-errors.md (or the landing date; frontmatter `cairn: log`, `change`, `date:` as cardamum's recent logs write it) naming what landed per phase, the evidence and the capabilities moved; status landed; the folder moved to cairn/changes/archive/.
+- [x] CHANGELOG (Added, **Breaking:**, Changed, Fixed as in the proposal), MIGRATION.md ("JSON output"), README exit statuses, doc comments of the outputs. The paging move is told by correcting the Unreleased text-output entry (0.3 printed no paging), not by a Changed line of its own; MIGRATION.md's stale `card list` line follows and "Text output" names the `Error:` lines; the README had no FAQ, so its exit statuses are a Usage paragraph; the output doc comments name the truncation entry (Phase 3 wrote the rest).
+- [x] Delta folded into cairn/spec/commands.md, backends.md and mcp.md; log cairn/log/2026-11-14-a-result-carries-its-errors.md (or the landing date; frontmatter `cairn: log`, `change`, `date:` as cardamum's recent logs write it) naming what landed per phase, the evidence and the capabilities moved; status landed; the folder moved to cairn/changes/archive/. Folded across the phases; the delta rewritten to the landed text (the Phase 2 and 4 amendments).
 - [ ] The live suites (google, microsoft, fastmail) run by the owner on the result.

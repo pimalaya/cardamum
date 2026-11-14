@@ -30,6 +30,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added the `--json` error code `stdin-taken`, for a command reading stdin inside a session.
 - Added `code` to each backend of `account check --json`, the stable code of its failure (`store-busy`, `store-uncreated`...), `null` when it passed or the failure carries none.
 - Added MIGRATION.md, the changes to act on coming from 0.3.
+- Added an `errors` list to `addressbook list` and `card list`, under `--json` and in text: one item error `{id, code, error, sources}` per card the listing could not read, `[]` when there is none, described under `json-schema` as `cardamum-item-error`.
+
+  A card whose body is no vCard or not UTF-8 lists with its id and gains an entry, as do a vdir file that cannot be read, a JMAP card that does not project, a pimdir body that cannot be read and a CardDAV row the server answered without the card's data; a CardDAV listing the server truncated adds an entry with a `null` id. The text output prints each as an `Error:` line at its end, and the MCP `card_list` and `addressbook_list` tools return them beside `isError: true`.
+- Added the `--json` error codes `permission-denied`, `quota-exceeded` and `rate-limited`, read from the server's refusal on every network backend and in `account check` rows, and `card-not-found`, `addressbook-not-found` and `card-unreadable`.
 
 ### Changed
 
@@ -42,7 +46,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   Without `-c`, every canonical path that exists is loaded, each deep-merged on top of the ones before.
 - **Breaking:** changed every text output to plain text: no border, no colour, nothing sized to the terminal.
 
-  `card list` prints one line per card, the account and the addressbook above, the page and the next one below. `-s 0` lists every card. `table.preset`, `table.arrangement` and every `*-color` key are gone, refused under `card.list` and `addressbook`.
+  `card list` prints one line per card, the account, the addressbook, the page and the next one above. `-s 0` lists every card. `table.preset`, `table.arrangement` and every `*-color` key are gone, refused under `card.list` and `addressbook`.
+- **Breaking:** changed `addressbook list` and `card list` to exit 3 once they printed their result when a card could not be read (`errors` not empty), and the vdir and JMAP listings to list the other cards where one card failed the whole listing.
+- Changed a card or an address book not found to fail with `card-not-found` or `addressbook-not-found`, where the failure carried no code.
 - Changed account resolution to refuse several accounts marked `default`, naming them.
 - Changed the `pimdir` feature to build io-pimdir's search, adding ical-rs, mime-rs and ariadne to the binary.
 - **Breaking:** changed every write printing a confirmation to print a receipt instead of `{"message": ...}` under `--json`: `addressbook update|delete` and `card delete` print `{id, queued}`, the item acted on and whether the write waits for a sync; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-group members` `{id, added, removed}` and `card build -o` `{path, size}`. The text form keeps its sentence. Every command now has a schema under `json-schema` (pimalaya-cli 0.3).

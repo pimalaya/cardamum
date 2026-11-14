@@ -10,7 +10,7 @@ Each requirement names its capability file in parentheses, as Himalaya's delta o
 ## ADDED Requirements
 
 ### Requirement: A listing names the items it could not read
-(commands) `addressbook list` and `card list` SHALL print an `errors` list beside their items, under `--json` and in text: one pimalaya-cli item error `{id, code, error, sources}` per address book or card the command could not read, `[]` when there is none, in the order met. `id` SHALL be the item's id as the command prints ids, `null` when the backend named none; `code` a code of the vocabulary or `null`; `error` the message; `sources` the backend's own reasons, outermost first. An item listed in part (a card whose body does not parse) SHALL print in the list and in `errors`. A non-empty `errors` SHALL make the command exit 3 once it printed its result. A listing that reads the whole address book before cutting its page SHALL print its entries on the first page only.
+(commands) `addressbook list` and `card list` SHALL print an `errors` list beside their items, under `--json` and in text: one pimalaya-cli item error `{id, code, error, sources}` per address book or card the command could not read, `[]` when there is none, in the order met, and one entry with a `null` id and no code when the server truncated the listing (CardDAV). `id` SHALL be the item's id as the command prints ids, `null` when the backend named none; `code` a code of the vocabulary or `null`; `error` the message; `sources` the backend's own reasons, outermost first. An item listed in part (a card whose body does not parse) SHALL print in the list and in `errors`. A non-empty `errors` SHALL make the command exit 3 once it printed its result. A listing that reads the whole address book before cutting its page SHALL print its entries on the first page only.
 
 #### Scenario: A vdir card that cannot be read
 - GIVEN a vdir address book holding three cards, one of whose files cannot be read
@@ -26,17 +26,17 @@ Each requirement names its capability file in parentheses, as Himalaya's delta o
 (commands) In the text output, each `errors` entry SHALL print as one `Error:` line, `<id>  <code>  <error>` with `-` for a null id or code, last in the command's output: after the items and one blank line, the `Error:` lines aligned among themselves. Nothing SHALL print, the blank line included, when `errors` is empty.
 
 ### Requirement: A server's refusal carries its code
-(backends) A failure a server refused SHALL carry a code of the vocabulary Himalaya shares, read from the typed error of the protocol that answered it, the failure object, an `errors` entry and an `account check` row alike:
+(backends) A failure a server refused SHALL carry a code of the vocabulary Himalaya shares, read from the typed error of the protocol that answered it, in the failure object, an `errors` entry and an `account check` row alike. One reader per backend codes its typed errors, walking the error chain after any coded error, so the typed errors stay in the chain the backends return; the failure object is coded once the command failed, its messages and causes printing as before.
 
 | Code | When |
 |---|---|
-| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition, or `need-privileges` (RFC 3744 §7.1.1); a JMAP `forbidden` |
+| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition, or `need-privileges` (RFC 3744 §7.1.1); a CardDAV listing row, or its refused `address-data`, answered 403; a JMAP `forbidden` |
 | `quota-exceeded` | an HTTP 507; a CardDAV body naming `quota-not-exceeded` (RFC 4331 §6); Graph's `ErrorQuotaExceeded`; a JMAP `overQuota` |
 | `rate-limited` | an HTTP 429, or a People 403 naming a rate limit or a quota, or a JMAP `rateLimit`; cardamum retries nothing, so the first one met |
-| `card-not-found` | a card request answered 404 or 410 (CardDAV, People), 404 or 400 `ErrorInvalidIdMalformed` (Graph), `notFound` (JMAP); a vdir card file or a pimdir card that does not exist |
-| `addressbook-not-found` | an address book named that does not exist (vdir, pimdir) |
+| `card-not-found` | a card request answered 404 or 410 (CardDAV, People), 404 or 400 `ErrorInvalidIdMalformed` (Graph), `notFound` (JMAP ContactCard); a vdir card file or a pimdir card that does not exist, or a pimdir card id that is no number |
+| `addressbook-not-found` | an address book named that does not exist (vdir, pimdir); a JMAP AddressBook `notFound` |
 
-A refusal none of these name SHALL carry no code, its reason kept in `sources`. A CardDAV 403 naming another precondition (`valid-address-data`, `no-uid-conflict`) is a card the server would not take, no matter of rights, and SHALL carry none.
+A refusal none of these name SHALL carry no code, its reason kept in `sources`. A CardDAV 403 naming another precondition (`valid-address-data`, `no-uid-conflict`) is a card the server would not take, no matter of rights, and SHALL carry none; a refused `valid-address-data` keeps the server's answer as the cause of cardamum's hint.
 
 #### Scenario: A read-only address book
 - GIVEN a Graph contact folder the account may read but not write
@@ -50,6 +50,7 @@ A refusal none of these name SHALL carry no code, its reason kept in `sources`. 
 - vdir: a card file that cannot be read SHALL be a `card-unreadable` entry naming the card, its error in `sources`; a card removed while it lists SHALL be left out with no entry;
 - JMAP: a card that does not project SHALL be a `card-unreadable` entry, its id when it has one;
 - pimdir: a body that cannot be read SHALL be a `card-unreadable` entry, the card listed with its preview; a body the store does not hold yet SHALL be no entry;
+- CardDAV: a row the server answered without the card's data (a row refused whole, a refused `address-data` property, or none sent) SHALL be an entry naming the card, coded `permission-denied` when the row or a refused property carries a 403, else `card-unreadable`, each refused property and its status in `sources`; the entries print on the first page only, as the whole address book is read before the page is cut;
 - CardDAV, Graph, People: a page or an answer that fails SHALL fail the listing whole.
 
 ### Requirement: A partial outcome keeps its result
@@ -75,10 +76,10 @@ A refusal none of these name SHALL carry no code, its reason kept in `sources`. 
 | `capability-missing` | the backend the account resolves to does not serve a capability the command reaches; nothing was read or written |
 | `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete` |
 | `addressbook-not-found` | the address book a command names does not exist; nothing was read or written |
-| `card-unreadable` | the backend answered for a card cardamum could not read: its file could not be read (vdir), its body did not parse as a vCard or is not UTF-8, it did not project (JMAP), its body could not be read (pimdir); an `errors` entry |
 | `permission-denied` | the server refused the request to the account (see "A server's refusal carries its code") |
 | `quota-exceeded` | the write would exceed the account's quota |
 | `rate-limited` | the server throttled the request; cardamum retries nothing |
+| `card-unreadable` | the backend answered for a card cardamum could not read: its listing row came without its data (CardDAV), its file could not be read (vdir), its body did not parse as a vCard or is not UTF-8, it did not project (JMAP), its body could not be read (pimdir); an `errors` entry |
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
 | `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |
 | `store-uncreated` | the pimdir root holds no store; its sync engine creates it |
@@ -116,7 +117,7 @@ A refusal none of these name SHALL carry no code, its reason kept in `sources`. 
 (commands) `card list` SHALL print above the cards `Account: <name> (<backend>)`, `Addressbook: <id>`, `Page: <n>, cards <a> to <b>` (`card <a>` for one, `empty` for none, `all` when unpaged) followed by `, the last` when no card follows, and `Next page: --page <n>` while one does, the values aligned in one column; then a blank line and one line per card with no column header (`id  email  phone  name`, the free-text name last, `-` for an empty cell). Below the cards SHALL print only the command's errors ("A command's errors print at its end").
 
 ### Requirement: A listing is whole or fails
-(backends) A listing SHALL never come back shorter than the backend holds without saying so: a card it could not read SHALL be an `errors` entry ("Each backend names the cards it could not read"), and a listing that cannot be read at all SHALL fail. A CardDAV listing whose answer is not one whole `multistatus` document (an HTML page, a cut body, an empty one) SHALL fail with io-webdav's error; until io-webdav returns the rows it could not read, a CardDAV row refused per href is left out and a listing the server truncated reads complete. A vdir listing SHALL leave out a card removed while it lists. A Graph listing SHALL follow its next page through io-msgraph's `page_get`, which refuses a link off the Graph origin, so the token never follows a link elsewhere.
+(backends) A listing SHALL never come back shorter than the backend holds without saying so: a card it could not read SHALL be an `errors` entry ("Each backend names the cards it could not read"), and a listing that cannot be read at all SHALL fail. A CardDAV listing whose answer is not one whole `multistatus` document (an HTML page, a cut body, an empty one) SHALL fail with io-webdav's error; a CardDAV listing the server truncated (a 507 row, RFC 6352 §8.6.1) SHALL add an entry with a `null` id and no code saying the listing is incomplete. A vdir listing SHALL leave out a card removed while it lists. A Graph listing SHALL follow its next page through io-msgraph's `page_get`, which refuses a link off the Graph origin, so the token never follows a link elsewhere.
 
 ## REMOVED Requirements
 

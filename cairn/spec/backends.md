@@ -32,7 +32,7 @@ A backend with no entity-tag concept SHALL refuse `--if-match` rather than accep
 A card's shared `id` SHALL be the backend's own identifier, used verbatim end to end: the last path segment of the resource href (CardDAV), the file stem (vdir), the `ContactCard` id (JMAP), the contact id (Graph), the person id (People), or the store-assigned public `seq` (pimdir). No adapter SHALL add or strip a file extension when addressing a resource. CardDAV names a new card `<uuid>.vcf` itself and passes the whole name through, since the server owns the resource name from then on. A CardDAV write SHALL report the id io-webdav answers, never the caller's string: `card create` and `carddav put` print the last segment of the `Location` the server names, else of the URL sent, percent-encoded as a listing shows it.
 
 ### Requirement: A listing is whole or fails
-A listing SHALL never come back shorter than the backend holds without saying so: a card it could not read SHALL be an `errors` entry ("Each backend names the cards it could not read"), and a listing that cannot be read at all SHALL fail. A CardDAV listing whose answer is not one whole `multistatus` document (an HTML page, a cut body, an empty one) SHALL fail with io-webdav's error; until io-webdav returns the rows it could not read, a CardDAV row refused per href is left out and a listing the server truncated reads complete. A vdir listing SHALL leave out a card removed while it lists. A Graph listing SHALL follow its next page through io-msgraph's `page_get`, which refuses a link off the Graph origin, so the token never follows a link elsewhere.
+A listing SHALL never come back shorter than the backend holds without saying so: a card it could not read SHALL be an `errors` entry ("Each backend names the cards it could not read"), and a listing that cannot be read at all SHALL fail. A CardDAV listing whose answer is not one whole `multistatus` document (an HTML page, a cut body, an empty one) SHALL fail with io-webdav's error; a CardDAV listing the server truncated (a 507 row, RFC 6352 §8.6.1) SHALL add an entry with a `null` id and no code saying the listing is incomplete. A vdir listing SHALL leave out a card removed while it lists. A Graph listing SHALL follow its next page through io-msgraph's `page_get`, which refuses a link off the Graph origin, so the token never follows a link elsewhere.
 
 ### Requirement: Each backend names the cards it could not read
 A backend SHALL report a card it could not read as an `errors` entry and SHALL never drop it silently nor fail the listing for it:
@@ -41,6 +41,7 @@ A backend SHALL report a card it could not read as an `errors` entry and SHALL n
 - vdir: a card file that cannot be read SHALL be a `card-unreadable` entry naming the card, its error in `sources`; a card removed while it lists SHALL be left out with no entry;
 - JMAP: a card that does not project SHALL be a `card-unreadable` entry, its id when it has one;
 - pimdir: a body that cannot be read SHALL be a `card-unreadable` entry, the card listed with its preview; a body the store does not hold yet SHALL be no entry;
+- CardDAV: a row the server answered without the card's data (a row refused whole, a refused `address-data` property, or none sent) SHALL be an entry naming the card, coded `permission-denied` when the row or a refused property carries a 403, else `card-unreadable`, each refused property and its status in `sources`; the entries print on the first page only, as the whole address book is read before the page is cut;
 - CardDAV, Graph, People: a page or an answer that fails SHALL fail the listing whole.
 
 ### Requirement: Local storage backends
@@ -121,7 +122,7 @@ A failure a server refused SHALL carry a code of the vocabulary Himalaya shares,
 
 | Code | When |
 |---|---|
-| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition, or `need-privileges` (RFC 3744 §7.1.1); a JMAP `forbidden` |
+| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition, or `need-privileges` (RFC 3744 §7.1.1); a CardDAV listing row, or its refused `address-data`, answered 403; a JMAP `forbidden` |
 | `quota-exceeded` | an HTTP 507; a CardDAV body naming `quota-not-exceeded` (RFC 4331 §6); Graph's `ErrorQuotaExceeded`; a JMAP `overQuota` |
 | `rate-limited` | an HTTP 429, or a People 403 naming a rate limit or a quota, or a JMAP `rateLimit`; cardamum retries nothing, so the first one met |
 | `card-not-found` | a card request answered 404 or 410 (CardDAV, People), 404 or 400 `ErrorInvalidIdMalformed` (Graph), `notFound` (JMAP ContactCard); a vdir card file or a pimdir card that does not exist, or a pimdir card id that is no number |

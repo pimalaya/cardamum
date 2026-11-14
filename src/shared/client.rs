@@ -513,9 +513,7 @@ impl AddressbookClient {
             #[cfg(feature = "pimdir")]
             BackendClient::Pimdir(client) => client.list_cards(addressbook_id, skip, take),
             #[cfg(feature = "carddav")]
-            BackendClient::Carddav(client) => client
-                .list_cards(addressbook_id, skip, take)
-                .map(CardWindow::from),
+            BackendClient::Carddav(client) => client.list_cards(addressbook_id, skip, take),
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.list_cards(addressbook_id, skip, take),
             #[cfg(feature = "msgraph")]
@@ -690,7 +688,7 @@ pub fn window<T>(items: Vec<T>, skip: usize, take: Option<usize>) -> Vec<T> {
 
 /// The errors of a listing that reads the whole address book before
 /// cutting its page: on the first page only, so no page repeats them.
-#[cfg(any(feature = "jmap", feature = "vdir"))]
+#[cfg(any(feature = "carddav", feature = "jmap", feature = "vdir"))]
 pub fn first_page(errors: Vec<ItemError>, skip: usize) -> Vec<ItemError> {
     match skip {
         0 => errors,

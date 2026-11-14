@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use anyhow::{Context, Error, Result, bail};
 use io_webdav::{
     client::{WebdavClientStd, WebdavClientStdError},
-    rfc4918::send::WebdavSendError,
+    rfc4918::{send::WebdavSendError, typed::WebdavUnreadableEntry},
     rfc6352::{
         addressbook::{CarddavAddressbook, CarddavAddressbookPatch},
         card::{CarddavCardEntry, list::CarddavCardListOptions},
@@ -17,13 +17,13 @@ use io_webdav::{
 use pimalaya_config::secret::SecretResolver;
 
 use crate::{
-    carddav::client::is_missing,
+    carddav::client::{is_missing, row_code},
     config::CarddavConfig,
-    error,
+    error::{self, ErrorCode, ItemError},
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
-        client::window,
+        client::{CardWindow, first_page, window},
         uuid::uuid_v4,
     },
 };
@@ -104,21 +104,36 @@ impl CarddavBackend {
     }
 
     /// Lists the `take` cards inside `addressbook_id` after the first `skip`.
+    ///
+    /// Each row the server answered without the card's data is an entry, as
+    /// is a listing the server truncated, on the first page only since the
+    /// whole address book is read before the page is cut.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
         skip: usize,
         take: Option<usize>,
-    ) -> Result<Vec<Card>> {
+    ) -> Result<CardWindow> {
         let opts = CarddavCardListOptions::default();
-        let cards = self
-            .inner
-            .list_cards(addressbook_id, &opts)?
+        let listed = self.inner.list_cards(addressbook_id, &opts)?;
+
+        let cards = listed
             .cards
             .into_iter()
             .map(|entry| into_card(addressbook_id, entry))
             .collect();
-        Ok(window(cards, skip, take))
+
+        let mut errors: Vec<ItemError> =
+            listed.unreadable.into_iter().map(unreadable_row).collect();
+
+        if listed.truncated {
+            errors.push(truncated());
+        }
+
+        Ok(CardWindow {
+            cards: window(cards, skip, take),
+            errors: first_page(errors, skip),
+        })
     }
 
     /// Fetches `card_id` from `addressbook_id`.
@@ -215,6 +230,43 @@ fn into_card(addressbook_id: &str, entry: CarddavCardEntry) -> Card {
     }
 }
 
+/// The entry of a listed card the server answered without its data: coded
+/// from the row's status or the status refusing its properties, a 403
+/// `permission-denied`, else `card-unreadable`; each refused property in its
+/// sources.
+fn unreadable_row(row: WebdavUnreadableEntry) -> ItemError {
+    let code = row
+        .status
+        .into_iter()
+        .chain(row.failures.iter().map(|failure| failure.status))
+        .find_map(row_code)
+        .unwrap_or(ErrorCode::CardUnreadable);
+
+    let error = match row.status {
+        Some(status) => format!("The server refused the card with status {status}"),
+        None if !row.failures.is_empty() => String::from("The server refused the card data"),
+        None => String::from("The server sent the card without its data"),
+    };
+
+    ItemError {
+        id: Some(row.id),
+        code: Some(code),
+        error,
+        sources: row.failures.iter().map(ToString::to_string).collect(),
+    }
+}
+
+/// The entry of a listing the server truncated (a 507 row, RFC 6352
+/// §8.6.1): no card to name and no code, the listing incomplete.
+fn truncated() -> ItemError {
+    ItemError {
+        id: None,
+        code: None,
+        error: String::from("The server truncated the listing: more cards exist than it returned"),
+        sources: Vec::new(),
+    }
+}
+
 /// Adds a hint when the server rejects a card as an invalid vCard.
 ///
 /// The CardDAV `valid-address-data` precondition (RFC 6352 §6.3.2.1).
@@ -275,7 +327,7 @@ mod tests {
 
     /// The backend over a CardDAV server answering `status` with `body`,
     /// its home set already discovered.
-    fn refusing(status: u16, body: &str) -> CarddavBackend {
+    fn answering(status: u16, body: &str) -> CarddavBackend {
         let (script, _) = Script::new([script::response(status, "application/xml", body)]);
         let base = Url::parse("https://dav.example.org/").unwrap();
         let home = base.join("/dav/").unwrap();
@@ -287,7 +339,7 @@ mod tests {
     /// The code a write refused with `status` and `body` prints in its
     /// failure object.
     fn create_code(status: u16, body: &str) -> Option<ErrorCode> {
-        let err = refusing(status, body)
+        let err = answering(status, body)
             .create_card("book", CARD.to_vec())
             .unwrap_err();
         let code = error::code(&err);
@@ -323,7 +375,7 @@ mod tests {
     #[test]
     fn a_refused_vcard_keeps_the_answer_as_its_cause() {
         let body = r#"<?xml version="1.0"?><D:error xmlns:D="DAV:"><C:valid-address-data xmlns:C="urn:ietf:params:xml:ns:carddav"/></D:error>"#;
-        let err = refusing(403, body)
+        let err = answering(403, body)
             .create_card("book", CARD.to_vec())
             .unwrap_err();
 
@@ -339,7 +391,7 @@ mod tests {
     fn a_refused_write_prints_its_code_in_its_failure_object() {
         use pimalaya_cli::error::ErrorReport;
 
-        let err = refusing(403, "")
+        let err = answering(403, "")
             .delete_card("book", "c1.vcf", None)
             .unwrap_err()
             .context("Delete card `c1.vcf`");
@@ -360,12 +412,122 @@ mod tests {
     /// read as on a delete.
     #[test]
     fn a_missing_card_is_a_card_not_found() {
-        let err = refusing(404, "").get_card("book", "c9.vcf").unwrap_err();
+        let err = answering(404, "").get_card("book", "c9.vcf").unwrap_err();
         assert_eq!(code_of(&err), Some(ErrorCode::CardNotFound), "{err:#}");
 
-        let err = refusing(410, "")
+        let err = answering(410, "")
             .delete_card("book", "c9.vcf", None)
             .unwrap_err();
         assert_eq!(code_of(&err), Some(ErrorCode::CardNotFound), "{err:#}");
+    }
+
+    /// A listing answering a card, a row refused whole, a row refusing its
+    /// data, a row missing it and a truncation row.
+    const LISTING: &str = r#"<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:carddav">
+  <d:response>
+    <d:href>/dav/book/c1.vcf</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:getetag>"e1"</d:getetag>
+        <c:address-data>BEGIN:VCARD&#13;
+VERSION:4.0&#13;
+UID:c1&#13;
+FN:Jane&#13;
+END:VCARD&#13;
+</c:address-data>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dav/book/c2.vcf</d:href>
+    <d:status>HTTP/1.1 403 Forbidden</d:status>
+  </d:response>
+  <d:response>
+    <d:href>/dav/book/c3.vcf</d:href>
+    <d:propstat>
+      <d:prop><d:getetag>"e3"</d:getetag></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+    <d:propstat>
+      <d:prop><c:address-data/></d:prop>
+      <d:status>HTTP/1.1 403 Forbidden</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dav/book/c4.vcf</d:href>
+    <d:propstat>
+      <d:prop><d:getetag>"e4"</d:getetag></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dav/book/</d:href>
+    <d:status>HTTP/1.1 507 Insufficient Storage</d:status>
+  </d:response>
+</d:multistatus>"#;
+
+    /// Each row the server refused is an entry naming its card, a 403
+    /// `permission-denied`, its refused properties in its sources; the
+    /// truncation an entry naming no card and carrying no code.
+    #[test]
+    fn a_carddav_listing_names_the_rows_it_could_not_read() {
+        let listed = answering(207, LISTING).list_cards("book", 0, None).unwrap();
+
+        let ids: Vec<&str> = listed.cards.iter().map(|card| card.id.as_str()).collect();
+        assert_eq!(ids, ["c1.vcf"]);
+
+        let entries: Vec<_> = listed
+            .errors
+            .iter()
+            .map(|entry| {
+                let id = entry.id.as_deref();
+                let sources: Vec<&str> = entry.sources.iter().map(String::as_str).collect();
+                (id, entry.code, entry.error.as_str(), sources)
+            })
+            .collect();
+
+        assert_eq!(
+            entries,
+            [
+                (
+                    Some("c2.vcf"),
+                    Some(ErrorCode::PermissionDenied),
+                    "The server refused the card with status 403",
+                    vec![],
+                ),
+                (
+                    Some("c3.vcf"),
+                    Some(ErrorCode::PermissionDenied),
+                    "The server refused the card data",
+                    vec!["address-data (403)"],
+                ),
+                (
+                    Some("c4.vcf"),
+                    Some(ErrorCode::CardUnreadable),
+                    "The server sent the card without its data",
+                    vec![],
+                ),
+                (
+                    None,
+                    None,
+                    "The server truncated the listing: more cards exist than it returned",
+                    vec![],
+                ),
+            ]
+        );
+    }
+
+    /// The whole address book is read before the page is cut, so the
+    /// entries print on the first page only.
+    #[test]
+    fn a_carddav_listing_prints_its_entries_on_the_first_page_only() {
+        let listed = answering(207, LISTING)
+            .list_cards("book", 1, Some(2))
+            .unwrap();
+
+        assert!(listed.cards.is_empty());
+        assert!(listed.errors.is_empty());
     }
 }

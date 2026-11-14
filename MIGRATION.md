@@ -20,13 +20,16 @@ What a script reads off `--json` barely moves; the text output changes everywher
 ### Text output
 
 - **Every list is plain text**, with no border, no colour and no truncation: an uppercase header then one item per line, columns two spaces apart, an empty cell as `-`, the free-text column last; or, for a list of wide items (the CardDAV and JMAP addressbooks, Graph folders and contacts, vdir collections, `pimdir search` hits), each item the way `git log` prints a commit. A single item prints as `Label:  value` lines. A script cutting the v0.3 tables reads `--json` instead.
-- **`card list` prints one line per card**, `id  email  phone  name`, with no header row, between `Account:` and `Addressbook:` above and `Page:` and `Next page:` under it. `addressbook list` leaves the description to `--json`.
+- **`card list` prints one line per card**, `id  email  phone  name`, with no header row, under `Account:`, `Addressbook:`, `Page:` and `Next page:`. `addressbook list` leaves the description to `--json`.
+- **A listing ends with the cards it could not read**, one `Error:` line each, `<id>  <code>  <error>`, after the list and one blank line; nothing when it read them all.
 - **`card list -s 0` lists every card**, where it listed none.
 
 ### JSON output
 
 - **`card list` prints `nextPage`** beside `cards`: the next page number while cards follow, `null` on the last page. Give it back through `--page-token`.
 - **A failed `account check` prints its report and exits 3**, `ok: false`, the error and its `code` (`store-busy`, `store-uncreated`...) on each failed backend, where it printed one failure object and exited 1. Read which backends passed from `backends`.
+- **`addressbook list` and `card list` print `errors`** beside their items, `[]` when there is none: one `{id, code, error, sources}` per card the listing could not read (`card-unreadable`, a CardDAV 403 row `permission-denied`, a truncated CardDAV listing an entry with a `null` id and no code). A non-empty `errors` exits 3 once the result is printed, where such a card was dropped or failed the whole listing with exit 1: read the cards and their `errors` together rather than taking exit 3 as a failure.
+- **A card or an address book not found carries a code**, `card-not-found` or `addressbook-not-found`, and a server's refusal `permission-denied`, `quota-exceeded` or `rate-limited`, where their `code` was `null`.
 - **A command line the grammar refuses under `--json` prints the failure object**, `{"code":"usage-invalid","error":…}` on stdout, and still exits 2, where clap printed its text on stderr.
 
 ### Commands that now fail earlier

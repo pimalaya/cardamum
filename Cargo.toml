@@ -73,5 +73,5 @@ vcard-rs = { version = "0.6", default-features = false, features = ["parser"] }
 [patch.crates-io]
 io-gpeople = { git = "https://github.com/pimalaya/io-gpeople", rev = "e4a9cac80d023688118dbae88f8535145e8d2c9b" }
 io-pim-discovery = { path = "../io-pim-discovery" }
-io-webdav = { git = "https://github.com/pimalaya/io-webdav", rev = "185ab63be5859c5ef6115bef97e4df5cb1187973" }
+io-webdav = { path = "../io-webdav" }
 pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "0be1b1f08d19ccb9d16ee8e1d4266c27c96e0cdd" }

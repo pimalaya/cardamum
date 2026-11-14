@@ -31,7 +31,7 @@ pub struct CarddavReportMultigetCommand {
 impl CarddavReportMultigetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
         let ids: Vec<&str> = self.card_ids.iter().map(String::as_str).collect();
-        let entries = client.multiget_cards(&self.addressbook_id, &ids)?;
+        let entries = client.multiget_cards(&self.addressbook_id, &ids)?.cards;
 
         printer.out(CarddavCardEntriesOutput {
             rows: entries.into_iter().map(EntryRow::from).collect(),

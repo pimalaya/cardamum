@@ -339,7 +339,17 @@ fn refused(err: &WebdavClientStdError) -> Option<(u16, &str)> {
 /// card failed (RFC 6352 §6.3.2), no matter of rights.
 pub(crate) fn refusal_code(cause: &(dyn std::error::Error + 'static)) -> Option<ErrorCode> {
     let (status, body) = refused(cause.downcast_ref::<WebdavClientStdError>()?)?;
+    status_code(status, body)
+}
 
+/// The code of a listing row the server answered with `status` and no
+/// body, as [`refusal_code`] reads a refusal: a 403 `permission-denied`.
+pub(crate) fn row_code(status: u16) -> Option<ErrorCode> {
+    status_code(status, "")
+}
+
+/// The code of a refusal of `status` answered with `body`.
+fn status_code(status: u16, body: &str) -> Option<ErrorCode> {
     match status {
         _ if body.contains("quota-not-exceeded") => Some(ErrorCode::QuotaExceeded),
         507 => Some(ErrorCode::QuotaExceeded),

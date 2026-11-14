@@ -179,7 +179,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `permission-denied` | the server refused the request to the account (see "A server's refusal carries its code") |
 | `quota-exceeded` | the write would exceed the account's quota |
 | `rate-limited` | the server throttled the request; cardamum retries nothing |
-| `card-unreadable` | the backend answered for a card cardamum could not read: its file could not be read (vdir), its body did not parse as a vCard or is not UTF-8, it did not project (JMAP), its body could not be read (pimdir); an `errors` entry |
+| `card-unreadable` | the backend answered for a card cardamum could not read: its listing row came without its data (CardDAV), its file could not be read (vdir), its body did not parse as a vCard or is not UTF-8, it did not project (JMAP), its body could not be read (pimdir); an `errors` entry |
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
 | `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |
 | `store-uncreated` | the pimdir root holds no store; its sync engine creates it |
@@ -279,7 +279,7 @@ A field taken from a card or a server (a name, an address, an id, an error a ser
 `card list` SHALL print `nextPage` beside `cards`: the next page number, as a string, while cards follow the page, `null` otherwise, and SHALL take it back through `--page-token`, which wins over `--page`. Whether cards follow is exact on every backend: the unified client reads one card past the page.
 
 ### Requirement: A listing names the items it could not read
-`addressbook list` and `card list` SHALL print an `errors` list beside their items, under `--json` and in text: one pimalaya-cli item error `{id, code, error, sources}` per address book or card the command could not read, `[]` when there is none, in the order met. `id` SHALL be the item's id as the command prints ids, `null` when the backend named none; `code` a code of the vocabulary or `null`; `error` the message; `sources` the backend's own reasons, outermost first. An item listed in part (a card whose body does not parse) SHALL print in the list and in `errors`. A non-empty `errors` SHALL make the command exit 3 once it printed its result. A listing that reads the whole address book before cutting its page SHALL print its entries on the first page only.
+`addressbook list` and `card list` SHALL print an `errors` list beside their items, under `--json` and in text: one pimalaya-cli item error `{id, code, error, sources}` per address book or card the command could not read, `[]` when there is none, in the order met, and one entry with a `null` id and no code when the server truncated the listing (CardDAV). `id` SHALL be the item's id as the command prints ids, `null` when the backend named none; `code` a code of the vocabulary or `null`; `error` the message; `sources` the backend's own reasons, outermost first. An item listed in part (a card whose body does not parse) SHALL print in the list and in `errors`. A non-empty `errors` SHALL make the command exit 3 once it printed its result. A listing that reads the whole address book before cutting its page SHALL print its entries on the first page only.
 
 #### Scenario: A vdir card that cannot be read
 - GIVEN a vdir address book holding three cards, one of whose files cannot be read

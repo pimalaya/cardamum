@@ -31,9 +31,10 @@ use crate::{
 /// "sources"}]}`: the first `FN`, `EMAIL` and `TEL` as before, then the
 /// common fields read through the decoded vCard, every address and
 /// number included, then the cursor of the next page, `null` on the last
-/// one, then the error of each card the page could not read, `[]` when
-/// none, the command then exiting 3. A card whose body is not available
-/// yet carries what its backend knows of it.
+/// one, then the error of each card the page could not read, and of a
+/// listing the server cut short (its `id` `null`), `[]` when none, the
+/// command then exiting 3. A card whose body is not available yet
+/// carries what its backend knows of it.
 #[derive(Debug, Parser)]
 pub struct CardListCommand {
     /// Addressbook to list the cards of.
@@ -110,7 +111,8 @@ pub struct CardListOutput {
     /// The cursor of the next page, `null` once the listing is complete,
     /// given back through `--page-token`.
     pub next_page: Option<String>,
-    /// The error of each card the page could not read, in the order met.
+    /// The error of each card the page could not read, in the order met,
+    /// and of a listing the server cut short, its `id` `null`.
     pub errors: Vec<ItemError>,
 }
 

@@ -269,6 +269,8 @@ cardamum card list --log-level debug 2>/tmp/cardamum.log
 
 Use `--log-file <PATH>` to append them to a file directly. When `--log-level` is omitted the `RUST_LOG` environment variable is consulted, and `RUST_BACKTRACE=1` adds the full error backtrace.
 
+The exit status is `0` on success and `1` on a failure, printed on stdout as the failure object under `--json`, its `code` naming it when a caller can act on it. `2` is a command line Cardamum refuses (an unknown flag, a missing argument, a bad value): clap's message goes to stderr, or, with `--json`, the failure object coded `usage-invalid` to stdout. `3` means the command printed its result without fully succeeding: an `account check` with a failed backend, or an `addressbook list` or `card list` whose `errors` names a card it could not read.
+
 ## License
 
 This project is licensed under either of:

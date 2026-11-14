@@ -65,17 +65,23 @@ use pimalaya_stream::{
     feature = "gpeople"
 ))]
 use secrecy::SecretString;
-use serde::Deserialize;
+#[cfg(not(all(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople",
+    feature = "vdir",
+    feature = "pimdir"
+)))]
+use serde::de::IgnoredAny;
+use serde::{Deserialize, Deserializer};
 #[cfg(any(feature = "carddav", feature = "jmap"))]
 use url::Url;
 
 /// The whole configuration file: the options shared by every account,
-/// then the accounts themselves.
-///
-/// `deny_unknown_fields` is omitted so a neighbouring tool can share the
-/// same file without bouncing off an unknown top-level key.
+/// then the accounts themselves, refusing a key it does not know.
 #[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Config {
     /// Addressbook options, overridable per account.
     #[serde(default)]
@@ -85,6 +91,14 @@ pub struct Config {
     pub card: CardConfig,
     /// The accounts, keyed by their `[accounts.<name>]` table name.
     pub accounts: HashMap<String, AccountConfig>,
+    /// Refused: the output is plain text, drawn in no table.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub table: Option<TableRemoved>,
+    /// Refused: `account list` prints plain text, in no colour.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub account: Option<AccountTableRemoved>,
 }
 
 impl TomlConfig for Config {
@@ -152,9 +166,12 @@ impl AccountConfig {
     }
 }
 
-/// Account configuration.
+/// Account configuration, refusing a key it does not know.
+///
+/// The block of a backend the build leaves out loads unread, so one file
+/// serves every build.
 #[derive(Debug, Default, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AccountConfig {
     /// Whether a command passing no `-a <NAME>` runs against it.
     #[serde(default)]
@@ -193,6 +210,50 @@ pub struct AccountConfig {
     /// The Google People account this account talks to.
     #[cfg(feature = "gpeople")]
     pub gpeople: Option<GpeopleConfig>,
+    /// Refused: the output is plain text, drawn in no table.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub table: Option<TableRemoved>,
+    /// The account proxy, unread by a build with no network backend.
+    #[cfg(not(any(
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "gpeople"
+    )))]
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub proxy: Option<IgnoredAny>,
+    /// The vdir block, unread by a build without vdir.
+    #[cfg(not(feature = "vdir"))]
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub vdir: Option<IgnoredAny>,
+    /// The pimdir block, unread by a build without pimdir.
+    #[cfg(not(feature = "pimdir"))]
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub pimdir: Option<IgnoredAny>,
+    /// The CardDAV block, unread by a build without CardDAV.
+    #[cfg(not(feature = "carddav"))]
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub carddav: Option<IgnoredAny>,
+    /// The JMAP block, unread by a build without JMAP.
+    #[cfg(not(feature = "jmap"))]
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub jmap: Option<IgnoredAny>,
+    /// The Microsoft Graph block, unread by a build without Graph.
+    #[cfg(not(feature = "msgraph"))]
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub msgraph: Option<IgnoredAny>,
+    /// The Google People block, unread by a build without People.
+    #[cfg(not(feature = "gpeople"))]
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub gpeople: Option<IgnoredAny>,
 }
 
 /// Vdir configuration.
@@ -419,6 +480,10 @@ pub struct AddressbookConfig {
     /// Addressbook id the `card` commands take when their
     /// `-k/--addressbook` flag is omitted.
     pub default: Option<String>,
+    /// Refused: `addressbook list` prints plain text, in no colour.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub list: Option<AddressbookListRemoved>,
 }
 
 /// Card-level options.
@@ -445,6 +510,65 @@ pub struct CardListConfig {
     /// The flag wins when passed, then this value, then the hard
     /// fallback of 25.
     pub page_size: Option<u32>,
+    /// Refused: `card list` prints plain text, in no colour.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub table: Option<CardListTableRemoved>,
+}
+
+/// The error of a table this release removed, naming it and the migration
+/// notes.
+fn removed<E: serde::de::Error>(table: &str, why: &str) -> E {
+    E::custom(format!(
+        "The `{table}` table is removed, {why}: delete it, see MIGRATION.md"
+    ))
+}
+
+/// The `table` table, at the root or in an account, which no
+/// configuration holds any more.
+#[derive(Clone, Debug)]
+pub enum TableRemoved {}
+
+impl<'de> Deserialize<'de> for TableRemoved {
+    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+        Err(removed(
+            "table",
+            "the output being plain text with no border",
+        ))
+    }
+}
+
+/// The top-level `account` table, which no configuration holds any more.
+#[derive(Clone, Debug)]
+pub enum AccountTableRemoved {}
+
+impl<'de> Deserialize<'de> for AccountTableRemoved {
+    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+        Err(removed("account", "`account list` printing no colour"))
+    }
+}
+
+/// The `addressbook.list` table, which no configuration holds any more.
+#[derive(Clone, Debug)]
+pub enum AddressbookListRemoved {}
+
+impl<'de> Deserialize<'de> for AddressbookListRemoved {
+    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+        Err(removed(
+            "addressbook.list",
+            "`addressbook list` printing no colour",
+        ))
+    }
+}
+
+/// The `card.list.table` table, which no configuration holds any more.
+#[derive(Clone, Debug)]
+pub enum CardListTableRemoved {}
+
+impl<'de> Deserialize<'de> for CardListTableRemoved {
+    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+        Err(removed("card.list.table", "`card list` printing no colour"))
+    }
 }
 
 /// Proxy configuration.
@@ -811,5 +935,79 @@ mod tests {
         assert_eq!(url.host_str(), Some("xn--bcher-kva.example"));
         let url = parse_server("xn--bcher-kva.example", "https", &schemes).unwrap();
         assert_eq!(url.host_str(), Some("xn--bcher-kva.example"));
+    }
+
+    /// Parses `toml` as a whole configuration, into its error message.
+    fn refusal(toml: &str) -> String {
+        let err = toml::from_str::<crate::config::Config>(toml).unwrap_err();
+        err.to_string()
+    }
+
+    #[test]
+    fn an_unknown_root_key_is_refused() {
+        let err = refusal("colour = \"red\"\n[accounts.example]\n");
+        assert!(err.contains("unknown field `colour`"), "{err}");
+    }
+
+    #[test]
+    fn an_unknown_account_key_is_refused() {
+        let err = refusal("[accounts.example]\ndefualt = true\n");
+        assert!(err.contains("unknown field `defualt`"), "{err}");
+    }
+
+    /// A backend table and the tables nested in it refuse a key they do
+    /// not know, as the option tables do.
+    #[cfg(all(feature = "vdir", feature = "carddav"))]
+    #[test]
+    fn an_unknown_backend_or_nested_key_is_refused() {
+        let err = refusal("[accounts.example]\nvdir.home-dri = \"~/Contacts\"\n");
+        assert!(err.contains("unknown field `home-dri`"), "{err}");
+
+        let toml = "[accounts.example]\ncarddav.server = \"dav.example.org\"\n\
+                    carddav.auth = \"none\"\ncarddav.tls.certificate = \"ca.pem\"\n";
+        let err = refusal(toml);
+        assert!(err.contains("unknown field `certificate`"), "{err}");
+
+        let err = refusal("[accounts.example]\ncard.list.page-sise = 10\n");
+        assert!(err.contains("unknown field `page-sise`"), "{err}");
+    }
+
+    /// The tables v0.3 read and this release removed are refused by name,
+    /// pointing at the migration notes, at the root and in an account.
+    #[test]
+    fn a_removed_table_is_refused_by_name() {
+        let tables = [
+            ("table", "table.preset = \"x\"\n"),
+            (
+                "addressbook.list",
+                "addressbook.list.table.id-color = \"red\"\n",
+            ),
+            ("card.list.table", "card.list.table.fn-color = \"red\"\n"),
+        ];
+
+        for (table, line) in tables {
+            let root = format!("{line}[accounts.example]\n");
+            let account = format!("[accounts.example]\n{line}");
+
+            for toml in [root, account] {
+                let err = refusal(&toml);
+                assert!(err.contains(&format!("`{table}` table")), "{err}");
+                assert!(err.contains("MIGRATION.md"), "{err}");
+            }
+        }
+
+        let err = refusal("account.list.table.name-color = \"red\"\n[accounts.example]\n");
+        assert!(err.contains("`account` table"), "{err}");
+        assert!(err.contains("MIGRATION.md"), "{err}");
+    }
+
+    /// A build leaving a backend out still loads a file configuring it, a
+    /// file serving several builds.
+    #[cfg(not(feature = "gpeople"))]
+    #[test]
+    fn a_backend_left_out_of_the_build_still_loads() {
+        let toml = "[accounts.example]\ngpeople.auth.token.raw = \"token\"\n\
+                    proxy.url = \"socks5h://localhost:1080\"\n";
+        toml::from_str::<crate::config::Config>(toml).unwrap();
     }
 }

@@ -18,7 +18,15 @@ Without `-c/--config`, the configuration SHALL load every existing canonical pat
 Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
 
 ### Requirement: One backend block per backend
-Each account block SHALL carry at most one sub-block per compiled-in backend (`vdir`, `pimdir`, `carddav`, `jmap`, `msgraph`, `gpeople`), each deserialized with `deny_unknown_fields` so a typo is an error rather than a silently ignored option. An account may declare several, and `--backend` picks between them (see [backends.md](backends.md)).
+Each account block SHALL carry at most one sub-block per backend (`vdir`, `pimdir`, `carddav`, `jmap`, `msgraph`, `gpeople`), each deserialized with `deny_unknown_fields` when its backend is compiled in. An account may declare several, and `--backend` picks between them (see [backends.md](backends.md)).
+
+### Requirement: An unknown key is refused
+Every table of the configuration, the root and each account included, SHALL refuse a key it does not know, failing the load with the key's name, so a typo is an error rather than a silently ignored option. The block of a backend the build leaves out (and `proxy` in a build with no network backend) SHALL load unread, so one file serves every build.
+
+#### Scenario: A typo in an account
+- GIVEN `[accounts.example]` holding `defualt = true`
+- WHEN the configuration is loaded
+- THEN it fails naming the unknown field `defualt`
 
 ### Requirement: Secrets are read, never written
 A credential field SHALL be a pimalaya-config `Secret`: a raw value in the file, or a command whose stdout is the secret (an argv array for a known keyring provider or token broker, a string for a shell command). Cardamum only ever reads a secret; it never stores, refreshes or issues one. An OAuth 2.0 token therefore comes from an external broker such as Ortie, and a missing secret surfaces when the account is tested.
@@ -56,7 +64,12 @@ A bare `cardamum` SHALL print the help when a configuration exists, a broken one
 Resolving the default account SHALL fail, naming them sorted, when several accounts are marked `default = true` once the configuration is loaded, layers and `-c` files merged. An account named with `-a` SHALL still resolve.
 
 ### Requirement: No colour is configured
-The configuration SHALL hold no colour and no table shape: `table.preset`, `table.arrangement` and the `*.list.table.*-color` keys are unknown keys, refused where their table denies unknown keys (`card.list`, `addressbook`) and ignored at the top level and the account level, which tolerate unknown keys for a neighbouring tool.
+The configuration SHALL hold no colour and no table shape. The tables v0.3 read for them SHALL be refused by name, the error pointing at MIGRATION.md: `table` at the root and in an account, the top-level `account`, and `addressbook.list` and `card.list.table` at the root and in an account.
+
+#### Scenario: A v0.3 table preset
+- GIVEN a configuration holding `table.preset`
+- WHEN it is loaded
+- THEN it fails naming the `table` table as removed and MIGRATION.md
 
 ### Requirement: A CardDAV account names its ALPN identifiers
 `carddav.alpn` SHALL list the ALPN protocol identifiers offered during the TLS handshake, `["http/1.1"]` by default, as `jmap`, `msgraph` and `gpeople` do.

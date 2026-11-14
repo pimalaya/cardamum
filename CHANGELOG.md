@@ -46,7 +46,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   Without `-c`, every canonical path that exists is loaded, each deep-merged on top of the ones before.
 - **Breaking:** changed every text output to plain text: no border, no colour, nothing sized to the terminal.
 
-  `card list` prints one line per card, the account, the addressbook, the page and the next one above. `-s 0` lists every card. `table.preset`, `table.arrangement` and every `*-color` key are gone, refused under `card.list` and `addressbook`.
+  `card list` prints one line per card, the account, the addressbook, the page and the next one above. `-s 0` lists every card. `table.preset`, `table.arrangement` and every `*-color` key are gone, their tables refused by name.
+- **Breaking:** changed the configuration to refuse a key it does not know at the top level and in an account, where it ignored it, as every backend and option table already did. The tables v0.3 read for tables and colours (`table`, the top-level `account`, `addressbook.list`, `card.list.table`) are refused by name, the error pointing at MIGRATION.md. The block of a backend the build leaves out still loads unread.
 - **Breaking:** changed `addressbook list` and `card list` to exit 3 once they printed their result when a card could not be read (`errors` not empty), and the vdir and JMAP listings to list the other cards where one card failed the whole listing.
 - Changed a card or an address book not found to fail with `card-not-found` or `addressbook-not-found`, where the failure carried no code.
 - Changed account resolution to refuse several accounts marked `default`, naming them.

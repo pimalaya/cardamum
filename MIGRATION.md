@@ -2,7 +2,7 @@
 
 ## From v0.3 to the next release
 
-The next release brings Cardamum to the standards Himalaya and Ortie share: no configuration wizard, one configuration path per `-c`, plain text with no table nor colour, a unified API whose backends say what they serve, and a REPL and an MCP server. A v0.3 configuration loads as it is, unless it sets a table or colour key under `card.list` or `addressbook`, or marks several accounts default.
+The next release brings Cardamum to the standards Himalaya and Ortie share: no configuration wizard, one configuration path per `-c`, plain text with no table nor colour, a unified API whose backends say what they serve, and a REPL and an MCP server. A v0.3 configuration loads as it is, unless it sets a table or colour key, holds a key Cardamum does not know, or marks several accounts default.
 
 What a script reads off `--json` barely moves; the text output changes everywhere, and a few commands now fail earlier or report differently. The CHANGELOG lists every change; these are the ones to act on.
 
@@ -13,7 +13,8 @@ What a script reads off `--json` barely moves; the text output changes everywher
 - **`CARDAMUM_CONFIG` is no longer read.** Pass `-c "$CARDAMUM_CONFIG"` for one path, and one `-c` per path for what was a `:`-separated list.
 - **Every default path is read, as layers.** $XDG_CONFIG_HOME/cardamum/config.toml, $HOME/.config/cardamum/config.toml and $HOME/.cardamumrc are each deep-merged on top of the ones before, where v0.3 read the first one found. An rc file left beside a config.toml now overrides it: delete the one you do not use.
 - **Several `default = true` accounts are refused**, naming them. Keep it on one account across the merged files.
-- **Table and colour keys are gone.** Remove `table.preset`, `table.arrangement` and the `*-color` keys of `addressbook.list.table`, `card.list.table` and `account.list.table`. Under `card.list` and `addressbook` they fail the configuration as unknown keys; at the top level and in an account they are ignored.
+- **Table and colour keys are gone.** Remove the `table` table (`table.preset`, `table.arrangement`), at the top level and in each account, the top-level `account` table (`account.list.table`), and the `addressbook.list` and `card.list.table` tables (their `*-color` keys). Each fails the configuration by name, pointing here.
+- **An unknown key fails the configuration**, at the top level and in an account too, naming the key, where v0.3 ignored it there: a misspelt `default` or `addressbook` no longer loads silently. A block for a backend the build leaves out still loads, unread.
 - **`http` and `https` hosts are ASCII.** A CardDAV or JMAP `server` or an HTTP proxy `url` with an internationalised host is refused: write the host in Punycode (`https://xn--bcher-kva.example` for `bücher.example`).
 - **`carddav.alpn` is new**, `["http/1.1"]` by default, as the other network backends have.
 

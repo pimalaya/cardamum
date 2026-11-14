@@ -10,9 +10,9 @@
 //! user's own groups. Memberships are m:n labels, so one card can appear
 //! under several books and each listing is narrowed to its group.
 
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 use io_gpeople::v1::{
-    client::{GpeopleClientStd, GpeopleClientStdConnectOptions},
+    client::{GpeopleClientStd, GpeopleClientStdConnectOptions, GpeopleClientStdError},
     rest::{
         contact_groups::{
             GpeopleContactGroup, GpeopleContactGroupType, list::GpeopleContactGroupsListParams,
@@ -30,6 +30,8 @@ use secrecy::ExposeSecret;
 
 use crate::{
     config::{GpeopleConfig, ProxyConfig},
+    error,
+    gpeople::client::is_missing,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -237,7 +239,8 @@ impl GpeopleBackend {
                 &format!("people/{card_id}"),
                 GPEOPLE_PERSON_VCARD_FIELDS,
                 &[],
-            )?
+            )
+            .map_err(|err| card_error(card_id, err))?
             .response;
 
         Ok(into_card(addressbook_id, person))
@@ -310,7 +313,8 @@ impl GpeopleBackend {
 
         let current = self
             .inner
-            .person_get(&resource_name, GPEOPLE_PERSON_VCARD_FIELDS, &[])?
+            .person_get(&resource_name, GPEOPLE_PERSON_VCARD_FIELDS, &[])
+            .map_err(|err| card_error(card_id, err))?
             .response;
 
         let base = current.to_vcard();
@@ -353,7 +357,9 @@ impl GpeopleBackend {
         if if_match.is_some() {
             bail!("Google People cannot gate a delete on an ETag");
         }
-        self.inner.contact_delete(&format!("people/{card_id}"))?;
+        self.inner
+            .contact_delete(&format!("people/{card_id}"))
+            .map_err(|err| card_error(card_id, err))?;
         Ok(())
     }
 }
@@ -397,6 +403,15 @@ fn group_id(resource_name: &str) -> &str {
         .unwrap_or(resource_name)
 }
 
+/// The failure of a request on the person `card_id`, `card-not-found` when
+/// People holds no such person.
+fn card_error(card_id: &str, err: GpeopleClientStdError) -> Error {
+    match is_missing(&err) {
+        true => error::card_not_found(card_id, err.into()),
+        false => err.into(),
+    }
+}
+
 /// Decodes raw card bytes as UTF-8 vCard text.
 fn into_vcard_text(contents: Vec<u8>) -> Result<String> {
     String::from_utf8(contents).map_err(|_| anyhow::anyhow!("Card contents are not valid UTF-8"))
@@ -404,17 +419,18 @@ fn into_vcard_text(contents: Vec<u8>) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        collections::VecDeque,
-        io::{Cursor, Read, Result, Write},
-        sync::{Arc, Mutex},
-    };
+    use std::sync::Mutex;
 
     use io_gpeople::v1::{client::GpeopleClientStd, rest::people::GpeoplePerson};
     use log::{LevelFilter, Log, Metadata, Record};
+    use pimalaya_cli::error::code_of;
     use serde_json::{Value, json};
 
-    use crate::gpeople::backend::{GpeopleBackend, MY_CONTACTS_GROUP};
+    use crate::{
+        error::{self, ErrorCode},
+        gpeople::backend::{GpeopleBackend, MY_CONTACTS_GROUP},
+        script::{self, Script},
+    };
 
     static WARNINGS: Warnings = Warnings(Mutex::new(Vec::new()));
 
@@ -435,52 +451,8 @@ mod tests {
         fn flush(&self) {}
     }
 
-    /// A server answering each request with the next scripted response.
-    struct Script {
-        responses: VecDeque<Vec<u8>>,
-        response: Cursor<Vec<u8>>,
-        requests: Arc<Mutex<Vec<Vec<u8>>>>,
-        answered: bool,
-    }
-
-    impl Read for Script {
-        fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
-            if !self.answered {
-                let response = self.responses.pop_front().unwrap_or_default();
-                self.response = Cursor::new(response);
-                self.answered = true;
-            }
-
-            self.response.read(buf)
-        }
-    }
-
-    impl Write for Script {
-        fn write(&mut self, buf: &[u8]) -> Result<usize> {
-            let mut requests = self.requests.lock().unwrap();
-
-            if self.answered {
-                requests.push(Vec::new());
-                self.answered = false;
-            }
-
-            requests.last_mut().unwrap().extend_from_slice(buf);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> Result<()> {
-            Ok(())
-        }
-    }
-
     fn response(body: &Value) -> Vec<u8> {
-        let body = body.to_string();
-        let len = body.len();
-
-        format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {len}\r\n\r\n{body}"
-        )
-        .into_bytes()
+        script::response(200, "application/json", &body.to_string())
     }
 
     #[test]
@@ -495,13 +467,7 @@ mod tests {
         );
 
         let created = json!({"resourceName": "people/c2", "etag": "%EgUBAi43PRoEAQIFByIM"});
-        let requests = Arc::new(Mutex::new(Vec::new()));
-        let script = Script {
-            responses: VecDeque::from([response(&created)]),
-            response: Cursor::default(),
-            requests: requests.clone(),
-            answered: true,
-        };
+        let (script, requests) = Script::new([response(&created)]);
         let mut backend = GpeopleBackend {
             inner: GpeopleClientStd::new(script, "token"),
         };
@@ -542,13 +508,7 @@ mod tests {
         let vcard = person.to_vcard().replace("Acme", "Globex");
         let vcard = vcard.replace("END:VCARD", "X-PET:Rex\r\nEND:VCARD");
 
-        let requests = Arc::new(Mutex::new(Vec::new()));
-        let script = Script {
-            responses: VecDeque::from([response(&current), response(&current)]),
-            response: Cursor::default(),
-            requests: requests.clone(),
-            answered: true,
-        };
+        let (script, requests) = Script::new([response(&current), response(&current)]);
         let mut backend = GpeopleBackend {
             inner: GpeopleClientStd::new(script, "token"),
         };
@@ -586,5 +546,73 @@ mod tests {
                 {"key": "other.client", "value": "theirs"},
             ])
         );
+    }
+
+    /// The backend over a People server answering `body` with `status`.
+    fn refusing(status: u16, body: &Value) -> GpeopleBackend {
+        let answer = script::response(status, "application/json", &body.to_string());
+        let (script, _) = Script::new([answer]);
+        GpeopleBackend {
+            inner: GpeopleClientStd::new(script, "token"),
+        }
+    }
+
+    /// The code a delete of `c1` refused with `status` and `body` prints
+    /// in its failure object.
+    fn delete_code(status: u16, body: Value) -> Option<ErrorCode> {
+        let err = refusing(status, &body)
+            .delete_card(MY_CONTACTS_GROUP, "c1", None)
+            .unwrap_err();
+        let code = error::code(&err);
+        assert_eq!(code_of(&error::with_code(err)), code);
+        code
+    }
+
+    /// A 403 is a matter of rights unless it names a rate limit or a
+    /// quota, which a 429 always is.
+    #[test]
+    fn a_people_refusal_carries_its_code() {
+        let denied = json!({"error": {
+            "code": 403,
+            "message": "The caller does not have permission",
+            "status": "PERMISSION_DENIED",
+        }});
+        let throttled = json!({"error": {
+            "code": 429,
+            "message": "Quota exceeded for quota metric 'Read requests'",
+            "status": "RESOURCE_EXHAUSTED",
+        }});
+        let limited = json!({"error": {
+            "code": 403,
+            "message": "User Rate Limit Exceeded",
+            "errors": [{"reason": "userRateLimitExceeded"}],
+        }});
+        let failed = json!({"error": {"code": 500, "message": "Internal error"}});
+
+        assert_eq!(delete_code(403, denied), Some(ErrorCode::PermissionDenied));
+        assert_eq!(delete_code(429, throttled), Some(ErrorCode::RateLimited));
+        assert_eq!(delete_code(403, limited), Some(ErrorCode::RateLimited));
+        assert_eq!(delete_code(500, failed), None);
+    }
+
+    /// A person People does not hold is a card not found, a group not.
+    #[test]
+    fn a_missing_person_is_a_card_not_found() {
+        let missing = json!({"error": {
+            "code": 404,
+            "message": "Requested entity was not found.",
+            "status": "NOT_FOUND",
+        }});
+
+        let err = refusing(404, &missing)
+            .get_card(MY_CONTACTS_GROUP, "c9")
+            .unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::CardNotFound), "{err:#}");
+        assert!(format!("{err:#}").contains("Requested entity"), "{err:#}");
+
+        let err = refusing(404, &missing)
+            .delete_addressbook("g9")
+            .unwrap_err();
+        assert_eq!(error::code(&err), None, "{err:#}");
     }
 }

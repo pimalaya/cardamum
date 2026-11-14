@@ -4,13 +4,13 @@
 
 use std::collections::BTreeMap;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::copy::JmapContactCardCopyArgs;
 use pimalaya_cli::printer::Printer;
 
 use crate::{
-    jmap::{client::JmapClient, error::format_set_error},
+    jmap::{client::JmapClient, error::set_error},
     shared::receipt::IdsReceipt,
 };
 
@@ -56,7 +56,10 @@ impl JmapContactCardCopyCommand {
         let out = client.contact_card_copy(self.from_account, cards)?;
 
         if let Some((id, err)) = out.not_created.into_iter().next() {
-            bail!("ContactCard `{id}` copy rejected{}", format_set_error(&err));
+            return Err(set_error(
+                &format!("ContactCard `{id}` copy rejected"),
+                &err,
+            ));
         }
 
         let ids: Vec<String> = out

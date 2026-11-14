@@ -29,14 +29,16 @@ use io_jmap::{
         },
     },
 };
+use pimalaya_cli::error::CodedError;
 use pimalaya_config::secret::SecretResolver;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
 
 use crate::{
     config::{JmapAuthConfig, JmapConfig, ProxyConfig, parse_server},
+    error::ErrorCode,
     jmap::{
-        error::{JmapSetError, format_set_error},
+        error::{JmapSetError, format_set_error, set_error, set_error_message},
         project,
     },
     shared::{
@@ -111,7 +113,7 @@ impl JmapBackend {
         let out = self.inner.address_book_set(args)?;
 
         if let Some(err) = out.not_created.into_values().next() {
-            bail!("JMAP AddressBook create rejected{}", format_set_error(&err));
+            return Err(set_error("JMAP AddressBook create rejected", &err));
         }
 
         out.created
@@ -144,7 +146,7 @@ impl JmapBackend {
         let out = self.inner.address_book_set(args)?;
 
         if let Some(err) = out.not_updated.into_values().next() {
-            bail!("JMAP AddressBook update rejected{}", format_set_error(&err));
+            return Err(set_error("JMAP AddressBook update rejected", &err));
         }
 
         Ok(())
@@ -160,10 +162,7 @@ impl JmapBackend {
         let out = self.inner.address_book_set(args)?;
 
         if let Some(err) = out.not_destroyed.into_values().next() {
-            bail!(
-                "JMAP AddressBook destroy rejected{}",
-                format_set_error(&err)
-            );
+            return Err(set_error("JMAP AddressBook destroy rejected", &err));
         }
 
         Ok(())
@@ -204,11 +203,12 @@ impl JmapBackend {
         };
         let out = self.inner.contact_card_get(opts)?;
 
-        let card = out
-            .cards
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow!("JMAP ContactCard `{card_id}` not found"))?;
+        let card = out.cards.into_iter().next().ok_or_else(|| {
+            CodedError::new(
+                ErrorCode::CardNotFound,
+                format!("JMAP ContactCard `{card_id}` not found"),
+            )
+        })?;
 
         project::to_card(addressbook_id, card).map_err(Error::msg)
     }
@@ -234,7 +234,7 @@ impl JmapBackend {
         let out = self.inner.contact_card_set(args)?;
 
         if let Some(err) = out.not_created.into_values().next() {
-            bail!(card_write_error("create", &err, &unmapped));
+            return Err(card_write_error("create", &err, &unmapped));
         }
 
         out.created
@@ -276,7 +276,7 @@ impl JmapBackend {
         let out = self.inner.contact_card_set(args)?;
 
         if let Some(err) = out.not_updated.into_values().next() {
-            bail!(card_write_error("update", &err, &unmapped));
+            return Err(card_write_error("update", &err, &unmapped));
         }
 
         Ok(CardUpdateOutcome::default())
@@ -299,10 +299,7 @@ impl JmapBackend {
         let out = self.inner.contact_card_set(args)?;
 
         if let Some(err) = out.not_destroyed.into_values().next() {
-            bail!(
-                "JMAP ContactCard destroy rejected{}",
-                format_set_error(&err)
-            );
+            return Err(set_error("JMAP ContactCard destroy rejected", &err));
         }
 
         Ok(())
@@ -370,7 +367,7 @@ fn unmapped_properties(vcard_props: Option<&Value>) -> Vec<String> {
         .collect()
 }
 
-/// A rejected card write, rendered as prose.
+/// A rejected card write, rendered as prose and coded by its type.
 ///
 /// A vCard property JSContact cannot model travels in the standard
 /// `vCardProps` member, which some servers (Fastmail) refuse outright,
@@ -381,17 +378,19 @@ fn card_write_error(verb: &str, err: &JmapContactCardSetItemError, unmapped: &[S
     let msg = format!("JMAP ContactCard {verb} rejected{}", format_set_error(err));
 
     if !err.properties().iter().any(|prop| prop == "vCardProps") {
-        return anyhow!(msg);
+        return set_error_message(msg, err);
     }
 
     let hint = "This server refuses the standard `vCardProps` member, where a vCard property JSContact cannot model is preserved";
-    match unmapped {
-        [] => anyhow!("{msg}. {hint}"),
-        names => anyhow!(
+    let msg = match unmapped {
+        [] => format!("{msg}. {hint}"),
+        names => format!(
             "{msg}. {hint}; the card carries {}, which JMAP has no home for on this server",
             names.join(", ")
         ),
-    }
+    };
+
+    set_error_message(msg, err)
 }
 
 #[cfg(test)]

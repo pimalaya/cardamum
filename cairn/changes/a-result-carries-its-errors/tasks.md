@@ -31,18 +31,18 @@ change: a-result-carries-its-errors
 
 ## Phase 2, the codes (commit `feat: code a server's refusal and a missing card or address book`)
 
-- [ ] src/error.rs: `PermissionDenied`, `QuotaExceeded`, `RateLimited`, `CardNotFound`, `AddressbookNotFound`, `CardUnreadable` (and `AddressbookUnreadable` only if Phase 3 meets it), declared in every build; the enum's `allow(dead_code)` gated as neverest gates it; the header doc (:7-8) says a failure without a code prints `"code": null`.
-- [ ] src/error.rs: `error::code(err)` and the chain walk over one reader per enabled backend (a slice of `fn` gated by `cfg`, as neverest/src/error.rs does); the `ItemError` alias.
-- [ ] CardDAV reader in src/carddav/ (its client module): 507 or `quota-not-exceeded`, 429, 403 with `need-privileges` or no `DAV:error` body, 404/410 on a card request. src/carddav/backend.rs:215-232 keeps the typed io-webdav error as a cause instead of `anyhow!`.
-- [ ] Graph reader in src/msgraph/: `ErrorQuotaExceeded` or 507, 429, 403, 404 or 400 `ErrorInvalidIdMalformed` on a contact request.
-- [ ] People reader in src/gpeople/ with a copy of `google_code` and the `google_refusal` parts it reads.
-- [ ] JMAP: `format_set_error` (src/jmap/backend.rs:113, :146, :162, :236-238, :278-280, :301-306) becomes a coded error builder; `get_card` not found (:211) `card-not-found`.
-- [ ] vdir: a missing card file `card-not-found` (read io-vdir 0.3's `VdirClientError` for the variant), a missing address book `addressbook-not-found` (src/vdir/backend.rs:204).
-- [ ] pimdir: src/pimdir/backend.rs:562 `card-not-found`, :514-517 `addressbook-not-found`.
-- [ ] src/account/check.rs:289: rows coded through `error::code`.
-- [ ] Tests, each through the real error path and failing before the phase: CardDAV and Graph over a scripted stream (`WebdavClientStd::new` and `MsgraphClientStd::new` take any `Read + Write`; reuse the `Script` of src/gpeople/backend.rs:405-590), People 403 and 429 through that `Script`, JMAP SetError types, a vdir and a pimdir `card read` of an unknown id under `--json` (tests/ over a temp vdir) printing `card-not-found` and exiting 1.
-- [ ] Spec: "A JSON error carries a stable code" and "A server's refusal carries its code" folded (see delta.md).
-- [ ] Phase checks pass.
+- [x] src/error.rs: `PermissionDenied`, `QuotaExceeded`, `RateLimited`, `CardNotFound`, `AddressbookNotFound`, `CardUnreadable` (and `AddressbookUnreadable` only if Phase 3 meets it), declared in every build; the enum's `allow(dead_code)` gated as neverest gates it; the header doc (:7-8) says a failure without a code prints `"code": null`. The pimdir codes were ungated too (schema-neutral across builds) and the `allow(dead_code)` is unconditional, as Himalaya's: `CardUnreadable` is raised by no build until Phase 3. `AddressbookUnreadable` left out (no backend shown to meet it).
+- [x] src/error.rs: `error::code(err)` and the chain walk over one reader per enabled backend (a slice of `fn` gated by `cfg`, as neverest/src/error.rs does); the `ItemError` alias. The `ItemError` alias moves to Phase 3, its first user (unused, it fails clippy). `error::with_code` (ortie's name and shape) codes the failure object, applied once in `Command::execute`, the funnel of the command line, the REPL and MCP tool calls, and on the MCP startup failure.
+- [x] CardDAV reader in src/carddav/ (its client module): 507 or `quota-not-exceeded`, 429, 403 with `need-privileges` or no `DAV:error` body, 404/410 on a card request. src/carddav/backend.rs:215-232 keeps the typed io-webdav error as a cause instead of `anyhow!`. The 404/410 is coded at the card requests of src/carddav/backend.rs (`card_error`), a reader seeing no request kind.
+- [x] Graph reader in src/msgraph/: `ErrorQuotaExceeded` or 507, 429, 403, 404 or 400 `ErrorInvalidIdMalformed` on a contact request. Not-found coded at the contact requests (`card_error`).
+- [x] People reader in src/gpeople/ with a copy of `google_code` and the `google_refusal` parts it reads.
+- [x] JMAP: `format_set_error` (src/jmap/backend.rs:113, :146, :162, :236-238, :278-280, :301-306) becomes a coded error builder; `get_card` not found (:211) `card-not-found`. The namespace commands (`jmap address-book|contact-card ...`) are coded the same way; an AddressBook `notFound` is `addressbook-not-found`.
+- [x] vdir: a missing card file `card-not-found` (read io-vdir 0.3's `VdirClientError` for the variant), a missing address book `addressbook-not-found` (src/vdir/backend.rs:204). Read by a vdir reader in the chain walk (`VdirItemLocateError::NotFound` under locate, get, delete, copy, move); the `vdir` namespace's missing collection is `addressbook-not-found` too.
+- [x] pimdir: src/pimdir/backend.rs:562 `card-not-found`, :514-517 `addressbook-not-found`. A card id that is no number is `card-not-found` too.
+- [x] src/account/check.rs:289: rows coded through `error::code`.
+- [x] Tests, each through the real error path and failing before the phase: CardDAV and Graph over a scripted stream (`WebdavClientStd::new` and `MsgraphClientStd::new` take any `Read + Write`; reuse the `Script` of src/gpeople/backend.rs:405-590), People 403 and 429 through that `Script`, JMAP SetError types, a vdir and a pimdir `card read` of an unknown id under `--json` (tests/ over a temp vdir) printing `card-not-found` and exiting 1. The Script moved to src/script.rs, shared by the three HTTP backends' tests; tests/not_found.rs runs the binary over a temp vdir and a temp pimdir store (and an unknown address book on both).
+- [x] Spec: "A JSON error carries a stable code" and "A server's refusal carries its code" folded (see delta.md). Without the Phase 3 parts (the `errors` entry); `card-unreadable` listed as declared, raised by no command yet.
+- [x] Phase checks pass.
 
 ## Phase 3, the listings (commit `feat!: list the cards and address books a listing could not read`)
 

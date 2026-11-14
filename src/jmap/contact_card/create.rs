@@ -4,13 +4,13 @@
 
 use std::collections::BTreeMap;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::{JmapContactCard, set::JmapContactCardSetArgs};
 use pimalaya_cli::printer::Printer;
 
 use crate::jmap::{
-    client::JmapClient, error::format_set_error, input::JsonArg, render::JmapContactCardOutput,
+    client::JmapClient, error::set_error, input::JsonArg, render::JmapContactCardOutput,
 };
 
 /// Create a ContactCard from a raw JSContact body (`ContactCard/set`).
@@ -42,7 +42,7 @@ impl JmapContactCardCreateCommand {
         let out = client.contact_card_set(args)?;
 
         if let Some(err) = out.not_created.into_values().next() {
-            bail!("ContactCard create rejected{}", format_set_error(&err));
+            return Err(set_error("ContactCard create rejected", &err));
         }
         let created = out
             .created

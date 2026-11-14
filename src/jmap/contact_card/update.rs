@@ -4,15 +4,13 @@
 
 use std::collections::BTreeMap;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::set::{JmapContactCardPatch, JmapContactCardSetArgs};
 use pimalaya_cli::printer::Printer;
 
 use crate::{
-    jmap::{
-        client::JmapClient, error::format_set_error, input::JsonArg, render::JmapContactCardOutput,
-    },
+    jmap::{client::JmapClient, error::set_error, input::JsonArg, render::JmapContactCardOutput},
     shared::receipt::IdReceipt,
 };
 
@@ -46,7 +44,7 @@ impl JmapContactCardUpdateCommand {
         let out = client.contact_card_set(args)?;
 
         if let Some(err) = out.not_updated.into_values().next() {
-            bail!("ContactCard update rejected{}", format_set_error(&err));
+            return Err(set_error("ContactCard update rejected", &err));
         }
 
         // NOTE: the server may answer with no object at all, or with one

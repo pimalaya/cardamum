@@ -6,11 +6,13 @@
 
 use std::path::Path;
 
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 use io_vdir::{client::VdirClient, collection::VdirCollection, item::VdirItemKind, path::VdirPath};
+use pimalaya_cli::error::CodedError;
 
 use crate::{
     config::VdirConfig,
+    error::ErrorCode,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -67,7 +69,7 @@ impl VdirBackend {
         let current = collections
             .into_iter()
             .find(|collection| collection.id() == id)
-            .ok_or_else(|| anyhow::anyhow!("Addressbook `{id}` not found"))?;
+            .ok_or_else(|| addressbook_not_found(id))?;
 
         let next = VdirCollection {
             path: self.addressbook_path(id)?,
@@ -201,11 +203,20 @@ impl VdirBackend {
 
         let path = self.inner.root().join(addressbook_id);
         if !Path::new(path.as_str()).is_dir() {
-            bail!("Addressbook `{addressbook_id}` not found");
+            return Err(addressbook_not_found(addressbook_id));
         }
 
         Ok(path)
     }
+}
+
+/// The failure of the address book `id` the home directory does not hold.
+fn addressbook_not_found(id: &str) -> Error {
+    CodedError::new(
+        ErrorCode::AddressbookNotFound,
+        format!("Addressbook `{id}` not found"),
+    )
+    .into()
 }
 
 /// Maps a [`VdirCollection`] to a shared [`Addressbook`].

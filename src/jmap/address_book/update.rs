@@ -4,13 +4,13 @@
 
 use std::collections::BTreeMap;
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::address_book::set::{JmapAddressBookSetArgs, JmapAddressBookUpdate};
 use pimalaya_cli::printer::Printer;
 
 use crate::{
-    jmap::{client::JmapClient, error::format_set_error, render::JmapAddressBookOutput},
+    jmap::{client::JmapClient, error::set_error, render::JmapAddressBookOutput},
     shared::receipt::IdReceipt,
 };
 
@@ -48,7 +48,7 @@ impl JmapAddressBookUpdateCommand {
         let out = client.address_book_set(args)?;
 
         if let Some(err) = out.not_updated.into_values().next() {
-            bail!("AddressBook update rejected{}", format_set_error(&err));
+            return Err(set_error("AddressBook update rejected", &err));
         }
 
         match out.updated.into_values().next().flatten() {

@@ -167,13 +167,19 @@ The name flags SHALL be named for the role, given and family, rather than for th
 `card delete` SHALL take `--if-match <ETAG>`. CardDAV SHALL send it as `If-Match` and pimdir SHALL check it as an update does; the backends that cannot gate a delete (vdir, jmap, msgraph, gpeople) SHALL refuse it rather than drop it.
 
 ### Requirement: A JSON error carries a stable code
-A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`. The code SHALL be found anywhere in the error chain, so added context does not hide it. A failure with no code SHALL print `"code": null`. The plain output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording. A pimdir store's code is the one io-pimdir names (`PimdirError::code()`), never read off its message.
+A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`. The code SHALL be found anywhere in the error chain, so added context does not hide it, or read from the typed error of the protocol that refused ("A server's refusal carries its code"). A failure with no code SHALL print `"code": null`. The plain output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording. A pimdir store's code is the one io-pimdir names (`PimdirError::code()`), never read off its message. Every code SHALL be declared in every build, whatever the backends compiled in.
 
 | Code | Raised when |
 |---|---|
 | `usage-invalid` | the command line, a REPL line or an MCP tool call's arguments do not match the grammar (pimalaya-cli's `CommonCode::UsageInvalid`); the command line exits 2 |
 | `stdin-taken` | a command inside a session (`repl`, `mcp`) would read its input off stdin, which carries the session's commands |
 | `capability-missing` | the backend the account resolves to does not serve a capability the command reaches; nothing was read or written |
+| `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete` |
+| `addressbook-not-found` | the address book a command names does not exist; nothing was read or written |
+| `permission-denied` | the server refused the request to the account (see "A server's refusal carries its code") |
+| `quota-exceeded` | the write would exceed the account's quota |
+| `rate-limited` | the server throttled the request; cardamum retries nothing |
+| `card-unreadable` | declared for the `errors` entry of a card a listing could not read; no command raises it yet |
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
 | `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |
 | `store-uncreated` | the pimdir root holds no store; its sync engine creates it |
@@ -198,6 +204,11 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 - GIVEN a pimdir card whose body changed since it was read
 - WHEN `cardamum --json card delete --if-match <old etag>` names it
 - THEN the command exits 1, queues nothing and prints `{"code":"precondition-failed","error":"Precondition failed: …","sources":[],"backtrace":null}`
+
+#### Scenario: An unknown card
+- GIVEN a vdir address book holding no card `nope`
+- WHEN `cardamum --json card read nope` runs
+- THEN the command exits 1 and prints a failure object coded `card-not-found`
 
 ### Requirement: The JSON contract is described and versioned
 `json-schema` SHALL describe the failure object under the key `cardamum-error`, its `code` typed by the code vocabulary and pimalaya-cli's `usage-invalid`. Every generated schema SHALL carry an `$id` naming the contract version: the major version of cardamum, or `0.<minor>` before 1.0. Every registered payload SHALL be a JSON object, checked by a test: a command whose shapes are one untagged type answers an empty object for a shape carrying nothing (an abandoned `card create -i`), never `null`. Piped `--json` output SHALL print one value per line.

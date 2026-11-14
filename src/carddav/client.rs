@@ -29,8 +29,9 @@ use io_pim_discovery::{
     rfc6764::{client::DiscoveryWebdavClientStd, service::DiscoveryDavService},
 };
 use io_webdav::{
-    client::{WebdavClientStd as Inner, WebdavClientStdConnectOptions},
-    rfc4918::WebdavAuth,
+    client::{WebdavClientStd as Inner, WebdavClientStdConnectOptions, WebdavClientStdError},
+    rfc4918::{WebdavAuth, follow_redirects::WebdavFollowRedirectsError, send::WebdavSendError},
+    rfc6578::sync_collection::WebdavSyncCollectionError,
 };
 use pimalaya_config::secret::SecretResolver;
 use pimalaya_stream::{
@@ -41,7 +42,10 @@ use pimalaya_stream::{
 use secrecy::ExposeSecret;
 use url::Url;
 
-use crate::config::{AccountConfig, CarddavAuthConfig, CarddavConfig, ProxyConfig};
+use crate::{
+    config::{AccountConfig, CarddavAuthConfig, CarddavConfig, ProxyConfig},
+    error::ErrorCode,
+};
 
 /// DNS resolver the discovery mechanisms query.
 const DEFAULT_RESOLVER: &str = "tcp://1.1.1.1:53";
@@ -307,4 +311,59 @@ fn build_auth(auth: CarddavAuthConfig, resolver: &mut SecretResolver) -> Result<
             WebdavAuth::Bearer(HttpAuthBearer::new(token.expose_secret()))
         }
     })
+}
+
+/// The status and body of an answer that refused a request, wherever
+/// io-webdav surfaces it.
+fn refused(err: &WebdavClientStdError) -> Option<(u16, &str)> {
+    match err {
+        WebdavClientStdError::Send(WebdavSendError::HttpStatus { status, body })
+        | WebdavClientStdError::WebdavSyncCollection(WebdavSyncCollectionError::Send(
+            WebdavSendError::HttpStatus { status, body },
+        ))
+        | WebdavClientStdError::WebdavFollowRedirects(WebdavFollowRedirectsError::HttpStatus {
+            status,
+            body,
+        }) => Some((*status, body)),
+        _ => None,
+    }
+}
+
+/// The code of a CardDAV refusal in an error chain, as neverest reads
+/// it.
+///
+/// A 507, or a body naming `quota-not-exceeded` (RFC 4331 §6), is
+/// `quota-exceeded`; a 429 `rate-limited`; a 403 `permission-denied`
+/// when its body names `need-privileges` (RFC 3744 §7.1.1) or no
+/// precondition at all. Any other 403 names a precondition the written
+/// card failed (RFC 6352 §6.3.2), no matter of rights.
+pub(crate) fn refusal_code(cause: &(dyn std::error::Error + 'static)) -> Option<ErrorCode> {
+    let (status, body) = refused(cause.downcast_ref::<WebdavClientStdError>()?)?;
+
+    match status {
+        _ if body.contains("quota-not-exceeded") => Some(ErrorCode::QuotaExceeded),
+        507 => Some(ErrorCode::QuotaExceeded),
+        429 => Some(ErrorCode::RateLimited),
+        403 if body.contains("need-privileges") || !names_precondition(body) => {
+            Some(ErrorCode::PermissionDenied)
+        }
+        _ => None,
+    }
+}
+
+/// Whether a refusal's body is a `DAV:error` element, which names the
+/// precondition the request failed (RFC 4918 §16).
+fn names_precondition(body: &str) -> bool {
+    body.contains(":error") || body.contains("<error")
+}
+
+/// Whether a card request found no card: 404, or 410 for one gone.
+pub(crate) fn is_missing(err: &WebdavClientStdError) -> bool {
+    matches!(
+        err,
+        WebdavClientStdError::Send(WebdavSendError::HttpStatus {
+            status: 404 | 410,
+            ..
+        })
+    )
 }

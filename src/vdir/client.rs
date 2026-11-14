@@ -8,10 +8,21 @@ use std::{
     path::Path,
 };
 
-use anyhow::{Result, anyhow, bail};
-use io_vdir::{client::VdirClient as Inner, path::VdirPath};
+use anyhow::{Result, anyhow};
+use io_vdir::{
+    client::{VdirClient as Inner, VdirClientError},
+    item::{
+        copy::VdirItemCopyError, delete::VdirItemDeleteError, get::VdirItemGetError,
+        locate::VdirItemLocateError, r#move::VdirItemMoveError,
+    },
+    path::VdirPath,
+};
+use pimalaya_cli::error::CodedError;
 
-use crate::config::{AccountConfig, VdirConfig};
+use crate::{
+    config::{AccountConfig, VdirConfig},
+    error::ErrorCode,
+};
 
 /// The vdir client a command runs against.
 pub struct VdirClient {
@@ -32,7 +43,8 @@ impl VdirClient {
     pub fn collection_path(&self, name: &str) -> Result<VdirPath> {
         let path = self.root().join(name);
         if !Path::new(path.as_str()).is_dir() {
-            bail!("Collection `{name}` not found");
+            let message = format!("Collection `{name}` not found");
+            return Err(CodedError::new(ErrorCode::AddressbookNotFound, message).into());
         }
         Ok(path)
     }
@@ -61,4 +73,23 @@ pub fn build_vdir_client(name: String, mut account_config: AccountConfig) -> Res
         .take()
         .ok_or_else(|| anyhow!("Vdir config is missing for account `{name}`"))?;
     Ok(VdirClient::new(vdir_config))
+}
+
+/// The code of a vdir failure in an error chain: an item io-vdir did not
+/// find in its collection is `card-not-found`, cardamum's items being
+/// cards.
+pub(crate) fn missing_code(cause: &(dyn std::error::Error + 'static)) -> Option<ErrorCode> {
+    let locate = match cause.downcast_ref::<VdirClientError>()? {
+        VdirClientError::VdirItemLocate(err)
+        | VdirClientError::VdirItemGet(VdirItemGetError::Locate(err))
+        | VdirClientError::VdirItemDelete(VdirItemDeleteError::Locate(err))
+        | VdirClientError::VdirItemCopy(VdirItemCopyError::Locate(err))
+        | VdirClientError::VdirItemMove(VdirItemMoveError::Locate(err)) => err,
+        _ => return None,
+    };
+
+    match locate {
+        VdirItemLocateError::NotFound(_) => Some(ErrorCode::CardNotFound),
+        _ => None,
+    }
 }

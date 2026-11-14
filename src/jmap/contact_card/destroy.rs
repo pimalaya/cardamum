@@ -2,13 +2,13 @@
 //!
 //! Destroys a ContactCard.
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::set::JmapContactCardSetArgs;
 use pimalaya_cli::printer::Printer;
 
 use crate::{
-    jmap::{client::JmapClient, error::format_set_error},
+    jmap::{client::JmapClient, error::set_error},
     shared::receipt::IdReceipt,
 };
 
@@ -31,7 +31,7 @@ impl JmapContactCardDestroyCommand {
         let out = client.contact_card_set(args)?;
 
         if let Some(err) = out.not_destroyed.into_values().next() {
-            bail!("ContactCard destroy rejected{}", format_set_error(&err));
+            return Err(set_error("ContactCard destroy rejected", &err));
         }
 
         printer.out(IdReceipt {

@@ -107,6 +107,24 @@ A derivation is what a write carries, not a lookup: the store keys an item it re
 ### Requirement: A store refusal carries its code
 The pimdir backend SHALL open a store as the io-pimdir it builds against defines it and SHALL NOT migrate one, migrating being the owner's. A failure to open, read the queue of, or stage into the pimdir store SHALL carry, under `--json`, the code io-pimdir's `PimdirError::code()` names for it, spelled as io-pimdir spells it, for the failures a caller acts on: `store-uncreated`, `store-version`, `store-foreign`, `store-corrupt`, `store-hash-algo`, `store-exposed`, `store-busy`, `lock-replaced`, `unsupported`, `item-duplicate` and `action-malformed`; an SQL, I/O or JSON failure carries none, and so does a code no cardamum path raises (`flag-invalid` among them: cardamum stages no flag, its `add` carrying the empty set and its `update` and `remove` none). `action-malformed` reaches cardamum on `pimdir status`, whose count of queued creates decodes every pending row of the address book, when another program queued a payload its schema refuses: the owner's drain parks it, and the status reads again. `lock-replaced` reaches cardamum on a write, the producer checking before its enqueue that the staging lock file it holds is still the one at its path (pimdir STORAGE §8): nothing is queued. The message is io-pimdir's, but for `store-version` (see "A pimdir store of another version is reinstalled"), and SHALL NOT advise deleting the store: a resync restores neither the queue nor what the store keeps alone.
 
+### Requirement: A server's refusal carries its code
+A failure a server refused SHALL carry a code of the vocabulary Himalaya shares, read from the typed error of the protocol that answered it, in the failure object and an `account check` row alike. One reader per backend codes its typed errors, walking the error chain after any coded error, so the typed errors stay in the chain the backends return; the failure object is coded once the command failed, its messages and causes printing as before.
+
+| Code | When |
+|---|---|
+| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition, or `need-privileges` (RFC 3744 §7.1.1); a JMAP `forbidden` |
+| `quota-exceeded` | an HTTP 507; a CardDAV body naming `quota-not-exceeded` (RFC 4331 §6); Graph's `ErrorQuotaExceeded`; a JMAP `overQuota` |
+| `rate-limited` | an HTTP 429, or a People 403 naming a rate limit or a quota, or a JMAP `rateLimit`; cardamum retries nothing, so the first one met |
+| `card-not-found` | a card request answered 404 or 410 (CardDAV, People), 404 or 400 `ErrorInvalidIdMalformed` (Graph), `notFound` (JMAP ContactCard); a vdir card file or a pimdir card that does not exist, or a pimdir card id that is no number |
+| `addressbook-not-found` | an address book named that does not exist (vdir, pimdir); a JMAP AddressBook `notFound` |
+
+A refusal none of these name SHALL carry no code, its reason kept in `sources`. A CardDAV 403 naming another precondition (`valid-address-data`, `no-uid-conflict`) is a card the server would not take, no matter of rights, and SHALL carry none; a refused `valid-address-data` keeps the server's answer as the cause of cardamum's hint.
+
+#### Scenario: A read-only address book
+- GIVEN a Graph contact folder the account may read but not write
+- WHEN `cardamum --json card delete <id>` runs
+- THEN it exits 1 printing a failure object coded `permission-denied`
+
 ### Requirement: A pimdir store of another version is reinstalled
 The pimdir backend SHALL open a store of the format version the io-pimdir it builds against reads (`io_pimdir::sql::FORMAT_VERSION`, `storage-draft-11` at the io-pimdir commit Cargo.toml pins) and no other, earlier or later, refusing it as `store-version` and reading nothing in it (pimdir STORAGE §4.2, §6). Nothing migrates a draft store. The refusal's message is cardamum's, not io-pimdir's: it names the version the store records, or that it records none, and the one this cardamum reads, and says that a store an earlier neverest wrote is reinstalled (that neverest's sync run until nothing is queued, neverest upgraded, the store moved aside, `neverest init` and a sync), while a store a later neverest wrote asks for a cardamum upgrade. It SHALL NOT advise deleting the store, nor syncing a new one before the queue is drained: the queued writes live in that store alone.
 

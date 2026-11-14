@@ -10,9 +10,9 @@
 //! the [`CONTACTS_FOLDER`] sentinel id. Updates carry no If-Match guard
 //! server-side (last-write-wins), so passing one bails.
 
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 use io_msgraph::v1::{
-    client::{MsgraphClientStd, MsgraphClientStdConnectOptions},
+    client::{MsgraphClientStd, MsgraphClientStdConnectOptions, MsgraphClientStdError},
     rest::users::{
         contact_folders::MsgraphContactFolder,
         contacts::{
@@ -25,6 +25,8 @@ use secrecy::ExposeSecret;
 
 use crate::{
     config::{MsgraphConfig, ProxyConfig},
+    error,
+    msgraph::client::is_missing,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -197,7 +199,8 @@ impl MsgraphBackend {
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
         let contact = self
             .inner
-            .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))?
+            .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))
+            .map_err(|err| card_error(card_id, err))?
             .response;
         Ok(into_card(addressbook_id, contact))
     }
@@ -237,12 +240,15 @@ impl MsgraphBackend {
 
         let base = self
             .inner
-            .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))?
+            .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))
+            .map_err(|err| card_error(card_id, err))?
             .response;
         let base_vcard = base.to_vcard();
 
         let contact = MsgraphContact::update_from_vcard(&vcard, &base_vcard)?;
-        self.inner.contact_update(card_id, &contact)?;
+        self.inner
+            .contact_update(card_id, &contact)
+            .map_err(|err| card_error(card_id, err))?;
 
         Ok(CardUpdateOutcome::default())
     }
@@ -257,7 +263,9 @@ impl MsgraphBackend {
         if if_match.is_some() {
             bail!("Microsoft Graph contacts cannot gate a delete on an ETag");
         }
-        self.inner.contact_delete(card_id)?;
+        self.inner
+            .contact_delete(card_id)
+            .map_err(|err| card_error(card_id, err))?;
         Ok(())
     }
 }
@@ -282,4 +290,78 @@ fn into_card(addressbook_id: &str, contact: MsgraphContact) -> Card {
 /// Decodes raw card bytes as UTF-8 vCard text.
 fn into_vcard_text(contents: Vec<u8>) -> Result<String> {
     String::from_utf8(contents).map_err(|_| anyhow::anyhow!("Card contents are not valid UTF-8"))
+}
+
+/// The failure of a request on the contact `card_id`, `card-not-found`
+/// when Graph holds no such contact.
+fn card_error(card_id: &str, err: MsgraphClientStdError) -> Error {
+    match is_missing(&err) {
+        true => error::card_not_found(card_id, err.into()),
+        false => err.into(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use io_msgraph::v1::client::MsgraphClientStd;
+    use pimalaya_cli::error::code_of;
+    use serde_json::json;
+
+    use super::{CONTACTS_FOLDER, MsgraphBackend};
+    use crate::{
+        error::{self, ErrorCode},
+        script::{self, Script},
+    };
+
+    /// The backend over a Graph server answering `status` with an error
+    /// envelope of `code`.
+    fn refusing(status: u16, code: &str) -> MsgraphBackend {
+        let body = json!({"error": {"code": code, "message": "Refused"}}).to_string();
+        let (script, _) = Script::new([script::response(status, "application/json", &body)]);
+        MsgraphBackend {
+            inner: MsgraphClientStd::new(script, "token", Default::default()),
+        }
+    }
+
+    /// The code a delete of a contact refused with `status` and `code`
+    /// prints in its failure object.
+    fn delete_code(status: u16, code: &str) -> Option<ErrorCode> {
+        let err = refusing(status, code)
+            .delete_card(CONTACTS_FOLDER, "AAMk", None)
+            .unwrap_err();
+        let code = error::code(&err);
+        assert_eq!(code_of(&error::with_code(err)), code);
+        code
+    }
+
+    #[test]
+    fn a_graph_refusal_carries_its_code() {
+        let denied = Some(ErrorCode::PermissionDenied);
+        let quota = Some(ErrorCode::QuotaExceeded);
+
+        assert_eq!(delete_code(403, "ErrorAccessDenied"), denied);
+        assert_eq!(delete_code(507, "ErrorQuotaExceeded"), quota);
+        assert_eq!(delete_code(400, "ErrorQuotaExceeded"), quota);
+        assert_eq!(
+            delete_code(429, "TooManyRequests"),
+            Some(ErrorCode::RateLimited)
+        );
+        assert_eq!(delete_code(500, "ErrorInternalServerError"), None);
+    }
+
+    /// A contact Graph does not hold, or an id that cannot name one, is a
+    /// card not found; another 400 is not.
+    #[test]
+    fn a_missing_contact_is_a_card_not_found() {
+        let missing = Some(ErrorCode::CardNotFound);
+
+        assert_eq!(delete_code(404, "ErrorItemNotFound"), missing);
+        assert_eq!(delete_code(400, "ErrorInvalidIdMalformed"), missing);
+        assert_eq!(delete_code(400, "ErrorInvalidRequest"), None);
+
+        let err = refusing(404, "ErrorItemNotFound")
+            .get_card(CONTACTS_FOLDER, "AAMk")
+            .unwrap_err();
+        assert_eq!(code_of(&err), missing, "{err:#}");
+    }
 }

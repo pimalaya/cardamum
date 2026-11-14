@@ -6,11 +6,16 @@
 use std::ops::{Deref, DerefMut};
 
 use anyhow::{Result, anyhow};
-use io_msgraph::v1::client::{MsgraphClientStd, MsgraphClientStdConnectOptions};
+use io_msgraph::v1::client::{
+    MsgraphClientStd, MsgraphClientStdConnectOptions, MsgraphClientStdError,
+};
 use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 
-use crate::config::{AccountConfig, ProxyConfig};
+use crate::{
+    config::{AccountConfig, ProxyConfig},
+    error::ErrorCode,
+};
 
 /// The connected Graph client.
 pub struct MsgraphClient {
@@ -52,4 +57,33 @@ pub fn build_msgraph_client(
     let inner = MsgraphClientStd::connect(token.expose_secret(), options)?;
 
     Ok(MsgraphClient { inner })
+}
+
+/// The code of a Graph refusal in an error chain, as neverest reads it:
+/// Graph's `ErrorQuotaExceeded` or a 507 is `quota-exceeded`, a 429
+/// `rate-limited`, a 403 `permission-denied`.
+pub(crate) fn refusal_code(cause: &(dyn std::error::Error + 'static)) -> Option<ErrorCode> {
+    let MsgraphClientStdError::Send(send) = cause.downcast_ref::<MsgraphClientStdError>()? else {
+        return None;
+    };
+    let err = send.api()?;
+
+    match (err.status, err.code.as_str()) {
+        (_, "ErrorQuotaExceeded") | (507, _) => Some(ErrorCode::QuotaExceeded),
+        (429, _) => Some(ErrorCode::RateLimited),
+        (403, _) => Some(ErrorCode::PermissionDenied),
+        _ => None,
+    }
+}
+
+/// Whether a contact request found no contact: a 404, or the 400 Graph
+/// answers an id that cannot name one (`ErrorInvalidIdMalformed`).
+pub(crate) fn is_missing(err: &MsgraphClientStdError) -> bool {
+    let MsgraphClientStdError::Send(send) = err else {
+        return false;
+    };
+
+    send.api().is_some_and(|err| {
+        err.status == 404 || (err.status == 400 && err.code == "ErrorInvalidIdMalformed")
+    })
 }

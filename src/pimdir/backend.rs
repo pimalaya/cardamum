@@ -18,7 +18,7 @@
 
 use std::ops::ControlFlow;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Error, Result, anyhow, bail};
 use io_pimdir::{
     client::reader::{PimdirCollection, PimdirItem},
     codec::PimdirAction,
@@ -511,10 +511,11 @@ impl PimdirBackend {
 
         ids.sort();
 
-        bail!(
+        let message = format!(
             "Addressbook `{collection}` not found; this account holds: {}",
             ids.join(", "),
-        )
+        );
+        Err(CodedError::new(ErrorCode::AddressbookNotFound, message).into())
     }
 
     /// Fails unless `collection` is an address book of the account that a
@@ -552,14 +553,19 @@ impl PimdirBackend {
 
     /// The stored item behind a public card id, or a clear miss.
     fn item(&self, collection: &str, card_id: &str) -> Result<PimdirItem> {
+        let missing =
+            |message: String| Error::new(CodedError::new(ErrorCode::CardNotFound, message));
+
+        // NOTE: a card id is the store's number for it, so one that is no
+        // number names no card.
         let seq = card_id
             .parse::<i64>()
-            .map_err(|_| anyhow!("Invalid card id `{card_id}` (expected a number)"))?;
+            .map_err(|_| missing(format!("Invalid card id `{card_id}` (expected a number)")))?;
 
         self.inner
             .reader
             .get_item(collection, seq)?
-            .ok_or_else(|| anyhow!("Card `{card_id}` not found in `{collection}`"))
+            .ok_or_else(|| missing(format!("Card `{card_id}` not found in `{collection}`")))
     }
 
     /// Stages a body and the action naming it as one step.

@@ -5,10 +5,10 @@
 
 use std::collections::BTreeSet;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Context, Error, Result, bail};
 use io_webdav::{
     client::{WebdavClientStd, WebdavClientStdError},
-    rfc4918::{send::WebdavSendError, summarize_body},
+    rfc4918::send::WebdavSendError,
     rfc6352::{
         addressbook::{CarddavAddressbook, CarddavAddressbookPatch},
         card::{CarddavCardEntry, list::CarddavCardListOptions},
@@ -17,7 +17,9 @@ use io_webdav::{
 use pimalaya_config::secret::SecretResolver;
 
 use crate::{
+    carddav::client::is_missing,
     config::CarddavConfig,
+    error,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -121,7 +123,10 @@ impl CarddavBackend {
 
     /// Fetches `card_id` from `addressbook_id`.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
-        let body = self.inner.read_card(addressbook_id, card_id)?;
+        let body = self
+            .inner
+            .read_card(addressbook_id, card_id)
+            .map_err(|err| card_error(card_id, err))?;
 
         Ok(Card {
             id: card_id.to_string(),
@@ -159,6 +164,7 @@ impl CarddavBackend {
             None => {
                 self.inner
                     .read_card(addressbook_id, card_id)
+                    .map_err(|err| card_error(card_id, err))
                     .with_context(|| {
                         format!("Cannot read the current version of card `{card_id}`")
                     })?
@@ -179,7 +185,9 @@ impl CarddavBackend {
         card_id: &str,
         if_match: Option<&str>,
     ) -> Result<()> {
-        self.inner.delete_card(addressbook_id, card_id, if_match)?;
+        self.inner
+            .delete_card(addressbook_id, card_id, if_match)
+            .map_err(|err| card_error(card_id, err))?;
         Ok(())
     }
 }
@@ -212,7 +220,10 @@ fn into_card(addressbook_id: &str, entry: CarddavCardEntry) -> Card {
 /// The CardDAV `valid-address-data` precondition (RFC 6352 §6.3.2.1).
 /// cardamum forwards the vCard unchanged, and providers disagree on
 /// what they accept: most require a `UID`, some (iCloud) also an `N`.
-fn card_write_error(err: WebdavClientStdError) -> anyhow::Error {
+///
+/// The server's answer stays the cause, its typed error kept for the
+/// readers of [`crate::error::code`].
+fn card_write_error(err: WebdavClientStdError) -> Error {
     let WebdavClientStdError::Send(WebdavSendError::HttpStatus { status: 403, body }) = &err else {
         return err.into();
     };
@@ -222,13 +233,21 @@ fn card_write_error(err: WebdavClientStdError) -> anyhow::Error {
         return err.into();
     }
 
-    anyhow!(
+    Error::new(err).context(
         "The server rejected the vCard as invalid. cardamum sends the vCard \
          you provide unchanged, and providers disagree on what they accept: \
          most require a UID property, and some (e.g. iCloud) also require an N \
-         property. Server response: {}",
-        summarize_body(body)
+         property",
     )
+}
+
+/// The failure of a request on the card `card_id`, `card-not-found` when
+/// the server holds no such card.
+fn card_error(card_id: &str, err: WebdavClientStdError) -> Error {
+    match is_missing(&err) {
+        true => error::card_not_found(card_id, err.into()),
+        false => err.into(),
+    }
 }
 
 /// Generates a fresh card resource name, a random UUIDv4 plus `.vcf`.
@@ -238,4 +257,115 @@ fn card_write_error(err: WebdavClientStdError) -> anyhow::Error {
 /// owns the whole of it.
 fn fresh_card_id() -> Result<String> {
     Ok(format!("{}.vcf", uuid_v4()?))
+}
+
+#[cfg(test)]
+mod tests {
+    use io_webdav::{client::WebdavClientStd, rfc4918::WebdavAuth};
+    use pimalaya_cli::error::code_of;
+    use url::Url;
+
+    use super::CarddavBackend;
+    use crate::{
+        error::{self, ErrorCode},
+        script::{self, Script},
+    };
+
+    const CARD: &[u8] = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:c1\r\nFN:Jane\r\nEND:VCARD\r\n";
+
+    /// The backend over a CardDAV server answering `status` with `body`,
+    /// its home set already discovered.
+    fn refusing(status: u16, body: &str) -> CarddavBackend {
+        let (script, _) = Script::new([script::response(status, "application/xml", body)]);
+        let base = Url::parse("https://dav.example.org/").unwrap();
+        let home = base.join("/dav/").unwrap();
+        let inner =
+            WebdavClientStd::from_parts(script, WebdavAuth::None, base, None, None, Some(home));
+        CarddavBackend { inner }
+    }
+
+    /// The code a write refused with `status` and `body` prints in its
+    /// failure object.
+    fn create_code(status: u16, body: &str) -> Option<ErrorCode> {
+        let err = refusing(status, body)
+            .create_card("book", CARD.to_vec())
+            .unwrap_err();
+        let code = error::code(&err);
+        assert_eq!(code_of(&error::with_code(err)), code);
+        code
+    }
+
+    /// A refusal is coded from its status and the precondition its body
+    /// names: a quota, a rate, or the account's rights, never a card the
+    /// server would not take.
+    #[test]
+    fn a_carddav_refusal_carries_its_code() {
+        let privileges =
+            r#"<?xml version="1.0"?><D:error xmlns:D="DAV:"><D:need-privileges/></D:error>"#;
+        let quota =
+            r#"<?xml version="1.0"?><D:error xmlns:D="DAV:"><D:quota-not-exceeded/></D:error>"#;
+        let uid = r#"<?xml version="1.0"?><D:error xmlns:D="DAV:"><C:no-uid-conflict xmlns:C="urn:ietf:params:xml:ns:carddav"/></D:error>"#;
+
+        assert_eq!(create_code(403, ""), Some(ErrorCode::PermissionDenied));
+        assert_eq!(
+            create_code(403, privileges),
+            Some(ErrorCode::PermissionDenied)
+        );
+        assert_eq!(create_code(403, quota), Some(ErrorCode::QuotaExceeded));
+        assert_eq!(create_code(507, ""), Some(ErrorCode::QuotaExceeded));
+        assert_eq!(create_code(429, ""), Some(ErrorCode::RateLimited));
+        assert_eq!(create_code(403, uid), None);
+        assert_eq!(create_code(500, ""), None);
+    }
+
+    /// A vCard the server refuses keeps the server's answer as the cause
+    /// of the hint, a matter of the card and not of rights.
+    #[test]
+    fn a_refused_vcard_keeps_the_answer_as_its_cause() {
+        let body = r#"<?xml version="1.0"?><D:error xmlns:D="DAV:"><C:valid-address-data xmlns:C="urn:ietf:params:xml:ns:carddav"/></D:error>"#;
+        let err = refusing(403, body)
+            .create_card("book", CARD.to_vec())
+            .unwrap_err();
+
+        assert!(err.to_string().starts_with("The server rejected the vCard"));
+        let cause = err.chain().nth(1).unwrap().to_string();
+        assert!(cause.contains("403"), "{cause}");
+        assert_eq!(error::code(&err), None, "{err:#}");
+    }
+
+    /// A refused write fails with an object coded by the refusal, its
+    /// message and causes printing as the backend wrote them.
+    #[test]
+    fn a_refused_write_prints_its_code_in_its_failure_object() {
+        use pimalaya_cli::error::ErrorReport;
+
+        let err = refusing(403, "")
+            .delete_card("book", "c1.vcf", None)
+            .unwrap_err()
+            .context("Delete card `c1.vcf`");
+        let text = format!("{err:#}");
+
+        let report = ErrorReport::<ErrorCode>::from(error::with_code(err));
+        let object = serde_json::to_value(&report).unwrap();
+        assert_eq!(object["code"], "permission-denied", "{object}");
+
+        let mut chain = vec![object["error"].as_str().unwrap().to_owned()];
+        for source in object["sources"].as_array().unwrap() {
+            chain.push(source.as_str().unwrap().to_owned());
+        }
+        assert_eq!(chain.join(": "), text);
+    }
+
+    /// A card the address book does not hold is a card not found, on a
+    /// read as on a delete.
+    #[test]
+    fn a_missing_card_is_a_card_not_found() {
+        let err = refusing(404, "").get_card("book", "c9.vcf").unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::CardNotFound), "{err:#}");
+
+        let err = refusing(410, "")
+            .delete_card("book", "c9.vcf", None)
+            .unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::CardNotFound), "{err:#}");
+    }
 }

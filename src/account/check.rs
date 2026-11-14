@@ -286,7 +286,7 @@ impl BackendCheck {
             Err(err) => Self {
                 backend,
                 ok: false,
-                code: pimalaya_cli::error::code_of(&err),
+                code: crate::error::code(&err),
                 error: Some(format!("{err:#}")),
             },
         }

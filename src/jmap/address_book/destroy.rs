@@ -2,13 +2,13 @@
 //!
 //! Destroys an AddressBook, optionally with the cards it holds.
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::address_book::set::JmapAddressBookSetArgs;
 use pimalaya_cli::printer::Printer;
 
 use crate::{
-    jmap::{client::JmapClient, error::format_set_error},
+    jmap::{client::JmapClient, error::set_error},
     shared::receipt::IdReceipt,
 };
 
@@ -35,7 +35,7 @@ impl JmapAddressBookDestroyCommand {
         let out = client.address_book_set(args)?;
 
         if let Some(err) = out.not_destroyed.into_values().next() {
-            bail!("AddressBook destroy rejected{}", format_set_error(&err));
+            return Err(set_error("AddressBook destroy rejected", &err));
         }
 
         printer.out(IdReceipt {

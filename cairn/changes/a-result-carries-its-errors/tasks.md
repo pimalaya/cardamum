@@ -46,20 +46,20 @@ change: a-result-carries-its-errors
 
 ## Phase 3, the listings (commit `feat!: list the cards and address books a listing could not read`)
 
-- [ ] `addressbook list` (src/shared/addressbook/list.rs:96-102) and `card list` (src/shared/card/list.rs:83-106) outputs gain `errors: Vec<ItemError>`, required in their schema; the unified client (src/shared/client.rs:470-495) carries the entries from each backend beside the items.
-- [ ] A body that does not parse or is not UTF-8 (src/shared/card/project.rs:47-50, src/shared/card/list.rs:237-240): listed as today, plus a `card-unreadable` entry.
-- [ ] vdir (src/vdir/backend.rs:101-125): `list_readable_items`, one `card-unreadable` entry per failed file; a vanished card left out silently.
-- [ ] JMAP (src/jmap/backend.rs:174-197, src/jmap/project.rs:30-43): one card that does not project is an entry, the others listed.
-- [ ] pimdir (src/pimdir/backend.rs:458-494): a blob read error is an entry, the card listed with its preview; a missing blob unchanged.
-- [ ] Paging: whole-read backends print their entries on the first page only; pimdir on the page holding the card.
-- [ ] A non-empty `errors` returns `PartialOutcome::default()` after printing (exit 3).
-- [ ] Text: `card list`'s paging fields move from the footer into the header after `Addressbook:`. Both lists print their `Error:` lines last, after the items and one blank line, nothing at all when `errors` is empty. The text tests (src/shared/card/list.rs:313-357) follow the moved paging and gain a case with an entry.
-- [ ] json-schema: `cardamum-item-error` registered; src/json_schema.rs:354 knows it.
-- [ ] MCP: the instructions (src/mcp.rs:44-56) name `errors`; tests/mcp.rs gains a `card_list` over a vdir holding an unreadable file, asserting `isError: true` with `structuredContent.errors`.
-- [ ] REPL: a session keeps its client after a partial outcome.
-- [ ] Tests: tests/ over a temp vdir with one file `chmod 000` (unix only): `card list --json` lists the others, prints the entry and exits 3; a card that does not parse lists with its entry; tests/exit.rs gains the exit 3 case.
-- [ ] Spec: the listing requirements folded (see delta.md).
-- [ ] Phase checks pass, the live suites' expectations read (tests/common.rs `assert_cards`) and adjusted for the `errors` key if they compare whole objects.
+- [x] `addressbook list` (src/shared/addressbook/list.rs:96-102) and `card list` (src/shared/card/list.rs:83-106) outputs gain `errors: Vec<ItemError>`, required in their schema; the unified client (src/shared/client.rs:470-495) carries the entries from each backend beside the items. The backends answer a `CardWindow { cards, errors }` (CardDAV, Graph and People through `From<Vec<Card>>`, with no entries); `CardPage::of` drops the entry of the card read past the page with that card. No backend reads an address book it cannot list whole, so `addressbook list` prints `errors: []` and `AddressbookUnreadable` stays out (io-vdir 0.3 fails `list_collections` whole).
+- [x] A body that does not parse or is not UTF-8 (src/shared/card/project.rs:47-50, src/shared/card/list.rs:237-240): listed as today, plus a `card-unreadable` entry. Checked once in the unified client (`shared::client::unreadable`, UTF-8 then `VcardCst::parse`) over the cards of the page, so on the page holding the card for every backend.
+- [x] vdir (src/vdir/backend.rs:101-125): `list_readable_items`, one `card-unreadable` entry per failed file; a vanished card left out silently.
+- [x] JMAP (src/jmap/backend.rs:174-197, src/jmap/project.rs:30-43): one card that does not project is an entry, the others listed. `project_cards`; the card is left out of the list. vcard-rs 0.6 `from_jscontact` cannot fail on a JSON object, so the one projection failure met is a card without an id (`null` id entry).
+- [x] pimdir (src/pimdir/backend.rs:458-494): a blob read error is an entry, the card listed with its preview; a missing blob unchanged. `listed_card` beside `card_from_item`, which keeps failing for `pimdir search`; the poisoned-page test now reads 5 entries.
+- [x] Paging: whole-read backends print their entries on the first page only; pimdir on the page holding the card.
+- [x] A non-empty `errors` returns `PartialOutcome::default()` after printing (exit 3).
+- [x] Text: `card list`'s paging fields move from the footer into the header after `Addressbook:`. Both lists print their `Error:` lines last, after the items and one blank line, nothing at all when `errors` is empty. The text tests (src/shared/card/list.rs:313-357) follow the moved paging and gain a case with an entry. Rendering through `error::write_item_errors`, a local copy of pimalaya-cli 79c0d9e `ItemErrors`; an empty page prints its header alone (no blank line), as 79c0d9e `Listing` does. addressbook list gained its first text tests.
+- [x] json-schema: `cardamum-item-error` registered; src/json_schema.rs:354 knows it.
+- [x] MCP: the instructions (src/mcp.rs:44-56) name `errors`; tests/mcp.rs gains a `card_list` over a vdir holding an unreadable file, asserting `isError: true` with `structuredContent.errors`.
+- [x] REPL: a session keeps its client after a partial outcome. `Session::run_unified` drops it only on an error holding no `PartialOutcome`; unit test in src/session.rs.
+- [x] Tests: tests/ over a temp vdir with one file `chmod 000` (unix only): `card list --json` lists the others, prints the entry and exits 3; a card that does not parse lists with its entry; tests/exit.rs gains the exit 3 case. tests/listing.rs (unreadable file, first page only, unparseable body, non-UTF-8 body, byte-exact text).
+- [x] Spec: the listing requirements folded (see delta.md).
+- [x] Phase checks pass, the live suites' expectations read (tests/common.rs `assert_cards`) and adjusted for the `errors` key if they compare whole objects. `assert_cards` reads keys one by one, no change.
 
 ## Phase 4, CardDAV rows (after io-webdav's a-listing-returns-what-it-could-not-read is pushed and pinned)
 

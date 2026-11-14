@@ -31,7 +31,7 @@ use pimalaya_cli::error::CodedError;
 
 use crate::{
     config::{AccountConfig, PimdirConfig},
-    error::ErrorCode,
+    error::{self, ErrorCode},
     pimdir::{
         client::{PimdirClient, refusal},
         status::{PimdirAddressbookStatus, PimdirParkedStatus, PimdirStatusOutput},
@@ -39,6 +39,7 @@ use crate::{
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
+        client::CardWindow,
     },
 };
 
@@ -236,14 +237,15 @@ impl PimdirBackend {
         addressbook_id: &str,
         mut skip: usize,
         take: Option<usize>,
-    ) -> Result<Vec<Card>> {
+    ) -> Result<CardWindow> {
         self.known_collection(addressbook_id)?;
 
         if take == Some(0) {
-            return Ok(Vec::new());
+            return Ok(CardWindow::default());
         }
 
         let mut cards = Vec::new();
+        let mut errors = Vec::new();
 
         self.scan(addressbook_id, |item| {
             if skip > 0 {
@@ -251,7 +253,13 @@ impl PimdirBackend {
                 return Ok(ControlFlow::Continue(()));
             }
 
-            cards.push(self.card_from_item(addressbook_id, item)?);
+            let (card, err) = self.listed_card(addressbook_id, item);
+
+            if let Some(err) = err {
+                errors.push(error::unreadable_card(Some(&card.id), err));
+            }
+
+            cards.push(card);
 
             match take {
                 Some(take) if cards.len() >= take => Ok(ControlFlow::Break(())),
@@ -259,7 +267,7 @@ impl PimdirBackend {
             }
         })?;
 
-        Ok(cards)
+        Ok(CardWindow { cards, errors })
     }
 
     /// Fetches `card_id` from `addressbook_id`, reading its blob.
@@ -455,9 +463,28 @@ impl PimdirBackend {
     /// store. The preview is never the record: [`get_card`](Self::get_card)
     /// refuses an unhydrated card outright.
     pub(crate) fn card_from_item(&self, addressbook_id: &str, item: PimdirItem) -> Result<Card> {
-        let stored = match &item.object {
-            Some(hash) => self.inner.reader.blobs().get(hash)?,
-            None => None,
+        match self.listed_card(addressbook_id, item) {
+            (card, None) => Ok(card),
+            (_, Some(err)) => Err(err),
+        }
+    }
+
+    /// Builds a shared [`Card`] from a stored item as a listing shows it,
+    /// beside the error its body could not be read with.
+    ///
+    /// A body that cannot be read lists as the preview an unhydrated card
+    /// lists as, the error left to the caller; a body the store does not
+    /// hold is no error.
+    fn listed_card(&self, addressbook_id: &str, item: PimdirItem) -> (Card, Option<Error>) {
+        let (stored, err) = match &item.object {
+            Some(hash) => match self.inner.reader.blobs().get(hash) {
+                Ok(stored) => (stored, None),
+                Err(err) => {
+                    let err = Error::from(err).context("Cannot read the card body");
+                    (None, Some(err))
+                }
+            },
+            None => (None, None),
         };
         // NOTE: the version is the body's, so a card whose blob is gone
         // has none, as an unfetched one has none.
@@ -472,7 +499,7 @@ impl PimdirBackend {
                 // NOTE: the blob may be gone from an inconsistent store
                 // rather than never fetched, which is worth a word since
                 // `get_card` refuses outright.
-                if item.object.is_some() {
+                if item.object.is_some() && err.is_none() {
                     warn!(
                         "body blob missing for card `{}` in `{addressbook_id}`, \
                          listing its summary instead",
@@ -484,12 +511,14 @@ impl PimdirBackend {
             }
         };
 
-        Ok(Card {
+        let card = Card {
             id: item.seq.to_string(),
             addressbook_id: addressbook_id.to_string(),
             etag,
             contents,
-        })
+        };
+
+        (card, err)
     }
 
     /// Fails unless the store knows `collection`, naming those it holds.
@@ -855,7 +884,7 @@ mod tests {
         assert_eq!(link, "urn:uuid:c1");
         drain(&dir);
 
-        let cards = backend.list_cards("book", 0, None).unwrap();
+        let cards = backend.list_cards("book", 0, None).unwrap().cards;
         assert_eq!(cards.len(), 1);
         let fields = CardFields::project(&cards[0].contents);
         assert_eq!(fields.full_name.as_deref(), Some("Jane Doe"));
@@ -904,7 +933,7 @@ mod tests {
         backend.create_card("book", JANE.to_vec()).unwrap();
         drain(&dir);
 
-        let listed = backend.list_cards("book", 0, None).unwrap();
+        let listed = backend.list_cards("book", 0, None).unwrap().cards;
         let id = listed[0].id.clone();
         let etag = backend.get_card("book", &id).unwrap().etag.unwrap();
         assert_eq!(listed[0].etag.as_deref(), Some(etag.as_str()));
@@ -932,7 +961,9 @@ mod tests {
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
         drain(&dir);
-        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
 
         let err = backend.delete_card("book", &id, Some("stale")).unwrap_err();
         assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));
@@ -943,7 +974,9 @@ mod tests {
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
         drain(&dir);
-        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
 
         let update = backend.update_card("book", &id, JANE.to_vec(), Some("stale"));
         let err = update.unwrap_err().to_string();
@@ -960,7 +993,13 @@ mod tests {
             .delete_card("book", &id, Some(&format!("\"{etag}\"")))
             .unwrap();
         assert_eq!(pending(&backend), 1);
-        assert!(backend.list_cards("book", 0, None).unwrap().is_empty());
+        assert!(
+            backend
+                .list_cards("book", 0, None)
+                .unwrap()
+                .cards
+                .is_empty()
+        );
 
         drain(&dir);
         assert!(backend.get_card("book", &id).is_err());
@@ -1021,7 +1060,7 @@ mod tests {
             Some(100),
         ] {
             for skip in [0, 1, 2, 5, 9, 50, 400] {
-                let streamed = backend.list_cards("book", skip, take).unwrap();
+                let streamed = backend.list_cards("book", skip, take).unwrap().cards;
                 let expected = eager(backend, skip, take).unwrap();
                 assert_eq!(streamed, expected, "{take:?} after {skip}");
                 listed += streamed.len();
@@ -1040,6 +1079,7 @@ mod tests {
         let ids: Vec<String> = backend
             .list_cards("book", 0, None)
             .unwrap()
+            .cards
             .into_iter()
             .map(|card| card.id)
             .collect();
@@ -1049,11 +1089,11 @@ mod tests {
         assert!(ids.len() > 4 * SCAN_BATCH);
         backend.delete_card("book", &ids[11], None).unwrap();
         assert_streams_as_it_listed(&mut backend);
-        assert_eq!(backend.list_cards("book", 0, None).unwrap().len(), 39);
+        assert_eq!(backend.list_cards("book", 0, None).unwrap().cards.len(), 39);
     }
 
     /// Makes the bodies of `ids` unreadable: each blob loses every
-    /// permission, so any read of it fails the listing.
+    /// permission, so any read of it fails.
     ///
     /// A directory where a blob belongs no longer does, io-pimdir reading
     /// it as a stray, so as an absent body (pimdir STORAGE §7).
@@ -1082,10 +1122,11 @@ mod tests {
         let order: Vec<String> = backend
             .list_cards("book", 0, None)
             .unwrap()
+            .cards
             .into_iter()
             .map(|card| card.id)
             .collect();
-        let page = backend.list_cards("book", 10, Some(5)).unwrap();
+        let page = backend.list_cards("book", 10, Some(5)).unwrap().cards;
         assert_eq!(
             page.iter().map(|card| card.id.clone()).collect::<Vec<_>>(),
             order[10..15]
@@ -1094,9 +1135,44 @@ mod tests {
         poison(&backend, &order[..10]);
         poison(&backend, &order[15..]);
 
-        assert_eq!(backend.list_cards("book", 10, Some(5)).unwrap(), page);
+        let listed = backend.list_cards("book", 10, Some(5)).unwrap();
+        assert_eq!(listed.cards, page);
+        assert!(listed.errors.is_empty(), "{:?}", listed.errors);
         assert!(eager(&backend, 10, Some(5)).is_err());
-        assert!(backend.list_cards("book", 5, Some(5)).is_err());
+        assert_eq!(
+            backend.list_cards("book", 5, Some(5)).unwrap().errors.len(),
+            5
+        );
+    }
+
+    /// A body that cannot be read is an entry on the page holding its
+    /// card, the card listed with its preview and no version.
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_body_is_an_entry_its_card_listed_with_its_preview() {
+        use crate::error::ErrorCode;
+
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        drain(&dir);
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
+        poison(&backend, std::slice::from_ref(&id));
+
+        let listed = backend.list_cards("book", 0, None).unwrap();
+        assert_eq!(listed.cards.len(), 1);
+        assert_eq!(listed.cards[0].id, id);
+        assert_eq!(listed.cards[0].etag, None);
+        let preview = String::from_utf8(listed.cards[0].contents.clone()).unwrap();
+        assert!(preview.contains("FN:Jane Doe\r\n"), "{preview}");
+
+        assert_eq!(listed.errors.len(), 1, "{:?}", listed.errors);
+        let entry = &listed.errors[0];
+        assert_eq!(entry.id.as_deref(), Some(id.as_str()));
+        assert_eq!(entry.code, Some(ErrorCode::CardUnreadable));
+        assert_eq!(entry.error, "Cannot read the card body");
+        assert!(!entry.sources.is_empty());
     }
 
     /// A card in the address book `local`, which the device keeps and no
@@ -1153,12 +1229,16 @@ mod tests {
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
         drain(&dir);
-        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
         let hash = backend.item("book", &id).unwrap().object.unwrap();
         std::fs::remove_file(backend.inner.reader.blobs().path(&hash).unwrap()).unwrap();
 
+        // NOTE: a body the store does not hold is no error of the listing.
         let listed = backend.list_cards("book", 0, None).unwrap();
-        assert_eq!(listed[0].etag, None);
+        assert_eq!(listed.cards[0].etag, None);
+        assert!(listed.errors.is_empty());
 
         let err = backend.delete_card("book", &id, Some(&hash.0)).unwrap_err();
         assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));
@@ -1290,7 +1370,9 @@ mod tests {
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
         drain(&dir);
-        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
         let joe = String::from_utf8(card(1, "Joe Bloggs")).unwrap();
         let roe = String::from_utf8(JANE.to_vec())
             .unwrap()
@@ -1345,7 +1427,7 @@ mod tests {
         assert_eq!(code_of(&err), Some(ErrorCode::ItemDuplicate), "{err:#}");
         assert_eq!(pending(&backend), 0);
         assert_eq!(objects(&dir), before, "a refused create leaves no body");
-        assert_eq!(backend.list_cards("book", 0, None).unwrap().len(), 1);
+        assert_eq!(backend.list_cards("book", 0, None).unwrap().cards.len(), 1);
     }
 
     /// Every file of the store's blob tree, sorted.
@@ -1421,7 +1503,9 @@ mod tests {
     fn an_edit_whose_body_a_sync_replaced_is_parked() {
         let (dir, mut backend) = store();
         pulled(&dir, "book", JANE);
-        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
         let read = backend.get_card("book", &id).unwrap();
         let rename = |name: &str| {
             String::from_utf8(JANE.to_vec())
@@ -1453,7 +1537,9 @@ mod tests {
     fn a_delete_whose_body_a_sync_replaced_is_parked() {
         let (dir, mut backend) = store();
         pulled(&dir, "book", JANE);
-        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
         let read = backend.get_card("book", &id).unwrap();
         let renamed = String::from_utf8(JANE.to_vec())
             .unwrap()
@@ -1544,7 +1630,9 @@ mod tests {
         let written = pull("carddav", "jane.vcf", &rename("Jane Poe"), "e2");
         assert_eq!(written.conflicted.len(), 1, "no conflict to write over");
 
-        let id = backend.list_cards("book", 0, None).unwrap()[0].id.clone();
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
         let read = backend.get_card("book", &id).unwrap();
         assert_eq!(read.contents, rename("Jane Roe"));
 
@@ -1595,7 +1683,9 @@ mod tests {
             pulled(&dir, book, JANE);
 
             let mut backend = open(account);
-            let id = backend.list_cards(book, 0, None).unwrap()[0].id.clone();
+            let id = backend.list_cards(book, 0, None).unwrap().cards[0]
+                .id
+                .clone();
             let read = backend.get_card(book, &id).unwrap();
             backend
                 .update_card(book, &id, rename("Jane Roe"), read.etag.as_deref())

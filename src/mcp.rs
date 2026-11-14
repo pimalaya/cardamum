@@ -53,7 +53,10 @@ says what this account's backend serves; a tool it cannot serve is not \
 listed. The tools that change the addressbooks or the cards are listed \
 only when the server runs with --allow-write. A failed call answers \
 isError with a cardamum-error object, its `code` naming the failure when \
-it has one.";
+it has one. A listing names what it could not read in `errors`, one \
+cardamum-item-error object (`id`, `code`, `error`, `sources`) per card or \
+addressbook; when that list is not empty the call answers isError beside \
+its result, the items it read included.";
 
 /// The leaves exposed as tools, with what each may do.
 ///

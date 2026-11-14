@@ -8,13 +8,15 @@
 //! keeps its session across lines and the [`crate::mcp`] server across
 //! tool calls, so the unified client connects once. A command that fails
 //! drops the client it ran on, its connection being possibly dead or left
-//! mid-exchange, and the next command builds it again. The protocol
+//! mid-exchange, and the next command builds it again; a partial outcome
+//! (a listing with `errors`) keeps it, the command having run to its end.
+//! The protocol
 //! commands build their own client each time.
 
 use std::path::PathBuf;
 
 use anyhow::Result;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{error::partial_outcome_of, printer::Printer};
 
 use crate::{backend::Backend, cli::resolve_account, shared::client::AddressbookClient};
 
@@ -40,7 +42,8 @@ pub struct SessionAccount<'a> {
 
 impl Session<'_> {
     /// Runs a unified command over the kept client, building it when the
-    /// session holds none, and dropping it when the command fails.
+    /// session holds none, and dropping it when the command fails short of
+    /// a partial outcome.
     pub fn run_unified<P: Printer>(
         &mut self,
         printer: &mut P,
@@ -59,10 +62,55 @@ impl Session<'_> {
 
         let result = command(printer, client);
 
-        if result.is_err() {
+        // NOTE: a partial outcome ran to its end, its connection whole.
+        if let Err(err) = &result
+            && partial_outcome_of(err).is_none()
+        {
             self.unified = None;
         }
 
         result
+    }
+}
+
+#[cfg(all(test, feature = "vdir"))]
+mod tests {
+    use anyhow::anyhow;
+    use pimalaya_cli::{error::PartialOutcome, printer::CapturePrinter};
+
+    use super::*;
+    use crate::config::{AccountConfig, Config, VdirConfig};
+
+    /// A session holding a vdir client over an empty home.
+    fn session() -> Session<'static> {
+        let account = AccountConfig {
+            vdir: Some(VdirConfig {
+                home_dir: String::from("/nonexistent"),
+            }),
+            ..Default::default()
+        };
+        let client =
+            AddressbookClient::new(Config::default(), "a".into(), account, Backend::Auto).unwrap();
+
+        Session {
+            unified: Some(client),
+            ..Default::default()
+        }
+    }
+
+    /// A partial outcome keeps the client, a failure drops it.
+    #[test]
+    fn a_partial_outcome_keeps_the_client_a_failure_drops_it() {
+        let mut session = session();
+        let mut printer = CapturePrinter::default();
+
+        let partial =
+            session.run_unified(&mut printer, |_, _| Err(PartialOutcome::default().into()));
+        assert!(partial.is_err());
+        assert!(session.unified.is_some());
+
+        let failed = session.run_unified(&mut printer, |_, _| Err(anyhow!("Gone")));
+        assert!(failed.is_err());
+        assert!(session.unified.is_none());
     }
 }

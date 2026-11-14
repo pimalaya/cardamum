@@ -31,15 +31,17 @@
 )))]
 use std::convert::Infallible;
 
-use anyhow::{Result, bail};
+use anyhow::{Error, Result, bail};
 use log::debug;
 use pimalaya_config::secret::SecretResolver;
+use vcard::tree::cst::VcardCst;
 
 use crate::{
     account::context::Account,
     backend::Backend,
     capability::{self, Capability},
     config::{AccountConfig, Config},
+    error::{self, ItemError},
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -484,14 +486,8 @@ impl AddressbookClient {
             }
         };
 
-        let mut cards = self.list_cards_window(addressbook_id, skip, take)?;
-        let more = take.is_some_and(|take| cards.len() >= take);
-
-        if more {
-            cards.pop();
-        }
-
-        Ok(CardPage { cards, more })
+        let window = self.list_cards_window(addressbook_id, skip, take)?;
+        Ok(CardPage::of(window, take))
     }
 
     /// Lists the `take` cards of `addressbook_id` after the first `skip`,
@@ -501,7 +497,7 @@ impl AddressbookClient {
         addressbook_id: &str,
         skip: usize,
         take: Option<usize>,
-    ) -> Result<Vec<Card>> {
+    ) -> Result<CardWindow> {
         match self.open()? {
             #[cfg(not(any(
                 feature = "vdir",
@@ -517,13 +513,19 @@ impl AddressbookClient {
             #[cfg(feature = "pimdir")]
             BackendClient::Pimdir(client) => client.list_cards(addressbook_id, skip, take),
             #[cfg(feature = "carddav")]
-            BackendClient::Carddav(client) => client.list_cards(addressbook_id, skip, take),
+            BackendClient::Carddav(client) => client
+                .list_cards(addressbook_id, skip, take)
+                .map(CardWindow::from),
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.list_cards(addressbook_id, skip, take),
             #[cfg(feature = "msgraph")]
-            BackendClient::Msgraph(client) => client.list_cards(addressbook_id, skip, take),
+            BackendClient::Msgraph(client) => client
+                .list_cards(addressbook_id, skip, take)
+                .map(CardWindow::from),
             #[cfg(feature = "gpeople")]
-            BackendClient::Gpeople(client) => client.list_cards(addressbook_id, skip, take),
+            BackendClient::Gpeople(client) => client
+                .list_cards(addressbook_id, skip, take)
+                .map(CardWindow::from),
         }
     }
 
@@ -686,6 +688,79 @@ pub fn window<T>(items: Vec<T>, skip: usize, take: Option<usize>) -> Vec<T> {
     }
 }
 
+/// The errors of a listing that reads the whole address book before
+/// cutting its page: on the first page only, so no page repeats them.
+#[cfg(any(feature = "jmap", feature = "vdir"))]
+pub fn first_page(errors: Vec<ItemError>, skip: usize) -> Vec<ItemError> {
+    match skip {
+        0 => errors,
+        _ => Vec::new(),
+    }
+}
+
+/// Why `contents` reads as no vCard: a body that is not UTF-8, or that
+/// does not parse; `None` for one that does.
+pub fn unreadable(contents: &[u8]) -> Option<Error> {
+    if let Err(err) = std::str::from_utf8(contents) {
+        return Some(Error::new(err).context("Cannot read the card body as UTF-8"));
+    }
+
+    match VcardCst::parse(contents) {
+        Ok(_) => None,
+        Err(err) => Some(Error::new(err).context("Cannot parse the card body as a vCard")),
+    }
+}
+
+/// The cards a backend listed for a page, beside the errors of the cards
+/// it could not read.
+#[derive(Debug, Default)]
+pub struct CardWindow {
+    /// The cards listed, in the backend's order.
+    pub cards: Vec<Card>,
+    /// The error of each card the backend could not read, in the order
+    /// met.
+    pub errors: Vec<ItemError>,
+}
+
+impl CardPage {
+    /// The page `window` holds, `take` being the page size plus one: the
+    /// card past the page, when listed, tells that another follows and
+    /// leaves with its entry. Each card left whose body reads as no vCard
+    /// gains an entry.
+    fn of(window: CardWindow, take: Option<usize>) -> Self {
+        let CardWindow {
+            mut cards,
+            mut errors,
+        } = window;
+        let more = take.is_some_and(|take| cards.len() >= take);
+
+        if more && let Some(next) = cards.pop() {
+            errors.retain(|error| error.id.as_deref() != Some(next.id.as_str()));
+        }
+
+        for card in &cards {
+            if let Some(err) = unreadable(&card.contents) {
+                errors.push(error::unreadable_card(Some(&card.id), err));
+            }
+        }
+
+        Self {
+            cards,
+            more,
+            errors,
+        }
+    }
+}
+
+impl From<Vec<Card>> for CardWindow {
+    fn from(cards: Vec<Card>) -> Self {
+        Self {
+            cards,
+            errors: Vec::new(),
+        }
+    }
+}
+
 /// One page of a card listing.
 #[derive(Debug, Default)]
 pub struct CardPage {
@@ -693,4 +768,48 @@ pub struct CardPage {
     pub cards: Vec<Card>,
     /// Whether more cards follow the page.
     pub more: bool,
+    /// The error of each card the page could not read, in the order met.
+    pub errors: Vec<ItemError>,
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::anyhow;
+
+    use super::*;
+    use crate::error::ErrorCode;
+
+    fn card(id: &str, contents: &str) -> Card {
+        Card {
+            id: id.to_string(),
+            addressbook_id: String::from("book"),
+            etag: None,
+            contents: contents.as_bytes().to_vec(),
+        }
+    }
+
+    const CARD: &str = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ada\r\nEND:VCARD\r\n";
+
+    /// The card past a page leaves with its entry, which the next page
+    /// prints; a card of the page whose body is no vCard gains one.
+    #[test]
+    fn a_page_keeps_the_entries_of_its_own_cards() {
+        let entry = |id| error::unreadable_card(Some(id), anyhow!("Cannot read the card body"));
+        let window = CardWindow {
+            cards: vec![card("1", CARD), card("2", "not a card"), card("3", CARD)],
+            errors: vec![entry("1"), entry("3")],
+        };
+
+        let page = CardPage::of(window, Some(3));
+        assert!(page.more);
+        let ids: Vec<&str> = page.cards.iter().map(|card| card.id.as_str()).collect();
+        assert_eq!(ids, ["1", "2"]);
+        let ids: Vec<_> = page.errors.iter().map(|error| error.id.clone()).collect();
+        assert_eq!(ids, [Some("1".into()), Some("2".into())]);
+        assert!(
+            page.errors
+                .iter()
+                .all(|error| error.code == Some(ErrorCode::CardUnreadable))
+        );
+    }
 }

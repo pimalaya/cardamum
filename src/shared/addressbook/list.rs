@@ -12,12 +12,15 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::capability::Capability;
+use crate::error::{ItemError, partial_when, write_item_errors};
 use crate::shared::{addressbook::Addressbook, client::AddressbookClient};
 
 /// List every addressbook available to the active account.
 ///
 /// JSON output: `{"addressbooks": [{"id", "name", "description",
-/// "color"}]}`.
+/// "color", "default"}], "errors": [{"id", "code", "error", "sources"}]}`:
+/// the address books, then the error of each one the account could not
+/// read, `[]` when none, the command then exiting 3.
 #[derive(Debug, Parser)]
 pub struct AddressbookListCommand;
 
@@ -28,9 +31,11 @@ impl AddressbookListCommand {
 
         let output = AddressbookListOutput {
             rows: addressbooks.into_iter().map(From::from).collect(),
+            errors: Vec::new(),
         };
 
-        printer.out(output)
+        printer.out(&output)?;
+        partial_when(&output.errors)
     }
 }
 
@@ -41,6 +46,9 @@ pub struct AddressbookListOutput {
     /// The addressbooks the account exposes.
     #[serde(rename = "addressbooks")]
     pub rows: Vec<AddressbookRow>,
+    /// The error of each address book the account could not read, in the
+    /// order met.
+    pub errors: Vec<ItemError>,
 }
 
 /// One addressbook, as rendered by [`AddressbookListOutput`].
@@ -90,6 +98,60 @@ impl fmt::Display for AddressbookListOutput {
             ]);
         }
 
-        write!(f, "{columns}")
+        write!(f, "{columns}")?;
+        write_item_errors(f, &self.errors)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use anyhow::anyhow;
+
+    use super::*;
+
+    fn output() -> AddressbookListOutput {
+        AddressbookListOutput {
+            rows: vec![AddressbookRow {
+                id: String::from("personal"),
+                name: String::from("Personal"),
+                description: None,
+                color: Some(String::from("#ff0000")),
+                default: true,
+            }],
+            errors: Vec::new(),
+        }
+    }
+
+    /// The table alone when every address book was read.
+    #[test]
+    fn a_listing_without_errors_prints_its_table_alone() {
+        let expected = "\
+ID        DEFAULT  COLOR    NAME
+personal  yes      #ff0000  Personal
+";
+        assert_eq!(output().to_string(), expected);
+    }
+
+    /// The errors print last, after the table and one blank line.
+    #[test]
+    fn the_errors_print_last_after_one_blank_line() {
+        let mut output = output();
+        output.errors = vec![
+            ItemError::new(Some("work"), &anyhow!("Cannot read it")),
+            ItemError::new(None, &anyhow!("Gone")),
+        ];
+
+        let expected = "\
+ID        DEFAULT  COLOR    NAME
+personal  yes      #ff0000  Personal
+
+Error:  work  -  Cannot read it
+Error:  -     -  Gone
+";
+        assert_eq!(output.to_string(), expected);
+
+        let json = serde_json::to_value(&output).unwrap();
+        assert_eq!(json["errors"][0]["id"], "work");
+        assert_eq!(json["errors"][1]["id"], serde_json::Value::Null);
     }
 }

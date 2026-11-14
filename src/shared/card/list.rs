@@ -14,6 +14,7 @@ use serde::Serialize;
 use crate::{
     backend::Backend,
     capability::Capability,
+    error::{ItemError, partial_when, write_item_errors},
     shared::{
         arg::AddressbookIdArg,
         card::{Card, project::CardFields},
@@ -26,11 +27,13 @@ use crate::{
 /// JSON output: `{"cards": [{"id", "addressbookId", "etag", "fnValue",
 /// "email", "tel", "uid", "fullName", "givenName", "familyName",
 /// "emails", "phones", "organization", "organizationUnits", "title",
-/// "note"}], "nextPage"}`: the first `FN`, `EMAIL` and `TEL` as before,
-/// then the common fields read through the decoded vCard, every address
-/// and number included, then the cursor of the next page, `null` on the
-/// last one. A card whose body is not available yet carries what its
-/// backend knows of it.
+/// "note"}], "nextPage", "errors": [{"id", "code", "error",
+/// "sources"}]}`: the first `FN`, `EMAIL` and `TEL` as before, then the
+/// common fields read through the decoded vCard, every address and
+/// number included, then the cursor of the next page, `null` on the last
+/// one, then the error of each card the page could not read, `[]` when
+/// none, the command then exiting 3. A card whose body is not available
+/// yet carries what its backend knows of it.
 #[derive(Debug, Parser)]
 pub struct CardListCommand {
     /// Addressbook to list the cards of.
@@ -66,7 +69,7 @@ impl CardListCommand {
         let page_size = Some(page_size).filter(|size| *size > 0);
         let listing = client.list_cards(&addressbook_id, Some(page), page_size)?;
 
-        printer.out(CardListOutput {
+        let output = CardListOutput {
             account: client.name.clone(),
             backend: client.backend(),
             addressbook: addressbook_id,
@@ -74,7 +77,11 @@ impl CardListCommand {
             page_size,
             cards: listing.cards.into_iter().map(CardRow::from).collect(),
             next_page: listing.more.then(|| (page + 1).to_string()),
-        })
+            errors: listing.errors,
+        };
+
+        printer.out(&output)?;
+        partial_when(&output.errors)
     }
 }
 
@@ -103,6 +110,8 @@ pub struct CardListOutput {
     /// The cursor of the next page, `null` once the listing is complete,
     /// given back through `--page-token`.
     pub next_page: Option<String>,
+    /// The error of each card the page could not read, in the order met.
+    pub errors: Vec<ItemError>,
 }
 
 /// One card, previewed as rendered by [`CardListOutput`].
@@ -142,17 +151,19 @@ impl From<Card> for CardRow {
 }
 
 impl CardListOutput {
-    /// The fields above the cards: the account with its backend and the
-    /// addressbook.
+    /// The fields above the cards: the account with its backend, the
+    /// addressbook, then the paging.
     fn header(&self) -> Vec<(&'static str, String)> {
         let account = format!("{} ({})", sanitize::text(&self.account), self.backend);
         let addressbook = sanitize::text(&self.addressbook).into_owned();
-        vec![("Account", account), ("Addressbook", addressbook)]
+        let mut fields = vec![("Account", account), ("Addressbook", addressbook)];
+        fields.extend(self.paging());
+        fields
     }
 
-    /// The fields under the cards: the page with the cards it holds, and
-    /// the flag reaching the next page.
-    fn footer(&self) -> Vec<(&'static str, String)> {
+    /// The page with the cards it holds, and the flag reaching the next
+    /// page.
+    fn paging(&self) -> Vec<(&'static str, String)> {
         let count = self.cards.len() as u64;
         let (page, first) = match (self.page, self.page_size) {
             (Some(page), Some(size)) => {
@@ -216,16 +227,13 @@ impl fmt::Display for CardListOutput {
         }
 
         write_fields(f, &self.header())?;
-        writeln!(f)?;
 
-        let rows = columns.to_string();
-
-        if !rows.is_empty() {
-            f.write_str(&rows)?;
+        if !self.cards.is_empty() {
             writeln!(f)?;
+            write!(f, "{columns}")?;
         }
 
-        write_fields(f, &self.footer())
+        write_item_errors(f, &self.errors)
     }
 }
 
@@ -307,22 +315,22 @@ mod tests {
                 card("bob", "BEGIN:VCARD\r\nFN:Bob\r\nEND:VCARD\r\n"),
             ],
             next_page: Some(String::from("2")),
+            errors: Vec::new(),
         }
     }
 
-    /// A page prints its context, one line per card with the name last,
-    /// then the page and the flag reaching the next one.
+    /// A page prints its context and its paging, then one line per card
+    /// with the name last, and nothing under the cards.
     #[test]
-    fn a_page_prints_one_line_per_card_between_its_header_and_footer() {
+    fn a_page_prints_its_paging_above_one_line_per_card() {
         let expected = "\
 Account:      work (vdir)
 Addressbook:  personal
+Page:         1, cards 1 to 2
+Next page:    --page 2
 
 ada  ada@example.org  +33 6  Ada Lovelace
 bob  -                -      Bob
-
-Page:         1, cards 1 to 2
-Next page:    --page 2
 ";
         assert_eq!(output().to_string(), expected);
     }
@@ -337,10 +345,9 @@ Next page:    --page 2
         let expected = "\
 Account:      work (vdir)
 Addressbook:  personal
+Page:         2, card 3, the last
 
 ada  ada@example.org  +33 6  Ada Lovelace
-
-Page:         2, card 3, the last
 ";
         assert_eq!(output.to_string(), expected);
 
@@ -350,18 +357,62 @@ Page:         2, card 3, the last
         let expected = "\
 Account:      work (vdir)
 Addressbook:  personal
-
 Page:         3, empty
 ";
         assert_eq!(output.to_string(), expected);
     }
 
-    /// The text-only context stays out of the JSON, the cursor goes in.
+    /// The errors print last, after the cards and one blank line, aligned
+    /// among themselves, `-` for an absent id or code.
     #[test]
-    fn the_json_carries_the_cards_and_the_cursor() {
+    fn the_errors_print_last_after_one_blank_line() {
+        use anyhow::anyhow;
+
+        use crate::{error, shared::client::unreadable};
+
+        let mut output = output();
+        output.cards.push(card("bad", "not a card"));
+        output.errors = vec![
+            error::unreadable_card(Some("bad"), unreadable(b"not a card").unwrap()),
+            error::ItemError::new(Some("42"), &anyhow!("Gone")),
+        ];
+
+        let expected = "\
+Account:      work (vdir)
+Addressbook:  personal
+Page:         1, cards 1 to 3
+Next page:    --page 2
+
+ada  ada@example.org  +33 6  Ada Lovelace
+bob  -                -      Bob
+bad  -                -      -
+
+Error:  bad  card-unreadable  Cannot parse the card body as a vCard
+Error:  42   -                Gone
+";
+        assert_eq!(output.to_string(), expected);
+
+        output.cards.clear();
+        output.errors.truncate(1);
+        let expected = "\
+Account:      work (vdir)
+Addressbook:  personal
+Page:         1, empty
+Next page:    --page 2
+
+Error:  bad  card-unreadable  Cannot parse the card body as a vCard
+";
+        assert_eq!(output.to_string(), expected);
+    }
+
+    /// The text-only context stays out of the JSON, the cursor and the
+    /// errors go in.
+    #[test]
+    fn the_json_carries_the_cards_the_cursor_and_the_errors() {
         let json = serde_json::to_value(output()).unwrap();
         let keys: Vec<_> = json.as_object().unwrap().keys().cloned().collect();
-        assert_eq!(keys, ["cards", "nextPage"]);
+        assert_eq!(keys, ["cards", "errors", "nextPage"]);
         assert_eq!(json["nextPage"], "2");
+        assert_eq!(json["errors"], serde_json::json!([]));
     }
 }

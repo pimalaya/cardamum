@@ -64,7 +64,7 @@ A rejected protocol write SHALL surface as prose: the server's own error type an
 All output, data and errors alike, SHALL go to stdout through the printer, distinguished by the exit code; `--json` switches every command to JSON. stderr carries logs and interactive prompts only, so redirecting stdout is always safe.
 
 ### Requirement: Exit statuses
-The binary SHALL exit 0 on success, 1 with the failure object printed, 2 on a command line the grammar refuses (an unknown flag or command, a missing argument, a bad value), and 3 on a partial outcome, a command that printed its result without fully succeeding (`pimalaya_cli::error::PartialOutcome`, `account check` with a failed backend). The binary SHALL parse its command line through `pimalaya_cli::clap::parse`: help and version print as clap prints them; a refused command line with a `--json` word before any `--` SHALL print on stdout the failure object coded `usage-invalid`, its `error` clap's message without the `error: ` prefix nor styles, and without `--json` clap's rendering on stderr.
+The binary SHALL exit 0 on success, 1 with the failure object printed, 2 on a command line the grammar refuses (an unknown flag or command, a missing argument, a bad value), and 3 on a partial outcome, a command that printed its result without fully succeeding (`pimalaya_cli::error::PartialOutcome`): `account check` with a failed backend, and a listing whose `errors` is not empty. The binary SHALL parse its command line through `pimalaya_cli::clap::parse`: help and version print as clap prints them; a refused command line with a `--json` word before any `--` SHALL print on stdout the failure object coded `usage-invalid`, its `error` clap's message without the `error: ` prefix nor styles, and without `--json` clap's rendering on stderr.
 
 #### Scenario: A refused command line under JSON
 - GIVEN any configuration, or none
@@ -167,7 +167,7 @@ The name flags SHALL be named for the role, given and family, rather than for th
 `card delete` SHALL take `--if-match <ETAG>`. CardDAV SHALL send it as `If-Match` and pimdir SHALL check it as an update does; the backends that cannot gate a delete (vdir, jmap, msgraph, gpeople) SHALL refuse it rather than drop it.
 
 ### Requirement: A JSON error carries a stable code
-A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`. The code SHALL be found anywhere in the error chain, so added context does not hide it, or read from the typed error of the protocol that refused ("A server's refusal carries its code"). A failure with no code SHALL print `"code": null`. The plain output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording. A pimdir store's code is the one io-pimdir names (`PimdirError::code()`), never read off its message. Every code SHALL be declared in every build, whatever the backends compiled in.
+A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`, and in an `errors` entry beside `id`, `error` and `sources`. The code SHALL be found anywhere in the error chain, so added context does not hide it, or read from the typed error of the protocol that refused ("A server's refusal carries its code"). A failure with no code SHALL print `"code": null`. The plain output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording. A pimdir store's code is the one io-pimdir names (`PimdirError::code()`), never read off its message. Every code SHALL be declared in every build, whatever the backends compiled in.
 
 | Code | Raised when |
 |---|---|
@@ -179,7 +179,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `permission-denied` | the server refused the request to the account (see "A server's refusal carries its code") |
 | `quota-exceeded` | the write would exceed the account's quota |
 | `rate-limited` | the server throttled the request; cardamum retries nothing |
-| `card-unreadable` | declared for the `errors` entry of a card a listing could not read; no command raises it yet |
+| `card-unreadable` | the backend answered for a card cardamum could not read: its file could not be read (vdir), its body did not parse as a vCard or is not UTF-8, it did not project (JMAP), its body could not be read (pimdir); an `errors` entry |
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
 | `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |
 | `store-uncreated` | the pimdir root holds no store; its sync engine creates it |
@@ -211,7 +211,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 - THEN the command exits 1 and prints a failure object coded `card-not-found`
 
 ### Requirement: The JSON contract is described and versioned
-`json-schema` SHALL describe the failure object under the key `cardamum-error`, its `code` typed by the code vocabulary and pimalaya-cli's `usage-invalid`. Every generated schema SHALL carry an `$id` naming the contract version: the major version of cardamum, or `0.<minor>` before 1.0. Every registered payload SHALL be a JSON object, checked by a test: a command whose shapes are one untagged type answers an empty object for a shape carrying nothing (an abandoned `card create -i`), never `null`. Piped `--json` output SHALL print one value per line.
+`json-schema` SHALL describe the failure object under the key `cardamum-error`, its `code` typed by the code vocabulary and pimalaya-cli's `usage-invalid`, and the item error of an `errors` list under `cardamum-item-error`, its `code` typed by the code vocabulary. Every generated schema SHALL carry an `$id` naming the contract version: the major version of cardamum, or `0.<minor>` before 1.0. Every registered payload SHALL be a JSON object, checked by a test: a command whose shapes are one untagged type answers an empty object for a shape carrying nothing (an abandoned `card create -i`), never `null`. Piped `--json` output SHALL print one value per line.
 
 ### Requirement: A card projects its common fields
 `card list` rows and the `card read` output SHALL carry the card's common fields, read through vcard-rs's decoded model rather than off raw lines: `uid`, `fullName`, `givenName` and `familyName` (the `N` components, space-joined), `emails` and `phones` (every `EMAIL` and `TEL` in document order, a `tel:` URI as its number), `organization` and `organizationUnits` (the `ORG` components), `title` and `note`. A card that does not parse SHALL project nothing rather than fail the listing. The projection is read-only: the vCard stays the record.
@@ -273,10 +273,26 @@ The report `pimdir search` and `pimdir count` draw over a query they refuse SHAL
 A field taken from a card or a server (a name, an address, an id, an error a server wrote) SHALL have its control characters and bidi controls replaced before it is printed as text (pimalaya-cli `sanitize::text`), the write confirmations included. The `card read` view SHALL replace them in the card too, keeping tabs and line feeds and reading CRLF as LF. JSON strings and the raw bytes a command is asked for SHALL remain unchanged.
 
 ### Requirement: A card page names its context and its next page
-`card list` SHALL print `Account: <name> (<backend>)` and `Addressbook: <id>` above the cards, a blank line, one line per card with no column header (`id  email  phone  name`, the free-text name last, `-` for an empty cell), a blank line, then `Page: <n>, cards <a> to <b>` (`card <a>` for one, `empty` for none, `all` when unpaged) followed by `, the last` when no card follows, and `Next page: --page <n>` while one does, the values aligned in one column.
+`card list` SHALL print above the cards `Account: <name> (<backend>)`, `Addressbook: <id>`, `Page: <n>, cards <a> to <b>` (`card <a>` for one, `empty` for none, `all` when unpaged) followed by `, the last` when no card follows, and `Next page: --page <n>` while one does, the values aligned in one column; then a blank line and one line per card with no column header (`id  email  phone  name`, the free-text name last, `-` for an empty cell). Below the cards SHALL print only the command's errors ("A command's errors print at its end").
 
 ### Requirement: Listings resume from their cursor
 `card list` SHALL print `nextPage` beside `cards`: the next page number, as a string, while cards follow the page, `null` otherwise, and SHALL take it back through `--page-token`, which wins over `--page`. Whether cards follow is exact on every backend: the unified client reads one card past the page.
+
+### Requirement: A listing names the items it could not read
+`addressbook list` and `card list` SHALL print an `errors` list beside their items, under `--json` and in text: one pimalaya-cli item error `{id, code, error, sources}` per address book or card the command could not read, `[]` when there is none, in the order met. `id` SHALL be the item's id as the command prints ids, `null` when the backend named none; `code` a code of the vocabulary or `null`; `error` the message; `sources` the backend's own reasons, outermost first. An item listed in part (a card whose body does not parse) SHALL print in the list and in `errors`. A non-empty `errors` SHALL make the command exit 3 once it printed its result. A listing that reads the whole address book before cutting its page SHALL print its entries on the first page only.
+
+#### Scenario: A vdir card that cannot be read
+- GIVEN a vdir address book holding three cards, one of whose files cannot be read
+- WHEN `cardamum --json card list` runs
+- THEN it prints the two other cards and `"errors":[{"id":"<its id>","code":"card-unreadable",…}]`, and the exit status is 3
+
+#### Scenario: A card that does not parse
+- GIVEN a card whose body is no vCard
+- WHEN `cardamum --json card list` runs
+- THEN the card lists with its id and empty fields, an entry coded `card-unreadable` names it, and the exit status is 3
+
+### Requirement: A command's errors print at its end
+In the text output, each `errors` entry SHALL print as one `Error:` line, `<id>  <code>  <error>` with `-` for a null id or code, last in the command's output: after the items and one blank line, the `Error:` lines aligned among themselves. Nothing SHALL print, the blank line included, when `errors` is empty.
 
 ### Requirement: Capability registry
 Each backend SHALL declare, in a table compiled into every build, each capability of the unified API (`addressbook.list`, `addressbook.create`, `addressbook.rename`, `addressbook.delete`, `addressbook.description`, `addressbook.color`, `card.list`, `card.read`, `card.add`, `card.update`, `card.remove`, `card.update.if-match`, `card.remove.if-match`) at `full`, `partial`, `server` or `none`, every level but `full` with a detail saying what differs, which server refuses, or what serves it instead. A backend declares a capability only when it gives the result every other declarer gives.

@@ -4,7 +4,7 @@
 //! card operations onto [`io_vdir::client::VdirClient`] calls against the
 //! configured home directory.
 
-use std::path::Path;
+use std::{io, path::Path};
 
 use anyhow::{Error, Result, bail};
 use io_vdir::{client::VdirClient, collection::VdirCollection, item::VdirItemKind, path::VdirPath};
@@ -12,11 +12,11 @@ use pimalaya_cli::error::CodedError;
 
 use crate::{
     config::VdirConfig,
-    error::ErrorCode,
+    error::{self, ErrorCode},
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
-        client::window,
+        client::{CardWindow, first_page, window},
     },
 };
 
@@ -100,14 +100,28 @@ impl VdirBackend {
 
     /// Lists the `take` vCard items inside `addressbook_id` after the first
     /// `skip`.
+    ///
+    /// A file that cannot be read is an entry naming its card, on the
+    /// first page only, the whole directory being read for every page; a
+    /// file removed while it lists is left out.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
         skip: usize,
         take: Option<usize>,
-    ) -> Result<Vec<Card>> {
+    ) -> Result<CardWindow> {
         let path = self.addressbook_path(addressbook_id)?;
-        let items = self.inner.list_items(path)?;
+        let (items, unreadable) = self.inner.list_readable_items(path)?;
+
+        let errors = unreadable
+            .into_iter()
+            .filter(|(entry, _)| entry.kind == VdirItemKind::Vcard)
+            .filter(|(_, err)| err.kind() != io::ErrorKind::NotFound)
+            .map(|(entry, err)| {
+                let err = Error::new(err).context("Cannot read the card file");
+                error::unreadable_card(Some(&entry.id), err)
+            })
+            .collect();
 
         let cards = items
             .into_iter()
@@ -123,7 +137,10 @@ impl VdirBackend {
             })
             .collect();
 
-        Ok(window(cards, skip, take))
+        Ok(CardWindow {
+            cards: window(cards, skip, take),
+            errors: first_page(errors, skip),
+        })
     }
 
     /// Fetches `card_id` from `addressbook_id`.

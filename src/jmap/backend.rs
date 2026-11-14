@@ -36,7 +36,7 @@ use serde_json::Value;
 
 use crate::{
     config::{JmapAuthConfig, JmapConfig, ProxyConfig, parse_server},
-    error::ErrorCode,
+    error::{self, ErrorCode},
     jmap::{
         error::{JmapSetError, format_set_error, set_error, set_error_message},
         project,
@@ -44,7 +44,7 @@ use crate::{
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
-        client::window,
+        client::{CardWindow, first_page, window},
     },
 };
 
@@ -170,12 +170,15 @@ impl JmapBackend {
 
     /// Lists the AddressBook's cards as vCard documents, the `take` after
     /// the first `skip`.
+    ///
+    /// A card that does not convert to a vCard is left out, an entry naming
+    /// it instead, on the first page only: the query reads every card.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
         skip: usize,
         take: Option<usize>,
-    ) -> Result<Vec<Card>> {
+    ) -> Result<CardWindow> {
         let opts = JmapContactCardQueryOptions {
             filter: Some(JmapContactCardFilter {
                 in_address_book: Some(addressbook_id.to_string()),
@@ -185,14 +188,7 @@ impl JmapBackend {
         };
         let out = self.inner.contact_card_query(opts)?;
 
-        let cards = out
-            .cards
-            .into_iter()
-            .map(|card| project::to_card(addressbook_id, card))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(Error::msg)?;
-
-        Ok(window(cards, skip, take))
+        Ok(project_cards(addressbook_id, out.cards, skip, take))
     }
 
     /// Reads the ContactCard `card_id`, converted to a vCard document.
@@ -332,6 +328,37 @@ pub fn jmap_http_auth(
     }
 }
 
+/// The `take` cards of `cards` after the first `skip`, as vCard documents
+/// of `addressbook_id`, beside an entry for each card that does not
+/// convert, on the first page only.
+fn project_cards(
+    addressbook_id: &str,
+    cards: Vec<JmapContactCard>,
+    skip: usize,
+    take: Option<usize>,
+) -> CardWindow {
+    let mut listed = Vec::new();
+    let mut errors = Vec::new();
+
+    for card in cards {
+        let id = card.id.clone();
+
+        match project::to_card(addressbook_id, card) {
+            Ok(card) => listed.push(card),
+            Err(err) => {
+                let err =
+                    Error::msg(err).context("Cannot convert the JMAP contact card to a vCard");
+                errors.push(error::unreadable_card(id.as_deref(), err));
+            }
+        }
+    }
+
+    CardWindow {
+        cards: window(listed, skip, take),
+        errors: first_page(errors, skip),
+    }
+}
+
 /// Maps a [`JmapAddressBook`] to the shared shape, id as name fallback.
 fn into_addressbook(book: JmapAddressBook) -> Addressbook {
     let id = book.id.unwrap_or_default();
@@ -409,5 +436,47 @@ mod tests {
         };
         let header = jmap_http_auth(auth, &mut SecretResolver::new()).unwrap();
         assert_eq!(header.expose_secret(), "Basic dXNlcjpwYcOpc3M=");
+    }
+
+    /// A card that does not convert is an entry, the other cards listed;
+    /// a later page repeats no entry, the query reading every card.
+    #[test]
+    fn a_card_that_does_not_project_is_an_entry_the_others_listed() {
+        use io_jmap::rfc9610::contact_card::JmapContactCard;
+        use serde_json::json;
+
+        use super::project_cards;
+        use crate::error::ErrorCode;
+
+        let card = |id: Option<&str>, name: &str| JmapContactCard {
+            id: id.map(String::from),
+            address_book_ids: Default::default(),
+            card: json!({"@type": "Card", "name": {"full": name}})
+                .as_object()
+                .unwrap()
+                .clone(),
+        };
+        let cards = || {
+            vec![
+                card(Some("c1"), "Ada"),
+                card(None, "Nobody"),
+                card(Some("c3"), "Bob"),
+            ]
+        };
+
+        let first = project_cards("book", cards(), 0, Some(2));
+        let ids: Vec<&str> = first.cards.iter().map(|card| card.id.as_str()).collect();
+        assert_eq!(ids, ["c1", "c3"]);
+        assert_eq!(first.errors.len(), 1);
+        assert_eq!(first.errors[0].id, None);
+        assert_eq!(first.errors[0].code, Some(ErrorCode::CardUnreadable));
+        assert_eq!(
+            first.errors[0].sources,
+            ["JMAP ContactCard is missing its id"]
+        );
+
+        let second = project_cards("book", cards(), 1, Some(2));
+        assert_eq!(second.cards.len(), 1);
+        assert!(second.errors.is_empty());
     }
 }

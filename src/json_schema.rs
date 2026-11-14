@@ -28,8 +28,9 @@ use crate::shared::receipt::IdReceipt;
 
 /// Builds the command-to-schema registry consumed by `json-schema <DIR>`.
 ///
-/// Each value describes the type the command hands to the printer, and
-/// `cardamum-error` the failure object every command prints instead.
+/// Each value describes the type the command hands to the printer,
+/// `cardamum-error` the failure object every command prints instead, and
+/// `cardamum-item-error` the entry of a listing's `errors`.
 pub fn registry() -> JsonSchemaRegistry {
     let mut registry = JsonSchemaRegistry::new("cardamum", env!("CARGO_PKG_VERSION"));
 
@@ -315,6 +316,7 @@ pub fn registry() -> JsonSchemaRegistry {
     }
 
     insert!("cardamum-error", ErrorReport<ErrorCode>);
+    insert!("cardamum-item-error", crate::error::ItemError);
 
     registry
 }
@@ -350,8 +352,10 @@ mod tests {
         let mut known = Vec::new();
         paths(&Cli::command(), "cardamum", &mut known);
 
-        // NOTE: the failure object every command prints, not a command.
+        // NOTE: the failure object every command prints and the item
+        // error a listing carries, not commands.
         known.push("cardamum-error".into());
+        known.push("cardamum-item-error".into());
 
         for key in registry().schemas.keys() {
             assert!(known.contains(key), "{key} names no command");

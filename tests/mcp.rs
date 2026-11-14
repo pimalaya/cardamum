@@ -176,3 +176,29 @@ fn a_value_the_grammar_refuses_is_a_usage_failure() {
         "{failure}"
     );
 }
+
+/// A listing naming a card it could not read keeps its result beside
+/// `isError`, the entry in its `errors`.
+#[cfg(unix)]
+#[test]
+fn a_listing_with_errors_answers_its_result_beside_is_error() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let (home, config) = vdir();
+    let eve = home.path().join("contacts/personal/eve.vcf");
+    fs::write(&eve, CARD.replace("ada", "eve")).unwrap();
+    fs::set_permissions(&eve, fs::Permissions::from_mode(0o000)).unwrap();
+    if fs::read(&eve).is_ok() {
+        return;
+    }
+
+    let list = call(1, "card_list", json!({"addressbook": "personal"}));
+    let answers = serve(&home, &config, &[], &[list]);
+
+    let result = &answers[1]["result"];
+    assert_eq!(result["isError"], true, "{result}");
+    let content = &result["structuredContent"];
+    assert_eq!(content["cards"][0]["id"], "ada", "{result}");
+    assert_eq!(content["errors"][0]["id"], "eve", "{result}");
+    assert_eq!(content["errors"][0]["code"], "card-unreadable", "{result}");
+}

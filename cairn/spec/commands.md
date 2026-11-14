@@ -273,7 +273,7 @@ The report `pimdir search` and `pimdir count` draw over a query they refuse SHAL
 A field taken from a card or a server (a name, an address, an id, an error a server wrote) SHALL have its control characters and bidi controls replaced before it is printed as text (pimalaya-cli `sanitize::text`), the write confirmations included. The `card read` view SHALL replace them in the card too, keeping tabs and line feeds and reading CRLF as LF. JSON strings and the raw bytes a command is asked for SHALL remain unchanged.
 
 ### Requirement: A card page names its context and its next page
-`card list` SHALL print above the cards `Account: <name> (<backend>)`, `Addressbook: <id>`, `Page: <n>, cards <a> to <b>` (`card <a>` for one, `empty` for none, `all` when unpaged) followed by `, the last` when no card follows, and `Next page: --page <n>` while one does, the values aligned in one column; then a blank line and one line per card with no column header (`id  email  phone  name`, the free-text name last, `-` for an empty cell). Below the cards SHALL print only the command's errors ("A command's errors print at its end").
+`card list` SHALL print as a pimalaya-cli `listing::Listing`: above the cards `Account: <name> (<backend>)`, `Addressbook: <id>`, `Page: <n>, cards <a> to <b>` (`card <a>` for one, `empty` for none, `all` when unpaged) followed by `, the last` when no card follows, and `Next page: --page <n>` while one does, the values aligned in one column; then a blank line and one line per card with no column header (`id  email  phone  name`, the free-text name last, `-` for an empty cell). Below the cards SHALL print only the command's errors ("A command's errors print at its end").
 
 ### Requirement: Listings resume from their cursor
 `card list` SHALL print `nextPage` beside `cards`: the next page number, as a string, while cards follow the page, `null` otherwise, and SHALL take it back through `--page-token`, which wins over `--page`. Whether cards follow is exact on every backend: the unified client reads one card past the page.
@@ -292,7 +292,7 @@ A field taken from a card or a server (a name, an address, an id, an error a ser
 - THEN the card lists with its id and empty fields, an entry coded `card-unreadable` names it, and the exit status is 3
 
 ### Requirement: A command's errors print at its end
-In the text output, each `errors` entry SHALL print as one `Error:` line, `<id>  <code>  <error>` with `-` for a null id or code, last in the command's output: after the items and one blank line, the `Error:` lines aligned among themselves. Nothing SHALL print, the blank line included, when `errors` is empty.
+In the text output, each `errors` entry SHALL print as one `Error:` line, `<id>  <code>  <error>` with `-` for a null id or code, last in the command's output: after the items and one blank line, the `Error:` lines aligned among themselves (pimalaya-cli `error::ItemErrors`). Nothing SHALL print, the blank line included, when `errors` is empty.
 
 ### Requirement: Capability registry
 Each backend SHALL declare, in a table compiled into every build, each capability of the unified API (`addressbook.list`, `addressbook.create`, `addressbook.rename`, `addressbook.delete`, `addressbook.description`, `addressbook.color`, `card.list`, `card.read`, `card.add`, `card.update`, `card.remove`, `card.update.if-match`, `card.remove.if-match`) at `full`, `partial`, `server` or `none`, every level but `full` with a detail saying what differs, which server refuses, or what serves it instead. A backend declares a capability only when it gives the result every other declarer gives.
@@ -301,7 +301,12 @@ Each backend SHALL declare, in a table compiled into every build, each capabilit
 A unified command SHALL check the capabilities it reaches, those its flags reach included (`--if-match`, an addressbook's name, description or colour), against the backend the account resolves to, before reading the store or connecting, and SHALL fail with `capability-missing` naming the backend, the capability and the detail.
 
 ### Requirement: An account lists what it serves
-`account capability` SHALL print, for the backend the unified commands resolve to (`--backend` honoured), every capability with its level and detail, connecting nowhere: `{"account", "backend", "capabilities": [{"name", "level", "detail"}]}`.
+`account capability` SHALL print pimalaya-cli's `capability::AccountCapabilityOutput`, connecting nowhere: `{"account", "capabilities": [{"name", "backend", "level", "detail"}]}`, one row per capability, `backend` the backend the unified commands resolve to (`--backend` honoured), `level` one of `full`, `partial`, `server` and `none`, `detail` what the level leaves out or `null`. When the account configures no backend `--backend` allows, every row SHALL read `backend` `null` and level `none`, and the command SHALL succeed. The text SHALL be a list headed by `Account: <name>`, then one line per capability: the name, the backend, the level and the detail.
+
+#### Scenario: A backend the account lacks
+- GIVEN an account configuring vdir alone
+- WHEN `cardamum --json --backend pimdir account capability` runs
+- THEN every row has `"backend": null` and `"level": "none"`, and the exit status is 0
 
 ### Requirement: The help names what each backend serves
 The `--help` of each unified leaf SHALL end with a `Backends:` footer generated from the tables: per capability the leaf reaches, the backends grouped by level, then each detail with the backends it applies to.

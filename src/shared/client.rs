@@ -72,6 +72,43 @@ pub struct AddressbookClient {
     pub account: Account,
 }
 
+/// The backend the unified commands run against: the first one the account
+/// configures that `backend` allows, in priority order.
+#[allow(unused_variables)]
+pub fn resolve_backend(account_config: &AccountConfig, backend: Backend) -> Option<Backend> {
+    #[cfg(feature = "vdir")]
+    if backend.allows_vdir() && account_config.vdir.is_some() {
+        return Some(Backend::Vdir);
+    }
+
+    #[cfg(feature = "pimdir")]
+    if backend.allows_pimdir() && account_config.pimdir.is_some() {
+        return Some(Backend::Pimdir);
+    }
+
+    #[cfg(feature = "carddav")]
+    if backend.allows_carddav() && account_config.carddav.is_some() {
+        return Some(Backend::Carddav);
+    }
+
+    #[cfg(feature = "jmap")]
+    if backend.allows_jmap() && account_config.jmap.is_some() {
+        return Some(Backend::Jmap);
+    }
+
+    #[cfg(feature = "msgraph")]
+    if backend.allows_msgraph() && account_config.msgraph.is_some() {
+        return Some(Backend::Msgraph);
+    }
+
+    #[cfg(feature = "gpeople")]
+    if backend.allows_gpeople() && account_config.gpeople.is_some() {
+        return Some(Backend::Gpeople);
+    }
+
+    None
+}
+
 /// The configuration of the backend an [`AddressbookClient`] speaks to.
 enum BackendConfig {
     #[cfg(feature = "vdir")]
@@ -138,56 +175,33 @@ impl AddressbookClient {
         #[allow(unused_mut)] mut account_config: AccountConfig,
         backend: Backend,
     ) -> Result<Self> {
-        #[allow(unused_mut)]
-        let mut inner: Option<BackendConfig> = None;
-
-        #[cfg(feature = "vdir")]
-        if inner.is_none()
-            && backend.allows_vdir()
-            && let Some(vdir_config) = account_config.vdir.take()
-        {
-            inner = Some(BackendConfig::Vdir(vdir_config));
-        }
-
-        #[cfg(feature = "pimdir")]
-        if inner.is_none()
-            && backend.allows_pimdir()
-            && let Some(pimdir_config) = account_config.pimdir.take()
-        {
-            inner = Some(BackendConfig::Pimdir(pimdir_config));
-        }
-
-        #[cfg(feature = "carddav")]
-        if inner.is_none()
-            && backend.allows_carddav()
-            && let Some(carddav_config) = account_config.carddav.take()
-        {
-            inner = Some(BackendConfig::Carddav(Box::new(carddav_config)));
-        }
-
-        #[cfg(feature = "jmap")]
-        if inner.is_none()
-            && backend.allows_jmap()
-            && let Some(jmap_config) = account_config.jmap.take()
-        {
-            inner = Some(BackendConfig::Jmap(Box::new(jmap_config)));
-        }
-
-        #[cfg(feature = "msgraph")]
-        if inner.is_none()
-            && backend.allows_msgraph()
-            && let Some(msgraph_config) = account_config.msgraph.take()
-        {
-            inner = Some(BackendConfig::Msgraph(Box::new(msgraph_config)));
-        }
-
-        #[cfg(feature = "gpeople")]
-        if inner.is_none()
-            && backend.allows_gpeople()
-            && let Some(gpeople_config) = account_config.gpeople.take()
-        {
-            inner = Some(BackendConfig::Gpeople(Box::new(gpeople_config)));
-        }
+        let inner = match resolve_backend(&account_config, backend) {
+            #[cfg(feature = "vdir")]
+            Some(Backend::Vdir) => account_config.vdir.take().map(BackendConfig::Vdir),
+            #[cfg(feature = "pimdir")]
+            Some(Backend::Pimdir) => account_config.pimdir.take().map(BackendConfig::Pimdir),
+            #[cfg(feature = "carddav")]
+            Some(Backend::Carddav) => account_config
+                .carddav
+                .take()
+                .map(|config| BackendConfig::Carddav(Box::new(config))),
+            #[cfg(feature = "jmap")]
+            Some(Backend::Jmap) => account_config
+                .jmap
+                .take()
+                .map(|config| BackendConfig::Jmap(Box::new(config))),
+            #[cfg(feature = "msgraph")]
+            Some(Backend::Msgraph) => account_config
+                .msgraph
+                .take()
+                .map(|config| BackendConfig::Msgraph(Box::new(config))),
+            #[cfg(feature = "gpeople")]
+            Some(Backend::Gpeople) => account_config
+                .gpeople
+                .take()
+                .map(|config| BackendConfig::Gpeople(Box::new(config))),
+            _ => None,
+        };
 
         let Some(config_) = inner else {
             bail!("No backend matching `{backend}` is configured for this account");

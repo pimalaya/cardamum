@@ -42,7 +42,7 @@ pub fn registry() -> JsonSchemaRegistry {
 
     insert!(
         "cardamum-account-capability",
-        crate::account::capability::AccountCapabilityOutput
+        pimalaya_cli::capability::AccountCapabilityOutput
     );
     insert!(
         "cardamum-account-list",

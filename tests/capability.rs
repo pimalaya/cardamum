@@ -74,6 +74,7 @@ fn an_unserved_verb_is_refused_before_anything_is_touched() {
     assert_eq!(fs::read_to_string(card).unwrap(), CARD);
 }
 
+/// One row per capability, each naming the backend it resolves to.
 #[test]
 fn the_account_lists_what_its_backend_serves() {
     let (home, config) = vdir();
@@ -86,15 +87,51 @@ fn the_account_lists_what_its_backend_serves() {
     );
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["account"], "example");
-    assert_eq!(json["backend"], "vdir");
+    assert!(json.get("backend").is_none(), "{json}");
 
     let capabilities = json["capabilities"].as_array().unwrap();
-    let level = |name: &str| {
-        let capability = capabilities.iter().find(|c| c["name"] == name).unwrap();
-        capability["level"].as_str().unwrap().to_string()
-    };
-    assert_eq!(level("card.add"), "full");
-    assert_eq!(level("card.remove.if-match"), "none");
+    let row = |name: &str| capabilities.iter().find(|c| c["name"] == name).unwrap();
+    assert_eq!(row("card.add")["backend"], "vdir");
+    assert_eq!(row("card.add")["level"], "full");
+    assert_eq!(row("card.add")["detail"], Value::Null);
+    assert_eq!(row("card.remove.if-match")["level"], "none");
+}
+
+/// The text is a list headed by the account, one line per capability:
+/// its name, its backend, its level and its detail.
+#[test]
+fn the_capabilities_print_one_line_each_under_the_account() {
+    let (home, config) = vdir();
+    let output = run(home.path(), &config, &["account", "capability"]);
+    let text = String::from_utf8(output.stdout).unwrap();
+
+    assert!(text.starts_with("Account:    example\n\n"), "{text}");
+    assert!(
+        text.contains("\ncard.add                 vdir  full  -\n"),
+        "{text}"
+    );
+}
+
+/// A `--backend` the account configures none of resolves no backend: every
+/// row is `none`, its backend `null`, rather than the command failing.
+#[cfg(feature = "pimdir")]
+#[test]
+fn a_backend_the_account_lacks_resolves_none() {
+    let (home, config) = vdir();
+    let args = ["--json", "--backend", "pimdir", "account", "capability"];
+    let output = run(home.path(), &config, &args);
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let json: Value = serde_json::from_slice(&output.stdout).unwrap();
+
+    for row in json["capabilities"].as_array().unwrap() {
+        assert_eq!(row["backend"], Value::Null, "{row}");
+        assert_eq!(row["level"], "none", "{row}");
+    }
 }
 
 #[test]

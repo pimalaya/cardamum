@@ -15,19 +15,12 @@
 //! errors the backends return. cardamum retries nothing, so
 //! `rate-limited` codes the first throttled answer met.
 
-use std::fmt;
-
 use anyhow::Error;
 #[cfg(feature = "pimdir")]
 use io_pimdir::client::PimdirError;
-use pimalaya_cli::{
-    columns::Columns,
-    error::{CodedError, PartialOutcome, code_of},
-    sanitize,
-};
+use pimalaya_cli::error::{CodedError, PartialOutcome, code_of};
 use schemars::JsonSchema;
 use serde::Serialize;
-use serde_json::Value;
 
 /// The stable codes, each serialised in kebab-case.
 ///
@@ -234,35 +227,6 @@ pub fn partial_when(errors: &[ItemError]) -> anyhow::Result<()> {
         true => Ok(()),
         false => Err(PartialOutcome::default().into()),
     }
-}
-
-/// Writes the item errors after a command's output: one blank line, then
-/// one `Error:` line each, the id, the code and the message aligned among
-/// them, `-` for an absent one; nothing when there are none.
-///
-/// A copy of pimalaya-cli's `ItemErrors`, which the pinned commit lacks,
-/// printing byte for byte as it does.
-pub fn write_item_errors(f: &mut fmt::Formatter<'_>, errors: &[ItemError]) -> fmt::Result {
-    if errors.is_empty() {
-        return Ok(());
-    }
-
-    let mut columns = Columns::default();
-
-    for error in errors {
-        let id = sanitize::text(error.id.as_deref().unwrap_or("-")).into_owned();
-        let code = match &error.code {
-            Some(code) => serde_json::to_value(code).unwrap_or(Value::Null),
-            None => Value::Null,
-        };
-        let code = code.as_str().unwrap_or("-").to_owned();
-        let message = sanitize::text(&error.error).into_owned();
-
-        columns.push([String::from("Error:"), id, code, message]);
-    }
-
-    writeln!(f)?;
-    write!(f, "{columns}")
 }
 
 /// The failure of the card `card_id` the address book does not hold,

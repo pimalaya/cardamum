@@ -46,4 +46,4 @@ What a script reads off `--json` barely moves; the text output changes everywher
 - `cardamum pimdir search` and `cardamum pimdir count` answer from the store's search index, with the coverage of the answer: under `--json`, `coverage` carries `complete`, `bodiless`, `missing`, `unparseable`, `unindexed`, `behind` and `filling`, the three counts of bodies out of sight standing at 0 under a query none of whose terms reads a card's body.
 - `cardamum repl` runs commands over one account in a session, the unified client connecting once; it refuses the composer (`-i`) and stdin input (`stdin-taken`).
 - `cardamum mcp` serves the unified API to an AI agent over the Model Context Protocol, the writes only with `--allow-write`.
-- `cardamum account capability`.
+- `cardamum account capability` lists, for each capability of the unified API, the backend serving it, its level and what the level leaves out.

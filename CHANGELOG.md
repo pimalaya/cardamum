@@ -22,7 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `nextPage` to `card list --json`, the next page number while cards follow and `null` on the last page, and `--page-token`, taking it back.
 - Added `carddav.alpn`, the ALPN identifiers offered to a CardDAV server, `["http/1.1"]` by default.
 - Added config.sample.toml to releases and packages, installed as share/doc/cardamum/config.sample.toml.
-- Added `account capability`, listing what the backend an account resolves to serves of the unified API, with each level and its detail, without connecting.
+- Added `account capability`, listing what an account serves of the unified API without connecting: one row per capability, `{name, backend, level, detail}` under `--json`, the backend it resolves to (`null` when the account configures none `--backend` allows), its level and what the level leaves out. Its output is pimalaya-cli's, shared with Himalaya.
 - Added a `Backends:` section to the `--help` of each `addressbook` and `card` command, naming which backend serves what.
 - Added the `--json` error code `capability-missing`.
 - Added `repl`, a session running the CLI's commands over one account, the unified client connecting once.

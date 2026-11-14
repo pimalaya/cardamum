@@ -7,12 +7,12 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::{columns::Columns, printer::Printer, sanitize};
+use pimalaya_cli::{columns::Columns, error::ItemErrors, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::capability::Capability;
-use crate::error::{ItemError, partial_when, write_item_errors};
+use crate::error::{ItemError, partial_when};
 use crate::shared::{addressbook::Addressbook, client::AddressbookClient};
 
 /// List every addressbook available to the active account.
@@ -98,8 +98,14 @@ impl fmt::Display for AddressbookListOutput {
             ]);
         }
 
+        let mut errors = ItemErrors::default();
+
+        for error in &self.errors {
+            errors.push(error);
+        }
+
         write!(f, "{columns}")?;
-        write_item_errors(f, &self.errors)
+        errors.write_after(f)
     }
 }
 

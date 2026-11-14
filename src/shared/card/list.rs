@@ -7,14 +7,19 @@ use std::fmt;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use pimalaya_cli::{clap::args::PageTokenArg, columns::Columns, printer::Printer, sanitize};
+use pimalaya_cli::{
+    clap::args::PageTokenArg,
+    listing::{Listing, ListingPage},
+    printer::Printer,
+    sanitize,
+};
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
     backend::Backend,
     capability::Capability,
-    error::{ItemError, partial_when, write_item_errors},
+    error::{ItemError, partial_when},
     shared::{
         arg::AddressbookIdArg,
         card::{Card, project::CardFields},
@@ -152,66 +157,22 @@ impl From<Card> for CardRow {
     }
 }
 
-impl CardListOutput {
-    /// The fields above the cards: the account with its backend, the
-    /// addressbook, then the paging.
-    fn header(&self) -> Vec<(&'static str, String)> {
-        let account = format!("{} ({})", sanitize::text(&self.account), self.backend);
-        let addressbook = sanitize::text(&self.addressbook).into_owned();
-        let mut fields = vec![("Account", account), ("Addressbook", addressbook)];
-        fields.extend(self.paging());
-        fields
-    }
-
-    /// The page with the cards it holds, and the flag reaching the next
-    /// page.
-    fn paging(&self) -> Vec<(&'static str, String)> {
-        let count = self.cards.len() as u64;
-        let (page, first) = match (self.page, self.page_size) {
-            (Some(page), Some(size)) => {
-                let first = u64::from(page - 1) * u64::from(size) + 1;
-                (page.to_string(), first)
-            }
-            _ => (String::from("all"), 1),
-        };
-
-        let range = match count {
-            0 => String::from("empty"),
-            1 => format!("card {first}"),
-            n => format!("cards {first} to {}", first + n - 1),
-        };
-
-        let last = match (self.page, &self.next_page) {
-            (Some(_), None) if count > 0 => ", the last",
-            _ => "",
-        };
-
-        let mut fields = vec![("Page", format!("{page}, {range}{last}"))];
-
-        if let Some(token) = &self.next_page {
-            fields.push(("Next page", format!("--page {}", sanitize::text(token))));
-        }
-
-        fields
-    }
-}
-
-/// Writes `Label:  value` lines, values in one column: two spaces after
-/// the longest label, `Addressbook:`.
-fn write_fields(f: &mut fmt::Formatter<'_>, fields: &[(&str, String)]) -> fmt::Result {
-    const WIDTH: usize = "Addressbook:".len() + 2;
-
-    for (label, value) in fields {
-        let label = format!("{label}:");
-        writeln!(f, "{label:<WIDTH$}{value}")?;
-    }
-
-    Ok(())
-}
-
 impl fmt::Display for CardListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut columns = Columns::default();
+        let backend = self.backend.to_string();
+        let mut listing = Listing::new(&self.account, Some(&backend));
+        listing.head("Addressbook", &self.addressbook);
+
+        let page = match (self.page, self.page_size) {
+            (Some(page), Some(size)) => ListingPage::Numbered {
+                page: page.into(),
+                size: size.into(),
+            },
+            _ => ListingPage::All,
+        };
+
+        let next = self.next_page.as_deref();
+        listing.page(page, self.cards.len(), ["card", "cards"], next);
 
         // NOTE: a name is free text, so it reads last.
         for card in &self.cards {
@@ -220,7 +181,7 @@ impl fmt::Display for CardListOutput {
                 None => String::new(),
             };
 
-            columns.push([
+            listing.items.push([
                 sanitize::text(&card.id).into_owned(),
                 cell(&card.email),
                 cell(&card.tel),
@@ -228,14 +189,11 @@ impl fmt::Display for CardListOutput {
             ]);
         }
 
-        write_fields(f, &self.header())?;
-
-        if !self.cards.is_empty() {
-            writeln!(f)?;
-            write!(f, "{columns}")?;
+        for error in &self.errors {
+            listing.errors.push(error);
         }
 
-        write_item_errors(f, &self.errors)
+        write!(f, "{listing}")
     }
 }
 

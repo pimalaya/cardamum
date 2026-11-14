@@ -109,6 +109,37 @@ fn the_server_introduces_itself_and_lists_reads_alone() {
     );
 }
 
+/// `account_capability` answers one row per capability, each naming the
+/// backend serving it, as its output schema describes.
+#[test]
+fn account_capability_answers_one_row_per_capability() {
+    let (home, config) = vdir();
+    let list = json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"});
+    let capability = call(2, "account_capability", json!({}));
+    let answers = serve(&home, &config, &[], &[list, capability]);
+
+    let tools = answers[1]["result"]["tools"].as_array().unwrap();
+    let tool = tools
+        .iter()
+        .find(|tool| tool["name"] == "account_capability")
+        .unwrap();
+    let row = &tool["outputSchema"]["$defs"]["AccountCapability"];
+    let required = row["required"].as_array().unwrap();
+    assert!(required.contains(&json!("backend")), "{row}");
+
+    let result = &answers[2]["result"];
+    assert_ne!(result["isError"], true, "{result}");
+
+    let output = &result["structuredContent"];
+    assert_eq!(output["account"], "example", "{output}");
+    assert!(output.get("backend").is_none(), "{output}");
+
+    let rows = output["capabilities"].as_array().unwrap();
+    let row = rows.iter().find(|row| row["name"] == "card.list").unwrap();
+    assert_eq!(row["backend"], "vdir");
+    assert_eq!(row["level"], "full");
+}
+
 #[test]
 fn a_call_answers_the_command_json() {
     let (home, config) = vdir();

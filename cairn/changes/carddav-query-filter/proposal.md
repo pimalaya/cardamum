@@ -11,7 +11,7 @@ created: 2026-09-26
 
 ## Why
 
-#25 asks for a card search. The unified `card` API stays least-common-denominator until the 2027 query work, where a single grammar shared with Himalaya and owned by the pimdir search spec reaches every backend. Until then search is per protocol: JMAP (`contact-card query --text`), Google (`connection search`), Microsoft (`contacts list --filter`) already have one, vdir has no protocol to mirror, and pimdir waits for 2027. CardDAV is the gap: `report query` always sends the match-all filter.
+Each protocol namespace mirrors its own search: JMAP (`contact-card query --text`), Google (`connection search`), Microsoft (`contacts list --filter`), pimdir (`pimdir search`). CardDAV is the gap: `report query` always sends the match-all filter, so RFC 6352 §10.5 filters are reachable only through `report raw`. The unified search asked in #25 is the change card-search, which answers the pimdir query language on every backend and does not build on these flags.
 
 ## What
 
@@ -28,5 +28,5 @@ A truncated result says so: a `truncated` field in JSON, a line in text. The tab
 ## Scope / non-goals
 
 - **The flags cover the common case.** Param-filters, several text-matches in one prop-filter and a prop-level test stay with `report raw`.
-- **No shared search.** `card list` passes the default match-all filter.
+- **Not the unified search.** `card list` passes the default match-all filter; `card search` is the change card-search.
 - **No client-side matching.** The server decides, and the command prints what it answered.

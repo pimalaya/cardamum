@@ -16,18 +16,18 @@ change: a-result-carries-its-errors
 
 ## Phase 0, outside this repository
 
-- [ ] io-pim-discovery's stream-0-4 is committed and pushed; note its commit hash for Phase 1. Stop here until it is.
+- [x] io-pim-discovery's stream-0-4 is committed and pushed; note its commit hash for Phase 1. Stop here until it is. Committed locally as 1c3d195, not pushed: Phase 1 links it by a path patch (owner ruling).
 
 ## Phase 1, the libraries (commit `build: update pimalaya-stream to 0.4 and the io-* crates`)
 
-- [ ] Cargo.toml: `pimalaya-stream` 0.4, `io-http` 0.8, `io-jmap` 0.9, `io-msgraph` 0.9, dev `io-oauth` 0.7.
-- [ ] `[patch.crates-io]`, sorted, no comment: io-gpeople e4a9cac80d023688118dbae88f8535145e8d2c9b, io-pim-discovery (Phase 0 rev), io-webdav 185ab63be5859c5ef6115bef97e4df5cb1187973, pimalaya-cli 0be1b1f08d19ccb9d16ee8e1d4266c27c96e0cdd. A crate the owner released meanwhile is taken from crates.io instead, its pin dropped.
-- [ ] `cargo update`; the lock holds pimalaya-config 0.4.1.
-- [ ] src/config.rs:594-609 `TlsConfig::into_tls`: `server: self.cert.map(|cert| TlsServer { cert }), client: None` (import `TlsServer`).
-- [ ] `cargo tree -d --all-features -e normal`: no pimalaya-stream, io-http or io-oauth twice.
-- [ ] tests/google.rs:148 and tests/microsoft.rs:94 still build (`Tls::default()` against io-oauth 0.7).
-- [ ] CHANGELOG: the dependency entry follows; Fixed: a credential command prompting for a password (`systemd-ask-password`) no longer hangs (pimalaya-config 0.4.1).
-- [ ] Phase checks pass.
+- [x] Cargo.toml: `pimalaya-stream` 0.4, `io-http` 0.8, `io-jmap` 0.9, `io-msgraph` 0.9, dev `io-oauth` 0.7.
+- [x] `[patch.crates-io]`, sorted, no comment: io-gpeople e4a9cac80d023688118dbae88f8535145e8d2c9b, io-pim-discovery (Phase 0 rev), io-webdav 185ab63be5859c5ef6115bef97e4df5cb1187973, pimalaya-cli 0be1b1f08d19ccb9d16ee8e1d4266c27c96e0cdd. A crate the owner released meanwhile is taken from crates.io instead, its pin dropped. io-pim-discovery is `{ path = "../io-pim-discovery" }` until 1c3d195 is pushed (owner ruling); none of the four was released meanwhile.
+- [x] `cargo update`; the lock holds pimalaya-config 0.4.1.
+- [x] src/config.rs:594-609 `TlsConfig::into_tls`: `server: self.cert.map(|cert| TlsServer { cert }), client: None` (import `TlsServer`).
+- [x] `cargo tree -d --all-features -e normal`: no pimalaya-stream, io-http or io-oauth twice.
+- [x] tests/google.rs:148 and tests/microsoft.rs:94 still build (`Tls::default()` against io-oauth 0.7).
+- [x] CHANGELOG: the dependency entry follows; Fixed: a credential command prompting for a password (`systemd-ask-password`) no longer hangs (pimalaya-config 0.4.1).
+- [x] Phase checks pass.
 
 ## Phase 2, the codes (commit `feat: code a server's refusal and a missing card or address book`)
 

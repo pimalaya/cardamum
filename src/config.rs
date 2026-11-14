@@ -56,7 +56,7 @@ use pimalaya_config::{command::CommandConfig, toml::TomlConfig};
 ))]
 use pimalaya_stream::{
     proxy::{Proxy, ProxyAuth},
-    tls::{Rustls, RustlsCrypto, Tls, TlsProvider},
+    tls::{Rustls, RustlsCrypto, Tls, TlsProvider, TlsServer},
 };
 #[cfg(any(
     feature = "carddav",
@@ -604,7 +604,8 @@ impl TlsConfig {
                 }),
                 alpn,
             },
-            cert: self.cert,
+            server: self.cert.map(|cert| TlsServer { cert }),
+            client: None,
         }
     }
 }

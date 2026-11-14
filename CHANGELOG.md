@@ -94,6 +94,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed `account check` exiting 0 when a backend failed: it now prints its report and exits 3.
 - Fixed pimdir accepting writes into an address book no source syncs, which no sync would ever push: they are now refused before anything is staged.
 - Fixed a pimdir card whose body blob is missing reporting an `etag`, which an `--if-match` could then match.
+- Fixed a year-less birthday (`BDAY:--MMDD`) on the gpeople backend being stashed instead of becoming a People birthday, so Google now shows it and creates its yearly calendar event (io-gpeople `e507d82`, [#26](https://github.com/pimalaya/cardamum/issues/26)).
 - Fixed pimdir recognising an address book only by the exact kind `text/vcard`: a kind carrying parameters now counts.
 - Fixed `card create` on pimdir reporting as queued a card whose `UID` the address book already holds, synced or queued, which the sync then parked: it is now refused with `item-duplicate`, leaving nothing in the store, and `-i` keeps the composer file.
 - Fixed a pimdir `card update` made from the card it read (no vCard source, or `--if-match`) overwriting, unmerged, a server change a sync brought in before applying it: the queued update now names the body it was made against, and the sync engine parks it instead.

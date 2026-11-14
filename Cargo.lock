@@ -790,8 +790,7 @@ dependencies = [
 [[package]]
 name = "io-gpeople"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee81fd1de9af948d5d86d5ab9d423c12f2888e051c97380841932aed055d462c"
+source = "git+https://github.com/pimalaya/io-gpeople?rev=e507d82c7f8955edfdbc37795161e8d7f94f0660#e507d82c7f8955edfdbc37795161e8d7f94f0660"
 dependencies = [
  "anyhow",
  "base64-codec",

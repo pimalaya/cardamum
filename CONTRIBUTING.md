@@ -48,7 +48,7 @@ cargo clippy --all-targets --no-default-features --features rustls-ring,pimdir -
 
 ## Testing against a real server
 
-Providers disagree on what they advertise and on what they then honour. The live suites (tests/google.rs, tests/microsoft.rs, tests/fastmail.rs) run on every push: `cargo test --test google -- --ignored anonymous::` touches no account, `credentialed::` reads the test accounts and needs their secrets. A backend change beyond them is verified by hand against a real account, `cardamum -a <account> account check` first for the connection, then the commands it touches. The reports live in [cairn/spec/testing](./cairn/spec/testing), one file per provider: add yours there, and never paste a secret into one, nor print one in output, a log line or a test fixture.
+Providers disagree on what they advertise and on what they then honour. The live suites (tests/google.rs, tests/microsoft.rs, tests/fastmail.rs) run in CI weekly, Mondays at 03:00 UTC, and by hand with `gh workflow run tests.yml`, never on a push: a push storm would burn the providers' quotas. A release runs them by hand on the commit it tags. Locally, `cargo test --test google -- --ignored anonymous::` touches no account, `credentialed::` reads the test accounts and needs their secrets. A backend change beyond them is verified by hand against a real account, `cardamum -a <account> account check` first for the connection, then the commands it touches. The reports live in [cairn/spec/testing](./cairn/spec/testing), one file per provider: add yours there, and never paste a secret into one, nor print one in output, a log line or a test fixture.
 
 ## Cairn
 

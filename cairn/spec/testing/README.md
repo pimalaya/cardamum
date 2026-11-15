@@ -10,7 +10,7 @@ Real-world test reports for Cardamum CLI, one per backend and provider. Each was
 
 Method: [provider-test-plan.md](provider-test-plan.md).
 
-These reports are dated manual runs. The automated live suites, tests/google.rs, tests/microsoft.rs and tests/fastmail.rs, run on every push and only read: `cargo test --test google -- --ignored anonymous::` touches no account, `credentialed::` reads the test accounts (see [packaging.md](../packaging.md), "Live provider suites").
+These reports are dated manual runs. The automated live suites, tests/google.rs, tests/microsoft.rs and tests/fastmail.rs, run weekly and by hand (`gh workflow run tests.yml`), never on a push, and only read: `cargo test --test google -- --ignored anonymous::` touches no account, `credentialed::` reads the test accounts (see [packaging.md](../packaging.md), "Live provider suites").
 
 Every backend pairs a **shared** run (the cross-protocol `addressbook` and `card` commands) with a **specific** run (the raw `cardamum <proto> …` surface), where the backend has one.
 

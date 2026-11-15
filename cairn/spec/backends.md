@@ -122,10 +122,10 @@ A failure a server refused SHALL carry a code of the vocabulary Himalaya shares,
 
 | Code | When |
 |---|---|
-| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition, or `need-privileges` (RFC 3744 §7.1.1); a CardDAV listing row, or its refused `address-data`, answered 403; a JMAP `forbidden` |
+| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition, or `need-privileges` (RFC 3744 §7.1.1); a CardDAV listing, `report query` or `report multiget` row, or its refused `address-data`, answered 403; a JMAP `forbidden` |
 | `quota-exceeded` | an HTTP 507; a CardDAV body naming `quota-not-exceeded` (RFC 4331 §6); Graph's `ErrorQuotaExceeded`; a JMAP `overQuota` |
 | `rate-limited` | an HTTP 429, or a People 403 naming a rate limit or a quota, or a JMAP `rateLimit`; cardamum retries nothing, so the first one met |
-| `card-not-found` | a card request answered 404 or 410 (CardDAV, People), 404 or 400 `ErrorInvalidIdMalformed` (Graph), `notFound` (JMAP ContactCard); a vdir card file or a pimdir card that does not exist, or a pimdir card id that is no number |
+| `card-not-found` | a card request answered 404 or 410 (CardDAV, People), a `carddav report multiget` row included, 404 or 400 `ErrorInvalidIdMalformed` (Graph), `notFound` (JMAP ContactCard); a vdir card file or a pimdir card that does not exist, or a pimdir card id that is no number |
 | `addressbook-not-found` | an address book named that does not exist (vdir, pimdir); a JMAP AddressBook `notFound` |
 
 A refusal none of these name SHALL carry no code, its reason kept in `sources`. A CardDAV 403 naming another precondition (`valid-address-data`, `no-uid-conflict`) is a card the server would not take, no matter of rights, and SHALL carry none; a refused `valid-address-data` keeps the server's answer as the cause of cardamum's hint.

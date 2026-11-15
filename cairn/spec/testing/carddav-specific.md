@@ -64,6 +64,7 @@ Not testable that run: the `-a google` OAuth token failed to refresh with `Inval
 
 - **C1 (fixed, 2026-07-18):** `discover` used to fail outright on a `carddav.home` account (`WebDAV client missing principal URL`) because a configured home short-circuits the discovery walk. It now reports each endpoint best-effort. Confirmed holding.
 - **`report raw` (landed, 2026-07-18):** the arbitrary-REPORT-body escape hatch. `propfind` and `proppatch` stay typed: `Propfind::new` / `Proppatch` take typed props, not a raw body, so a raw variant there would need an io-webdav raw-request method.
+- **S4 (fixed, 2026-11-15):** `report multiget` names each id the server answered 404 in `errors`, coded `card-not-found`, and exits 3 (see [a-report-carries-its-errors](../../log/2026-11-15-a-report-carries-its-errors.md)); `report query` names its unreadable rows the same way.
 
 ## Verdict
 

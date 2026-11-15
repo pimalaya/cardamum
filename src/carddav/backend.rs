@@ -233,8 +233,8 @@ fn into_card(addressbook_id: &str, entry: CarddavCardEntry) -> Card {
 /// The entry of a listed card the server answered without its data: coded
 /// from the row's status or the status refusing its properties, a 403
 /// `permission-denied`, else `card-unreadable`; each refused property in its
-/// sources.
-fn unreadable_row(row: WebdavUnreadableEntry) -> ItemError {
+/// sources. The `report query` and `report multiget` rows read the same.
+pub(crate) fn unreadable_row(row: WebdavUnreadableEntry) -> ItemError {
     let code = row
         .status
         .into_iter()

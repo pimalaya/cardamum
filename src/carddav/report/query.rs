@@ -16,9 +16,13 @@ use io_webdav::rfc6352::{
 };
 use pimalaya_cli::printer::Printer;
 
-use crate::carddav::{
-    client::CarddavClient,
-    report::entries::{CarddavCardEntriesOutput, EntryRow},
+use crate::{
+    carddav::{
+        backend::unreadable_row,
+        client::CarddavClient,
+        report::entries::{CarddavCardEntriesOutput, EntryRow},
+    },
+    error::partial_when,
 };
 
 /// Query the cards of an addressbook (RFC 6352 §8.6).
@@ -29,7 +33,10 @@ use crate::carddav::{
 /// Param-filters and anything else the flags cannot express go through
 /// `report raw`.
 ///
-/// JSON output: `{"cards": [{"id", "etag", "contents"}], "truncated"}`.
+/// JSON output: `{"cards": [{"id", "etag", "contents"}], "truncated",
+/// "errors": [{"id", "code", "error", "sources"}]}`: the error of each
+/// card the server answered without its data, `[]` when none, the command
+/// then exiting 3. A truncated result is `truncated`, no error.
 #[derive(Debug, Parser)]
 pub struct CarddavReportQueryCommand {
     /// Identifier of the addressbook to query.
@@ -68,10 +75,14 @@ impl CarddavReportQueryCommand {
         };
         let ok = client.list_cards(&self.addressbook_id, &opts)?;
 
-        printer.out(CarddavCardEntriesOutput {
+        let output = CarddavCardEntriesOutput {
             rows: ok.cards.into_iter().map(EntryRow::from).collect(),
             truncated: ok.truncated,
-        })
+            errors: ok.unreadable.into_iter().map(unreadable_row).collect(),
+        };
+
+        printer.out(&output)?;
+        partial_when(&output.errors)
     }
 
     /// Maps the filter flags onto one prop-filter each.

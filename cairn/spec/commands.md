@@ -64,7 +64,7 @@ A rejected protocol write SHALL surface as prose: the server's own error type an
 All output, data and errors alike, SHALL go to stdout through the printer, distinguished by the exit code; `--json` switches every command to JSON. stderr carries logs and interactive prompts only, so redirecting stdout is always safe.
 
 ### Requirement: Exit statuses
-The binary SHALL exit 0 on success, 1 with the failure object printed, 2 on a command line the grammar refuses (an unknown flag or command, a missing argument, a bad value), and 3 on a partial outcome, a command that printed its result without fully succeeding (`pimalaya_cli::error::PartialOutcome`): `account check` with a failed backend, and a listing whose `errors` is not empty. The binary SHALL parse its command line through `pimalaya_cli::clap::parse`: help and version print as clap prints them; a refused command line with a `--json` word before any `--` SHALL print on stdout the failure object coded `usage-invalid`, its `error` clap's message without the `error: ` prefix nor styles, and without `--json` clap's rendering on stderr.
+The binary SHALL exit 0 on success, 1 with the failure object printed, 2 on a command line the grammar refuses (an unknown flag or command, a missing argument, a bad value), and 3 on a partial outcome, a command that printed its result without fully succeeding (`pimalaya_cli::error::PartialOutcome`): `account check` with a failed backend, and a listing or a CardDAV `report query` or `report multiget` whose `errors` is not empty. The binary SHALL parse its command line through `pimalaya_cli::clap::parse`: help and version print as clap prints them; a refused command line with a `--json` word before any `--` SHALL print on stdout the failure object coded `usage-invalid`, its `error` clap's message without the `error: ` prefix nor styles, and without `--json` clap's rendering on stderr.
 
 #### Scenario: A refused command line under JSON
 - GIVEN any configuration, or none
@@ -174,12 +174,12 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `usage-invalid` | the command line, a REPL line or an MCP tool call's arguments do not match the grammar (pimalaya-cli's `CommonCode::UsageInvalid`); the command line exits 2 |
 | `stdin-taken` | a command inside a session (`repl`, `mcp`) would read its input off stdin, which carries the session's commands |
 | `capability-missing` | the backend the account resolves to does not serve a capability the command reaches; nothing was read or written |
-| `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete` |
+| `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete`; an `errors` entry of `carddav report multiget` |
 | `addressbook-not-found` | the address book a command names does not exist; nothing was read or written |
 | `permission-denied` | the server refused the request to the account (see "A server's refusal carries its code") |
 | `quota-exceeded` | the write would exceed the account's quota |
 | `rate-limited` | the server throttled the request; cardamum retries nothing |
-| `card-unreadable` | the backend answered for a card cardamum could not read: its listing row came without its data (CardDAV), its file could not be read (vdir), its body did not parse as a vCard or is not UTF-8, it did not project (JMAP), its body could not be read (pimdir); an `errors` entry |
+| `card-unreadable` | the backend answered for a card cardamum could not read: its listing, `report query` or `report multiget` row came without its data (CardDAV), its file could not be read (vdir), its body did not parse as a vCard or is not UTF-8, it did not project (JMAP), its body could not be read (pimdir); an `errors` entry |
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
 | `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |
 | `store-uncreated` | the pimdir root holds no store; its sync engine creates it |
@@ -293,6 +293,14 @@ A field taken from a card or a server (a name, an address, an id, an error a ser
 
 ### Requirement: A command's errors print at its end
 In the text output, each `errors` entry SHALL print as one `Error:` line, `<id>  <code>  <error>` with `-` for a null id or code, last in the command's output: after the items and one blank line, the `Error:` lines aligned among themselves (pimalaya-cli `error::ItemErrors`). Nothing SHALL print, the blank line included, when `errors` is empty.
+
+### Requirement: A CardDAV report names the cards it could not read
+`carddav report query` and `carddav report multiget` SHALL print an `errors` list beside `cards` and `truncated`, under `--json` and in text, as "A listing names the items it could not read" says: one pimalaya-cli item error per row the server answered without the card's data, coded as a CardDAV listing row is ("Each backend names the cards it could not read"), and on `report multiget` a row answered 404 or 410, an id the address book does not hold, coded `card-not-found`; `[]` when there is none. A non-empty `errors` SHALL make the command exit 3 once it printed its result. A result the server truncated SHALL stay `truncated`, its text line kept, and SHALL add no entry: a query's `--limit` asks for the cut (RFC 6352 §8.6.1), so a truncation is no partial outcome there. In the text the `Error:` lines print last ("A command's errors print at its end"), after the table and the truncation line, with no blank line leading an output that holds nothing else.
+
+#### Scenario: An id the server does not hold
+- GIVEN an address book holding `c1.vcf` and no `c9.vcf`
+- WHEN `cardamum --json carddav report multiget <book> c1.vcf c9.vcf` runs
+- THEN it prints `c1.vcf` in `cards` and `"errors":[{"id":"c9.vcf","code":"card-not-found",…}]`, and the exit status is 3
 
 ### Requirement: Capability registry
 Each backend SHALL declare, in a table compiled into every build, each capability of the unified API (`addressbook.list`, `addressbook.create`, `addressbook.rename`, `addressbook.delete`, `addressbook.description`, `addressbook.color`, `card.list`, `card.read`, `card.add`, `card.update`, `card.remove`, `card.update.if-match`, `card.remove.if-match`) at `full`, `partial`, `server` or `none`, every level but `full` with a detail saying what differs, which server refuses, or what serves it instead. A backend declares a capability only when it gives the result every other declarer gives.

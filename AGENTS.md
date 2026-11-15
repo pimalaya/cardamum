@@ -1,40 +1,37 @@
-# AGENTS.md: Cairn activation
+# AGENTS.md
 
-This repository follows **Cairn**, a language- and tool-agnostic convention for keeping a living spec, reviewable change proposals, and an honest history next to the code. The normative format lives in [pimalaya/cairn](https://github.com/pimalaya/cairn) (CAIRN.md for the rules, GUIDE.md for the by-hand procedure). No tooling is required: you create and check the structure by reading and following the rules.
+## Cairn
 
-The Cairn root of this repository is [`cairn/`](./cairn). The [src/main.rs](./src/main.rs) header remains the architecture entry point for the code itself; `cairn/spec/` is the behavioural truth behind it.
+This repository follows **Cairn**, a language- and tool-agnostic convention for keeping a living spec, reviewable change proposals, and an honest history next to the code. The full format and by-hand guide live at <https://github.com/pimalaya/cairn> (`CAIRN.md` and `GUIDE.md`). No tooling is required: you create and check the structure by reading and following the rules.
 
 If you are an agent working in this repository, do the following **by default, without being asked**.
 
-## 1. Before non-trivial work, propose
+### 1. Locate the Cairn root
 
-For anything beyond a trivial fix, create `cairn/changes/<change-id>/` with:
+The root is this repository (marked by the `cairn/` directory). All Cairn artifacts live under `cairn/`: `spec/` is current truth (one file per capability), `changes/` holds in-flight proposals, `log/` is the dated history.
 
-- proposal.md: *why* and *what* (frontmatter: `cairn: change`, `id`, `status: active`, `created`).
-- tasks.md: the checklist (frontmatter: `cairn: tasks`, `change`).
-- delta.md: what this changes in the spec, under the three literal headings `## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`.
+### 2. Before non-trivial work, propose
+
+For anything beyond a trivial fix, create `cairn/changes/<change-id>/` (kebab-case) with:
+
+- `proposal.md`: *why* and *what* (frontmatter: `cairn: change`, `id`, `status: active`, `created`).
+- `tasks.md`: the checklist (frontmatter: `cairn: tasks`, `change`).
+- `delta.md`: what this changes in the spec (`## ADDED Requirements`, `## MODIFIED Requirements`, `## REMOVED Requirements`).
 
 Let the human review intent **before** you write code. Trivial fixes may skip this and go straight to landing.
 
-## 2. After work lands, fold and log (never skip)
+### 3. After work lands, fold and log (never skip)
 
-- Fold the change's delta into `cairn/spec/<capability>.md` so the spec always reflects current truth (append ADDED, replace MODIFIED, delete REMOVED).
-- Append a dated entry `cairn/log/YYYY-MM-DD-<change-id>.md` describing what landed and which capabilities moved.
+- Fold the change's delta into `cairn/spec/<capability>.md` so the spec always reflects current truth (append ADDED, replace MODIFIED, delete REMOVED). A spec file holds current truth only, no history and no rationale.
+- Append a dated entry `cairn/log/YYYY-MM-DD-<change-id>.md` describing what landed and which capabilities moved. Log entries are immutable.
 - Set the change `status: landed` and move its folder to `cairn/changes/archive/`.
 
 > **The forcing rule:** a change that affects behaviour is not *done* until the spec is updated and the log entry is written.
 
-## 3. Stay conformant
+### 4. Stay conformant
 
-Check the structure yourself against the strict rules (CAIRN.md §8): a discoverable root, `spec/ changes/ log/` present, every Cairn file carrying a valid `cairn:` type, each change having proposal.md and tasks.md, kebab-case ids, literal delta headings, and a log entry for every landed change. Everything else (prose, naming, ordering, extra files) is free.
+Check the structure yourself against the strict rules (CAIRN.md §8): a discoverable root, `spec/ changes/ log/` present, every Cairn file carrying a valid `cairn:` type, each change having `proposal.md` and `tasks.md`, kebab-case ids, literal delta headings, and a log entry for every landed change. Everything else (prose, naming, ordering, extra files) is free.
 
-## 4. Repository conventions
+## Everything else
 
-- Run every cargo command through the nix devshell: `nix develop --command cargo <...>`.
-- Run `cargo fmt` on the crate after finishing code changes.
-- Build the feature matrix, not just the default: every backend (`carddav`, `jmap`, `msgraph`, `gpeople`, `vdir`, `pimdir`) must compile on its own, since the shared client is fully cfg-gated.
-- Never adjust production code to fit a test: adjust the test to match correct behaviour.
-- Never print a secret in output, a log line or a test fixture.
-- No em dashes in prose, per the Pimalaya guidelines.
-- The pimdir derivations (link id, summary, sort key, content hash) are io-pimdir's own and never reimplemented here, because Neverest writes into the same store through the same crate.
-- A user-facing change also lands in CHANGELOG.md, which is a release-scoped roll-up over the Cairn log, not a replacement for it.
+For how this binary is built, where changes belong, and the Pimalaya standards it follows, read `CONTRIBUTING.md` and the `src/main.rs` header (the crate's architecture document). Manual provider test reports live under cairn/spec/testing/.

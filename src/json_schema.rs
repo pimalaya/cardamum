@@ -73,10 +73,7 @@ pub fn registry() -> JsonSchemaRegistry {
         "cardamum-card-build",
         OneOf<crate::shared::card::build::CardBuildOutput, pimalaya_cli::output::SavedOutput>
     );
-    insert!(
-        "cardamum-card-create",
-        crate::shared::card::create::CardCreateOutput
-    );
+    insert!("cardamum-card-add", crate::shared::card::add::CardAddOutput);
     insert!(
         "cardamum-card-update",
         crate::shared::card::update::CardUpdateOutput
@@ -229,41 +226,41 @@ pub fn registry() -> JsonSchemaRegistry {
         };
 
         insert!(
-            "cardamum-gpeople-contact-group-list",
+            "cardamum-gpeople-contact-groups-list",
             GpeopleContactGroupsOutput
         );
         insert!(
-            "cardamum-gpeople-contact-group-get",
+            "cardamum-gpeople-contact-groups-get",
             GpeopleContactGroupOutput
         );
         insert!(
-            "cardamum-gpeople-contact-group-create",
+            "cardamum-gpeople-contact-groups-create",
             GpeopleContactGroupOutput
         );
         insert!(
-            "cardamum-gpeople-contact-group-update",
+            "cardamum-gpeople-contact-groups-update",
             GpeopleContactGroupOutput
         );
-        insert!("cardamum-gpeople-connection-list", GpeoplePersonsOutput);
-        insert!("cardamum-gpeople-connection-get", GpeoplePersonOutput);
-        insert!("cardamum-gpeople-connection-create", GpeoplePersonOutput);
-        insert!("cardamum-gpeople-connection-update", GpeoplePersonOutput);
-        insert!("cardamum-gpeople-connection-search", GpeoplePersonsOutput);
-        insert!("cardamum-gpeople-other-contact-list", GpeoplePersonsOutput);
+        insert!("cardamum-gpeople-connections-list", GpeoplePersonsOutput);
+        insert!("cardamum-gpeople-connections-get", GpeoplePersonOutput);
+        insert!("cardamum-gpeople-connections-create", GpeoplePersonOutput);
+        insert!("cardamum-gpeople-connections-update", GpeoplePersonOutput);
+        insert!("cardamum-gpeople-connections-search", GpeoplePersonsOutput);
+        insert!("cardamum-gpeople-other-contacts-list", GpeoplePersonsOutput);
         insert!(
-            "cardamum-gpeople-other-contact-search",
+            "cardamum-gpeople-other-contacts-search",
             GpeoplePersonsOutput
         );
-        insert!("cardamum-gpeople-other-contact-copy", GpeoplePersonOutput);
+        insert!("cardamum-gpeople-other-contacts-copy", GpeoplePersonOutput);
         insert!("cardamum-gpeople-profile-get", GpeoplePersonOutput);
         insert!(
             "cardamum-gpeople-request",
             crate::shared::raw_json::RawJsonOutput
         );
-        insert!("cardamum-gpeople-connection-delete", IdReceipt);
-        insert!("cardamum-gpeople-contact-group-delete", IdReceipt);
+        insert!("cardamum-gpeople-connections-delete", IdReceipt);
+        insert!("cardamum-gpeople-contact-groups-delete", IdReceipt);
         insert!(
-            "cardamum-gpeople-contact-group-members",
+            "cardamum-gpeople-contact-groups-members",
             crate::gpeople::contact_group::members::GpeopleMembersOutput
         );
     }
@@ -273,6 +270,18 @@ pub fn registry() -> JsonSchemaRegistry {
         insert!(
             "cardamum-pimdir-status",
             crate::pimdir::status::PimdirStatusOutput
+        );
+        insert!(
+            "cardamum-pimdir-queue-list",
+            crate::pimdir::queue::list::PimdirQueueListOutput
+        );
+        insert!(
+            "cardamum-pimdir-queue-show",
+            crate::pimdir::queue::show::PimdirQueueShowOutput
+        );
+        insert!(
+            "cardamum-pimdir-queue-cancel",
+            crate::pimdir::queue::cancel::PimdirQueueCancelOutput
         );
         insert!(
             "cardamum-pimdir-search",

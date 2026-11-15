@@ -17,7 +17,7 @@ use crate::jmap::{
 ///
 /// JSON output: the raw JMAP ContactCard the server created.
 #[derive(Debug, Parser)]
-pub struct JmapContactCardCreateCommand {
+pub struct JmapContactCardAddCommand {
     /// AddressBook the card is created in.
     #[arg(short = 'k', long, value_name = "ADDRESS-BOOK")]
     pub in_address_book: String,
@@ -25,7 +25,7 @@ pub struct JmapContactCardCreateCommand {
     pub json: JsonArg,
 }
 
-impl JmapContactCardCreateCommand {
+impl JmapContactCardAddCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: JmapClient) -> Result<()> {
         let card = self.json.read()?;
 

@@ -131,6 +131,7 @@ dependencies = [
  "anyhow",
  "ariadne",
  "base64-codec",
+ "blake3",
  "clap",
  "getrandom 0.4.3",
  "idna_adapter",

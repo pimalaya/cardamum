@@ -20,7 +20,11 @@ use std::ops::ControlFlow;
 
 use anyhow::{Error, Result, anyhow, bail};
 use io_pimdir::{
-    client::reader::{PimdirCollection, PimdirItem},
+    client::{
+        PimdirError, PimdirStore,
+        producer::PimdirActionStatus,
+        reader::{PimdirCollection, PimdirItem},
+    },
     codec::PimdirAction,
     object::PimdirHash,
     placement::PimdirFlags,
@@ -34,6 +38,7 @@ use crate::{
     error::{self, ErrorCode},
     pimdir::{
         client::{PimdirClient, refusal},
+        queue::list::{PimdirParkedRow, PimdirQueuedCard},
         status::{PimdirAddressbookStatus, PimdirParkedStatus, PimdirStatusOutput},
     },
     shared::{
@@ -147,7 +152,7 @@ impl PimdirBackend {
             .map(|parked| PimdirParkedStatus {
                 row: parked.id,
                 addressbook_id: parked.collection,
-                action: parked.action,
+                kind: parked.action,
                 error: parked.error,
             })
             .collect();
@@ -158,6 +163,182 @@ impl PimdirBackend {
             addressbooks,
             parked,
         })
+    }
+
+    /// The ids of the account's address books a queue command reads,
+    /// `addressbook` alone when named, refused when the account holds no
+    /// such address book.
+    fn queue_collections(&self, addressbook: Option<&str>) -> Result<Vec<String>> {
+        if let Some(addressbook) = addressbook {
+            self.known_collection(addressbook)?;
+            return Ok(vec![addressbook.to_owned()]);
+        }
+
+        let mut ids: Vec<String> = self.collections()?.into_iter().map(|c| c.id).collect();
+        ids.sort();
+        Ok(ids)
+    }
+
+    /// The card creations staged in the account's address books, or in
+    /// `addressbook` alone, in the order they were queued.
+    ///
+    /// A queued creation has no public id until the owner applies it, so
+    /// no listing shows it: this is where it does, by its queue row, the
+    /// link id `card add` reported, and the full name of the body it pins
+    /// when that body is local.
+    pub fn queued_cards(&self, addressbook: Option<&str>) -> Result<Vec<PimdirQueuedCard>> {
+        let mut cards = Vec::new();
+
+        for collection in self.queue_collections(addressbook)? {
+            let pending = self
+                .inner
+                .reader
+                .pending_creates(&collection)
+                .map_err(|err| refusal(err, "Read the pimdir queue"))?;
+
+            for queued in pending {
+                let PimdirAction::Add {
+                    link_id, object, ..
+                } = queued.action
+                else {
+                    continue;
+                };
+
+                let body = match &object {
+                    Some(hash) => self.inner.reader.blobs().get(hash)?,
+                    None => None,
+                };
+                let full_name = body.and_then(|body| match contact::derive(&body).summary {
+                    Some(PimdirSummary::Contact(summary)) => Some(summary.full_name),
+                    _ => None,
+                });
+
+                cards.push(PimdirQueuedCard {
+                    id: queued.id,
+                    queued_at: queued.created_at,
+                    producer: queued.producer,
+                    collection: queued.collection,
+                    kind: String::from("add"),
+                    link_id: link_id.map(|link_id| link_id.0),
+                    full_name,
+                });
+            }
+        }
+
+        cards.sort_by_key(|card| card.id);
+        Ok(cards)
+    }
+
+    /// The rows of any kind the owner parked in the account's address
+    /// books, or in `addressbook` alone, in the order they were queued.
+    pub fn parked_rows(&self, addressbook: Option<&str>) -> Result<Vec<PimdirParkedRow>> {
+        let collections = self.queue_collections(addressbook)?;
+
+        Ok(self
+            .inner
+            .reader
+            .parked_actions()?
+            .into_iter()
+            .filter(|parked| collections.contains(&parked.collection))
+            .map(|parked| PimdirParkedRow {
+                unconfirmed: parked.unconfirmed().is_some(),
+                id: parked.id,
+                queued_at: parked.created_at,
+                producer: parked.producer,
+                collection: parked.collection,
+                kind: parked.action,
+                attempts: parked.attempts,
+                error: parked.error,
+            })
+            .collect())
+    }
+
+    /// Where the queue row `id` stands: pending, parked, unconfirmed,
+    /// applied with the card an `add` created, or unknown.
+    ///
+    /// A row anchored on a collection that is not one of the account's
+    /// address books reads as unknown, as another account's row reads in
+    /// Himalaya. A row applied on a collection gone since names none, so
+    /// no account can be told from it, and it reads as applied.
+    pub fn queue_row(&self, id: i64) -> Result<PimdirActionStatus> {
+        let status = self
+            .inner
+            .reader
+            .action_status(id)
+            .map_err(|err| refusal(err, format!("Read queue row {id}")))?;
+
+        let collection = match &status {
+            PimdirActionStatus::Pending { collection, .. }
+            | PimdirActionStatus::Parked { collection, .. }
+            | PimdirActionStatus::Unconfirmed { collection, .. }
+            | PimdirActionStatus::Applied {
+                collection: Some(collection),
+                ..
+            } => collection,
+            PimdirActionStatus::Applied {
+                collection: None, ..
+            }
+            | PimdirActionStatus::Unknown
+            | PimdirActionStatus::Reset => return Ok(status),
+        };
+
+        let ours = self
+            .collections()?
+            .iter()
+            .any(|ours| &ours.id == collection);
+
+        Ok(match ours {
+            true => status,
+            false => PimdirActionStatus::Unknown,
+        })
+    }
+
+    /// Cancels one pending or parked row of the account's queue, returning
+    /// its action kind.
+    ///
+    /// The row is read first, so one of another account, or one applied
+    /// already, is refused before the owner role is taken. The store is
+    /// opened as it stands, never created nor migrated, and a sync in
+    /// flight owning it is refused at once rather than waited out: the
+    /// action may have been applied by the time the message is read.
+    pub fn cancel_queued(&self, id: i64) -> Result<String> {
+        let kind = match self.queue_row(id)? {
+            PimdirActionStatus::Pending { kind, .. }
+            | PimdirActionStatus::Parked { kind, .. }
+            | PimdirActionStatus::Unconfirmed { kind, .. } => kind,
+            PimdirActionStatus::Applied { .. } => bail!("Row {id} was applied already"),
+            // NOTE: a bare row id states no store, so io-pimdir follows it
+            // unchecked and never answers a reset for it.
+            PimdirActionStatus::Unknown | PimdirActionStatus::Reset => bail!(
+                "No queued action with row {id} in this account's queue; \
+                 it may have been synced already"
+            ),
+        };
+
+        let root = &self.inner.root;
+        let context = format!("Cancel queued action {id}");
+
+        let mut owner = PimdirStore::open_current(root).map_err(|err| match err {
+            PimdirError::Owned(_) => {
+                let message = format!(
+                    "A sync is running on `{}`, so the queue cannot be edited; \
+                     the action may have been applied already",
+                    root.display(),
+                );
+                CodedError::new(ErrorCode::StoreOwned, message).into()
+            }
+            err => refusal(err, context.clone()),
+        })?;
+
+        let dropped = owner
+            .drop_action(id)
+            .map_err(|err| refusal(err, context.clone()))?;
+
+        if !dropped {
+            bail!("No queued action with row {id}; it may have been synced already");
+        }
+
+        Ok(kind)
     }
 
     /// Lists the contact collections as addressbooks, sorted by name.
@@ -407,7 +588,7 @@ impl PimdirBackend {
     /// One store holds every kind a sync caches (pimdir STORAGE §4.3, §14),
     /// so the kind separates an address book from a mailbox or a calendar.
     /// A kind-less one counts: a sync predating kinds left the column empty.
-    fn collections(&self) -> Result<Vec<PimdirCollection>> {
+    pub(crate) fn collections(&self) -> Result<Vec<PimdirCollection>> {
         let collections = match self.inner.account.as_deref() {
             Some(account) => self
                 .inner
@@ -1427,7 +1608,7 @@ mod tests {
         use clap::Parser;
 
         use crate::shared::card::{
-            create::CardCreateCommand, delete::CardDeleteCommand, update::CardUpdateCommand,
+            add::CardAddCommand, delete::CardDeleteCommand, update::CardUpdateCommand,
         };
 
         let (dir, mut backend) = store();
@@ -1442,7 +1623,7 @@ mod tests {
             .replace("Jane Doe", "Jane Roe");
         let mut out = Captured::default();
 
-        CardCreateCommand::parse_from(["create", "-k", "book", &joe])
+        CardAddCommand::parse_from(["add", "-k", "book", &joe])
             .execute(&mut out, &mut client(&dir))
             .unwrap();
         assert!(out.text.contains("queued"), "{}", out.text);
@@ -1627,7 +1808,7 @@ mod tests {
 
         let status = backend.status().unwrap();
         assert_eq!(status.parked.len(), 1, "{:?}", status.parked);
-        assert_eq!(status.parked[0].action, "remove");
+        assert_eq!(status.parked[0].kind, "remove");
     }
 
     /// A write over a conflicted card states no resolution, so the owner
@@ -1721,7 +1902,7 @@ mod tests {
         );
 
         let status = backend.status().unwrap();
-        let parked: Vec<_> = status.parked.iter().map(|row| &row.action).collect();
+        let parked: Vec<_> = status.parked.iter().map(|row| &row.kind).collect();
         assert_eq!(parked, ["update", "remove"]);
     }
 
@@ -1778,7 +1959,7 @@ mod tests {
         assert_eq!(status.parked.len(), 1, "{:?}", status.parked);
         let parked = &status.parked[0];
         assert_eq!(parked.addressbook_id, "work/book");
-        assert_eq!(parked.action, "update");
+        assert_eq!(parked.kind, "update");
         assert!(
             parked.error.contains("body replaced since it was read"),
             "{}",
@@ -1807,15 +1988,15 @@ mod tests {
         use clap::Parser;
         use pimalaya_cli::error::code_of;
 
-        use crate::shared::card::create::CardCreateCommand;
+        use crate::shared::card::add::CardAddCommand;
 
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
         let jane = String::from_utf8(JANE.to_vec()).unwrap();
         let mut out = Captured::default();
 
-        let err = CardCreateCommand::parse_from([
-            "create",
+        let err = CardAddCommand::parse_from([
+            "add",
             "-k",
             "book",
             "-i",
@@ -2001,5 +2182,103 @@ mod tests {
         drain(&dir);
         let status = backend.status().unwrap();
         assert_eq!(status.parked.len(), 1);
+    }
+
+    /// A queued creation lists in the queue by its row, the link id the
+    /// write reported and its full name, shows `pending`, and cancelling
+    /// it drops it from the queue, after which its row reads `unknown`.
+    #[test]
+    fn a_queued_card_lists_in_the_queue_until_cancelled() {
+        use io_pimdir::client::producer::PimdirActionStatus;
+
+        let (_dir, mut backend) = store();
+        let link_id = backend.create_card("book", JANE.to_vec()).unwrap();
+
+        let queued = backend.queued_cards(None).unwrap();
+        assert_eq!(queued.len(), 1, "{queued:?}");
+        assert_eq!(queued[0].collection, "book");
+        assert_eq!(queued[0].kind, "add");
+        assert_eq!(queued[0].link_id.as_deref(), Some(link_id.as_str()));
+        assert_eq!(queued[0].full_name.as_deref(), Some("Jane Doe"));
+        assert_eq!(backend.queued_cards(Some("book")).unwrap().len(), 1);
+
+        let row = queued[0].id;
+        let status = backend.queue_row(row).unwrap();
+        assert!(
+            matches!(&status, PimdirActionStatus::Pending { kind, .. } if kind == "add"),
+            "{status:?}"
+        );
+
+        assert_eq!(backend.cancel_queued(row).unwrap(), "add");
+        assert!(backend.queued_cards(None).unwrap().is_empty());
+        assert_eq!(pending(&backend), 0);
+        let gone = backend.queue_row(row).unwrap();
+        assert!(matches!(gone, PimdirActionStatus::Unknown), "{gone:?}");
+
+        let err = backend.cancel_queued(row).unwrap_err().to_string();
+        assert!(err.contains("No queued action with row"), "{err}");
+    }
+
+    /// A row the sync applied reads `applied` with the card it created,
+    /// the id `card read` takes, and is no longer cancelled.
+    #[test]
+    fn an_applied_creation_names_its_card_and_is_not_cancelled() {
+        use io_pimdir::client::producer::PimdirActionStatus;
+
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        let row = backend.queued_cards(None).unwrap()[0].id;
+        drain(&dir);
+
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
+        match backend.queue_row(row).unwrap() {
+            PimdirActionStatus::Applied { seq, .. } => {
+                assert_eq!(seq.map(|seq| seq.to_string()), Some(id));
+            }
+            status => panic!("{status:?}"),
+        }
+
+        let err = backend.cancel_queued(row).unwrap_err().to_string();
+        assert_eq!(err, format!("Row {row} was applied already"));
+    }
+
+    /// A parked row lists among the parked ones with its kind, in the
+    /// address book named and in every one, and an unknown address book
+    /// is refused.
+    #[test]
+    fn a_parked_row_lists_with_its_kind() {
+        let (dir, mut backend) = store();
+        pulled(&dir, "book", JANE);
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
+        let read = backend.get_card("book", &id).unwrap();
+        backend
+            .delete_card("book", &id, read.etag.as_deref())
+            .unwrap();
+        let renamed = String::from_utf8(JANE.to_vec())
+            .unwrap()
+            .replace("Jane Doe", "Jane Poe")
+            .into_bytes();
+        pulled(&dir, "book", &renamed);
+        drain(&dir);
+
+        let parked = backend.parked_rows(None).unwrap();
+        assert_eq!(parked.len(), 1, "{parked:?}");
+        assert_eq!(parked[0].kind, "remove");
+        assert_eq!(parked[0].collection, "book");
+        assert!(!parked[0].unconfirmed);
+        assert_eq!(backend.parked_rows(Some("book")).unwrap().len(), 1);
+
+        let err = backend.parked_rows(Some("nope")).unwrap_err();
+        assert_eq!(
+            pimalaya_cli::error::code_of::<ErrorCode>(&err),
+            Some(ErrorCode::AddressbookNotFound),
+        );
+
+        assert_eq!(backend.cancel_queued(parked[0].id).unwrap(), "remove");
+        assert!(backend.parked_rows(None).unwrap().is_empty());
     }
 }

@@ -9,7 +9,7 @@ status: current
 `cardamum mcp` is a Model Context Protocol server over stdio exposing the unified API as tools, on pimalaya-cli's shared `mcp` module (src/mcp.rs).
 
 ### Requirement: Tools are the classified unified API
-`cardamum mcp` SHALL expose as tools `account_capability`, `addressbook_list`, `card_list` and `card_read`, and, under `--allow-write` only, `addressbook_create`, `addressbook_update`, `addressbook_delete`, `card_create`, `card_update` and `card_delete`, each tool's input being its command's grammar without the composer flags, its output schema the command's own. A tool the account's backend does not serve at all SHALL NOT be listed.
+`cardamum mcp` SHALL expose as tools `account_capability`, `addressbook_list`, `card_list` and `card_read`, and, under `--allow-write` only, `addressbook_create`, `addressbook_update`, `addressbook_delete`, `card_add`, `card_update` and `card_delete`, each tool's input being its command's grammar without the composer flags, its output schema the command's own. Every leaf of `addressbook` and `card` SHALL be either a tool or excluded by name (`card build`, a local formatter writing files), and the instructions SHALL name no tool the server does not define, each checked by a test. A tool the account's backend does not serve at all SHALL NOT be listed.
 
 ### Requirement: A tool reads no local file
 Inside the MCP server, a vCard source SHALL be taken as text, a local path naming a file being no way in, and stdin SHALL never be read by a tool.

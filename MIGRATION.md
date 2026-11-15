@@ -1,8 +1,8 @@
 # Migration guide
 
-## From v0.3 to the next release
+## From v0.3 to v0.4
 
-The next release brings Cardamum to the standards Himalaya and Ortie share: no configuration wizard, one configuration path per `-c`, plain text with no table nor colour, one exit contract, a coded failure for what a caller acts on, an `errors` list on every command that reads several cards, a unified API whose backends say what they serve, and a REPL and an MCP server. A v0.3 configuration loads as it is, unless it sets a table or colour key, resolves its CardDAV server through `carddav.discover`, holds a key Cardamum does not know, or marks several accounts default.
+v0.4 brings Cardamum to the standards Himalaya and Ortie share: no configuration wizard, one configuration path per `-c`, plain text with no table nor colour, one exit contract, a coded failure for what a caller acts on, an `errors` list on every command that reads several cards, a unified API whose backends say what they serve, and a REPL and an MCP server. A v0.3 configuration loads as it is, unless it sets a table or colour key, resolves its CardDAV server through `carddav.discover`, holds a key Cardamum does not know, or marks several accounts default.
 
 The text output changes everywhere, the JSON of the writes and of the raw `request` commands changes shape, exit 3 is new, and a few commands now fail earlier or report differently. The CHANGELOG lists every change; these are the ones to act on.
 
@@ -14,7 +14,7 @@ The text output changes everywhere, the JSON of the writes and of the raw `reque
   ```sh
   # v0.3
   cardamum -c public.toml:private.toml card list
-  # next release
+  # v0.4
   cardamum -c public.toml -c private.toml card list
   ```
 - **`CARDAMUM_CONFIG` is no longer read.** Pass the path through `-c`, one flag per path for what was a `:`-separated list:
@@ -22,7 +22,7 @@ The text output changes everywhere, the JSON of the writes and of the raw `reque
   ```sh
   # v0.3
   CARDAMUM_CONFIG=~/.config/cardamum/work.toml cardamum card list
-  # next release
+  # v0.4
   cardamum -c ~/.config/cardamum/work.toml card list
   ```
 - **Every default path is read, as layers.** $XDG_CONFIG_HOME/cardamum/config.toml, $HOME/.config/cardamum/config.toml and $HOME/.cardamumrc are each deep-merged on top of the ones before, where v0.3 read the first one found. An rc file left beside a config.toml now overrides it: delete the one you do not use.
@@ -31,7 +31,7 @@ The text output changes everywhere, the JSON of the writes and of the raw `reque
   ```sh
   # v0.3
   cardamum -a default card list
-  # next release
+  # v0.4
   cardamum card list
   ```
 
@@ -48,7 +48,7 @@ The text output changes everywhere, the JSON of the writes and of the raw `reque
   addressbook.list.table.name-color = "green"
   account.list.table.name-color = "green"
 
-  # next release
+  # v0.4
   card.list.page-size = 50
   ```
 - **`carddav.discover` is gone.** Cardamum no longer resolves a domain to its CardDAV server (PACC, SRV and TXT records, `.well-known`) on every run, and a configuration holding `carddav.discover` fails by name (``The `carddav.discover` key is removed, …, see MIGRATION.md``). Name the server in `carddav.server`: a bare host still goes through its `/.well-known/carddav` over https, a URL with a path is the context root the principal walk starts from. Google answers its `.well-known` to an authenticated request alone, which Cardamum does not make: name the address book home in `carddav.home` instead, the account's address in it.
@@ -56,27 +56,27 @@ The text output changes everywhere, the JSON of the writes and of the raw `reque
   ```toml
   # v0.3
   carddav.discover = "example.org"
-  # next release, the host its SRV record named
+  # v0.4, the host its SRV record named
   carddav.server = "dav.example.org"
 
   # v0.3, Fastmail
   carddav.discover = "fastmail.com"
-  # next release
+  # v0.4
   carddav.server = "https://carddav.fastmail.com/dav/"
 
   # v0.3, iCloud
   carddav.discover = "icloud.com"
-  # next release
+  # v0.4
   carddav.server = "https://contacts.icloud.com/"
 
   # v0.3, Posteo
   carddav.discover = "posteo.de"
-  # next release
+  # v0.4
   carddav.server = "https://posteo.de:8843/"
 
   # v0.3, Google
   carddav.discover = "gmail.com"
-  # next release
+  # v0.4
   carddav.home = "https://www.googleapis.com/carddav/v1/principals/alice@gmail.com/lists"
   ```
 - **An unknown key fails the configuration**, at the top level and in an account too, naming the key, where v0.3 ignored it there (the backend and option tables refused one already): a misspelt `default` or `addressbook` no longer loads silently. Fix or delete it. A block for a backend the build leaves out still loads, unread, so one file serves a reduced build.
@@ -86,7 +86,7 @@ The text output changes everywhere, the JSON of the writes and of the raw `reque
   [accounts.example]
   defualt = true
 
-  # next release: fails naming `defualt`; write
+  # v0.4: fails naming `defualt`; write
   [accounts.example]
   default = true
   ```
@@ -95,7 +95,7 @@ The text output changes everywhere, the JSON of the writes and of the raw `reque
   ```toml
   # v0.3
   carddav.server = "https://bücher.example"
-  # next release
+  # v0.4
   carddav.server = "https://xn--bcher-kva.example"
   ```
 - **`pimdir.account` unset reads the store's one account.** Where v0.3 left it unset and read the collections grouped under no account, the backend now reads the one account the store groups its collections under, and refuses a store several accounts share, naming them. Set it on a shared store:
@@ -118,7 +118,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   # v0.3
   cardamum --json card list > cards.json || exit 1
 
-  # next release
+  # v0.4
   cardamum --json card list > cards.json
   case $? in
     0) ;;
@@ -143,7 +143,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   │ c1.vcf ┆ Jane ┆ jane@example.org ┆     │
   └────────┴──────┴──────────────────┴─────┘
 
-  next release
+  v0.4
   Account:      example (carddav)
   Addressbook:  contacts
   Page:         1, card 1, the last
@@ -162,7 +162,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   ```sh
   # v0.3
   cardamum card list | awk -F'│' 'NR > 3 { print $2 }'
-  # next release
+  # v0.4
   cardamum --json card list | jq -r '.cards[].id'
   ```
 - **`card list -s 0` lists every card**, where it listed none.
@@ -175,7 +175,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   v0.3
   {"error":"…","sources":["…"],"backtrace":null}
 
-  next release
+  v0.4
   {"code":"card-not-found","error":"…","sources":["…"],"backtrace":null}
   ```
 
@@ -185,23 +185,23 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   ```sh
   # v0.3: {"message":"Card `c1.vcf` successfully deleted"}
   cardamum --json card delete c1.vcf | jq -r '.message'
-  # next release: {"id":"c1.vcf","queued":false}
+  # v0.4: {"id":"c1.vcf","queued":false}
   cardamum --json card delete c1.vcf | jq -r '.id'
   ```
 
-  `addressbook update|delete` and `card delete` print `{id, queued}`, `card create` `{id, queued}`, `card update` `{id, keptProperties, queued}` and `addressbook create` `{id, name, queued}`, `queued` true when the write waits for a sync (pimdir), false otherwise; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-group members` `{id, added, removed}` and `card build -o` `{path, size}`.
+  `addressbook update|delete` and `card delete` print `{id, queued}`, `card add` `{id, queued}`, `card update` `{id, keptProperties, queued}` and `addressbook create` `{id, name, queued}`, `queued` true when the write waits for a sync (pimdir), false otherwise; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-groups members` `{id, added, removed}` and `card build -o` `{path, size}`.
 - **A queued write says so in its JSON.** v0.3's `card create` printed `{"id": …}` and `card update` `{"id": …, "keptProperties": […]}`; both now add `queued`, and `addressbook create` adds `name` and `queued`. Read `queued` rather than the wording to tell a pimdir write waiting for a sync:
 
   ```sh
-  # next release: {"id":"urn:uuid:…","queued":true}
-  cardamum --json card create -k book card.vcf | jq -r 'if .queued then "queued" else .id end'
+  # v0.4: {"id":"urn:uuid:…","queued":true}
+  cardamum --json card add -k book card.vcf | jq -r 'if .queued then "queued" else .id end'
   ```
 - **`card read` prints its `card list` row plus the vCard.** The keys `card list` prints join (`addressbookId`, `fnValue`, `email`, `tel`), and `encoding` comes beside `contents`: `utf-8` when `contents` is the vCard text, `base64` when its bytes are not UTF-8 and `contents` holds their base64; v0.3 failed on such a card. `card build` carries its card the same way:
 
   ```sh
   # v0.3
   cardamum --json card read -k book c1.vcf | jq -r '.contents'
-  # next release
+  # v0.4
   cardamum --json card read -k book c1.vcf | jq -r 'if .encoding == "base64" then .contents | @base64d else .contents end'
   ```
 - **The raw `request` commands wrap the response**: `gpeople request`, `jmap request` and `msgraph request` print `{"response": …}`, `null` when the server sent no body, where they printed the response itself.
@@ -209,7 +209,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   ```sh
   # v0.3
   cardamum --json msgraph request get me/contacts | jq '.value[]'
-  # next release
+  # v0.4
   cardamum --json msgraph request get me/contacts | jq '.response.value[]'
   ```
 - **The listings print `errors`.** `addressbook list` and `card list` print it beside their items, `carddav report query` and `report multiget` beside `cards` and `truncated`, `[]` when there is none: one `{id, code, error, sources}` per card the command could not read, where such a card was dropped (CardDAV, and a body that does not parse) or failed the whole listing (vdir, JMAP). Read the cards and their `errors` together; a non-empty list exits 3 (see above).
@@ -218,7 +218,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   v0.3
   {"cards":[{"id":"c1.vcf",…}]}
 
-  next release
+  v0.4
   {"cards":[{"id":"c1.vcf",…}],"nextPage":null,"errors":[{"id":"c2.vcf","code":"permission-denied","error":"The server refused the card with status 403","sources":[]}]}
   ```
 
@@ -239,6 +239,31 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
 - **A JMAP set error of a type io-jmap does not model is named as the server sent it**, where it read `unknown`.
 - **Piped `--json` prints one value per line**, and each schema of `cardamum json-schema` carries an `$id` naming the contract version.
 
+### Command names
+
+The commands take the names Himalaya and Calendula give them. Every v0.3 spelling is still accepted, hidden from the help, so a script keeps running; move to the new one when you touch it. What changes is the help, and the schema names of `cardamum json-schema`.
+
+- **`addressbook delete` and `addressbook update` take the address book as a positional**, as `himalaya mailbox delete <MAILBOX>` does. `-k/--addressbook` still works and leaves the help; giving both is refused (`usage-invalid`). `addressbook update` without one still takes `addressbook.default`, `addressbook delete` never does.
+
+  ```sh
+  # v0.3
+  cardamum addressbook delete -k work
+  cardamum addressbook update -k work --name Work
+  # v0.4
+  cardamum addressbook delete work
+  cardamum addressbook update work --name Work
+  ```
+- **`card create` is `card add`**, as `himalaya message add`; `card new` stays. `cardamum json-schema` names its schema `cardamum-card-add`, where v0.3 wrote `cardamum-card-create`, and the MCP tool is `card_add`.
+
+  ```sh
+  # v0.3
+  cardamum card create -k personal ada.vcf
+  # v0.4
+  cardamum card add -k personal ada.vcf
+  ```
+- **The `gpeople` resources are plural**, as the People API and Himalaya's `gmail` name them: `gpeople connections`, `gpeople contact-groups`, `gpeople other-contacts`. The singular names, and the `people`, `contacts`, `group`, `groups` and `other` aliases, still work. `cardamum json-schema` names their schemas by the plural path (`cardamum-gpeople-connections-list`).
+- **A JMAP card's `etag` is a BLAKE3 digest of its JSON**, 64 hex digits, the same from one build to the next, where v0.3 printed a 16-digit hash that changed with the Rust release a build used. An `etag` stored from v0.3 no longer matches: read the card again before passing it to `--if-match`.
+
 ### Commands that now fail earlier
 
 - **A verb or a flag the account's backend does not serve is refused before connecting**, with the `capability-missing` code: `--if-match` on JMAP, Graph, vdir and People deletes, a colour on JMAP, Graph and People addressbooks, a description on Graph and People, any addressbook write on pimdir. The adapters used to refuse once connected, without a code. `cardamum account capability` lists what an account's backend serves, and each `addressbook` and `card` command's `--help` ends with a `Backends:` section.
@@ -247,7 +272,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   ```sh
   # v0.3, a build without carddav: ran on JMAP
   cardamum card list
-  # next release
+  # v0.4
   cardamum --backend jmap card list
   ```
 
@@ -266,10 +291,12 @@ The release moves onto the family line every Pimalaya CLI shares: pimalaya-cli, 
 ### The pimdir store
 
 - **A store an earlier neverest wrote is refused**, with the `store-version` code: this release reads a store of pimdir storage-draft-11 alone, and nothing migrates a draft store. Run the neverest that wrote it until nothing is queued, upgrade neverest to a release on the same draft, move the store aside, then run `neverest init` and sync again. Do not delete the store first: its queued writes live there alone. A search index of an earlier draft is refused with `index-version` until the sync engine rebuilds it, and a store another user can read with `store-exposed`.
-- **A write queued over a card that changed is parked, not applied.** `card update` and `card delete` given `--if-match` name the version they matched on the write they queue, so a sync changing the card before applying it parks the write; and a `card update` or a `card delete` of a card in conflict is parked too, the card and its diverging body kept, where a delete settled the conflict. The command still answers that the write is queued: read `cardamum pimdir status` after a sync, which lists every parked write with the reason.
+- **A write queued over a card that changed is parked, not applied.** `card update` and `card delete` given `--if-match` name the version they matched on the write they queue, so a sync changing the card before applying it parks the write; and a `card update` or a `card delete` of a card in conflict is parked too, the card and its diverging body kept, where a delete settled the conflict. The command still answers that the write is queued: read `cardamum pimdir queue list` after a sync, which lists every parked write with the reason, and `cardamum pimdir queue cancel <ROW>` retracts one.
 
 ### New
 
+- `cardamum pimdir status` reports the store behind the account: its address books, how many of their cards are downloaded, how many creations are queued, and the parked writes.
+- `cardamum pimdir queue list`, `show` and `cancel`, as in Himalaya, list the cards queued for creation, which no listing shows before a sync applies them, and the parked rows (`row` and `kind` under `--json`), say where one row stands, and retract one, taking the store owner's role for that one write.
 - `cardamum pimdir search` and `cardamum pimdir count` answer from the store's search index, with the coverage of the answer: under `--json`, `coverage` carries `complete`, `bodiless`, `missing`, `unparseable`, `unindexed`, `behind` and `filling`, the three counts of bodies out of sight standing at 0 under a query none of whose terms reads a card's body.
 - `cardamum repl` runs commands over one account in a session, the unified client connecting once; it refuses the composer (`-i`) and stdin input (`stdin-taken`).
 - `cardamum mcp` serves the unified API to an AI agent over the Model Context Protocol, the writes only with `--allow-write`.

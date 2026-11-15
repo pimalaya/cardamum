@@ -227,9 +227,9 @@ impl Command {
             Self::Pimdir(cmd) => {
                 let (config, name, mut account_config) =
                     resolve_account(config_paths, account_name)?;
-                let backend = PimdirBackend::build(name, &mut account_config)?;
+                let backend = PimdirBackend::build(name.clone(), &mut account_config)?;
                 let account = Account::from(config).merge(Account::from(account_config));
-                cmd.execute(printer, &account, backend)
+                cmd.execute(printer, &name, &account, backend)
             }
             #[cfg(feature = "vdir")]
             Self::Vdir(cmd) => {

@@ -15,7 +15,7 @@ pub struct AddressbookIdArg {
     pub id: Option<String>,
 }
 
-/// The composer `card create` and `card update` refine a card in.
+/// The composer `card add` and `card update` refine a card in.
 #[derive(Debug, Parser)]
 pub struct CardComposerArgs {
     /// Edit the card in the composer before writing it.

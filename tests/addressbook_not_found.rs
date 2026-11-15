@@ -109,7 +109,9 @@ fn every_unified_command_refuses_an_unknown_addressbook() {
         &["card", "create", "-k", "nope", "--full-name", "Bob"],
         &["card", "update", "-k", "nope", "a", "--full-name", "Bob"],
         &["card", "delete", "-k", "nope", "a"],
+        &["addressbook", "update", "nope", "-n", "Renamed"],
         &["addressbook", "update", "-k", "nope", "-n", "Renamed"],
+        &["addressbook", "delete", "nope"],
         &["addressbook", "delete", "-k", "nope"],
     ];
 
@@ -128,7 +130,7 @@ fn an_addressbook_reaching_out_of_the_home_is_not_found() {
     for id in ["..", "../keep", "friends/..", ".", "friends/", ""] {
         let error = format!("Addressbook `{id}` not found");
 
-        let out = run(dir.path(), &["addressbook", "delete", "-k", id]);
+        let out = run(dir.path(), &["addressbook", "delete", id]);
         refused(&out, &error);
         kept(dir.path());
 
@@ -205,7 +207,7 @@ fn an_addressbook_the_home_holds_is_read_and_deleted_alone() {
     assert_eq!(out.status.code(), Some(0), "{json}");
     assert_eq!(json["cards"][0]["id"], "a", "{json}");
 
-    let out = run(dir.path(), &["addressbook", "delete", "-k", "friends"]);
+    let out = run(dir.path(), &["addressbook", "delete", "friends"]);
     let json: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(out.status.code(), Some(0), "{json}");
     assert_eq!(json["id"], "friends", "{json}");

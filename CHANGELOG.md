@@ -16,11 +16,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added the `--json` error code `addressbook-default-missing`: a card or address book command given no `-k` over an account setting no `addressbook.default` fails with it, naming the flag and the key, where it failed uncoded, as calendula codes `calendar-default-missing`.
 - Added `-V` and `--version` to `repl` lines, printing the version as the command line does.
 - Added a stable `code` to the `--json` error output for failures a caller acts on: `body-pending`, `precondition-failed`, and on pimdir the code io-pimdir names for a store or a write it refuses: `store-uncreated`, `store-version`, `store-foreign`, `store-corrupt`, `store-hash-algo`, `store-exposed`, `store-busy`, `lock-replaced`, `unsupported`, `item-duplicate`, `action-malformed`.
-- Added `pimdir status`, reporting the local pimdir store behind the account: its address books, how many of their cards are downloaded and how many creations are queued, and every write the sync engine parked rather than applied, with its queue row and the reason.
+- Added `pimdir status`, reporting the local pimdir store behind the account: its address books, how many of their cards are downloaded and how many creations are queued, and every write the sync engine parked rather than applied, with its queue row, its kind and the reason.
 - Added `pimdir search`, searching the account's cards in the pimdir query language through the store's search index.
 
   The sync engine builds and refreshes the index, cardamum only reads it. A hit carries the `card list` fields, its address book, what matched and a snippet; `-k` narrows to one address book, `--sort name|relevance` orders. The answer carries its coverage, `{complete, bodiless, missing, unparseable, unindexed, behind, filling}` under `--json` and one line under the list otherwise: the cards whose body is not local or whose body the index could not read or parse, each counted when a term of the query reads card bodies, and the index lagging the store.
 - Added `pimdir count`, counting the cards a pimdir query matches, with the same coverage.
+- Added `pimdir queue list`, `pimdir queue show` and `pimdir queue cancel`, as Himalaya's: the cards queued for creation, which no listing shows before a sync applies them, and the rows the sync engine parked, each by its queue row (`row`, `kind` under `--json`); where one row stands (`pending`, `parked`, `unconfirmed`, `applied` with the card it created, `unknown`); and the way to retract one, taking the store owner's role for that one write and refused while a sync holds it.
 - Added the `--json` error codes `index-missing`, `index-outdated`, `index-version`, `index-fts5-missing`, `query-refused` and `query-unanswerable`, raised by `pimdir search` and `pimdir count`.
 - Added a welcome for a first run: a person at a terminal meeting no configuration is shown the commands creating it from the shipped sample, then the first command to run.
 - Added `nextPage` to `card list --json`, the next page number while cards follow and `null` on the last page, and `--page-token`, taking it back.
@@ -44,6 +45,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **Breaking:** renamed `card create` to `card add`, as Himalaya's `message add`, its `json-schema` key becoming `cardamum-card-add`; `card create` stays a hidden alias and `card new` a visible one, and the MCP tool is `card_add`.
+- Changed `addressbook delete` and `addressbook update` to take the address book as a positional, as Himalaya's `mailbox delete <MAILBOX>`: `-k/--addressbook` stays a hidden alias, both together refused as `usage-invalid`, and the MCP tools keep their `addressbook` property.
+- **Breaking:** changed the `gpeople` resource commands to the plural nouns of the People API, `connections`, `contact-groups` and `other-contacts`, as Himalaya's `gmail` names its resources, their `json-schema` keys following the plural paths; the singular names stay hidden aliases.
+- Changed the version a JMAP card reports (`etag`, and what `--if-match` is compared with) to the BLAKE3 digest of its JSON, stable across builds, where a hash from Rust's `DefaultHasher` could change with the Rust release a build used.
 - Changed the unified commands to refuse a verb or a flag the account's backend does not serve before connecting, with `capability-missing`, rather than once connected with an uncoded error.
 - Changed every dependency to name the features it needs, and base64 to base64-codec.
 - Changed config.sample.toml to one `[accounts.example]` table and one commented section per backend or provider, each tested to parse.
@@ -71,11 +76,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed the refusal of a removed table or key to pimalaya-config's sentence, ``The `table` table is removed, …: delete it, see MIGRATION.md``, its shape unchanged.
 - Changed pimalaya-cli to 0.5.1 and pimalaya-config to 0.5.1.
 - Changed the `pimdir` feature to build io-pimdir's search, adding ical-rs, mime-rs and ariadne to the binary.
-- **Breaking:** changed every write printing a confirmation to print a receipt instead of `{"message": ...}` under `--json`: `addressbook update|delete` and `card delete` print `{id, queued}`, the item acted on and whether the write waits for a sync, `card create` `{id, queued}`, `card update` `{id, keptProperties, queued}` and `addressbook create` `{id, name, queued}`, `queued` `true` on pimdir and `false` elsewhere; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-group members` `{id, added, removed}` and `card build -o` `{path, size}`, its text `Saved <size> bytes to <path>` (pimalaya-cli's `SavedOutput`). The text form keeps its sentence. Every command now has a schema under `json-schema` (pimalaya-cli 0.3).
+- **Breaking:** changed every write printing a confirmation to print a receipt instead of `{"message": ...}` under `--json`: `addressbook update|delete` and `card delete` print `{id, queued}`, the item acted on and whether the write waits for a sync, `card add` `{id, queued}`, `card update` `{id, keptProperties, queued}` and `addressbook create` `{id, name, queued}`, `queued` `true` on pimdir and `false` elsewhere; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-groups members` `{id, added, removed}` and `card build -o` `{path, size}`, its text `Saved <size> bytes to <path>` (pimalaya-cli's `SavedOutput`). The text form keeps its sentence. Every command now has a schema under `json-schema` (pimalaya-cli 0.3).
 - Bumped pimalaya-cli, pimalaya-config and pimalaya-stream to 0.4 and io-jmap to 0.9. The `--json` failure object always carries `code`, `null` when none applies.
 
 - Bumped rustls-webpki to 0.103.16 and webpki-root-certs to 1.0.11, fixing RUSTSEC-2026-0382 and RUSTSEC-2026-0383.
-- Changed piped `--json` output to print one value per line, each schema of `json-schema` to carry an `$id` naming the contract version (`v0.3`), and added `cardamum-error`, the schema of the JSON failure object (pimalaya-cli `55b6693`). The wire objects of `gpeople`, `jmap` and `msgraph` are now described as JSON objects, and the abandoned arm of `card create` and `card update`, which `--json` never prints, is now `{}` rather than `null`.
+- Changed piped `--json` output to print one value per line, each schema of `json-schema` to carry an `$id` naming the contract version (`v0.3`), and added `cardamum-error`, the schema of the JSON failure object (pimalaya-cli `55b6693`). The wire objects of `gpeople`, `jmap` and `msgraph` are now described as JSON objects, and the abandoned arm of `card add` and `card update`, which `--json` never prints, is now `{}` rather than `null`.
 - **Breaking:** changed the `--json` output of `gpeople request`, `jmap request` and `msgraph request` to wrap the raw response as `{"response": …}`, so the payload is an object even when the server answers no body (`null`) or an array.
 - Changed `card list` on pimdir to stream the store rather than load it: it holds one batch of rows and the page it prints instead of every card body of the address book, reads the bodies of that page only, and stops once the page is full. The output is unchanged.
 - Changed io-pimdir to 0.13 (pimdir storage-draft-11, sync-draft-11 and search-draft-11), io-msgraph to 0.9, io-gpeople to 0.8 and io-http to 0.8, so cardamum shares one io-pimdir and one store schema with neverest, himalaya and calendula: an empty mail date is stored as no date, a band round keeps undated mail, and opening a store creates the `items_by_sort_global` index a page across collections walks. A response whose head passes 64 KiB or whose body passes 256 MiB now fails the exchange with a typed error instead of growing the buffer without bound,, a connection closing mid-body fails rather than spinning, and People and Graph fold vCard lines over 75 octets.
@@ -89,13 +94,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed a JMAP set error of a type io-jmap does not model to be named as the server sent it, where it read `unknown`.
 - Bumped vcard-rs to 0.6.
 
-  A 3.0 or 4.0 line longer than 75 octets that `card build`, `card create` or `card update` writes or edits is now folded.
+  A 3.0 or 4.0 line longer than 75 octets that `card build`, `card add` or `card update` writes or edits is now folded.
 
 - Changed the pimdir `update_card` and `delete_card` to honour `--if-match` against the `etag` they report, the store's hash of the card's body: a write naming a version the card no longer has is refused before anything is queued, with an error starting `Precondition failed:`.
 - Changed `card update` and `card delete` on pimdir to name, on the write they queue, the version `--if-match` matched (pimdir STORAGE §15.3): a write queued over a card a sync changes before applying it is parked rather than applied, and shows in `pimdir status`.
 - Changed a `card update` or a `card delete` of a conflicted pimdir card to be parked by the sync engine, the card and its diverging body kept, where a delete settled the conflict: cardamum decides no conflict, a client showing it or the server does.
 - Changed the pimdir writes to be refused before they are queued when a source of the store does not support them, naming the capability, the source and why (pimdir draft-03, STORAGE §15.6). A write a source supports only in part logs a warning.
-- Changed `card create`, `card update` and `card delete` on pimdir to say the write is queued for the next sync instead of reporting it done; the `--json` output is unchanged.
+- Changed `card add`, `card update` and `card delete` on pimdir to say the write is queued for the next sync instead of reporting it done; the `--json` output is unchanged.
 
   A queued create reports the card's link id, its `UID`, and is not listed until the sync applies it.
 
@@ -116,6 +121,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed `card add -k <group>` on Google People leaving a contact in myContacts when the group does not exist: it created the contact, then failed adding the membership with a bare 404, so a retry made a second one. Every card command on People now reads the group it names first, and an unknown one fails `addressbook-not-found` before anything is written; a membership refused after the create says the card stays in Contacts.
+- Fixed `card list -k <group>` on Google People listing an unknown group as empty with exit 0: it fails `addressbook-not-found`, as vdir and pimdir do. `card read`, `update` and `delete`, which ignored the group, check it too, and `addressbook update` and `delete` code a group People does not hold the same way.
 - Fixed `card read` printing a card's control characters as is, which could drive the terminal: the text view replaces them, CRLF read as LF, and `--json` keeps the bytes.
 - Fixed the write confirmations printing a server-given id as is.
 - Fixed a unified command spawning its secret commands again when it reopened its backend after the composer.
@@ -124,10 +131,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed a pimdir card whose body blob is missing reporting an `etag`, which an `--if-match` could then match.
 - Fixed a year-less birthday (`BDAY:--MMDD`) on the gpeople backend being stashed instead of becoming a People birthday, so Google now shows it and creates its yearly calendar event (io-gpeople `e507d82`, [#26](https://github.com/pimalaya/cardamum/issues/26)).
 - Fixed pimdir recognising an address book only by the exact kind `text/vcard`: a kind carrying parameters now counts.
-- Fixed `card create` on pimdir reporting as queued a card whose `UID` the address book already holds, synced or queued, which the sync then parked: it is now refused with `item-duplicate`, leaving nothing in the store, and `-i` keeps the composer file.
+- Fixed `card add` on pimdir reporting as queued a card whose `UID` the address book already holds, synced or queued, which the sync then parked: it is now refused with `item-duplicate`, leaving nothing in the store, and `-i` keeps the composer file.
 - Fixed a pimdir `card update` made from the card it read (no vCard source, or `--if-match`) overwriting, unmerged, a server change a sync brought in before applying it: the queued update now names the body it was made against, and the sync engine parks it instead.
 - Fixed `card update` on Google People erasing what a vCard cannot show of the fields it changes: a further organization, a relation of another type, a custom type, a sub-field without a vCard slot.
-- Fixed `card create` and `card update` on Google People leaving out a property longer than 8 KiB without a word: a warning names it.
+- Fixed `card add` and `card update` on Google People leaving out a property longer than 8 KiB without a word: a warning names it.
 - Fixed `addressbook update --description ""` on JMAP leaving the description in place: it is cleared.
 - Fixed the Microsoft Graph listings following a next page link off the Graph origin with the account's token: such a link is refused.
 - Fixed a credential command prompting for a password (`systemd-ask-password`) hanging the run: it now reads the terminal when cardamum runs in one (pimalaya-config 0.4.1).

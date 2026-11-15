@@ -45,7 +45,7 @@ the contacts of one account. Find an addressbook with addressbook_list and \
 pass its id as `addressbook`, the account's default one when left out. \
 List its cards with card_list, a page at a time: give `nextPage` back as \
 `page-token` for the next one. A card's `id` names it, in that \
-addressbook, for card_read, card_update and card_delete. card_create and \
+addressbook, for card_read, card_update and card_delete. card_add and \
 card_update take the card as vCard text in `vcard`, or as field flags \
 (`full-name`, `email`, `phone`), never as a path. account_capability \
 says what this account's backend serves; a tool it cannot serve is not \
@@ -70,7 +70,7 @@ const TOOLS: &[McpTool] = &[
     McpTool::write("addressbook", "delete", true),
     McpTool::read("card", "list"),
     McpTool::read("card", "read"),
-    McpTool::write("card", "create", false),
+    McpTool::write("card", "add", false),
     McpTool::write("card", "update", true),
     McpTool::write("card", "delete", true),
 ];
@@ -94,7 +94,7 @@ pub struct McpCommand {
     /// List the tools that change the addressbooks and the cards too.
     ///
     /// Adds the addressbook create, update and delete tools and the card
-    /// create, update and delete tools.
+    /// add, update and delete tools.
     #[arg(long)]
     pub allow_write: bool,
 }
@@ -311,7 +311,45 @@ mod tests {
             !tools.iter().any(|name| name.starts_with("addressbook_c")),
             "{tools:?}"
         );
-        assert!(tools.contains(&String::from("card_create")), "{tools:?}");
+        assert!(tools.contains(&String::from("card_add")), "{tools:?}");
+    }
+
+    /// The unified API leaves no tool exposes.
+    const EXCLUDED: &[(&str, &str)] = &[("card", "build")];
+
+    #[test]
+    fn every_unified_leaf_is_classified() {
+        let mut cli = Cli::command();
+        cli.build();
+
+        for group in ["addressbook", "card"] {
+            let group = cli.find_subcommand(group).unwrap();
+
+            for leaf in group
+                .get_subcommands()
+                .filter(|leaf| leaf.get_name() != "help")
+            {
+                let path = (group.get_name(), leaf.get_name());
+                let classified = TOOLS.iter().any(|tool| (tool.group, tool.leaf) == path)
+                    || EXCLUDED.contains(&path);
+
+                assert!(classified, "{path:?} is neither a tool nor excluded");
+            }
+        }
+    }
+
+    #[test]
+    fn the_instructions_name_existing_tools() {
+        let words = INSTRUCTIONS
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+            .filter(|word| word.contains('_'));
+
+        for word in words {
+            let known = TOOLS
+                .iter()
+                .any(|tool| word == format!("{}_{}", tool.group, tool.leaf));
+            assert!(known, "{word}");
+        }
     }
 
     #[test]

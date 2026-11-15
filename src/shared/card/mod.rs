@@ -4,10 +4,10 @@
 
 mod types;
 
+pub mod add;
 pub mod build;
 pub mod cli;
 pub mod composer;
-pub mod create;
 pub mod delete;
 pub mod fields;
 pub mod list;

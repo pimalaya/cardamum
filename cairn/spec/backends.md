@@ -29,7 +29,10 @@ The output of a unified command SHALL NOT carry a field that only one backend fi
 A backend with no entity-tag concept SHALL refuse `--if-match` rather than accept and ignore it: its table declares `card.update.if-match` or `card.remove.if-match` at `none`, so the command fails with `capability-missing` before connecting, and the adapter keeps its own refusal. Silently dropping a guard the caller asked for is the one outcome that reads as protection and is none. A backend whose read reports a version its write takes no guard on (the Graph `changeKey`, the hash of a JMAP ContactCard) SHALL compare it with the card it reads just before the write and declare the guard `partial`, the detail saying a write landing in between is not caught ("A delete can be gated on a version", commands).
 
 ### Requirement: Card ids are backend-native and verbatim
-A card's shared `id` SHALL be the backend's own identifier, used verbatim end to end: the last path segment of the resource href (CardDAV), the file stem (vdir), the `ContactCard` id (JMAP), the contact id (Graph), the person id (People), or the store-assigned public `seq` (pimdir). No adapter SHALL add or strip a file extension when addressing a resource. CardDAV names a new card `<uuid>.vcf` itself and passes the whole name through, since the server owns the resource name from then on. A CardDAV write SHALL report the id io-webdav answers, never the caller's string: `card create` and `carddav put` print the last segment of the `Location` the server names, else of the URL sent, percent-encoded as a listing shows it.
+A card's shared `id` SHALL be the backend's own identifier, used verbatim end to end: the last path segment of the resource href (CardDAV), the file stem (vdir), the `ContactCard` id (JMAP), the contact id (Graph), the person id (People), or the store-assigned public `seq` (pimdir). No adapter SHALL add or strip a file extension when addressing a resource. CardDAV names a new card `<uuid>.vcf` itself and passes the whole name through, since the server owns the resource name from then on. A CardDAV write SHALL report the id io-webdav answers, never the caller's string: `card add` and `carddav put` print the last segment of the `Location` the server names, else of the URL sent, percent-encoded as a listing shows it.
+
+### Requirement: A JMAP card's version is a stable digest
+The JMAP backend SHALL report as a card's `etag`, in `card list` and `card read`, the BLAKE3 digest of the ContactCard's JSON in lowercase hex, its keys in serde_json's sorted order, JMAP having no per-card version. The function SHALL be a fixed one, never Rust's `DefaultHasher`, whose algorithm may change from one Rust release to the next: a version one build prints is passed back as `--if-match` to another, and compared with the digest of the card read before the write ("An update guards on the version it read" in commands).
 
 ### Requirement: A listing is whole or fails
 A listing SHALL never come back shorter than the backend holds without saying so: a card it could not read SHALL be an `errors` entry ("Each backend names the cards it could not read"), and a listing that cannot be read at all SHALL fail. A CardDAV listing whose answer is not one whole `multistatus` document (an HTML page, a cut body, an empty one) SHALL fail with io-webdav's error; a CardDAV listing the server truncated (a 507 row, RFC 6352 §8.6.1) SHALL add an entry with a `null` id and no code saying the listing is incomplete. A vdir listing SHALL leave out a card removed while it lists. A Graph listing SHALL follow its next page through io-msgraph's `page_get`, which refuses a link off the Graph origin, so the token never follows a link elsewhere.
@@ -44,6 +47,14 @@ A backend SHALL report a card it could not read as an `errors` entry and SHALL n
 - CardDAV: a row the server answered without the card's data (a row refused whole, a refused `address-data` property, or none sent) SHALL be an entry naming the card, coded `permission-denied` when the row or a refused property carries a 403, else `card-unreadable`, each refused property and its status in `sources`; the entries print on the first page only, as the whole address book is read before the page is cut;
 - CardDAV, Graph, People: a page or an answer that fails SHALL fail the listing whole.
 
+### Requirement: People resolves its contact group before acting
+The People backend SHALL read the contact group a card command names (`contactGroups.get`, no members) before it lists, reads or writes anything through it, myContacts excepted, every account holding it: a group People does not hold SHALL fail coded `addressbook-not-found`, ``Addressbook `<id>` not found`` with People's answer in `sources`, after that one request. A listing narrows every connection to the group's members on the client, and a create lands in myContacts before its membership is added, so without it a typo lists as an empty group and a create leaves a contact behind before failing. A membership refused after the create SHALL say the card was created in Contacts and not added to the group. `addressbook update` and `addressbook delete` of a group People does not hold SHALL fail with the same code.
+
+#### Scenario: A card added to a group Google does not hold
+- GIVEN a Google account holding no contact group `nope`
+- WHEN `cardamum --json card add -k nope c.vcf` runs, or `cardamum --json card list -k nope`
+- THEN each exits 1 coded `addressbook-not-found` after one `GET contactGroups/nope`, and no `createContact` is sent
+
 ### Requirement: Local storage backends
 vdir and pimdir SHALL adapt io-vdir and io-pimdir. vdir stores each addressbook as an immediate subdirectory of `vdir.home-dir` and each card as a `.vcf` file inside it, byte-faithfully. pimdir is an offline cache a sync engine populates through io-pimdir, which holds both the store and the engine, and follows the cache requirements below.
 
@@ -54,7 +65,7 @@ A write creates whatever directory it is handed, a listing of a missing one answ
 
 #### Scenario: An id reaching out of the home
 - GIVEN the account `perso` whose vdir home `outer/home` holds the addressbook `friends` alone, beside the directory `outer/keep`
-- WHEN `cardamum --json addressbook delete -k ..`, `addressbook delete -k ../keep` or `card list -k nope` runs
+- WHEN `cardamum --json addressbook delete ..`, `addressbook delete ../keep` or `card list -k nope` runs
 - THEN each exits 1 with the failure object coded `addressbook-not-found`, and the home, `outer/keep` and the directory holding them are left as they were
 
 ### Requirement: A cache renames nothing it cannot push
@@ -75,8 +86,8 @@ The pimdir backend SHALL treat the store as a possibly-partial cache. `get_card`
 ### Requirement: A pimdir card listing streams the store
 `list_cards` on pimdir SHALL walk the address book in keyset batches of the store's contacts order and hold one batch of rows and the page it returns, never the address book. The cards before the page SHALL be counted off their rows without reading a body, a body SHALL be read only for a card the page returns, and the walk SHALL stop once the page is full.
 
-### Requirement: pimdir takes the reader and producer roles, never the owner
-The pimdir backend SHALL read through a `PimdirReader` and write through a `PimdirProducer`, and SHALL NOT open a `PimdirStore`. The owner handle drains the queue, sweeps the objects and purges the trash, and holds an exclusive lock on the store for its lifetime, so holding it would both lock a sync out for the length of a listing and put every destructive verb behind a frontend that never calls them. The reader SHALL be built with the pending overlay, so an update or removal this process staged reads back before the store's owner applies it.
+### Requirement: pimdir takes the reader and producer roles, the owner's for one cancellation
+The pimdir backend SHALL read through a `PimdirReader` and write through a `PimdirProducer`, and SHALL open a `PimdirStore` for `pimdir queue cancel` alone, through `PimdirStore::open_current`, which creates and migrates nothing, dropping the one row and releasing the handle inside the call, as Himalaya cancels a queued action. The owner handle drains the queue, sweeps the objects and purges the trash, and holds an exclusive lock on the store for its lifetime, so holding it any longer would both lock a sync out for the length of a command and put every destructive verb behind a frontend that never calls them; a sync holding it refuses the cancellation at once, coded `store-owned`. The reader SHALL be built with the pending overlay, so an update or removal this process staged reads back before the store's owner applies it.
 
 ### Requirement: A pimdir body is named by the store's own hash
 The pimdir backend SHALL leave a body's name to the producer staging it (`enqueue_with_body`), which hashes it with BLAKE3, the one algorithm a store records in `store_meta.hash_algo` (pimdir STORAGE §5; a store recording another is refused as `store-hash-algo`), and SHALL NOT hash or write a body itself. A body named under another algorithm is a body no read ever finds, and one written outside the producer's staging lock is one a collector may remove before its row pins it.
@@ -214,6 +225,6 @@ Because a bare origin is not necessarily the context root (Fastmail serves conta
 ### Requirement: The connection is opened by the call that needs it
 `AddressbookClient` SHALL select its backend from the configuration without connecting, and open the connection on the first call that needs one. A command that never reaches the network therefore never opens a socket, and a command that runs a composer holds none open while the editor is up.
 
-That last case is why the rule exists rather than being an optimization. A server closes an idle connection, and an editor session lasts minutes: a write landing after one reads the end of a socket whose far side is gone, and reports `unexpected end of file` for a card that is perfectly good. `card create -i` connects for the first time when it creates, after the editor has exited.
+That last case is why the rule exists rather than being an optimization. A server closes an idle connection, and an editor session lasts minutes: a write landing after one reads the end of a socket whose far side is gone, and reports `unexpected end of file` for a card that is perfectly good. `card add -i` connects for the first time when it creates, after the editor has exited.
 
 A command that must read before the editor SHALL drop that connection before spawning the composer, so the write after it opens a fresh one. `card update -i` is the only such command: it reads the card to seed the editor with it.

@@ -13,7 +13,7 @@ use crate::gpeople::{client::GpeopleClient, input::PersonJsonArg, render::Gpeopl
 /// Create a contact from a raw People person JSON body.
 ///
 /// The contact lands in `myContacts`: add group memberships with
-/// `contact-group members --add`.
+/// `contact-groups members --add`.
 ///
 /// JSON output: the raw People person the server created.
 #[derive(Debug, Parser)]

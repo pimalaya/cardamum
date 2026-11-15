@@ -11,7 +11,7 @@ use crate::{
     capability,
     session::Session,
     shared::card::{
-        build::CardBuildCommand, create::CardCreateCommand, delete::CardDeleteCommand,
+        add::CardAddCommand, build::CardBuildCommand, delete::CardDeleteCommand,
         list::CardListCommand, read::CardReadCommand, update::CardUpdateCommand,
     },
 };
@@ -27,8 +27,8 @@ pub enum CardCommand {
     #[command(after_long_help = capability::help("card", "read"))]
     Read(CardReadCommand),
     Build(Box<CardBuildCommand>),
-    #[command(visible_alias = "new", after_long_help = capability::help("card", "create"))]
-    Create(Box<CardCreateCommand>),
+    #[command(visible_alias = "new", alias = "create", after_long_help = capability::help("card", "add"))]
+    Add(Box<CardAddCommand>),
     #[command(after_long_help = capability::help("card", "update"))]
     Update(Box<CardUpdateCommand>),
     #[command(visible_alias = "rm", after_long_help = capability::help("card", "delete"))]
@@ -48,7 +48,7 @@ impl CardCommand {
             Self::Build(cmd) => cmd.execute(printer, account.config_paths, account.name),
             Self::List(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),
             Self::Read(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),
-            Self::Create(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),
+            Self::Add(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),
             Self::Update(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),
             Self::Delete(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),
         }

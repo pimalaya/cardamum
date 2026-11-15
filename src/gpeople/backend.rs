@@ -10,7 +10,7 @@
 //! user's own groups. Memberships are m:n labels, so one card can appear
 //! under several books and each listing is narrowed to its group.
 
-use anyhow::{Error, Result, bail};
+use anyhow::{Context, Error, Result, bail};
 use io_gpeople::v1::{
     client::{GpeopleClientStd, GpeopleClientStdConnectOptions, GpeopleClientStdError},
     rest::{
@@ -25,12 +25,13 @@ use io_gpeople::v1::{
     },
 };
 use log::warn;
+use pimalaya_cli::error::with_code;
 use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 
 use crate::{
     config::{GpeopleConfig, ProxyConfig},
-    error,
+    error::{self, ErrorCode},
     gpeople::client::is_missing,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
@@ -166,7 +167,8 @@ impl GpeopleBackend {
         let resource_name = format!("contactGroups/{id}");
         let current = self
             .inner
-            .contact_group_get(&resource_name, None, &[])?
+            .contact_group_get(&resource_name, None, &[])
+            .map_err(|err| group_error(id, err))?
             .response;
 
         let group = GpeopleContactGroup {
@@ -189,17 +191,42 @@ impl GpeopleBackend {
         }
 
         self.inner
-            .contact_group_delete(&format!("contactGroups/{id}"), false)?;
+            .contact_group_delete(&format!("contactGroups/{id}"), false)
+            .map_err(|err| group_error(id, err))?;
+        Ok(())
+    }
+
+    /// Fails coded `addressbook-not-found` unless People holds the contact
+    /// group `id`, before anything is read or written through it.
+    ///
+    /// A listing narrows every connection to the group's members and a
+    /// create lands in myContacts before its membership is added, so
+    /// without this a typo would list as an empty group, and a create
+    /// would leave a contact behind before failing. myContacts is every
+    /// account's and costs no request; a user group is read once, its
+    /// members left out.
+    fn resolve_group(&mut self, id: &str) -> Result<()> {
+        if id == MY_CONTACTS_GROUP {
+            return Ok(());
+        }
+
+        self.inner
+            .contact_group_get(&format!("contactGroups/{id}"), None, &[])
+            .map_err(|err| group_error(id, err))?;
         Ok(())
     }
 
     /// Lists the contacts of the group, each projected onto a vCard.
+    ///
+    /// An unknown group fails rather than list as empty.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
         skip: usize,
         take: Option<usize>,
     ) -> Result<Vec<Card>> {
+        self.resolve_group(addressbook_id)?;
+
         let mut cards = Vec::new();
         let mut page_token: Option<String> = None;
 
@@ -233,6 +260,8 @@ impl GpeopleBackend {
 
     /// Reads the contact `card_id`, projected onto a vCard document.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
+        self.resolve_group(addressbook_id)?;
+
         let person = self
             .inner
             .person_get(
@@ -249,11 +278,15 @@ impl GpeopleBackend {
     /// Creates the vCard as a People contact, returning its new id.
     ///
     /// Creates always land in myContacts, so a user group target adds
-    /// the membership right after. A property too long for the stash
-    /// is left out and logged as a warning.
+    /// the membership right after, the group resolved before the contact
+    /// is created: an unknown one creates nothing. A membership refused
+    /// after the create says the contact stays in myContacts. A property
+    /// too long for the stash is left out and logged as a warning.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let vcard = into_vcard_text(contents)?;
         let GpeoplePersonVcard { person, dropped } = GpeoplePerson::from_vcard(&vcard)?;
+
+        self.resolve_group(addressbook_id)?;
 
         let created = self
             .inner
@@ -267,20 +300,27 @@ impl GpeopleBackend {
         }
 
         if addressbook_id != MY_CONTACTS_GROUP {
+            let kept = || {
+                format!(
+                    "Card `{id}` was created in Contacts but not added to addressbook \
+                     `{addressbook_id}`: delete it, or add it to the group"
+                )
+            };
+
             let modified = self
                 .inner
                 .contact_group_members_modify(
                     &format!("contactGroups/{addressbook_id}"),
                     &[created.resource_name],
                     &[],
-                )?
+                )
+                .with_context(kept)?
                 .response;
 
             if !modified.not_found_resource_names.is_empty() {
-                bail!(
-                    "Google group member add rejected: {:?} not found",
-                    modified.not_found_resource_names
-                );
+                let names = &modified.not_found_resource_names;
+                let err = anyhow::anyhow!("Google group member add rejected: {names:?} not found");
+                return Err(err.context(kept()));
             }
         }
 
@@ -297,12 +337,13 @@ impl GpeopleBackend {
     /// warning.
     pub fn update_card(
         &mut self,
-        _addressbook_id: &str,
+        addressbook_id: &str,
         card_id: &str,
         contents: Vec<u8>,
         if_match: Option<&str>,
     ) -> Result<CardUpdateOutcome> {
         let vcard = into_vcard_text(contents)?;
+        self.resolve_group(addressbook_id)?;
         let resource_name = format!("people/{card_id}");
 
         let GpeoplePersonVcard {
@@ -350,13 +391,14 @@ impl GpeopleBackend {
     /// Deletes the contact `card_id`.
     pub fn delete_card(
         &mut self,
-        _addressbook_id: &str,
+        addressbook_id: &str,
         card_id: &str,
         if_match: Option<&str>,
     ) -> Result<()> {
         if if_match.is_some() {
             bail!("Google People cannot gate a delete on an ETag");
         }
+        self.resolve_group(addressbook_id)?;
         self.inner
             .contact_delete(&format!("people/{card_id}"))
             .map_err(|err| card_error(card_id, err))?;
@@ -408,6 +450,17 @@ fn group_id(resource_name: &str) -> &str {
 fn card_error(card_id: &str, err: GpeopleClientStdError) -> Error {
     match is_missing(&err) {
         true => error::card_not_found(card_id, err.into()),
+        false => err.into(),
+    }
+}
+
+/// The failure of a request on the contact group `id`,
+/// `addressbook-not-found` when People holds no such group: cardamum's
+/// sentence, People's answer in `sources`.
+fn group_error(id: &str, err: GpeopleClientStdError) -> Error {
+    match is_missing(&err) {
+        true => with_code(err.into(), |_| Some(ErrorCode::AddressbookNotFound))
+            .context(format!("Addressbook `{id}` not found")),
         false => err.into(),
     }
 }
@@ -595,7 +648,8 @@ mod tests {
         assert_eq!(delete_code(500, failed), None);
     }
 
-    /// A person People does not hold is a card not found, a group not.
+    /// A person People does not hold is a card not found, a group an
+    /// addressbook not found.
     #[test]
     fn a_missing_person_is_a_card_not_found() {
         let missing = json!({"error": {
@@ -613,6 +667,130 @@ mod tests {
         let err = refusing(404, &missing)
             .delete_addressbook("g9")
             .unwrap_err();
-        assert_eq!(error::code(&err), None, "{err:#}");
+        let code = Some(ErrorCode::AddressbookNotFound);
+        assert_eq!(code_of(&err), code, "{err:#}");
+        assert_eq!(err.to_string(), "Addressbook `g9` not found");
+    }
+
+    /// People's answer to a request on something it does not hold.
+    fn not_found() -> Vec<u8> {
+        let body = json!({"error": {
+            "code": 404,
+            "message": "Requested entity was not found.",
+            "status": "NOT_FOUND",
+        }});
+        script::response(404, "application/json", &body.to_string())
+    }
+
+    /// The request lines a scripted server received, in order.
+    fn lines(requests: &crate::script::Requests) -> Vec<String> {
+        let requests = requests.lock().unwrap();
+        requests
+            .iter()
+            .map(|request| {
+                let request = String::from_utf8_lossy(request);
+                request.lines().next().unwrap_or_default().to_owned()
+            })
+            .collect()
+    }
+
+    const CARD: &str = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\nEND:VCARD\r\n";
+
+    /// A card command run against a backend, its result dropped.
+    type Call = fn(&mut GpeopleBackend) -> anyhow::Result<()>;
+
+    /// A card command naming a contact group People does not hold fails
+    /// coded `addressbook-not-found` on the one request reading the group:
+    /// a create sends no `createContact`, so no contact is left in
+    /// myContacts, and a listing does not read as an empty group.
+    #[test]
+    fn an_unknown_group_is_not_found_before_anything_is_written() {
+        let calls: [(&str, Call); 5] = [
+            ("create", |b| b.create_card("nope", CARD.into()).map(drop)),
+            ("list", |b| b.list_cards("nope", 0, None).map(drop)),
+            ("read", |b| b.get_card("nope", "c1").map(drop)),
+            ("update", |b| {
+                b.update_card("nope", "c1", CARD.into(), None).map(drop)
+            }),
+            ("delete", |b| b.delete_card("nope", "c1", None)),
+        ];
+
+        for (name, call) in calls {
+            let (script, requests) = Script::new([not_found()]);
+            let mut backend = GpeopleBackend {
+                inner: GpeopleClientStd::new(script, "token"),
+            };
+
+            let err = call(&mut backend).unwrap_err();
+            let code = Some(ErrorCode::AddressbookNotFound);
+            assert_eq!(code_of(&err), code, "{name}: {err:#}");
+            assert_eq!(err.to_string(), "Addressbook `nope` not found", "{name}");
+
+            let lines = lines(&requests);
+            assert_eq!(lines.len(), 1, "{name}: {lines:?}");
+            assert!(
+                lines[0].starts_with("GET /v1/contactGroups/nope"),
+                "{name}: {lines:?}"
+            );
+        }
+    }
+
+    /// A create into a group People holds reads the group, creates the
+    /// contact, then adds the membership; a membership refused after the
+    /// create says the contact stays in Contacts.
+    #[test]
+    fn a_create_into_a_group_adds_the_membership_or_says_what_stays() {
+        let group = json!({"resourceName": "contactGroups/g1", "etag": "e1", "name": "Work"});
+        let created = json!({"resourceName": "people/c2", "etag": "%EgUBAi43PRoEAQIFByIM"});
+        let added = json!({});
+
+        let (script, requests) =
+            Script::new([response(&group), response(&created), response(&added)]);
+        let mut backend = GpeopleBackend {
+            inner: GpeopleClientStd::new(script, "token"),
+        };
+        let id = backend.create_card("g1", CARD.into()).unwrap();
+        assert_eq!(id, "c2");
+
+        let lines = lines(&requests);
+        assert_eq!(lines.len(), 3, "{lines:?}");
+        assert!(
+            lines[0].starts_with("GET /v1/contactGroups/g1"),
+            "{lines:?}"
+        );
+        assert!(lines[1].contains("people:createContact"), "{lines:?}");
+        assert!(
+            lines[2].contains("contactGroups/g1/members:modify"),
+            "{lines:?}"
+        );
+
+        let (script, _) = Script::new([response(&group), response(&created), not_found()]);
+        let mut backend = GpeopleBackend {
+            inner: GpeopleClientStd::new(script, "token"),
+        };
+        let err = backend.create_card("g1", CARD.into()).unwrap_err();
+        let error = err.to_string();
+        assert!(
+            error.starts_with("Card `c2` was created in Contacts"),
+            "{error}"
+        );
+        assert!(error.contains("addressbook `g1`"), "{error}");
+    }
+
+    /// myContacts is every account's: a listing of it reads no group.
+    #[test]
+    fn my_contacts_is_never_resolved() {
+        let page = json!({"connections": [], "totalItems": 0});
+        let (script, requests) = Script::new([response(&page)]);
+        let mut backend = GpeopleBackend {
+            inner: GpeopleClientStd::new(script, "token"),
+        };
+
+        let cards = backend.list_cards(MY_CONTACTS_GROUP, 0, None).unwrap();
+        assert!(cards.is_empty());
+
+        let lines = lines(&requests);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(lines[0].contains("connections"), "{lines:?}");
     }
 }

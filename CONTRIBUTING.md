@@ -17,6 +17,10 @@ Cardamum owns no protocol code. It aggregates the backends, renders the results 
 
 The cross-backend layer is owned here rather than by an aggregator crate: the shared types live in src/shared, and each backend maps them onto its protocol crate through its own backend.rs. A verb some backends serve with the same result joins the unified API, each backend declaring its level in src/capability.rs (`full`, `partial`, `server` or `none`); a concept only one protocol has, or one whose result differs, belongs to that protocol's command family.
 
+The pimdir derivations (link id, summary, sort key, content hash) are io-pimdir's own and never reimplemented here: Neverest writes into the same store through the same crate, and a card staged by cardamum has to link and summarize exactly as one arriving through a sync.
+
+A test follows the correct behaviour: never adjust production code to make one pass. A user-facing change lands in CHANGELOG.md too, a release-scoped roll-up over the Cairn log rather than a replacement for it.
+
 ## Feature matrix
 
 Each backend sits behind its own cargo feature, and a network backend needs a TLS provider. The default set is every backend, `rustls-ring` and `vendored`.
@@ -44,4 +48,8 @@ cargo clippy --all-targets --no-default-features --features rustls-ring,pimdir -
 
 ## Testing against a real server
 
-Providers disagree on what they advertise and on what they then honour. The live suites (tests/google.rs, tests/microsoft.rs, tests/fastmail.rs) run on every push: `cargo test --test google -- --ignored anonymous::` touches no account, `credentialed::` reads the test accounts and needs their secrets. A backend change beyond them is verified by hand against a real account, `cardamum -a <account> account check` first for the connection, then the commands it touches. The reports live in [cairn/spec/testing](./cairn/spec/testing), one file per provider: add yours there, and never paste a secret into one.
+Providers disagree on what they advertise and on what they then honour. The live suites (tests/google.rs, tests/microsoft.rs, tests/fastmail.rs) run on every push: `cargo test --test google -- --ignored anonymous::` touches no account, `credentialed::` reads the test accounts and needs their secrets. A backend change beyond them is verified by hand against a real account, `cardamum -a <account> account check` first for the connection, then the commands it touches. The reports live in [cairn/spec/testing](./cairn/spec/testing), one file per provider: add yours there, and never paste a secret into one, nor print one in output, a log line or a test fixture.
+
+## Cairn
+
+This repository follows [Cairn](https://github.com/pimalaya/cairn): a change that affects behaviour is not done until the specification is updated and a log entry is written, and a landed change moves to cairn/changes/archive/. See [AGENTS.md](./AGENTS.md) for the full stanza.

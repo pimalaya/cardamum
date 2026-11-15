@@ -18,7 +18,7 @@ use crate::gpeople::{
 #[derive(Debug, Parser)]
 pub struct GpeopleOtherContactCopyCommand {
     /// Other-contact resource name (`otherContacts/<id>`), as shown in
-    /// the ID column of `other-contact list`.
+    /// the ID column of `other-contacts list`.
     #[arg(value_name = "RESOURCE-NAME")]
     pub resource_name: String,
 }

@@ -1,4 +1,4 @@
-//! # Card create command
+//! # Card add command
 //!
 //! Appends a card to an addressbook, from a vCard source, from field
 //! flags, from the composer, or from any combination of the three.
@@ -37,7 +37,7 @@ use crate::shared::{
 /// or the one a queued card is staged under, and whether a sync engine
 /// creates it later.
 #[derive(Debug, Parser)]
-pub struct CardCreateCommand {
+pub struct CardAddCommand {
     /// Addressbook the card is appended to.
     #[command(flatten)]
     pub addressbook: AddressbookIdArg,
@@ -58,7 +58,7 @@ pub struct CardCreateCommand {
     pub vcard: Option<String>,
 }
 
-impl CardCreateCommand {
+impl CardAddCommand {
     pub fn execute(self, printer: &mut impl Printer, client: &mut AddressbookClient) -> Result<()> {
         client.require(&[Capability::CardAdd])?;
         if self.vcard.is_none() && self.fields.is_empty() && !self.composer.interactive {
@@ -84,7 +84,7 @@ impl CardCreateCommand {
 
             let queued = client.queues_writes();
             let id = client.create_card(&addressbook_id, seeded)?;
-            return printer.out(CardCreateOutput::Created(CardCreatedOutput { id, queued }));
+            return printer.out(CardAddOutput::Created(CardAddedOutput { id, queued }));
         }
 
         let composer = CardComposer {
@@ -95,33 +95,33 @@ impl CardCreateCommand {
         // on the first call that needs it, so the editor runs with no
         // connection held and the create below opens one.
         let Some(draft) = composer.edit(printer, &seeded)? else {
-            return printer.out(CardCreateOutput::Abandoned {});
+            return printer.out(CardAddOutput::Abandoned {});
         };
 
         let created = client.create_card(&addressbook_id, draft.contents.clone());
         let id = draft.finish(created)?;
         let queued = client.queues_writes();
 
-        printer.out(CardCreateOutput::Created(CardCreatedOutput { id, queued }))
+        printer.out(CardAddOutput::Created(CardAddedOutput { id, queued }))
     }
 }
 
-/// What `card create` prints, which is whether it wrote anything.
+/// What `card add` prints, which is whether it wrote anything.
 ///
 /// Untagged, so the write serializes exactly as it would on its own. The
 /// second shape is reachable through `-i` alone, which `--json` refuses
 /// to run.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(untagged)]
-pub enum CardCreateOutput {
+pub enum CardAddOutput {
     /// The card the backend created.
-    Created(CardCreatedOutput),
+    Created(CardAddedOutput),
     /// Nothing, the edit having been abandoned: an empty object rather
     /// than null, so every payload of the command is a JSON object.
     Abandoned {},
 }
 
-impl fmt::Display for CardCreateOutput {
+impl fmt::Display for CardAddOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Created(out) => out.fmt(f),
@@ -133,7 +133,7 @@ impl fmt::Display for CardCreateOutput {
 /// The card the backend created, or queued for a sync to create.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct CardCreatedOutput {
+pub struct CardAddedOutput {
     /// Backend-assigned identifier of the new card, or the one a queued
     /// card is staged under, which no other command takes until a sync
     /// applies it.
@@ -142,7 +142,7 @@ pub struct CardCreatedOutput {
     pub queued: bool,
 }
 
-impl fmt::Display for CardCreatedOutput {
+impl fmt::Display for CardAddedOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.queued {
             true => writeln!(

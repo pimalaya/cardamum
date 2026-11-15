@@ -37,8 +37,8 @@ use crate::{
 
 /// Build a vCard and print it, writing it nowhere.
 ///
-/// The source, the field flags and `-i` stack as they do on `card
-/// create`, and the card comes back on stdout instead of going to a
+/// The source, the field flags and `-i` stack as they do on `card add`,
+/// and the card comes back on stdout instead of going to a
 /// backend, which is how a card is judged before it is sent. No account
 /// is resolved unless `-i` needs the configured composer.
 ///
@@ -98,7 +98,7 @@ impl CardBuildCommand {
 
         if !composer.interactive {
             // NOTE: what a create checks, a build checks too. A built card
-            // reaches `card create` as a source, which goes to the backend
+            // reaches `card add` as a source, which goes to the backend
             // as it was written, so a laxer check here would be a way
             // around that one.
             if vcard.is_none() {

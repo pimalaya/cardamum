@@ -57,7 +57,7 @@ impl GpeopleContactGroupMembersCommand {
     }
 }
 
-/// The contact group whose members `gpeople contact-group members` changed.
+/// The contact group whose members `gpeople contact-groups members` changed.
 #[derive(Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GpeopleMembersOutput {

@@ -8,14 +8,11 @@
 //! `vCardProps` escape hatch both ways, so the vCard document of record
 //! round-trips.
 //!
-//! JMAP has no per-card ETag, so the revision [`to_card`] surfaces is a
-//! hash of the card's JSON, driving display and manual If-Match checks
-//! only. Updates are last-write-wins, like Microsoft Graph.
+//! JMAP has no per-card ETag, so the revision [`to_card`] surfaces is the
+//! BLAKE3 digest of the card's JSON, the same from one cardamum build to
+//! the next, which `--if-match` is compared with before a write.
 
-use std::{
-    collections::BTreeMap,
-    hash::{DefaultHasher, Hash, Hasher},
-};
+use std::collections::BTreeMap;
 
 use io_jmap::rfc9610::contact_card::JmapContactCard;
 use serde_json::{Map, Value, to_string};
@@ -100,16 +97,15 @@ pub fn to_patch(vcard: &str, base_vcard: Option<&str>) -> Result<BTreeMap<String
     Ok(patch)
 }
 
-/// Revision token of a ContactCard: a hash of its JSON.
+/// Revision token of a ContactCard: the BLAKE3 digest of its JSON, in
+/// hex.
 ///
-/// serde_json maps are key-sorted, so the hash is independent of the
-/// property order the server picked.
+/// serde_json maps are key-sorted, so the digest is independent of the
+/// property order the server picked, and BLAKE3 is a fixed function, so
+/// a token printed by one build matches in another.
 fn etag(card: &JmapContactCard) -> Option<String> {
     let json = to_string(card).ok()?;
-    let mut hasher = DefaultHasher::new();
-    json.hash(&mut hasher);
-
-    Some(format!("{:016x}", hasher.finish()))
+    Some(blake3::hash(json.as_bytes()).to_hex().to_string())
 }
 
 #[cfg(test)]
@@ -119,6 +115,29 @@ mod tests {
     use super::*;
 
     const VCARD: &str = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:abc\r\nFN:Jane Doe\r\nEMAIL:jane@example.com\r\nTEL:+33612345678\r\nEND:VCARD\r\n";
+
+    /// The version is the BLAKE3 digest of the card's JSON, its keys
+    /// sorted whatever order the server sent them in, so a token printed
+    /// by one build matches in another. The digest is b3sum's of that
+    /// JSON.
+    #[test]
+    fn the_version_is_the_blake3_digest_of_the_json() {
+        let card: JmapContactCard = serde_json::from_value(json!({
+            "version": "1.0",
+            "uid": "abc",
+            "name": {"full": "Jane Doe"},
+            "@type": "Card",
+            "addressBookIds": {"b1": true},
+            "id": "c1",
+        }))
+        .unwrap();
+
+        let json = r#"{"id":"c1","addressBookIds":{"b1":true},"@type":"Card","name":{"full":"Jane Doe"},"uid":"abc","version":"1.0"}"#;
+        assert_eq!(to_string(&card).unwrap(), json);
+
+        let digest = "b610e5e0c6b2c3165e74896ddb4dc4d5df9069443cebec18b846061b8959f112";
+        assert_eq!(etag(&card).as_deref(), Some(digest));
+    }
 
     #[test]
     fn vcard_to_jscontact_maps_core_properties() {

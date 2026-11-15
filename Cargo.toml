@@ -21,7 +21,7 @@ native-tls = ["pimalaya-stream/native-tls", "io-webdav?/native-tls", "io-jmap?/n
 rustls-aws = ["pimalaya-stream/rustls-aws", "io-webdav?/rustls-aws", "io-jmap?/rustls-aws", "io-msgraph?/rustls-aws", "io-gpeople?/rustls-aws"]
 rustls-ring = ["pimalaya-stream/rustls-ring", "io-webdav?/rustls-ring", "io-jmap?/rustls-ring", "io-msgraph?/rustls-ring", "io-gpeople?/rustls-ring"]
 carddav = ["dep:io-webdav"]
-jmap = ["dep:io-jmap", "vcard-rs/jscontact"]
+jmap = ["dep:io-jmap", "dep:blake3", "vcard-rs/jscontact"]
 msgraph = ["dep:io-msgraph", "io-msgraph/vcard"]
 gpeople = ["dep:io-gpeople", "io-gpeople/vcard"]
 vdir = ["dep:io-vdir"]
@@ -47,6 +47,7 @@ toml = { version = "1.1", default-features = false, features = ["parse", "serde"
 anyhow = { version = "1", default-features = false, features = ["std"] }
 ariadne = { version = "0.6", default-features = false, optional = true }
 base64-codec = { version = "0.1", default-features = false, features = ["alloc"] }
+blake3 = { version = "1", default-features = false, optional = true }
 clap = { version = "4.4", default-features = false, features = ["derive", "error-context", "help", "std", "suggestions", "usage"] }
 getrandom = { version = "0.4", default-features = false }
 idna_adapter = { version = "=1.0.0", default-features = false }

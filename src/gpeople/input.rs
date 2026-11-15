@@ -14,8 +14,8 @@ use clap::Parser;
 use io_gpeople::v1::rest::people::GpeoplePersonField;
 use serde_json::Value;
 
-/// Positional raw People person JSON source, read by `connection
-/// create` and `connection update`.
+/// Positional raw People person JSON source, read by `connections
+/// create` and `connections update`.
 #[derive(Debug, Parser)]
 pub struct PersonJsonArg {
     /// A path to a JSON file, raw People person JSON, or `-` for stdin.

@@ -10,7 +10,6 @@ use pimalaya_cli::printer::Printer;
 use crate::capability::Capability;
 use crate::shared::{
     addressbook::AddressbookDiff,
-    arg::AddressbookIdArg,
     client::AddressbookClient,
     receipt::{Write, WriteReceipt},
 };
@@ -23,9 +22,21 @@ use crate::shared::{
 /// JSON output: `{"id", "queued"}`.
 #[derive(Debug, Parser)]
 pub struct AddressbookUpdateCommand {
-    /// Addressbook to update.
-    #[command(flatten)]
-    pub addressbook: AddressbookIdArg,
+    /// Addressbook to update, by id.
+    ///
+    /// Falls back to the `addressbook.default` config when omitted,
+    /// otherwise the command bails.
+    #[arg(value_name = "ADDRESSBOOK")]
+    pub addressbook: Option<String>,
+    /// The addressbook as an option, the v0.3 spelling of the positional.
+    #[arg(
+        short = 'k',
+        long = "addressbook",
+        value_name = "ADDRESSBOOK",
+        hide = true,
+        conflicts_with = "addressbook"
+    )]
+    pub addressbook_flag: Option<String>,
     /// New display name.
     #[arg(long, short, value_name = "TEXT")]
     pub name: Option<String>,
@@ -61,7 +72,8 @@ impl AddressbookUpdateCommand {
             bail!("Nothing to update: pass at least one of --name, --description or --color");
         }
 
-        let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
+        let addressbook = self.addressbook.or(self.addressbook_flag);
+        let addressbook_id = client.account.addressbook_id(addressbook)?;
         client.update_addressbook(&addressbook_id, patch)?;
 
         printer.out(WriteReceipt {
@@ -70,5 +82,40 @@ impl AddressbookUpdateCommand {
             what: "Addressbook",
             write: Write::Update,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::{CommandFactory, Parser, error::ErrorKind};
+
+    use super::AddressbookUpdateCommand;
+
+    fn parse(args: &[&str]) -> Result<Option<String>, ErrorKind> {
+        AddressbookUpdateCommand::try_parse_from([&["update"], args].concat())
+            .map(|cmd| cmd.addressbook.or(cmd.addressbook_flag))
+            .map_err(|err| err.kind())
+    }
+
+    /// The addressbook is an optional positional, the default one taken
+    /// without it, the v0.3 `-k` a hidden spelling of it.
+    #[test]
+    fn the_addressbook_is_a_positional_and_k_its_hidden_spelling() {
+        let work = Ok(Some(String::from("work")));
+        assert_eq!(parse(&["work", "-n", "Work"]), work);
+        assert_eq!(parse(&["-n", "Work", "work"]), work);
+        assert_eq!(parse(&["-k", "work", "-n", "Work"]), work);
+        assert_eq!(parse(&["-n", "Work"]), Ok(None));
+        let conflict = parse(&["work", "-k", "home", "-n", "Work"]);
+        assert_eq!(conflict, Err(ErrorKind::ArgumentConflict));
+
+        let usage = AddressbookUpdateCommand::command()
+            .render_usage()
+            .to_string();
+        assert_eq!(usage, "Usage: cardamum [OPTIONS] [ADDRESSBOOK]");
+        let help = AddressbookUpdateCommand::command()
+            .render_long_help()
+            .to_string();
+        assert!(!help.contains("-k"), "{help}");
     }
 }

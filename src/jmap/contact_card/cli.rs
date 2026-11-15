@@ -10,7 +10,7 @@ use crate::jmap::{
     client::JmapClient,
     contact_card::{
         changes::JmapContactCardChangesCommand, copy::JmapContactCardCopyCommand,
-        create::JmapContactCardCreateCommand, destroy::JmapContactCardDestroyCommand,
+        create::JmapContactCardAddCommand, destroy::JmapContactCardDestroyCommand,
         get::JmapContactCardGetCommand, query::JmapContactCardQueryCommand,
         update::JmapContactCardUpdateCommand,
     },
@@ -26,7 +26,7 @@ pub enum JmapContactCardCommand {
     Get(JmapContactCardGetCommand),
     Query(JmapContactCardQueryCommand),
     #[command(visible_aliases = ["add", "new"])]
-    Create(JmapContactCardCreateCommand),
+    Create(JmapContactCardAddCommand),
     Update(JmapContactCardUpdateCommand),
     #[command(visible_aliases = ["delete", "del", "rm", "remove"])]
     Destroy(JmapContactCardDestroyCommand),

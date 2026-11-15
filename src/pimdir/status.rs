@@ -22,12 +22,13 @@ use crate::pimdir::backend::PimdirBackend;
 /// An address book whose cards list but do not read is waiting on a sync
 /// to hydrate them, and this is where to see that coming. A parked write
 /// never lands: an update made from a card a sync changed since, a create
-/// the server refused. It is shown by its queue row (ROW), the id the
-/// store's own operator tooling retries or cancels it by.
+/// the server refused. It is shown by its queue row (ROW), the id
+/// `pimdir queue cancel` takes; `pimdir queue list` lists the queued
+/// creations themselves.
 ///
 /// JSON output: `{"account", "accounts", "addressbooks": [{"id", "name",
 /// "total", "hydrated", "queued"}], "parked": [{"row", "addressbookId",
-/// "action", "error"}]}`.
+/// "kind", "error"}]}`.
 #[derive(Debug, Parser)]
 pub struct PimdirStatusCommand;
 
@@ -80,7 +81,7 @@ pub struct PimdirParkedStatus {
     /// The address book the action targets.
     pub addressbook_id: String,
     /// The action kind (`add`, `update`, `remove`…).
-    pub action: String,
+    pub kind: String,
     /// Why the owner parked it.
     pub error: String,
 }
@@ -120,12 +121,12 @@ impl fmt::Display for PimdirStatusOutput {
         }
 
         if !self.parked.is_empty() {
-            let mut columns = Columns::new(["ROW", "ACTION", "ADDRESSBOOK", "ERROR"]);
+            let mut columns = Columns::new(["ROW", "KIND", "ADDRESSBOOK", "ERROR"]);
 
             for parked in &self.parked {
                 columns.push([
                     parked.row.to_string(),
-                    sanitize::text(&parked.action).into_owned(),
+                    sanitize::text(&parked.kind).into_owned(),
                     sanitize::text(&parked.addressbook_id).into_owned(),
                     sanitize::text(&parked.error).into_owned(),
                 ]);

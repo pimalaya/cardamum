@@ -25,7 +25,7 @@ use vcard::{
     },
 };
 
-/// The vCard fields `card create` and `card update` set from flags.
+/// The vCard fields `card add` and `card update` set from flags.
 ///
 /// Each flag names one property, and writing it replaces every instance
 /// of that property the card already carried.

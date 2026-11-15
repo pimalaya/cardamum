@@ -52,7 +52,7 @@ impl ReplCommand {
 
         repl.run::<Command, ErrorCode>(|printer, cmd| match cmd {
             Command::Card(CardCommand::Build(cmd)) if cmd.composer.interactive => Err(composer()),
-            Command::Card(CardCommand::Create(cmd)) if cmd.composer.interactive => Err(composer()),
+            Command::Card(CardCommand::Add(cmd)) if cmd.composer.interactive => Err(composer()),
             Command::Card(CardCommand::Update(cmd)) if cmd.composer.interactive => Err(composer()),
             cmd => cmd.execute(printer, session),
         })

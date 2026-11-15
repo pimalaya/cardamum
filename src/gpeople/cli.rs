@@ -22,12 +22,12 @@ use crate::gpeople::{
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum GpeopleCommand {
-    #[command(subcommand, visible_aliases = ["group", "groups"])]
-    ContactGroup(GpeopleContactGroupCommand),
-    #[command(subcommand, visible_aliases = ["people", "contacts"])]
-    Connection(GpeopleConnectionCommand),
-    #[command(subcommand, visible_alias = "other")]
-    OtherContact(GpeopleOtherContactCommand),
+    #[command(subcommand, alias = "contact-group", visible_aliases = ["group", "groups"])]
+    ContactGroups(GpeopleContactGroupCommand),
+    #[command(subcommand, alias = "connection", visible_aliases = ["people", "contacts"])]
+    Connections(GpeopleConnectionCommand),
+    #[command(subcommand, alias = "other-contact", visible_alias = "other")]
+    OtherContacts(GpeopleOtherContactCommand),
     #[command(subcommand)]
     Profile(GpeopleProfileCommand),
     Request(GpeopleRequestCommand),
@@ -36,9 +36,9 @@ pub enum GpeopleCommand {
 impl GpeopleCommand {
     pub fn execute(self, printer: &mut impl Printer, client: GpeopleClient) -> Result<()> {
         match self {
-            Self::ContactGroup(cmd) => cmd.execute(printer, client),
-            Self::Connection(cmd) => cmd.execute(printer, client),
-            Self::OtherContact(cmd) => cmd.execute(printer, client),
+            Self::ContactGroups(cmd) => cmd.execute(printer, client),
+            Self::Connections(cmd) => cmd.execute(printer, client),
+            Self::OtherContacts(cmd) => cmd.execute(printer, client),
             Self::Profile(cmd) => cmd.execute(printer, client),
             Self::Request(cmd) => cmd.execute(printer, client),
         }

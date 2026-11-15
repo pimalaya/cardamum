@@ -25,9 +25,10 @@
 //! `mcp`, `completion`, `manual`, `json-schema`) cover the rest.
 //!
 //! pimdir is a store rather than a protocol: its `pimdir` family reports
-//! on the store (`status`, the parked writes included) and queries its
-//! search index (`search`, `count`), and its operator commands ship as
-//! the separate pimdir binary.
+//! on the store (`status`), reads and retracts the writes cardamum queued
+//! (`queue list`, `show`, `cancel`) and queries its search index
+//! (`search`, `count`), and its other operator commands ship as the
+//! separate pimdir binary.
 //!
 //! The unified commands run over [`shared::client`]'s
 //! `AddressbookClient`, one `BackendClient` variant per compiled-in

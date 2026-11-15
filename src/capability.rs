@@ -199,7 +199,7 @@ const LEAVES: &[(&str, &str, &[Capability])] = &[
     ("addressbook", "delete", &[C::AddressbookDelete]),
     ("card", "list", &[C::CardList]),
     ("card", "read", &[C::CardRead]),
-    ("card", "create", &[C::CardAdd]),
+    ("card", "add", &[C::CardAdd]),
     ("card", "update", &[C::CardUpdate, C::CardUpdateIfMatch]),
     ("card", "delete", &[C::CardRemove, C::CardRemoveIfMatch]),
 ];

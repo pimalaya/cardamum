@@ -8,9 +8,15 @@ use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
 
 use crate::carddav::{
-    client::CarddavClient, delete::CarddavDeleteCommand, discover::CarddavDiscoverCommand,
-    get::CarddavGetCommand, mkcol::CarddavMkcolCommand, propfind::CarddavPropfindCommand,
-    proppatch::CarddavProppatchCommand, put::CarddavPutCommand, report::cli::CarddavReportCommand,
+    client::{CarddavClient, check_addressbook_id, check_addressbook_name, check_card_id},
+    delete::CarddavDeleteCommand,
+    discover::CarddavDiscoverCommand,
+    get::CarddavGetCommand,
+    mkcol::CarddavMkcolCommand,
+    propfind::CarddavPropfindCommand,
+    proppatch::CarddavProppatchCommand,
+    put::CarddavPutCommand,
+    report::cli::CarddavReportCommand,
 };
 
 /// CardDAV-specific API.
@@ -35,6 +41,34 @@ pub enum CarddavCommand {
 }
 
 impl CarddavCommand {
+    /// Refuses, before anything connects, an address book or card id no
+    /// CardDAV resource can have, coded as the unified commands code it, and
+    /// the name of a collection to create that none can have.
+    pub fn check(&self) -> Result<()> {
+        match self {
+            Self::Discover(_) => Ok(()),
+            Self::Propfind(cmd) => cmd
+                .addressbook_id
+                .as_deref()
+                .map_or(Ok(()), check_addressbook_id),
+            Self::Proppatch(cmd) => check_addressbook_id(&cmd.id),
+            Self::Mkcol(cmd) => check_addressbook_name(&cmd.id),
+            Self::Report(cmd) => cmd.check(),
+            Self::Get(cmd) => {
+                check_addressbook_id(&cmd.addressbook_id)?;
+                check_card_id(&cmd.card_id)
+            }
+            Self::Put(cmd) => {
+                check_addressbook_id(&cmd.addressbook_id)?;
+                check_card_id(&cmd.card_id)
+            }
+            Self::Delete(cmd) => {
+                check_addressbook_id(&cmd.addressbook_id)?;
+                cmd.card_id.as_deref().map_or(Ok(()), check_card_id)
+            }
+        }
+    }
+
     pub fn execute(self, printer: &mut impl Printer, client: CarddavClient) -> Result<()> {
         match self {
             Self::Discover(cmd) => cmd.execute(printer, client),

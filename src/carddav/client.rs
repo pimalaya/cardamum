@@ -12,7 +12,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use anyhow::{Result, anyhow};
+use anyhow::{Context, Result, anyhow, bail};
 use io_http::{
     coroutine::{HttpCoroutine, HttpCoroutineState, HttpYield},
     rfc6750::bearer::HttpAuthBearer,
@@ -24,8 +24,9 @@ use io_webdav::{
     client::{WebdavClientStd as Inner, WebdavClientStdConnectOptions, WebdavClientStdError},
     coroutine::{WebdavCoroutine, WebdavCoroutineState, WebdavYield},
     rfc4918::{
-        RESOURCETYPE, WebdavAuth, follow_redirects::WebdavFollowRedirectsError,
-        propfind::WebdavPropfind, send::WebdavSendError,
+        RESOURCETYPE, WebdavAuth, check_collection_id, check_resource_id,
+        follow_redirects::WebdavFollowRedirectsError, propfind::WebdavPropfind,
+        send::WebdavSendError,
     },
     rfc6578::sync_collection::WebdavSyncCollectionError,
 };
@@ -41,7 +42,7 @@ use url::Url;
 
 use crate::{
     config::{AccountConfig, CarddavAuthConfig, CarddavConfig, ProxyConfig},
-    error::ErrorCode,
+    error::{self, ErrorCode},
 };
 
 /// CardDAV client the protocol-specific commands run against.
@@ -345,4 +346,32 @@ pub(crate) fn is_missing(err: &WebdavClientStdError) -> bool {
             ..
         })
     )
+}
+
+/// Refuses an address book id no collection can have, one io-webdav's
+/// `check_collection_id` refuses (empty, or holding an empty, `.` or `..`
+/// segment), before anything connects: `addressbook-not-found`, as vdir
+/// refuses an id that is not one directory name, io-webdav's reason in
+/// `sources`.
+pub(crate) fn check_addressbook_id(id: &str) -> Result<()> {
+    check_collection_id(id).map_err(|err| error::addressbook_not_found(id, err.into()))
+}
+
+/// Refuses a card id no resource of an address book can have, one
+/// io-webdav's `check_resource_id` refuses, before anything connects:
+/// `card-not-found`, io-webdav's reason in `sources`.
+pub(crate) fn check_card_id(id: &str) -> Result<()> {
+    check_resource_id(id).map_err(|err| error::card_not_found(id, err.into()))
+}
+
+/// Refuses the name of an address book to create that no collection can
+/// have, before anything connects: uncoded, as vdir refuses a new name that
+/// is not one directory name, io-webdav's reason in `sources`.
+pub(crate) fn check_addressbook_name(name: &str) -> Result<()> {
+    if name.is_empty() {
+        bail!("Addressbook name cannot be empty");
+    }
+
+    check_collection_id(name)
+        .with_context(|| format!("Addressbook name `{name}` names no CardDAV collection"))
 }

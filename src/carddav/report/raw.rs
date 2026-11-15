@@ -13,14 +13,14 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
 use io_webdav::{
     coroutine::{WebdavCoroutine, WebdavCoroutineState, WebdavYield},
-    rfc4918::{GETETAG, WebdavMultistatus, report::WebdavReport},
+    rfc4918::{GETETAG, WebdavMultistatus, collection_path, report::WebdavReport},
     rfc6352::addressbook::ADDRESS_DATA,
 };
 use pimalaya_cli::{columns::Columns, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::carddav::client::CarddavClient;
+use crate::carddav::client::{CarddavClient, check_addressbook_id};
 
 /// Run a REPORT with an arbitrary XML body against an addressbook.
 ///
@@ -45,18 +45,18 @@ pub struct CarddavReportRawCommand {
 }
 
 impl CarddavReportRawCommand {
+    /// Runs the REPORT on the address book's path, built as io-webdav
+    /// builds it for its own requests: an id addressing another collection
+    /// is refused first, a relative one percent-encoded.
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
+        check_addressbook_id(&self.addressbook_id)?;
         let body = read_xml(&self.xml)?;
 
         let home = client
             .addressbook_home_set
             .clone()
             .ok_or_else(|| anyhow!("Addressbook home-set is not resolved"))?;
-        let path = format!(
-            "{}/{}",
-            home.path().trim_end_matches('/'),
-            self.addressbook_id.trim_matches('/')
-        );
+        let path = collection_path(home.path(), &self.addressbook_id);
         let base_url = client.base_url.clone();
         let user_agent = client.user_agent.clone();
         let auth = client.auth().clone();
@@ -141,7 +141,8 @@ pub struct EntryRow {
     pub status: Option<u16>,
     /// Its `getetag` property, unquoted.
     pub etag: Option<String>,
-    /// Size of its `address-data` property, in bytes.
+    /// Size of its `address-data` property, in bytes: the whole card, its
+    /// final line break included.
     pub data_bytes: usize,
 }
 
@@ -153,7 +154,11 @@ impl From<&io_webdav::rfc4918::WebdavResponseEntry> for EntryRow {
             etag: entry
                 .text(GETETAG)
                 .map(|raw| raw.trim_matches('"').to_string()),
-            data_bytes: entry.text(ADDRESS_DATA).map(str::len).unwrap_or(0),
+            // NOTE: `text` trims the final CRLF; the property keeps it whole.
+            data_bytes: entry
+                .prop(ADDRESS_DATA)
+                .map(|prop| prop.text.len())
+                .unwrap_or(0),
         }
     }
 }
@@ -187,5 +192,102 @@ impl fmt::Display for CarddavReportRawOutput {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use io_webdav::{client::WebdavClientStd, rfc4918::WebdavAuth};
+    use pimalaya_cli::{error::code_of, printer::CapturePrinter};
+    use url::Url;
+
+    use super::CarddavReportRawCommand;
+    use crate::{
+        carddav::client::CarddavClient,
+        error::ErrorCode,
+        script::{self, Requests, Script},
+    };
+
+    /// The card the server answers, each line ending in a CRLF.
+    const CARD: &str = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:c1\r\nFN:Jane\r\nEND:VCARD\r\n";
+
+    /// A multistatus answering [`CARD`], each CR escaped as iCloud and
+    /// Fastmail escape it.
+    const MULTISTATUS: &str = r#"<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:carddav">
+  <d:response>
+    <d:href>/dav/My%20Book/c1.vcf</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:getetag>"e1"</d:getetag>
+        <c:address-data>BEGIN:VCARD&#13;
+VERSION:4.0&#13;
+UID:c1&#13;
+FN:Jane&#13;
+END:VCARD&#13;
+</c:address-data>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>"#;
+
+    /// A client whose home set is `/dav/`, over a server answering
+    /// [`MULTISTATUS`], and the requests it receives.
+    fn client() -> (CarddavClient, Requests) {
+        let response = script::response(207, "application/xml", MULTISTATUS);
+        let (script, requests) = Script::new([response]);
+        let base = Url::parse("https://dav.example.org/").unwrap();
+        let home = base.join("/dav/").unwrap();
+        let inner =
+            WebdavClientStd::from_parts(script, WebdavAuth::None, base, None, None, Some(home));
+        (CarddavClient::new(inner), requests)
+    }
+
+    /// The command running a REPORT on `addressbook_id`.
+    fn report(addressbook_id: &str) -> CarddavReportRawCommand {
+        CarddavReportRawCommand {
+            addressbook_id: addressbook_id.to_owned(),
+            xml: String::from("<x/>"),
+            depth: 1,
+        }
+    }
+
+    /// The size printed is the whole card's, its final CRLF included, and
+    /// the path the one io-webdav builds, percent-encoded.
+    #[test]
+    fn a_raw_report_counts_the_whole_card_on_an_encoded_path() {
+        let (client, requests) = client();
+        let mut printer = CapturePrinter::default();
+        report("My Book").execute(&mut printer, client).unwrap();
+
+        let output = printer.into_single().unwrap();
+        assert_eq!(output["responses"][0]["dataBytes"], CARD.len(), "{output}");
+
+        let requests = requests.lock().unwrap();
+        let request = String::from_utf8_lossy(&requests[0]);
+        assert!(
+            request.starts_with("REPORT /dav/My%20Book/ HTTP/1.1\r\n"),
+            "{request}"
+        );
+    }
+
+    /// An id addressing the home set, its parent or the server root is
+    /// refused `addressbook-not-found`, nothing sent.
+    #[test]
+    fn a_raw_report_refuses_an_id_out_of_its_home() {
+        for id in ["..", "", "/", ".", "a/../..", "%2e%2e", "a//b"] {
+            let (client, requests) = client();
+            let mut printer = CapturePrinter::default();
+            let err = report(id).execute(&mut printer, client).unwrap_err();
+
+            assert_eq!(
+                code_of(&err),
+                Some(ErrorCode::AddressbookNotFound),
+                "{id:?}"
+            );
+            assert_eq!(err.to_string(), format!("Addressbook `{id}` not found"));
+            assert!(requests.lock().unwrap().is_empty(), "{id:?}");
+        }
     }
 }

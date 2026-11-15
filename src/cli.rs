@@ -202,6 +202,7 @@ impl Command {
             #[cfg(feature = "carddav")]
             Self::Carddav(cmd) => {
                 let (_, name, account_config) = resolve_account(config_paths, account_name)?;
+                cmd.check()?;
                 let client = build_carddav_client(name, account_config)?;
                 cmd.execute(printer, client)
             }

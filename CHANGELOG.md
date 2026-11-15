@@ -89,6 +89,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Bumped io-webdav to 0.8. An address book outside the home set is listed and addressed by its path rather than its last segment, a request the server closed the connection on is resent once, and a CardDAV multistatus is parsed 3.4 to 9 times faster, without quadratic copies and nested 64 levels at most.
 
   A CardDAV answer that is not one whole multistatus document fails instead of listing fewer cards, and a weak ETag is kept whole.
+- Bumped io-webdav to 0.9.1.
+
+  A card `card list`, `carddav report query` or `carddav report multiget` reads keeps its final CRLF, which iCloud and Fastmail escape and the listing trimmed, so it matches the body `card read` and `carddav get` return; a relative address book or card id is sent percent-encoded, a `\` no longer read as a separator.
 - Bumped io-vdir to 0.3.
 
   A vdir listing leaves out a card removed while it lists and holds regular files only, and an id that is empty or holds a path separator is refused.
@@ -149,6 +152,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed the `card list` name, email and phone columns, and the `fnValue`, `email` and `tel` keys of `card list`, `card read` and `pimdir search`, misreading a card's lines: a property with parameters (Fastmail's `FN;DERIVED=TRUE`) listed nameless, a folded line (RFC 6350 §3.2) was cut at its fold (`alan@examp` on Fastmail's JMAP cards), a grouped one (`item1.EMAIL`) was skipped and a `TELEX` was read as a `TEL`. The lines are unfolded first and a property is read whatever its group and parameters, its value as written.
 - Fixed `card read` and the `jmap`, `msgraph` and `gpeople` `request` text ending without a newline, the shell prompt landing on its last line: a card whose last line lacks one (a CardDAV `REPORT` body) included.
 - Fixed `card list` naming an address book a CardDAV server, JMAP or Microsoft Graph does not hold failing with the server's bare refusal and no code: it fails `addressbook-not-found` naming it, the server's answer in `sources`, as vdir, pimdir and People do. On JMAP a query that fails or finds nothing is checked with one `AddressBook/get`; on CardDAV a 404 or 410 of the collection is read so, on Graph a 404 or a malformed folder id, `card add` included; `addressbook update` and `delete` on CardDAV and Graph too.
+- Fixed a CardDAV address book or card id addressing another resource reaching the server: `addressbook delete ..` could send a DELETE to the parent of the home set, `/` to the server root and `""` to the home set, `addressbook update` a PROPPATCH there. An id that is empty or holds an empty, `.` or `..` segment now fails before the account's secret is resolved or anything connects, on every unified and `carddav` command: an address book id `addressbook-not-found`, a card id `card-not-found`, as vdir refuses an id that is not one directory name, and a name `addressbook create` or `carddav mkcol` cannot give a collection uncoded.
+- Fixed `carddav report raw` counting a card two bytes short in `dataBytes` when the server escapes its final CRLF, and building its path by hand: the REPORT goes to the path io-webdav builds, percent-encoded, an id out of the home refused.
 
 ## [0.3.0] - 2026-10-02
 

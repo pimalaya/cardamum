@@ -236,6 +236,19 @@ The `[carddav]` block SHALL resolve the addressbook home set through one of two 
 ### Requirement: CardDAV probes a bare origin before walking
 Because a bare origin is not necessarily the context root (Fastmail serves contacts under `/dav/` and 404s everything else), the `server` route SHALL probe `.well-known/carddav` and follow its redirect before the principal walk whenever the server names no path.
 
+### Requirement: A CardDAV id addresses its own resource
+An address book or card id a CardDAV command names SHALL be refused, before the account's secret is resolved or anything connects, when io-webdav refuses it (`rfc4918::check_collection_id`, `check_resource_id`: empty, or holding an empty, `.` or `..` segment once split on `/` and `\` and percent-decoded, an address book id's trailing slashes and an absolute id's leading one aside), such an id addressing the home set, its parent or the server root: an address book id coded `addressbook-not-found`, ``Addressbook `<id>` not found``, a card id coded `card-not-found`, ``Card `<id>` not found``, io-webdav's reason in `sources`, as vdir refuses an id that is not one directory name. Every unified command naming one SHALL refuse it so (`addressbook update` and `delete`, `card list`, `read`, `add`, `update` and `delete`), and every `carddav` command (`propfind`, `proppatch`, `get`, `put`, `delete`, `report query`, `multiget`, `sync` and `raw`). The name of an address book to create, its id on CardDAV, SHALL be refused the same way, uncoded as vdir refuses a new name: `addressbook create` and `carddav mkcol` with ``Addressbook name `<name>` names no CardDAV collection``, or ``Addressbook name cannot be empty``.
+
+io-webdav refuses such an id itself before sending anything, but as an I/O error no code reads, and only once the account is open.
+
+#### Scenario: An id climbing out of the home set
+- GIVEN a CardDAV account whose password command would leave a file behind
+- WHEN `cardamum --json addressbook delete ..` or `cardamum --json card read -k book ..` runs
+- THEN it exits 1 coded `addressbook-not-found` (``Addressbook `..` not found``) or `card-not-found` (``Card `..` not found``), the password command never ran and nothing connected
+
+### Requirement: A CardDAV card reads whole
+A card a CardDAV listing (`card list`, `carddav report query`) or `carddav report multiget` reads SHALL carry the whole `address-data` text, the final CRLF a server escapes as `&#13;` included, byte-identical to the body `card read` and `carddav get` return.
+
 ### Requirement: The connection is opened by the call that needs it
 `AddressbookClient` SHALL select its backend from the configuration without connecting, and open the connection on the first call that needs one. A command that never reaches the network therefore never opens a socket, and a command that runs a composer holds none open while the editor is up.
 

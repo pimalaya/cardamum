@@ -5,7 +5,7 @@
 
 use std::collections::BTreeSet;
 
-use anyhow::{Context, Error, Result, bail};
+use anyhow::{Context, Error, Result};
 use io_webdav::{
     client::{WebdavClientStd, WebdavClientStdError},
     rfc4918::{send::WebdavSendError, typed::WebdavUnreadableEntry},
@@ -55,17 +55,14 @@ impl CarddavBackend {
     /// Creates an addressbook collection under the home-set.
     ///
     /// The given name doubles as the URL segment, and comes back as the
-    /// new addressbook id.
+    /// new addressbook id. The unified client refuses a name no collection
+    /// can have before connecting (`check_addressbook_name`).
     pub fn create_addressbook(
         &mut self,
         name: &str,
         description: Option<&str>,
         color: Option<&str>,
     ) -> Result<String> {
-        if name.is_empty() {
-            bail!("Addressbook name cannot be empty");
-        }
-
         let wire = CarddavAddressbook {
             id: name.to_string(),
             display_name: Some(name.to_string()),
@@ -618,6 +615,14 @@ END:VCARD&#13;
                 ),
             ]
         );
+    }
+
+    /// A listed card is the whole body the server sent, the final CRLF it
+    /// escapes as `&#13;` included, as a GET returns it.
+    #[test]
+    fn a_carddav_listing_keeps_the_whole_card() {
+        let listed = answering(207, LISTING).list_cards("book", 0, None).unwrap();
+        assert_eq!(listed.cards[0].contents, CARD);
     }
 
     /// The whole address book is read before the page is cut, so the

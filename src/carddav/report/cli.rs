@@ -7,7 +7,7 @@ use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
 
 use crate::carddav::{
-    client::CarddavClient,
+    client::{CarddavClient, check_addressbook_id, check_card_id},
     report::{
         multiget::CarddavReportMultigetCommand, query::CarddavReportQueryCommand,
         raw::CarddavReportRawCommand, sync::CarddavReportSyncCommand,
@@ -28,6 +28,22 @@ pub enum CarddavReportCommand {
 }
 
 impl CarddavReportCommand {
+    /// Refuses, before anything connects, an address book or card id no
+    /// CardDAV resource can have (see [`CarddavCommand::check`]).
+    ///
+    /// [`CarddavCommand::check`]: crate::carddav::cli::CarddavCommand::check
+    pub fn check(&self) -> Result<()> {
+        match self {
+            Self::Query(cmd) => check_addressbook_id(&cmd.addressbook_id),
+            Self::Multiget(cmd) => {
+                check_addressbook_id(&cmd.addressbook_id)?;
+                cmd.card_ids.iter().try_for_each(|id| check_card_id(id))
+            }
+            Self::Sync(cmd) => check_addressbook_id(&cmd.addressbook_id),
+            Self::Raw(cmd) => check_addressbook_id(&cmd.addressbook_id),
+        }
+    }
+
     pub fn execute(self, printer: &mut impl Printer, client: CarddavClient) -> Result<()> {
         match self {
             Self::Query(cmd) => cmd.execute(printer, client),

@@ -237,8 +237,8 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `backend-not-built` | the backend the account resolves to is configured but left out of the build; the error names the cargo feature (see backends.md, "A backend left out of the build is named") |
 | `stdin-taken` | a command inside a session (`repl`, `mcp`) would read its input off stdin, which carries the session's commands |
 | `capability-missing` | the backend the account resolves to does not serve a capability the command reaches; nothing was read or written |
-| `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete`, worded by cardamum ("A not-found failure is cardamum's sentence"); an `errors` entry of `carddav report multiget`; a protocol command naming one card (`carddav get` and `delete`, `msgraph contacts get`, `update` and `delete`, `gpeople connections get`, `update` and `delete`), the server's message kept |
-| `addressbook-not-found` | the address book a command names does not exist; nothing was read or written |
+| `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete`, worded by cardamum ("A not-found failure is cardamum's sentence"); an `errors` entry of `carddav report multiget`; a protocol command naming one card (`carddav get` and `delete`, `msgraph contacts get`, `update` and `delete`, `gpeople connections get`, `update` and `delete`), the server's message kept; a card id no CardDAV card can have, before anything connects (backends, "A CardDAV id addresses its own resource") |
+| `addressbook-not-found` | the address book a command names does not exist, or no address book can have its id (empty, not one vdir directory name, refused by io-webdav on CardDAV); nothing was read or written |
 | `addressbook-default-missing` | a command needing an address book got no `-k` and the account sets no `addressbook.default`; nothing was read or written |
 | `permission-denied` | the server refused the request to the account (see "A server's refusal carries its code") |
 | `quota-exceeded` | the write would exceed the account's quota |
@@ -422,6 +422,14 @@ In the text output, each `errors` entry SHALL print as one `Error:` line, `<id> 
 - GIVEN an address book holding `c1.vcf` and no `c9.vcf`
 - WHEN `cardamum --json carddav report multiget <book> c1.vcf c9.vcf` runs
 - THEN it prints `c1.vcf` in `cards` and `"errors":[{"id":"c9.vcf","code":"card-not-found",…}]`, and the exit status is 3
+
+### Requirement: A raw CardDAV report addresses and counts as io-webdav does
+`carddav report raw` SHALL send its REPORT to the path io-webdav builds for the address book (`rfc4918::collection_path`): an absolute id as given, a relative one joined to the home set and percent-encoded, a slash closing it; the id is refused first, as every CardDAV command refuses one ("A CardDAV id addresses its own resource" in backends). Its `dataBytes` SHALL be the size of the row's whole `address-data` text, the final CRLF included, the size of the body `carddav get` returns.
+
+#### Scenario: A card whose CRLF the server escapes
+- GIVEN a home set `/dav/` whose server answers a REPORT with one 54-byte card ending in `END:VCARD&#13;` and a line feed
+- WHEN `cardamum --json carddav report raw "My Book" '<x/>'` runs
+- THEN the request line is `REPORT /dav/My%20Book/ HTTP/1.1` and the row's `dataBytes` is 54
 
 ### Requirement: Capability registry
 Each backend SHALL declare, in a table compiled into every build, each capability of the unified API (`addressbook.list`, `addressbook.create`, `addressbook.rename`, `addressbook.delete`, `addressbook.description`, `addressbook.color`, `card.list`, `card.read`, `card.add`, `card.update`, `card.remove`, `card.update.if-match`, `card.remove.if-match`) at `full`, `partial`, `server` or `none`, every level but `full` with a detail saying what differs, which server refuses, or what serves it instead. A backend declares a capability only when it gives the result every other declarer gives.

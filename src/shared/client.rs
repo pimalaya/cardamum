@@ -293,6 +293,36 @@ impl AddressbookClient {
         Ok(self.inner.as_mut().expect("just opened"))
     }
 
+    /// Refuses, before anything connects, an address book id the backend
+    /// cannot address and, when the call names one, a card id: on CardDAV
+    /// an id io-webdav refuses, coded as an address book or a card the
+    /// server does not hold.
+    #[cfg_attr(not(feature = "carddav"), allow(unused_variables))]
+    fn check_ids(&self, addressbook_id: &str, card_id: Option<&str>) -> Result<()> {
+        match &self.config {
+            #[cfg(feature = "carddav")]
+            BackendConfig::Carddav(_) => {
+                crate::carddav::client::check_addressbook_id(addressbook_id)?;
+                card_id.map_or(Ok(()), crate::carddav::client::check_card_id)
+            }
+            #[allow(unreachable_patterns)]
+            _ => Ok(()),
+        }
+    }
+
+    /// Refuses, before anything connects, the name of an address book to
+    /// create the backend cannot address: on CardDAV, where the name is
+    /// the collection's id, one io-webdav refuses.
+    #[cfg_attr(not(feature = "carddav"), allow(unused_variables))]
+    fn check_name(&self, name: &str) -> Result<()> {
+        match &self.config {
+            #[cfg(feature = "carddav")]
+            BackendConfig::Carddav(_) => crate::carddav::client::check_addressbook_name(name),
+            #[allow(unreachable_patterns)]
+            _ => Ok(()),
+        }
+    }
+
     /// Opens the client on `backend`, a Graph client over a scripted
     /// stream, rather than connecting.
     #[cfg(all(test, feature = "msgraph"))]
@@ -398,6 +428,8 @@ impl AddressbookClient {
         description: Option<&str>,
         color: Option<&str>,
     ) -> Result<String> {
+        self.check_name(name)?;
+
         match self.open()? {
             #[cfg(not(any(
                 feature = "vdir",
@@ -425,6 +457,8 @@ impl AddressbookClient {
 
     /// Applies a partial update to the addressbook identified by `id`.
     pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
+        self.check_ids(id, None)?;
+
         match self.open()? {
             #[cfg(not(any(
                 feature = "vdir",
@@ -453,6 +487,8 @@ impl AddressbookClient {
     /// Deletes the addressbook identified by `id` and every card it
     /// exclusively contains.
     pub fn delete_addressbook(&mut self, id: &str) -> Result<()> {
+        self.check_ids(id, None)?;
+
         match self.open()? {
             #[cfg(not(any(
                 feature = "vdir",
@@ -511,6 +547,8 @@ impl AddressbookClient {
         skip: usize,
         take: Option<usize>,
     ) -> Result<CardWindow> {
+        self.check_ids(addressbook_id, None)?;
+
         match self.open()? {
             #[cfg(not(any(
                 feature = "vdir",
@@ -542,6 +580,8 @@ impl AddressbookClient {
 
     /// Fetches the card `card_id` from `addressbook_id`.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
+        self.check_ids(addressbook_id, Some(card_id))?;
+
         match self.open()? {
             #[cfg(not(any(
                 feature = "vdir",
@@ -569,6 +609,8 @@ impl AddressbookClient {
 
     /// Appends a raw vCard and returns the id the backend assigned.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
+        self.check_ids(addressbook_id, None)?;
+
         match self.open()? {
             #[cfg(not(any(
                 feature = "vdir",
@@ -606,6 +648,8 @@ impl AddressbookClient {
         contents: Vec<u8>,
         if_match: Option<&str>,
     ) -> Result<CardUpdateOutcome> {
+        self.check_ids(addressbook_id, Some(card_id))?;
+
         match self.open()? {
             #[cfg(not(any(
                 feature = "vdir",
@@ -654,6 +698,8 @@ impl AddressbookClient {
         card_id: &str,
         if_match: Option<&str>,
     ) -> Result<()> {
+        self.check_ids(addressbook_id, Some(card_id))?;
+
         match self.open()? {
             #[cfg(not(any(
                 feature = "vdir",

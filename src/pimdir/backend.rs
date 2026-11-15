@@ -472,9 +472,10 @@ impl PimdirBackend {
     /// Builds a shared [`Card`] from a stored item as a listing shows it,
     /// beside the error its body could not be read with.
     ///
-    /// A body that cannot be read lists as the preview an unhydrated card
-    /// lists as, the error left to the caller; a body the store does not
-    /// hold is no error.
+    /// A body that cannot be read gives the preview an unhydrated card
+    /// lists as, the error left to the caller: a listing keeps the card's
+    /// place in the page and prints it in `errors` alone. A body the store
+    /// does not hold is no error.
     fn listed_card(&self, addressbook_id: &str, item: PimdirItem) -> (Card, Option<Error>) {
         let (stored, err) = match &item.object {
             Some(hash) => match self.inner.reader.blobs().get(hash) {
@@ -1146,10 +1147,11 @@ mod tests {
     }
 
     /// A body that cannot be read is an entry on the page holding its
-    /// card, the card listed with its preview and no version.
+    /// card. The window keeps the card's place with its preview and no
+    /// version, and the page prints it in `errors` alone.
     #[cfg(unix)]
     #[test]
-    fn an_unreadable_body_is_an_entry_its_card_listed_with_its_preview() {
+    fn an_unreadable_body_is_an_entry_alone() {
         use crate::error::ErrorCode;
 
         let (dir, mut backend) = store();
@@ -1173,6 +1175,12 @@ mod tests {
         assert_eq!(entry.code, Some(ErrorCode::CardUnreadable));
         assert_eq!(entry.error, "Cannot read the card body");
         assert!(!entry.sources.is_empty());
+
+        let page = client(&dir).list_cards("book", Some(1), Some(25)).unwrap();
+        assert!(page.cards.is_empty(), "{:?}", page.cards);
+        assert_eq!(page.errors.len(), 1, "{:?}", page.errors);
+        assert_eq!(page.errors[0].id.as_deref(), Some(id.as_str()));
+        assert_eq!(page.errors[0].code, Some(ErrorCode::CardUnreadable));
     }
 
     /// A card in the address book `local`, which the device keeps and no

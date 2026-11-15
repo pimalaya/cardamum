@@ -200,14 +200,24 @@ fn connect_pimdir(pimdir_config: &crate::config::PimdirConfig) -> Result<()> {
 
 /// Resolves the CardDAV context root, then walks the principal and the
 /// addressbook home set, proving address, TLS and authentication work.
+///
+/// A `home` block skips that walk, so the check sends the home one
+/// `PROPFIND` of depth 0 instead, which a refused credential fails.
 #[cfg(feature = "carddav")]
 fn connect_carddav(
     carddav_config: &crate::config::CarddavConfig,
     resolver: &mut SecretResolver,
 ) -> Result<()> {
-    use crate::carddav::client::open_carddav_client;
+    use crate::carddav::client::{open_carddav_client, propfind_home};
 
-    open_carddav_client(carddav_config.clone(), resolver)?;
+    let mut client = open_carddav_client(carddav_config.clone(), resolver)?;
+
+    // NOTE: the `home` route connects without a request, so nothing it did
+    // proves the credential. The other commands need no such request, their
+    // own first one being authenticated.
+    if carddav_config.home.is_some() {
+        propfind_home(&mut client)?;
+    }
 
     Ok(())
 }
@@ -493,5 +503,129 @@ mod vdir_tests {
             vdir.contains("FAIL (") && vdir.contains("does not exist"),
             "{out}"
         );
+    }
+}
+
+#[cfg(all(test, feature = "carddav"))]
+mod carddav_tests {
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+    };
+
+    use pimalaya_config::secret::{Secret, SecretResolver};
+    use secrecy::SecretString;
+    use serde_json::{Value, json};
+
+    use super::{BackendCheck, connect_carddav};
+    use crate::config::{CarddavAuthConfig, CarddavConfig};
+
+    /// A scripted server answering every request with `status` and no
+    /// body, a connection that sends none answered nothing. Returns its
+    /// URL, whose path is the address book home and the context root.
+    fn refusing(status: &'static str) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { return };
+
+                if read_request(&mut stream) {
+                    let response = format!(
+                        "HTTP/1.1 {status}\r\nContent-Length: 0\r\n\
+                         Connection: close\r\n\r\n"
+                    );
+                    let _ = stream.write_all(response.as_bytes());
+                }
+            }
+        });
+
+        format!("http://127.0.0.1:{port}/dav/home/")
+    }
+
+    /// Reads one request, its head and the body its `Content-Length`
+    /// names; `false` when the connection closed before one came.
+    fn read_request(stream: &mut impl Read) -> bool {
+        let mut request = Vec::new();
+        let mut buf = [0u8; 1024];
+
+        let head = loop {
+            if let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                break end + 4;
+            }
+            match stream.read(&mut buf) {
+                Ok(0) | Err(_) => return false,
+                Ok(n) => request.extend_from_slice(&buf[..n]),
+            }
+        };
+
+        let length = String::from_utf8_lossy(&request[..head])
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                if !name.eq_ignore_ascii_case("content-length") {
+                    return None;
+                }
+                value.trim().parse().ok()
+            })
+            .unwrap_or(0);
+
+        while request.len() < head + length {
+            match stream.read(&mut buf) {
+                Ok(0) | Err(_) => return false,
+                Ok(n) => request.extend_from_slice(&buf[..n]),
+            }
+        }
+
+        true
+    }
+
+    /// A CardDAV block over `server` or `home`, its bearer token made up.
+    fn config(server: Option<String>, home: Option<&str>) -> CarddavConfig {
+        CarddavConfig {
+            server,
+            home: home.map(|home| home.parse().unwrap()),
+            tls: Default::default(),
+            alpn: vec![String::from("http/1.1")],
+            proxy: None,
+            auth: CarddavAuthConfig::Bearer {
+                token: Secret::Raw(SecretString::from("made-up")),
+            },
+            discover: None,
+        }
+    }
+
+    /// The `account check` row of `config`, as JSON.
+    fn check(config: &CarddavConfig) -> Value {
+        let result = connect_carddav(config, &mut SecretResolver::new());
+        serde_json::to_value(BackendCheck::from("carddav", result)).unwrap()
+    }
+
+    /// A `home` block sends nothing while connecting, so the check sends
+    /// it a request: a refused credential fails it with the code and the
+    /// error a `server` block fails with.
+    #[test]
+    fn a_refused_credential_fails_a_home_check_as_a_server_one() {
+        let refusals = [
+            ("401 Unauthorized", "HTTP 401", Value::Null),
+            ("403 Forbidden", "HTTP 403", json!("permission-denied")),
+        ];
+
+        for (status, error, code) in refusals {
+            let url = refusing(status);
+            let home = check(&config(None, Some(&url)));
+            let server = check(&config(Some(url), None));
+
+            assert_eq!(home["ok"], false, "{home}");
+            assert_eq!(home["code"], code, "{home}");
+            let message = home["error"].as_str().unwrap_or_default();
+            assert!(message.contains(error), "{home}");
+
+            assert_eq!(server["ok"], false, "{server}");
+            assert_eq!(home["code"], server["code"], "{home} {server}");
+            assert_eq!(home["error"], server["error"], "{home} {server}");
+        }
     }
 }

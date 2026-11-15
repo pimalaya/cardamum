@@ -713,7 +713,9 @@ pub fn unreadable(contents: &[u8]) -> Option<Error> {
 /// it could not read.
 #[derive(Debug, Default)]
 pub struct CardWindow {
-    /// The cards listed, in the backend's order.
+    /// The cards listed, in the backend's order. A card the backend
+    /// names in `errors` may still hold its place here, so a page counts
+    /// it; the page leaves it out.
     pub cards: Vec<Card>,
     /// The error of each card the backend could not read, in the order
     /// met.
@@ -724,7 +726,7 @@ impl CardPage {
     /// The page `window` holds, `take` being the page size plus one: the
     /// card past the page, when listed, tells that another follows and
     /// leaves with its entry. Each card left whose body reads as no vCard
-    /// gains an entry.
+    /// gains an entry, and a card with an entry is in `errors` alone.
     fn of(window: CardWindow, take: Option<usize>) -> Self {
         let CardWindow {
             mut cards,
@@ -736,11 +738,22 @@ impl CardPage {
             errors.retain(|error| error.id.as_deref() != Some(next.id.as_str()));
         }
 
-        for card in &cards {
-            if let Some(err) = unreadable(&card.contents) {
-                errors.push(error::unreadable_card(Some(&card.id), err));
+        // NOTE: the page is cut before a card leaves, so a card in `errors`
+        // keeps its place and the next page starts where this one ended.
+        cards.retain(|card| {
+            let id = Some(card.id.as_str());
+            if errors.iter().any(|error| error.id.as_deref() == id) {
+                return false;
             }
-        }
+
+            match unreadable(&card.contents) {
+                Some(err) => {
+                    errors.push(error::unreadable_card(id, err));
+                    false
+                }
+                None => true,
+            }
+        });
 
         Self {
             cards,
@@ -789,21 +802,28 @@ mod tests {
     const CARD: &str = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ada\r\nEND:VCARD\r\n";
 
     /// The card past a page leaves with its entry, which the next page
-    /// prints; a card of the page whose body is no vCard gains one.
+    /// prints. A card of the page whose body is no vCard gains one, and a
+    /// card with an entry is in `errors` alone, whether its body parses
+    /// (a pimdir preview) or not.
     #[test]
-    fn a_page_keeps_the_entries_of_its_own_cards() {
+    fn a_card_the_page_could_not_read_is_in_its_errors_alone() {
         let entry = |id| error::unreadable_card(Some(id), anyhow!("Cannot read the card body"));
         let window = CardWindow {
-            cards: vec![card("1", CARD), card("2", "not a card"), card("3", CARD)],
-            errors: vec![entry("1"), entry("3")],
+            cards: vec![
+                card("1", CARD),
+                card("2", "not a card"),
+                card("3", CARD),
+                card("4", CARD),
+            ],
+            errors: vec![entry("3"), entry("4")],
         };
 
-        let page = CardPage::of(window, Some(3));
+        let page = CardPage::of(window, Some(4));
         assert!(page.more);
         let ids: Vec<&str> = page.cards.iter().map(|card| card.id.as_str()).collect();
-        assert_eq!(ids, ["1", "2"]);
+        assert_eq!(ids, ["1"]);
         let ids: Vec<_> = page.errors.iter().map(|error| error.id.clone()).collect();
-        assert_eq!(ids, [Some("1".into()), Some("2".into())]);
+        assert_eq!(ids, [Some("3".into()), Some("2".into())]);
         assert!(
             page.errors
                 .iter()

@@ -100,6 +100,7 @@ fn a_listing_with_errors_prints_its_result_and_exits_3() {
 
     assert_eq!(output.status.code(), Some(3), "{stdout}");
     let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["cards"][0]["id"], "bad", "{json}");
+    assert_eq!(json["cards"], Value::Array(Vec::new()), "{json}");
+    assert_eq!(json["errors"][0]["id"], "bad", "{json}");
     assert_eq!(json["errors"][0]["code"], "card-unreadable", "{json}");
 }

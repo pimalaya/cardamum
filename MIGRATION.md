@@ -207,7 +207,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   {"cards":[{"id":"c1.vcf",…}],"nextPage":null,"errors":[{"id":"c2.vcf","code":"permission-denied","error":"The server refused the card with status 403","sources":[]}]}
   ```
 
-  A card whose body is no vCard or not UTF-8 lists with its id and gains a `card-unreadable` entry; a CardDAV row the server answered without the card's data is `permission-denied` on a 403, else `card-unreadable`, its refused properties in `sources`; a `report multiget` id the server does not hold is `card-not-found`; a `card list` the CardDAV server truncated adds an entry with a `null` id and no code, where `report query` keeps it as `truncated: true`. `cardamum json-schema` describes an entry as `cardamum-item-error`.
+  A card whose body is no vCard or not UTF-8 is a `card-unreadable` entry alone, left out of `cards` and of the text's rows; a CardDAV row the server answered without the card's data is `permission-denied` on a 403, else `card-unreadable`, its refused properties in `sources`; a `report multiget` id the server does not hold is `card-not-found`; a `card list` the CardDAV server truncated adds an entry with a `null` id and no code, where `report query` keeps it as `truncated: true`. `cardamum json-schema` describes an entry as `cardamum-item-error`.
 
   ```sh
   # the cards read, then the ids that failed with their code

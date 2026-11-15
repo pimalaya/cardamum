@@ -35,12 +35,12 @@ A card's shared `id` SHALL be the backend's own identifier, used verbatim end to
 A listing SHALL never come back shorter than the backend holds without saying so: a card it could not read SHALL be an `errors` entry ("Each backend names the cards it could not read"), and a listing that cannot be read at all SHALL fail. A CardDAV listing whose answer is not one whole `multistatus` document (an HTML page, a cut body, an empty one) SHALL fail with io-webdav's error; a CardDAV listing the server truncated (a 507 row, RFC 6352 §8.6.1) SHALL add an entry with a `null` id and no code saying the listing is incomplete. A vdir listing SHALL leave out a card removed while it lists. A Graph listing SHALL follow its next page through io-msgraph's `page_get`, which refuses a link off the Graph origin, so the token never follows a link elsewhere.
 
 ### Requirement: Each backend names the cards it could not read
-A backend SHALL report a card it could not read as an `errors` entry and SHALL never drop it silently nor fail the listing for it:
+A backend SHALL report a card it could not read as an `errors` entry and SHALL never drop it silently nor fail the listing for it. A card named in `errors` SHALL NOT also list among the cards ("A listing names the items it could not read"):
 
-- every backend: a card whose body does not parse as a vCard, or is not UTF-8, SHALL list with its id and SHALL add a `card-unreadable` entry;
+- every backend: a card whose body does not parse as a vCard, or is not UTF-8, SHALL be a `card-unreadable` entry naming the card, no row listed for it;
 - vdir: a card file that cannot be read SHALL be a `card-unreadable` entry naming the card, its error in `sources`; a card removed while it lists SHALL be left out with no entry;
 - JMAP: a card that does not project SHALL be a `card-unreadable` entry, its id when it has one;
-- pimdir: a body that cannot be read SHALL be a `card-unreadable` entry, the card listed with its preview; a body the store does not hold yet SHALL be no entry;
+- pimdir: a body that cannot be read SHALL be a `card-unreadable` entry, no row listed for it, though its summary reads; a body the store does not hold yet SHALL be no entry, the card listed with its preview;
 - CardDAV: a row the server answered without the card's data (a row refused whole, a refused `address-data` property, or none sent) SHALL be an entry naming the card, coded `permission-denied` when the row or a refused property carries a 403, else `card-unreadable`, each refused property and its status in `sources`; the entries print on the first page only, as the whole address book is read before the page is cut;
 - CardDAV, Graph, People: a page or an answer that fails SHALL fail the listing whole.
 
@@ -187,6 +187,14 @@ When the backend `auto` resolves to is one the build leaves out, the unified com
 
 ### Requirement: CardDAV home-set resolution routes
 The `[carddav]` block SHALL resolve the addressbook home set through one of two routes. `home` short-circuits all discovery and is used as the home set directly. `server` connects to the given context root, then walks current-user-principal (RFC 5397) and addressbook-home-set (RFC 6352). A block naming neither SHALL fail naming both.
+
+### Requirement: account check proves a CardDAV home
+`account check` on a `[carddav]` block naming `home` SHALL send the home one authenticated `PROPFIND` of depth 0, asking for `DAV:resourcetype`, once connected, and SHALL fail the `carddav` row when it is refused, with the message and the code the `server` route's discovery fails with on the same answer: io-webdav's `WebDAV server returned HTTP <status>`, a 401 carrying no code and a 403 `permission-denied` ("A server's refusal carries its code"). The `home` route connects without a request, so nothing else in the check proves the credential. The request SHALL be the check's alone, the other commands sending none: the first request each sends is authenticated, so a refused credential fails it, and the `home` route exists to save the discovery round trips. The `server` route sends none either, its walk proving the credential.
+
+#### Scenario: A made-up token against a CardDAV home
+- GIVEN an account whose `carddav.home` names a server answering its token 401
+- WHEN `cardamum --json account check` runs
+- THEN it exits 3, the `carddav` row `ok: false`, `code` `null` and its `error` naming HTTP 401, as with `carddav.server` naming the same server
 
 ### Requirement: CardDAV probes a bare origin before walking
 Because a bare origin is not necessarily the context root (Fastmail serves contacts under `/dav/` and 404s everything else), the `server` route SHALL probe `.well-known/carddav` and follow its redirect before the principal walk whenever the server names no path.

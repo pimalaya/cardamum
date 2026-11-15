@@ -36,10 +36,10 @@ use crate::{
 /// "sources"}]}`: the first `FN`, `EMAIL` and `TEL` as before, then the
 /// common fields read through the decoded vCard, every address and
 /// number included, then the cursor of the next page, `null` on the last
-/// one, then the error of each card the page could not read, and of a
-/// listing the server cut short (its `id` `null`), `[]` when none, the
-/// command then exiting 3. A card whose body is not available yet
-/// carries what its backend knows of it.
+/// one, then the error of each card the page could not read, which
+/// `cards` leaves out, and of a listing the server cut short (its `id`
+/// `null`), `[]` when none, the command then exiting 3. A card whose body
+/// is not available yet carries what its backend knows of it.
 #[derive(Debug, Parser)]
 pub struct CardListCommand {
     /// Addressbook to list the cards of.
@@ -330,8 +330,9 @@ Page:         3, empty
 
         use crate::{error, shared::client::unreadable};
 
+        // NOTE: a card in `errors` is never among the cards, so no row of
+        // empty cells stands for it.
         let mut output = output();
-        output.cards.push(card("bad", "not a card"));
         output.errors = vec![
             error::unreadable_card(Some("bad"), unreadable(b"not a card").unwrap()),
             error::ItemError::new(Some("42"), &anyhow!("Gone")),
@@ -340,12 +341,11 @@ Page:         3, empty
         let expected = "\
 Account:      work (vdir)
 Addressbook:  personal
-Page:         1, cards 1 to 3
+Page:         1, cards 1 to 2
 Next page:    --page 2
 
 ada  ada@example.org  +33 6  Ada Lovelace
 bob  -                -      Bob
-bad  -                -      -
 
 Error:  bad  card-unreadable  Cannot parse the card body as a vCard
 Error:  42   -                Gone

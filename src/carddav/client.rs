@@ -22,7 +22,11 @@ use io_http::{
 };
 use io_webdav::{
     client::{WebdavClientStd as Inner, WebdavClientStdConnectOptions, WebdavClientStdError},
-    rfc4918::{WebdavAuth, follow_redirects::WebdavFollowRedirectsError, send::WebdavSendError},
+    coroutine::{WebdavCoroutine, WebdavCoroutineState, WebdavYield},
+    rfc4918::{
+        RESOURCETYPE, WebdavAuth, follow_redirects::WebdavFollowRedirectsError,
+        propfind::WebdavPropfind, send::WebdavSendError,
+    },
     rfc6578::sync_collection::WebdavSyncCollectionError,
 };
 use pimalaya_config::secret::SecretResolver;
@@ -128,6 +132,42 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
     client.addressbook_home_set()?;
 
     Ok(client)
+}
+
+/// Sends one `PROPFIND` of depth 0 to the addressbook home set of
+/// `client`, which a refused credential answers 401 or 403.
+///
+/// The `home` route opens the connection and sends nothing, where the
+/// `server` route authenticates its discovery walk, so `account check`
+/// proves the credential of a `home` block with this request. The error
+/// is io-webdav's, as the walk's: the same message and the same code.
+pub fn propfind_home(client: &mut Inner) -> Result<(), WebdavClientStdError> {
+    let home = client
+        .addressbook_home_set
+        .clone()
+        .ok_or(WebdavClientStdError::MissingAddressbookHomeSet)?;
+    let base_url = client.base_url.clone();
+    let user_agent = client.user_agent.clone();
+    let auth = client.auth().clone();
+
+    let props = [RESOURCETYPE];
+    let mut coroutine: WebdavPropfind =
+        WebdavPropfind::new(&base_url, &auth, &user_agent, home.path(), 0, &props);
+    let mut buf = [0u8; 8 * 1024];
+    let mut arg: Option<&[u8]> = None;
+
+    loop {
+        match coroutine.resume(arg.take()) {
+            WebdavCoroutineState::Complete(result) => return result.map(drop).map_err(Into::into),
+            WebdavCoroutineState::Yielded(WebdavYield::WantsWrite(bytes)) => {
+                client.stream.write_all(&bytes)?;
+            }
+            WebdavCoroutineState::Yielded(WebdavYield::WantsRead) => {
+                let n = client.stream.read(&mut buf)?;
+                arg = Some(&buf[..n]);
+            }
+        }
+    }
 }
 
 /// Probes `.well-known/carddav` on a bare-origin `server` with a GET.

@@ -283,7 +283,7 @@ A field taken from a card or a server (a name, an address, an id, an error a ser
 `card list` SHALL print `nextPage` beside `cards`: the next page number, as a string, while cards follow the page, `null` otherwise, and SHALL take it back through `--page-token`, which wins over `--page`. Whether cards follow is exact on every backend: the unified client reads one card past the page.
 
 ### Requirement: A listing names the items it could not read
-`addressbook list` and `card list` SHALL print an `errors` list beside their items, under `--json` and in text: one pimalaya-cli item error `{id, code, error, sources}` per address book or card the command could not read, `[]` when there is none, in the order met, and one entry with a `null` id and no code when the server truncated the listing (CardDAV). `id` SHALL be the item's id as the command prints ids, `null` when the backend named none; `code` a code of the vocabulary or `null`; `error` the message; `sources` the backend's own reasons, outermost first. An item listed in part (a card whose body does not parse) SHALL print in the list and in `errors`. A non-empty `errors` SHALL make the command exit 3 once it printed its result. A listing that reads the whole address book before cutting its page SHALL print its entries on the first page only.
+`addressbook list` and `card list` SHALL print an `errors` list beside their items, under `--json` and in text: one pimalaya-cli item error `{id, code, error, sources}` per address book or card the command could not read, `[]` when there is none, in the order met, and one entry with a `null` id and no code when the server truncated the listing (CardDAV). `id` SHALL be the item's id as the command prints ids, `null` when the backend named none; `code` a code of the vocabulary or `null`; `error` the message; `sources` the backend's own reasons, outermost first. An item in `errors` SHALL NOT print among the items, under `--json` nor in text, whatever made it unreadable (a card whose body does not parse or is not UTF-8, a file or a body that cannot be read, a row without its data): it is an entry alone, as calendula's `event list` prints an item it cannot read. It SHALL keep its place in the paging, the page holding it naming it and the next page starting after it. A non-empty `errors` SHALL make the command exit 3 once it printed its result. A listing that reads the whole address book before cutting its page SHALL print its entries on the first page only.
 
 #### Scenario: A vdir card that cannot be read
 - GIVEN a vdir address book holding three cards, one of whose files cannot be read
@@ -293,7 +293,7 @@ A field taken from a card or a server (a name, an address, an id, an error a ser
 #### Scenario: A card that does not parse
 - GIVEN a card whose body is no vCard
 - WHEN `cardamum --json card list` runs
-- THEN the card lists with its id and empty fields, an entry coded `card-unreadable` names it, and the exit status is 3
+- THEN `cards` leaves it out, an entry coded `card-unreadable` names it, the text prints no row for it, and the exit status is 3
 
 ### Requirement: A command's errors print at its end
 In the text output, each `errors` entry SHALL print as one `Error:` line, `<id>  <code>  <error>` with `-` for a null id or code, last in the command's output: after the items and one blank line, the `Error:` lines aligned among themselves (pimalaya-cli `error::ItemErrors`). Nothing SHALL print, the blank line included, when `errors` is empty.

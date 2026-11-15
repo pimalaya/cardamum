@@ -118,8 +118,10 @@ fn a_card_file_that_cannot_be_read_prints_on_the_first_page_alone() {
     assert_eq!(json["errors"], Value::Array(Vec::new()));
 }
 
+/// A card whose body does not parse is in `errors` alone, not also a row
+/// of empty fields among the cards.
 #[test]
-fn a_card_that_does_not_parse_lists_with_its_entry() {
+fn a_card_that_does_not_parse_is_an_entry_alone() {
     let (home, config) = vdir();
     fs::write(home.path().join("vdir/book/bad.vcf"), "not a card").unwrap();
 
@@ -130,11 +132,7 @@ fn a_card_that_does_not_parse_lists_with_its_entry() {
     );
     let json = partial(&output);
 
-    assert_eq!(ids(&json), ["ada", "bad", "bob"], "{json}");
-    let bad = &json["cards"][1];
-    assert!(bad["fnValue"].is_null(), "{bad}");
-    assert!(bad["fullName"].is_null(), "{bad}");
-
+    assert_eq!(ids(&json), ["ada", "bob"], "{json}");
     let errors = json["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 1, "{json}");
     assert_eq!(errors[0]["id"], "bad");
@@ -143,7 +141,7 @@ fn a_card_that_does_not_parse_lists_with_its_entry() {
 }
 
 #[test]
-fn a_card_that_is_not_utf8_lists_with_its_entry() {
+fn a_card_that_is_not_utf8_is_an_entry_alone() {
     let (home, config) = vdir();
     let body = b"BEGIN:VCARD\r\nVERSION:4.0\r\nFN:\xff\xfe\r\nEND:VCARD\r\n";
     fs::write(home.path().join("vdir/book/bin.vcf"), body).unwrap();
@@ -155,7 +153,7 @@ fn a_card_that_is_not_utf8_lists_with_its_entry() {
     );
     let json = partial(&output);
 
-    assert_eq!(ids(&json), ["ada", "bin", "bob"], "{json}");
+    assert_eq!(ids(&json), ["ada", "bob"], "{json}");
     assert_eq!(json["errors"][0]["id"], "bin", "{json}");
     assert_eq!(json["errors"][0]["code"], "card-unreadable");
     assert_eq!(
@@ -164,7 +162,31 @@ fn a_card_that_is_not_utf8_lists_with_its_entry() {
     );
 }
 
-/// In text, the entry prints last, after the cards and one blank line.
+/// A card in `errors` keeps its place in the paging: the page holding it
+/// names it, and the next page starts after it.
+#[test]
+fn a_card_that_does_not_parse_keeps_its_place_in_the_pages() {
+    let (home, config) = vdir();
+    fs::write(home.path().join("vdir/book/bad.vcf"), "not a card").unwrap();
+
+    let args = ["--json", "card", "list", "-k", "book", "-s", "2"];
+    let json = partial(&run(home.path(), &config, &args));
+    assert_eq!(ids(&json), ["ada"], "{json}");
+    assert_eq!(json["errors"][0]["id"], "bad", "{json}");
+    assert_eq!(json["nextPage"], "2", "{json}");
+
+    let args = ["--json", "card", "list", "-k", "book", "-s", "2", "-p", "2"];
+    let output = run(home.path(), &config, &args);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(0), "{stdout}");
+    let json: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(ids(&json), ["bob"], "{json}");
+    assert_eq!(json["errors"], Value::Array(Vec::new()));
+    assert_eq!(json["nextPage"], Value::Null, "{json}");
+}
+
+/// In text, the entry prints last, after the cards and one blank line,
+/// and no row of empty cells stands for its card.
 #[test]
 fn the_text_listing_prints_its_errors_last() {
     let (home, config) = vdir();
@@ -177,10 +199,9 @@ fn the_text_listing_prints_its_errors_last() {
     let expected = "\
 Account:      a (vdir)
 Addressbook:  book
-Page:         1, cards 1 to 3, the last
+Page:         1, cards 1 to 2, the last
 
 ada  -  -  Ada
-bad  -  -  -
 bob  -  -  Bob
 
 Error:  bad  card-unreadable  Cannot parse the card body as a vCard

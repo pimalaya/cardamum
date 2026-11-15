@@ -32,7 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added MIGRATION.md, the changes to act on coming from 0.3.
 - Added an `errors` list to `addressbook list` and `card list`, under `--json` and in text: one item error `{id, code, error, sources}` per card the listing could not read, `[]` when there is none, described under `json-schema` as `cardamum-item-error`.
 
-  A card whose body is no vCard or not UTF-8 lists with its id and gains an entry, as do a vdir file that cannot be read, a JMAP card that does not project, a pimdir body that cannot be read and a CardDAV row the server answered without the card's data; a CardDAV listing the server truncated adds an entry with a `null` id. The text output prints each as an `Error:` line at its end, and the MCP `card_list` and `addressbook_list` tools return them beside `isError: true`.
+  A card whose body is no vCard or not UTF-8 is an entry, as are a vdir file that cannot be read, a JMAP card that does not project, a pimdir body that cannot be read and a CardDAV row the server answered without the card's data, each left out of `cards`; a CardDAV listing the server truncated adds an entry with a `null` id. The text output prints each as an `Error:` line at its end, and the MCP `card_list` and `addressbook_list` tools return them beside `isError: true`.
 - Added the `--json` error codes `account-missing`, `account-default-missing` and `account-default-several`, for an account `-a` names that the configuration does not hold, and for no account or several marked `default = true`.
 - Added the `--json` error code `backend-not-built`: a command over an account whose backend this build leaves out fails naming the cargo feature to rebuild with, where it failed uncoded as if the account configured no backend.
 - Added `notBuilt` to `account list --json`, the account's backends this build leaves out, `backends` keeping the ones it carries; the text marks them `(not built)`.
@@ -119,6 +119,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed `addressbook update --description ""` on JMAP leaving the description in place: it is cleared.
 - Fixed the Microsoft Graph listings following a next page link off the Graph origin with the account's token: such a link is refused.
 - Fixed a credential command prompting for a password (`systemd-ask-password`) hanging the run: it now reads the terminal when cardamum runs in one (pimalaya-config 0.4.1).
+- Fixed `account check` passing a CardDAV account that names `carddav.home` whatever its credential, as the home route connected without a request: the check now sends the home one `PROPFIND`, so a refused credential fails its row as with `carddav.server`.
+- Fixed `card list` printing a card it could not read as a row of empty fields (a pimdir one as its preview) beside its `errors` entry: the card is in `errors` alone, under `--json` and in text, and keeps its place in the pages.
 
 ## [0.3.0] - 2026-10-02
 

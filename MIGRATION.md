@@ -225,7 +225,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   # v0.4
   cardamum --json card read -k book c1.vcf | jq -r 'if .encoding == "base64" then .contents | @base64d else .contents end'
   ```
-- **`carddav get`, `report query` and `report multiget` carry `encoding` beside each vCard**, as `card read` does: `utf-8` when `contents` is the vCard text, `base64` when its bytes are not UTF-8 and `contents` holds their base64, where v0.3's `carddav get` failed on such a card. A REPORT row reads as text, so its `encoding` is `utf-8`:
+- **`carddav get`, `report query`, `report multiget` and `vdir item get` carry `encoding` beside each vCard**, as `card read` does: `utf-8` when `contents` is the vCard text, `base64` when its bytes are not UTF-8 and `contents` holds their base64, where v0.3's `carddav get` and `vdir item get` failed on such a card. A REPORT row reads as text, so its `encoding` is `utf-8`:
 
   ```sh
   # v0.3
@@ -330,7 +330,7 @@ The commands take the names Himalaya and Calendula give them. Every v0.3 spellin
   ```
 
   `account check` reports such a backend as a failed row (exit 3), and `account list --json` names it in the new `notBuilt`, `backends` still holding the backends the build carries alone; both follow the order `auto` resolves them (vdir, pimdir, carddav, jmap, msgraph, gpeople), where `backends` started with CardDAV.
-- **Creating an address book that exists fails coded `addressbook-duplicate`**, ``Addressbook `<name>` already exists``, exit 1, nothing created. On vdir, `addressbook create` and `vdir create` of a name the home holds succeeded and rewrote its name, description and colour; a CardDAV server's refusal read `permission-denied` or carried no code, and Graph's and People's no code. JMAP lets two address books share a name, so it still creates the second:
+- **Creating an address book that exists fails coded `addressbook-duplicate`**, ``Cannot create address book `<name>`: it exists already``, exit 1, nothing created. On vdir, `addressbook create` and `vdir create` of a name the home holds succeeded and rewrote its name, description and colour; a CardDAV server's refusal read `permission-denied` or carried no code, and Graph's and People's no code. JMAP lets two address books share a name, so it still creates the second:
 
   ```sh
   # v0.3: exit 0, {"message":"…"}, the existing `work` renamed `work`

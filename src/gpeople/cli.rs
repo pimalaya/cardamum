@@ -13,7 +13,7 @@ use crate::gpeople::{
     profile::cli::GpeopleProfileCommand, request::GpeopleRequestCommand,
 };
 
-/// Google People API-specific API.
+/// Google People-specific API.
 ///
 /// Nested by People resource (contact groups, connections, other
 /// contacts, the signed-in user), each command named after its People

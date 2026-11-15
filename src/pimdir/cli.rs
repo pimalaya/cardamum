@@ -16,14 +16,13 @@ use crate::{
     },
 };
 
-/// Report on, queue into and search the local pimdir store behind the
-/// account.
+/// pimdir-specific API.
 ///
-/// What the store holds and how much of it is downloaded, the writes
-/// cardamum queued for its owner and those the owner parked rather than
-/// applied, each of which can be cancelled. Searches and counts the
-/// account's cards through the store's search index, which its sync
-/// engine builds.
+/// Direct access to the local pimdir store behind the account: what it
+/// holds and how much of it is downloaded, the writes cardamum queued for
+/// its owner and those the owner parked rather than applied, each of which
+/// can be cancelled, and its search index, which its sync engine builds,
+/// searching and counting the account's cards.
 ///
 /// The store's own operator tooling, the `pimdir` binary io-pimdir
 /// ships, covers the rest, including retrying a parked write and the

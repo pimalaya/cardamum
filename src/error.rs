@@ -336,8 +336,9 @@ pub fn addressbook_not_found(id: &str, cause: Error) -> Error {
 /// the backend's text in `sources`.
 #[cfg(any(feature = "carddav", feature = "gpeople", feature = "msgraph"))]
 pub fn addressbook_duplicate(name: &str, cause: Error) -> Error {
-    with_code(cause, |_| Some(ErrorCode::AddressbookDuplicate))
-        .context(format!("Addressbook `{name}` already exists"))
+    with_code(cause, |_| Some(ErrorCode::AddressbookDuplicate)).context(format!(
+        "Cannot create address book `{name}`: it exists already"
+    ))
 }
 
 #[cfg(test)]

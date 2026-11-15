@@ -52,17 +52,20 @@ impl CarddavBackend {
 
     /// Creates an addressbook collection under the home-set.
     ///
-    /// The given name doubles as the URL segment, and comes back as the
-    /// new addressbook id. The unified client refuses a name no collection
-    /// can have before connecting (`check_addressbook_name`).
+    /// `id` is the URL segment, the name doubling as one when `id` is
+    /// `None`, and comes back as the new addressbook id. The unified client
+    /// refuses an id no collection can have before connecting
+    /// (`check_addressbook_name`).
     pub fn create_addressbook(
         &mut self,
+        id: Option<&str>,
         name: &str,
         description: Option<&str>,
         color: Option<&str>,
     ) -> Result<String> {
+        let id = id.unwrap_or(name);
         let wire = CarddavAddressbook {
-            id: name.to_string(),
+            id: id.to_string(),
             display_name: Some(name.to_string()),
             description: description.map(str::to_string),
             color: color.map(str::to_string),
@@ -70,10 +73,10 @@ impl CarddavBackend {
         };
 
         if let Err(err) = self.inner.create_addressbook(&wire) {
-            return Err(self.create_error(name, err));
+            return Err(self.create_error(id, err));
         }
 
-        Ok(name.to_string())
+        Ok(id.to_string())
     }
 
     /// The failure of the `MKCOL` creating the address book `id`,
@@ -529,16 +532,19 @@ mod tests {
     fn an_address_book_created_twice_is_a_duplicate() {
         for status in [403, 405] {
             let err = refusing_mkcol(status)
-                .create_addressbook("My Book", None, None)
+                .create_addressbook(None, "My Book", None, None)
                 .unwrap_err();
             let duplicate = Some(ErrorCode::AddressbookDuplicate);
             assert_eq!(code_of(&err), duplicate, "{err:#}");
-            assert_eq!(err.to_string(), "Addressbook `My Book` already exists");
+            assert_eq!(
+                err.to_string(),
+                "Cannot create address book `My Book`: it exists already"
+            );
             assert!(format!("{err:#}").contains(&status.to_string()), "{err:#}");
         }
 
         let err = refusing_mkcol(403)
-            .create_addressbook("fresh", None, None)
+            .create_addressbook(None, "fresh", None, None)
             .unwrap_err();
         assert_eq!(error::code(&err), Some(ErrorCode::PermissionDenied));
     }
@@ -779,5 +785,52 @@ END:VCARD&#13;
             mkcol.starts_with("MKCOL /dav/My%20Book/ HTTP/1.1\r\n"),
             "{mkcol}"
         );
+    }
+
+    /// `addressbook create "My Book" --id book` sends its `MKCOL` to the id
+    /// chosen, the name its display name, and prints that id.
+    #[test]
+    fn a_created_addressbook_takes_the_id_given() {
+        use clap::Parser;
+        use pimalaya_cli::printer::CapturePrinter;
+
+        use crate::{
+            backend::Backend,
+            config::{AccountConfig, Config},
+            shared::{addressbook::create::AddressbookCreateCommand, client::AddressbookClient},
+        };
+
+        let (script, requests) = Script::new([script::response(201, "text/plain", "")]);
+        let base = Url::parse("https://dav.example.org/").unwrap();
+        let home = base.join("/dav/").unwrap();
+        let inner =
+            WebdavClientStd::from_parts(script, WebdavAuth::None, base, None, None, Some(home));
+
+        let config = "home = \"https://dav.example.org/dav/\"\nauth = \"none\"";
+        let account = AccountConfig {
+            carddav: Some(toml::from_str(config).unwrap()),
+            ..Default::default()
+        };
+        let mut client =
+            AddressbookClient::new(Config::default(), "dav".into(), account, Backend::Auto)
+                .unwrap();
+        client.open_carddav(CarddavBackend { inner });
+
+        let mut printer = CapturePrinter::default();
+        AddressbookCreateCommand::parse_from(["create", "My Book", "--id", "book"])
+            .execute(&mut printer, &mut client)
+            .unwrap();
+
+        let created = printer.into_single().unwrap();
+        assert_eq!(created["id"], "book", "{created}");
+        assert_eq!(created["name"], "My Book", "{created}");
+
+        let requests = requests.lock().unwrap();
+        let mkcol = String::from_utf8_lossy(&requests[0]);
+        assert!(
+            mkcol.starts_with("MKCOL /dav/book/ HTTP/1.1\r\n"),
+            "{mkcol}"
+        );
+        assert!(mkcol.contains("My Book"), "{mkcol}");
     }
 }

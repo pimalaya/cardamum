@@ -13,9 +13,10 @@ use crate::jmap::{
     session::cli::JmapSessionCommand,
 };
 
-/// JMAP-specific API (RFC 8620 + RFC 9610).
+/// JMAP-specific API.
 ///
-/// Nested by JMAP object type, each command named after its JMAP method
+/// The JMAP core and contacts methods (RFC 8620, RFC 9610), nested by
+/// JMAP object type, each command named after its JMAP method
 /// (`/get`, `/query`, `/set` create/update/destroy, `/changes`,
 /// `/copy`). Works with the raw JSContact model: `create` / `update`
 /// take a JSContact JSON body and `--json` prints the raw JMAP payload.

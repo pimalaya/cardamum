@@ -431,13 +431,21 @@ impl AddressbookClient {
     }
 
     /// Creates an addressbook and returns the id the backend assigned.
+    ///
+    /// `id` reaches the backends letting a client choose one, vdir and
+    /// CardDAV, the capability check refusing it on the others.
+    #[cfg_attr(
+        not(any(feature = "vdir", feature = "carddav")),
+        allow(unused_variables)
+    )]
     pub fn create_addressbook(
         &mut self,
+        id: Option<&str>,
         name: &str,
         description: Option<&str>,
         color: Option<&str>,
     ) -> Result<String> {
-        self.check_name(name)?;
+        self.check_name(id.unwrap_or(name))?;
 
         match self.open()? {
             #[cfg(not(any(
@@ -450,11 +458,13 @@ impl AddressbookClient {
             )))]
             BackendClient::Unused(never) => match *never {},
             #[cfg(feature = "vdir")]
-            BackendClient::Vdir(client) => client.create_addressbook(name, description, color),
+            BackendClient::Vdir(client) => client.create_addressbook(id, name, description, color),
             #[cfg(feature = "pimdir")]
             BackendClient::Pimdir(client) => client.create_addressbook(name, description, color),
             #[cfg(feature = "carddav")]
-            BackendClient::Carddav(client) => client.create_addressbook(name, description, color),
+            BackendClient::Carddav(client) => {
+                client.create_addressbook(id, name, description, color)
+            }
             #[cfg(feature = "jmap")]
             BackendClient::Jmap(client) => client.create_addressbook(name, description, color),
             #[cfg(feature = "msgraph")]

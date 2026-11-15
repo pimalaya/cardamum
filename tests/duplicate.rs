@@ -65,7 +65,10 @@ fn an_address_book_created_twice_is_a_duplicate() {
 
         let json: Value = serde_json::from_str(&stdout).unwrap();
         assert_eq!(json["code"], "addressbook-duplicate", "{json}");
-        assert_eq!(json["error"], "Addressbook `work` already exists", "{json}");
+        assert_eq!(
+            json["error"], "Cannot create address book `work`: it exists already",
+            "{json}"
+        );
 
         let name = fs::read_to_string(work.join("displayname")).unwrap();
         let description = fs::read_to_string(work.join("description")).unwrap();

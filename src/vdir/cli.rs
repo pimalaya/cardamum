@@ -13,11 +13,12 @@ use crate::vdir::{
     rename::VdirCollectionRenameCommand,
 };
 
-/// Manage vdir collections and items on the filesystem.
+/// vdir-specific API.
 ///
-/// Operates on the raw vdir API rooted at the active account's
-/// `vdir.root`. The flat verbs act on collections, which are
-/// directories, and `item` on the raw item files inside them.
+/// Direct access to the on-disk vdir backend rooted at the active
+/// account's `vdir.root`, without going through the unified API. The flat
+/// verbs act on collections, which are directories, and `item` on the raw
+/// item files inside them.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum VdirCommand {

@@ -16,6 +16,11 @@ use crate::shared::client::AddressbookClient;
 
 /// Create a new addressbook.
 ///
+/// The reported id is the one later commands address the addressbook by.
+/// Given only a name, vdir names its directory and CardDAV its URL segment
+/// after it; `--id` chooses that id instead, the name staying the display
+/// name. JMAP, Graph and People mint their own ids, so they refuse `--id`.
+///
 /// JSON output: `{"id", "name", "queued"}`, the identifier the backend
 /// assigned, the name given and whether a sync engine creates it later.
 #[derive(Debug, Parser)]
@@ -23,6 +28,12 @@ pub struct AddressbookCreateCommand {
     /// Display name of the addressbook to create.
     #[arg(value_name = "NAME")]
     pub name: String,
+    /// Identifier of the addressbook, on the backends letting a client
+    /// choose one: its vdir directory or its CardDAV URL segment.
+    ///
+    /// Omitted, the name is the id, and must then be one.
+    #[arg(long, value_name = "ID")]
+    pub id: Option<String>,
     /// Free-form description of the addressbook.
     #[arg(short, long, value_name = "TEXT")]
     pub description: Option<String>,
@@ -34,6 +45,9 @@ pub struct AddressbookCreateCommand {
 impl AddressbookCreateCommand {
     pub fn execute(self, printer: &mut impl Printer, client: &mut AddressbookClient) -> Result<()> {
         let mut capabilities = vec![Capability::AddressbookCreate];
+        if self.id.is_some() {
+            capabilities.push(Capability::AddressbookCreateId);
+        }
         if self.description.is_some() {
             capabilities.push(Capability::AddressbookDescription);
         }
@@ -43,6 +57,7 @@ impl AddressbookCreateCommand {
         client.require(&capabilities)?;
 
         let id = client.create_addressbook(
+            self.id.as_deref(),
             &self.name,
             self.description.as_deref(),
             self.color.as_deref(),

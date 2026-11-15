@@ -31,6 +31,8 @@ pub enum Capability {
     AddressbookList,
     /// Creating an addressbook.
     AddressbookCreate,
+    /// Choosing the id of an addressbook created.
+    AddressbookCreateId,
     /// Renaming an addressbook.
     AddressbookRename,
     /// Deleting an addressbook and the cards it holds.
@@ -57,9 +59,10 @@ pub enum Capability {
 
 impl Capability {
     /// Every capability, in the order the listings print them.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 14] = [
         C::AddressbookList,
         C::AddressbookCreate,
+        C::AddressbookCreateId,
         C::AddressbookRename,
         C::AddressbookDelete,
         C::AddressbookDescription,
@@ -78,6 +81,7 @@ impl Capability {
         match self {
             Self::AddressbookList => "addressbook.list",
             Self::AddressbookCreate => "addressbook.create",
+            Self::AddressbookCreateId => "addressbook.create.id",
             Self::AddressbookRename => "addressbook.rename",
             Self::AddressbookDelete => "addressbook.delete",
             Self::AddressbookDescription => "addressbook.description",
@@ -183,6 +187,7 @@ const LEAVES: &[(&str, &str, &[Capability])] = &[
         "create",
         &[
             C::AddressbookCreate,
+            C::AddressbookCreateId,
             C::AddressbookDescription,
             C::AddressbookColor,
         ],
@@ -276,6 +281,9 @@ const PIMDIR_COLLECTION: &str =
 const PIMDIR_QUEUED: &str = "queued for the next sync, and refused when a source of the store \
      does not support it";
 
+/// Why a backend minting its own ids takes no `--id`.
+const MINTED_ID: &str = "the server mints the id of an addressbook, so `--id` is refused";
+
 /// Why a backend without versions takes no `--if-match`.
 const NO_VERSION: &str = "the backend exposes no version to compare, so `--if-match` is refused";
 
@@ -294,6 +302,7 @@ const CARDDAV: &[Row] = &[
         C::AddressbookCreate,
         Server("the server may forbid creating an addressbook, as iCloud does"),
     ),
+    (C::AddressbookCreateId, Full),
     (C::AddressbookRename, Full),
     (
         C::AddressbookDelete,
@@ -317,6 +326,7 @@ const CARDDAV: &[Row] = &[
 const JMAP: &[Row] = &[
     (C::AddressbookList, Full),
     (C::AddressbookCreate, Full),
+    (C::AddressbookCreateId, Not(MINTED_ID)),
     (C::AddressbookRename, Full),
     (C::AddressbookDelete, Full),
     (C::AddressbookDescription, Full),
@@ -337,6 +347,7 @@ const JMAP: &[Row] = &[
 const MSGRAPH: &[Row] = &[
     (C::AddressbookList, Full),
     (C::AddressbookCreate, Full),
+    (C::AddressbookCreateId, Not(MINTED_ID)),
     (
         C::AddressbookRename,
         Partial("the default Contacts folder cannot be renamed"),
@@ -366,6 +377,7 @@ const MSGRAPH: &[Row] = &[
 const GPEOPLE: &[Row] = &[
     (C::AddressbookList, Full),
     (C::AddressbookCreate, Full),
+    (C::AddressbookCreateId, Not(MINTED_ID)),
     (
         C::AddressbookRename,
         Partial("the Contacts system group cannot be renamed"),
@@ -398,6 +410,7 @@ const GPEOPLE: &[Row] = &[
 const VDIR: &[Row] = &[
     (C::AddressbookList, Full),
     (C::AddressbookCreate, Full),
+    (C::AddressbookCreateId, Full),
     (C::AddressbookRename, Full),
     (C::AddressbookDelete, Full),
     (C::AddressbookDescription, Full),
@@ -415,6 +428,7 @@ const VDIR: &[Row] = &[
 const PIMDIR: &[Row] = &[
     (C::AddressbookList, Full),
     (C::AddressbookCreate, Not(PIMDIR_COLLECTION)),
+    (C::AddressbookCreateId, Not(PIMDIR_COLLECTION)),
     (C::AddressbookRename, Not(PIMDIR_COLLECTION)),
     (C::AddressbookDelete, Not(PIMDIR_COLLECTION)),
     (C::AddressbookDescription, Not(PIMDIR_COLLECTION)),

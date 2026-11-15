@@ -45,14 +45,16 @@ impl VdirBackend {
         Ok(collections.into_iter().map(into_addressbook).collect())
     }
 
-    /// Creates a collection named after `name` under the home directory.
+    /// Creates the collection `id` under the home directory, displayed as
+    /// `name`, its directory named after `name` when `id` is `None`.
     ///
-    /// Returns the new addressbook id, which is its directory name. A name
+    /// Returns the new addressbook id, which is its directory name. An id
     /// that is not one directory name is refused, as it would reach out of
     /// the home or below one of its addressbooks, and so is one the home
     /// holds already.
     pub fn create_addressbook(
         &mut self,
+        id: Option<&str>,
         name: &str,
         description: Option<&str>,
         color: Option<&str>,
@@ -61,21 +63,26 @@ impl VdirBackend {
             bail!("Addressbook name cannot be empty");
         }
 
-        if !is_dir_name(name) {
-            bail!("Addressbook name `{name}` is not one directory name");
+        let (id, what) = match id {
+            Some(id) => (id, "id"),
+            None => (name, "name"),
+        };
+
+        if !is_dir_name(id) {
+            bail!("Addressbook {what} `{id}` is not one directory name");
         }
 
-        check_collection_absent(self.inner.root(), name)?;
+        check_collection_absent(self.inner.root(), id)?;
 
         let collection = VdirCollection {
-            path: self.inner.root().join(name),
+            path: self.inner.root().join(id),
             display_name: Some(name.to_string()),
             description: description.map(str::to_string),
             color: color.map(str::to_string),
         };
         self.inner.create_collection(collection)?;
 
-        Ok(name.to_string())
+        Ok(id.to_string())
     }
 
     /// Applies `patch` to the collection `id`, over its current metadata.

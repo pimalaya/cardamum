@@ -62,7 +62,7 @@ pub(crate) fn collection_dir(root: &VdirPath, id: &str) -> Option<VdirPath> {
 pub(crate) fn check_collection_absent(root: &VdirPath, id: &str) -> Result<()> {
     match collection_dir(root, id) {
         Some(_) => {
-            let message = format!("Addressbook `{id}` already exists");
+            let message = format!("Cannot create address book `{id}`: it exists already");
             Err(CodedError::new(ErrorCode::AddressbookDuplicate, message).into())
         }
         None => Ok(()),

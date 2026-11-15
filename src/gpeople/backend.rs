@@ -693,7 +693,10 @@ mod tests {
             .unwrap_err();
         let duplicate = Some(ErrorCode::AddressbookDuplicate);
         assert_eq!(code_of(&err), duplicate, "{err:#}");
-        assert_eq!(err.to_string(), "Addressbook `Work` already exists");
+        assert_eq!(
+            err.to_string(),
+            "Cannot create address book `Work`: it exists already"
+        );
         assert!(format!("{err:#}").contains("already exists."), "{err:#}");
     }
 

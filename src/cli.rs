@@ -393,6 +393,30 @@ mod usage_tests {
         assert!(message.contains("--features jmap"), "{message}");
     }
 
+    /// Each protocol namespace this build carries reads as Himalaya's,
+    /// `<API>-specific API`.
+    #[test]
+    fn the_namespaces_read_as_himalaya() {
+        let abouts = [
+            ("carddav", "CardDAV-specific API"),
+            ("jmap", "JMAP-specific API"),
+            ("msgraph", "Microsoft Graph-specific API"),
+            ("gpeople", "Google People-specific API"),
+            ("pimdir", "pimdir-specific API"),
+            ("vdir", "vdir-specific API"),
+        ];
+
+        let mut cli = Cli::command();
+        cli.build();
+
+        for (name, about) in abouts {
+            if let Some(cmd) = cli.find_subcommand(name) {
+                let found = cmd.get_about().map(ToString::to_string);
+                assert_eq!(found.as_deref(), Some(about), "{name}");
+            }
+        }
+    }
+
     /// A backend this build carries is taken by its name.
     #[cfg(feature = "vdir")]
     #[test]

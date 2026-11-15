@@ -18,7 +18,7 @@ Each subcommand SHALL be a clap-derived struct holding its own arguments, with a
 Each command's doc comment SHALL be its help text: the first paragraph (two lines maximum) is the short summary `-h` shows, and the full text `--help` shows SHALL end with the command's JSON output shape. `cardamum <command> --help` is therefore the canonical usage reference for both humans and agents, and the README documents no per-command usage.
 
 ### Requirement: Specific commands mirror their protocol
-A protocol-specific command set SHALL match the remote protocol's own structure and vocabulary rather than the unified API's, following Himalaya's direction. The shape follows the protocol: CardDAV (WebDAV) is a flat list of WebDAV method names, JMAP, Microsoft Graph and Google People are nested by resource with sub-verbs naming the protocol methods, and vdir is flat collection verbs plus an `item` subcommand. Verb names track the protocol, so JMAP uses `destroy` while Graph and People use `delete`. A resource is named by the API's own plural noun, as Himalaya's `gmail` names its own: `gpeople connections`, `gpeople contact-groups` and `gpeople other-contacts`, the singular names (`connection`, `contact-group`, `other-contact`) accepted as hidden aliases beside the visible `people`, `contacts`, `group`, `groups` and `other`; `gpeople profile` reads the one signed-in user and stays singular.
+A protocol-specific command set SHALL match the remote protocol's own structure and vocabulary rather than the unified API's, following Himalaya's direction. The shape follows the protocol: CardDAV (WebDAV) is a flat list of WebDAV method names, JMAP, Microsoft Graph and Google People are nested by resource with sub-verbs naming the protocol methods, and vdir is flat collection verbs plus an `item` subcommand. Verb names track the protocol, so JMAP uses `destroy` while Graph and People use `delete`. A resource is named by the API's own plural noun, as Himalaya's `gmail` names its own: `gpeople connections`, `gpeople contact-groups` and `gpeople other-contacts`, the singular names (`connection`, `contact-group`, `other-contact`) accepted as hidden aliases beside the visible `people`, `contacts`, `group`, `groups` and `other`; `gpeople profile` reads the one signed-in user and stays singular. Each namespace SHALL read as Himalaya's in its summary line, `<API>-specific API`: `CardDAV-specific API`, `JMAP-specific API`, `Microsoft Graph-specific API`, `Google People-specific API`, `pimdir-specific API` and `vdir-specific API`, as calendula's namespaces read.
 
 pimdir is a store rather than a protocol: its `pimdir` family covers `status`, what a reader can tell of the store behind the account, `queue list`, `queue show` and `queue cancel`, the writes cardamum queued, and `search` and `count`, the store's search index queried in the pimdir SEARCH language. The other operator commands (retrying a parked action, the retained items) ship as the separate `pimdir` binary in io-pimdir.
 
@@ -359,6 +359,27 @@ The vCard SHALL travel as `contents`, a string: the text when its bytes are vali
 - WHEN `cardamum --json carddav get book c1.vcf` runs
 - THEN it exits 0 and prints `id`, `etag`, `contents` holding the bytes in base64 and `"encoding":"base64"`
 
+### Requirement: A vdir item read carries its bytes beside their encoding
+`vdir item get` SHALL carry the item as `carddav get` carries a vCard ("A CardDAV read carries its vCard beside its encoding") and as calendula's `vdir item get` carries one: `{id, kind, contents, encoding}`, `contents` the text when the bytes are valid UTF-8, `encoding` then `utf-8`, and their base64 (RFC 4648 standard alphabet, padded) otherwise, `encoding` then `base64`. An item that is not UTF-8 SHALL read rather than fail, and the text SHALL print it as its bytes.
+
+#### Scenario: A vdir item that is not UTF-8
+- GIVEN a vdir address book `book` holding `b.vcf`, whose bytes hold `0xE9`
+- WHEN `cardamum --json vdir item get book b` runs
+- THEN it exits 0 and prints `"kind":"vcard"`, `contents` holding the bytes in base64 and `"encoding":"base64"`
+
+### Requirement: An address book is created under the id given
+`addressbook create <NAME>` SHALL take an optional `--id <ID>`, as calendula's `calendar create <NAME> [--id <ID>]`: on vdir the directory and on CardDAV the URL segment, `<NAME>` then the display name alone, and the id the command prints. Without it the name SHALL stay the id, as before. JMAP, Microsoft Graph and Google People mint their own ids and pimdir creates no address book, so the four SHALL refuse `--id` before connecting (`addressbook.create.id` at `none`, "An unserved verb is refused before connecting").
+
+#### Scenario: A vdir address book under an id
+- GIVEN a vdir account
+- WHEN `cardamum --json addressbook create "My Work" --id work` runs
+- THEN it prints `{"id":"work","name":"My Work","queued":false}` and the home holds the directory `work`, displayed `My Work`
+
+#### Scenario: A JMAP account
+- GIVEN a JMAP account
+- WHEN `cardamum --json addressbook create Work --id work` runs
+- THEN it exits 1 coded `capability-missing` naming `addressbook.create.id`, nothing connected
+
 ### Requirement: pimdir searches cards through the store's index
 `cardamum pimdir search <query>...`, gated on the `pimdir` feature, SHALL answer the pimdir SEARCH query language (search-draft-11 §8) from the store's search index, scoped to the account's cards: the query is read as its conjuncts plus `kind:contact`, `account:<account>` when the store groups the account under a name, and `collection:<id>` when `-k/--addressbook` names an address book. The scope is added beside the query, never around it, so a group that is itself a conjunct of the query keeps narrowing the answer and its coverage as its terms do bare (SEARCH §8.2). Without `-k` it SHALL search every address book of the account, `addressbook.default` not applied, and a `-k` naming no address book of the account SHALL fail naming those it holds rather than answer nothing. The words of the query are joined by spaces into one query. An option of `pimdir search` or `pimdir count` SHALL be read wherever it stands, before the query or after it, `--json` included; a query word starting with `-`, a negated term, SHALL pass after `--` alone, a word starting with `-` before it being refused as an unknown option or read as the option it spells, as calendula and Himalaya read theirs. Cardamum SHALL open the index read-only (io-pimdir `PimdirIndex::open_query`) and SHALL NOT create, rebuild nor refresh it: the store's owner, its sync engine, does. The answer SHALL be the store as of the owner's last refresh: a queued write is not listed nor folded in.
 
@@ -493,10 +514,10 @@ In the text output, each `errors` entry SHALL print as one `Error:` line, `<id> 
 - THEN the request line is `REPORT /dav/My%20Book/ HTTP/1.1` and the row's `dataBytes` is 54
 
 ### Requirement: Capability registry
-Each backend SHALL declare, in a table compiled into every build, each capability of the unified API (`addressbook.list`, `addressbook.create`, `addressbook.rename`, `addressbook.delete`, `addressbook.description`, `addressbook.color`, `card.list`, `card.read`, `card.add`, `card.update`, `card.remove`, `card.update.if-match`, `card.remove.if-match`) at `full`, `partial`, `server` or `none`, every level but `full` with a detail saying what differs, which server refuses, or what serves it instead. A backend declares a capability only when it gives the result every other declarer gives.
+Each backend SHALL declare, in a table compiled into every build, each capability of the unified API (`addressbook.list`, `addressbook.create`, `addressbook.create.id`, `addressbook.rename`, `addressbook.delete`, `addressbook.description`, `addressbook.color`, `card.list`, `card.read`, `card.add`, `card.update`, `card.remove`, `card.update.if-match`, `card.remove.if-match`) at `full`, `partial`, `server` or `none`, every level but `full` with a detail saying what differs, which server refuses, or what serves it instead. A backend declares a capability only when it gives the result every other declarer gives.
 
 ### Requirement: An unserved verb is refused before connecting
-A unified command SHALL check the capabilities it reaches, those its flags reach included (`--if-match`, an addressbook's name, description or colour), against the backend the account resolves to, before reading the store or connecting, and SHALL fail with `capability-missing` naming the backend, the capability and the detail.
+A unified command SHALL check the capabilities it reaches, those its flags reach included (`--if-match`, an addressbook's id, name, description or colour), against the backend the account resolves to, before reading the store or connecting, and SHALL fail with `capability-missing` naming the backend, the capability and the detail.
 
 ### Requirement: An account lists what it serves
 `account capability` SHALL print pimalaya-cli's `capability::AccountCapabilityOutput`, connecting nowhere: `{"account", "capabilities": [{"name", "backend", "level", "detail"}]}`, one row per capability, `backend` the backend the unified commands resolve to (`--backend` honoured), `level` one of `full`, `partial`, `server` and `none`, `detail` what the level leaves out or `null`. When the account configures no backend `--backend` allows, every row SHALL read `backend` `null` and level `none`, and the command SHALL succeed. When it resolves to a backend the build leaves out, the command SHALL fail coded `backend-not-built`, that backend serving nothing. The text SHALL be a list headed by `Account: <name>`, then one line per capability: the name, the backend, the level and the detail.

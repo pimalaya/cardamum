@@ -24,7 +24,8 @@ use crate::shared::{
 /// The source, the field flags and `-i` stack: the source replaces the
 /// card's bytes, the flags set the properties they name on it, and `-i`
 /// opens the result in the composer. With no source the card is read from
-/// the backend first, and the version it answered guards the write.
+/// the backend first, and the version it answered guards the write on a
+/// backend taking a guard.
 ///
 /// JSON output: `{"id", "keptProperties"}`, the second listing what the
 /// update dropped and the server kept anyway.
@@ -37,7 +38,8 @@ pub struct CardUpdateCommand {
     ///
     /// The update only lands if the server still holds that version (RFC
     /// 9110 `If-Match`), which is how a concurrent write is caught. With
-    /// no source the command sends the ETag it read when this is omitted.
+    /// no source the command sends the ETag it read when this is omitted,
+    /// on a backend taking one.
     #[arg(long, value_name = "ETAG")]
     pub if_match: Option<String>,
     /// The composer the card is refined in before it is written.
@@ -83,6 +85,9 @@ impl CardUpdateCommand {
             }
         };
 
+        // NOTE: a backend taking no version guard (jmap, msgraph) still
+        // reports a version on a read, which it would refuse as a guard.
+        let etag = etag.filter(|_| client.serves(Capability::CardUpdateIfMatch));
         let if_match = self.if_match.or(etag);
         let seeded = self.fields.apply(&base)?;
 
@@ -193,5 +198,92 @@ impl fmt::Display for CardUpdatedOutput {
         }
 
         writeln!(f)
+    }
+}
+
+#[cfg(all(test, feature = "msgraph"))]
+mod tests {
+    use anyhow::Result;
+    use clap::Parser;
+    use io_msgraph::v1::client::MsgraphClientStd;
+    use pimalaya_cli::{output::Bytes, printer::Printer};
+    use serde::Serialize;
+    use serde_json::{Value, json};
+
+    use super::CardUpdateCommand;
+    use crate::{
+        backend::Backend,
+        config::{AccountConfig, Config},
+        msgraph::backend::MsgraphBackend,
+        script::{self, Script},
+        shared::client::AddressbookClient,
+    };
+
+    /// What a command printed, as JSON.
+    #[derive(Default)]
+    struct Captured(Value);
+
+    impl Printer for Captured {
+        fn out<T: core::fmt::Display + Serialize>(&mut self, data: T) -> Result<()> {
+            self.0 = serde_json::to_value(&data)?;
+            Ok(())
+        }
+
+        fn event<T: core::fmt::Display + Serialize>(&mut self, _event: T) -> Result<()> {
+            Ok(())
+        }
+
+        fn out_bytes(&mut self, _bytes: Bytes) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    /// An update with no `--if-match` on Graph sends one plain `PATCH`:
+    /// the `changeKey` its read reports is a version Graph takes no guard
+    /// on, so it stays off the write rather than refusing it.
+    #[test]
+    fn a_graph_update_without_if_match_sends_one_plain_patch() {
+        let contact = r#"{"id":"AAMk","changeKey":"k1","displayName":"Ada"}"#;
+        let answer = || script::response(200, "application/json", contact);
+        let (script, requests) = Script::new([answer(), answer(), answer()]);
+
+        let account = AccountConfig {
+            msgraph: Some(toml::from_str(r#"auth.token.raw = "token""#).unwrap()),
+            ..Default::default()
+        };
+        let mut client =
+            AddressbookClient::new(Config::default(), "work".into(), account, Backend::Auto)
+                .unwrap();
+        client.open_msgraph(MsgraphBackend {
+            inner: MsgraphClientStd::new(script, "token", Default::default()),
+        });
+
+        let mut out = Captured::default();
+        let args = [
+            "update",
+            "-k",
+            "contacts",
+            "AAMk",
+            "--full-name",
+            "Ada Byron",
+        ];
+        CardUpdateCommand::parse_from(args)
+            .execute(&mut out, &mut client)
+            .unwrap();
+        assert_eq!(out.0, json!({"id": "AAMk", "keptProperties": []}));
+
+        let requests = requests.lock().unwrap();
+        let requests: Vec<String> = requests
+            .iter()
+            .map(|request| String::from_utf8_lossy(request).into_owned())
+            .collect();
+        let patches: Vec<&String> = requests
+            .iter()
+            .filter(|request| request.starts_with("PATCH "))
+            .collect();
+        assert_eq!(patches.len(), 1, "{requests:#?}");
+        assert!(patches[0].contains("Ada Byron"), "{}", patches[0]);
+        let headers = patches[0].to_ascii_lowercase();
+        assert!(!headers.contains("if-match"), "{}", patches[0]);
     }
 }

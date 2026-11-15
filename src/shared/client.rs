@@ -237,6 +237,12 @@ impl AddressbookClient {
         capability::require(&self.backend().to_string(), capabilities)
     }
 
+    /// Whether the backend serves `capability` at any level but `none`.
+    pub fn serves(&self, capability: Capability) -> bool {
+        let support = capability::support(&self.backend().to_string(), capability);
+        !matches!(support, capability::Support::None(_))
+    }
+
     /// Whether the backend queues a write for a sync to push rather than
     /// make it on the server, so a write is confirmed as queued. Only the
     /// printed wording reads it, never the JSON.
@@ -285,6 +291,13 @@ impl AddressbookClient {
         }
 
         Ok(self.inner.as_mut().expect("just opened"))
+    }
+
+    /// Opens the client on `backend`, a Graph client over a scripted
+    /// stream, rather than connecting.
+    #[cfg(all(test, feature = "msgraph"))]
+    pub fn open_msgraph(&mut self, backend: crate::msgraph::backend::MsgraphBackend) {
+        self.inner = Some(BackendClient::Msgraph(Box::new(backend)));
     }
 }
 

@@ -161,7 +161,14 @@ Writing a field flag SHALL drop every instance of the property it names and writ
 The name flags SHALL be named for the role, given and family, rather than for the position, first and last. Which of the two is written first is exactly what varies between cultures, which is why RFC 6350, RFC 9553 and CLDR all name the role.
 
 ### Requirement: An update guards on the version it read
-`card update` given no vCard source SHALL send the ETag of the card it read as `If-Match`, an explicit `--if-match` still winning. Having read the card to change it, the command knows the version it diverged from, and an edit that took a minute SHALL NOT silently overwrite a write that landed during it. A source given on the command line is a rewrite that was asked for, and carries no such guard of its own.
+`card update` given no vCard source SHALL send the ETag of the card it read as `If-Match`, an explicit `--if-match` still winning, on a backend declaring `card.update.if-match` at a level above `none` (carddav, gpeople, pimdir). Having read the card to change it, the command knows the version it diverged from, and an edit that took a minute SHALL NOT silently overwrite a write that landed during it. A source given on the command line is a rewrite that was asked for, and carries no such guard of its own.
+
+A backend declaring `card.update.if-match` at `none` (jmap, msgraph, vdir) SHALL get no guard from the read: its read may still report a version (the Graph `changeKey`, a hash of the JMAP card) that its write takes no guard on, and the update SHALL be the plain write the backend makes, last-write-wins, never a refusal of a guard the caller did not ask for. An explicit `--if-match` there SHALL still fail `capability-missing` ("An unsupported precondition is refused, not dropped").
+
+#### Scenario: An update on Microsoft Graph without --if-match
+- GIVEN a Microsoft Graph account holding the contact `AAMk` in its default Contacts folder, read with a `changeKey`
+- WHEN `cardamum --json card update -k contacts AAMk --full-name "Ada Byron"` runs, with no `--if-match`
+- THEN it sends one `PATCH` carrying no `If-Match`, prints `{"id":"AAMk","keptProperties":[]}` and exits 0; the same command with `--if-match k1` fails `capability-missing` before connecting
 
 ### Requirement: A delete can be gated on a version
 `card delete` SHALL take `--if-match <ETAG>`. CardDAV SHALL send it as `If-Match` and pimdir SHALL check it as an update does; the backends that cannot gate a delete (vdir, jmap, msgraph, gpeople) SHALL refuse it rather than drop it.

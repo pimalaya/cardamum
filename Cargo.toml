@@ -74,4 +74,4 @@ vcard-rs = { version = "0.6", default-features = false, features = ["parser"] }
 io-gpeople = { git = "https://github.com/pimalaya/io-gpeople", rev = "e4a9cac80d023688118dbae88f8535145e8d2c9b" }
 io-pim-discovery = { git = "https://github.com/pimalaya/io-pim-discovery", rev = "d1f999ce582eb359b701caea4168edfdd76fa193" }
 io-webdav = { git = "https://github.com/pimalaya/io-webdav", rev = "777d34eea1b48f7d90635e3e82e1a96a9d57504e" }
-pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "9952b7f1c6a2cb9890e06c32ea73ed873b00995f" }
+pimalaya-cli = { git = "https://github.com/pimalaya/cli", rev = "3bada992cde034a6aa9474c169b6e2f892776db1" }

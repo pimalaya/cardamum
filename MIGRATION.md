@@ -26,6 +26,16 @@ The text output changes everywhere, the JSON of the writes and of the raw `reque
   cardamum -c ~/.config/cardamum/work.toml card list
   ```
 - **Every default path is read, as layers.** $XDG_CONFIG_HOME/cardamum/config.toml, $HOME/.config/cardamum/config.toml and $HOME/.cardamumrc are each deep-merged on top of the ones before, where v0.3 read the first one found. An rc file left beside a config.toml now overrides it: delete the one you do not use.
+- **`-a default` names the account called `default`**, where it took the account marked `default = true`. Omit `-a` to take that one:
+
+  ```sh
+  # v0.3
+  cardamum -a default card list
+  # next release
+  cardamum card list
+  ```
+
+  Without an account named `default`, `-a default` fails coded `account-missing`, saying to omit `-a`.
 - **Several `default = true` accounts are refused**, naming them. Keep it on one account across the merged files, or name the account with `-a <NAME>`.
 - **Table and colour keys are gone.** Each fails the configuration by name (``The `table` table is removed, …: delete it, see MIGRATION.md``): the `table` table (`table.preset`, `table.arrangement`), at the top level and in each account, the top-level `account` table (`account.list.table`), and the `addressbook.list` and `card.list.table` tables (their `*-color` keys), at the top level and in each account. Delete them; `card.list.page-size` stays.
 
@@ -140,7 +150,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   {"code":"card-not-found","error":"…","sources":["…"],"backtrace":null}
   ```
 
-  The codes a caller acts on: `card-not-found`, `addressbook-not-found`, `card-unreadable`, `permission-denied`, `quota-exceeded`, `rate-limited`, `capability-missing`, `usage-invalid`, `stdin-taken`, `body-pending`, `precondition-failed`, and on pimdir the store, write and search codes io-pimdir names (`store-version`, `store-busy`, `item-duplicate`, `index-version`, `query-refused`…). `cardamum json-schema` describes the failure object as `cardamum-error`.
+  The codes a caller acts on: `account-missing`, `account-default-missing`, `account-default-several`, `backend-not-built`, `card-not-found`, `addressbook-not-found`, `card-unreadable`, `permission-denied`, `quota-exceeded`, `rate-limited`, `capability-missing`, `usage-invalid`, `stdin-taken`, `body-pending`, `precondition-failed`, and on pimdir the store, write and search codes io-pimdir names (`store-version`, `store-busy`, `item-duplicate`, `index-version`, `query-refused`…). `cardamum json-schema` describes the failure object as `cardamum-error`.
 - **Every write prints a receipt** instead of `{"message": …}`; the text form keeps its sentence.
 
   ```sh
@@ -189,6 +199,16 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
 ### Commands that now fail earlier
 
 - **A verb or a flag the account's backend does not serve is refused before connecting**, with the `capability-missing` code: `--if-match` on JMAP, Graph, vdir and People deletes, a colour on JMAP, Graph and People addressbooks, a description on Graph and People, any addressbook write on pimdir. The adapters used to refuse once connected, without a code. `cardamum account capability` lists what an account's backend serves, and each `addressbook` and `card` command's `--help` ends with a `Backends:` section.
+- **A backend the build leaves out fails coded `backend-not-built`**, naming the cargo feature: its block still loads, so one configuration serves every build, but a reduced build no longer falls through to the next backend the account declares. An account declaring `carddav` then `jmap` ran on JMAP in a build without CardDAV; it now fails there, as `--backend jmap` still picks JMAP:
+
+  ```sh
+  # v0.3, a build without carddav: ran on JMAP
+  cardamum card list
+  # next release
+  cardamum --backend jmap card list
+  ```
+
+  `account check` reports such a backend as a failed row (exit 3), and `account list --json` names it in `backends` and in `notBuilt`; `backends` follows the order `auto` resolves them (vdir, pimdir, carddav, jmap, msgraph, gpeople), where it started with CardDAV.
 - **A CardDAV answer that is not one whole multistatus fails** (an HTML page, a cut or empty body) instead of listing fewer cards (io-webdav 0.8).
 - **A vdir id that is empty or holds a path separator is refused** (io-vdir 0.3).
 

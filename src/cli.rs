@@ -14,6 +14,7 @@ use pimalaya_cli::{
             completion::CompletionCommand, json_schema::JsonSchemaCommand, manual::ManualCommand,
         },
     },
+    error::with_code,
     footer, long_version,
     mcp::exit_on_failure,
     printer::Printer,
@@ -175,10 +176,12 @@ impl Command {
     /// Runs the command over `session`, whose account the protocol
     /// commands resolve and whose unified client the unified ones keep.
     ///
-    /// A failure carries the code of the refusal its chain holds
-    /// ([`error::with_code`]), in the failure object as in a session.
+    /// A failure carries the code a typed error of its chain names
+    /// ([`with_code`] over [`error::code`]), in the failure object as in a
+    /// session.
     pub fn execute(self, printer: &mut impl Printer, session: &mut Session) -> Result<()> {
-        self.dispatch(printer, session).map_err(error::with_code)
+        self.dispatch(printer, session)
+            .map_err(|err| with_code(err, error::code))
     }
 
     /// Runs the command, its failure as the backend returned it.
@@ -239,7 +242,9 @@ impl Command {
                 match cmd.execute(session) {
                     Err(err) if err.is::<ConfigMissingError>() && is_wanted(&*printer) => Err(err),
                     result => {
-                        exit_on_failure::<ErrorCode, _>(result.map_err(error::with_code));
+                        exit_on_failure::<ErrorCode, _>(
+                            result.map_err(|err| with_code(err, error::code)),
+                        );
                         Ok(())
                     }
                 }

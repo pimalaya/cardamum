@@ -13,12 +13,15 @@
 //! the typed error of the protocol that answered it ([`code`]): one
 //! reader per backend walks the error chain, which keeps the typed
 //! errors the backends return. cardamum retries nothing, so
-//! `rate-limited` codes the first throttled answer met.
+//! `rate-limited` codes the first throttled answer met. The account a
+//! command names, or the default one it takes, is coded the same way,
+//! read from the `AccountError` pimalaya-config returns.
 
 use anyhow::Error;
 #[cfg(feature = "pimdir")]
 use io_pimdir::client::PimdirError;
-use pimalaya_cli::error::{CodedError, PartialOutcome, code_of};
+use pimalaya_cli::error::{PartialOutcome, code_of, with_code};
+use pimalaya_config::toml::AccountError;
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -32,6 +35,15 @@ use serde::Serialize;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ErrorCode {
+    /// No account of the configuration has the name `-a` gives.
+    AccountMissing,
+    /// No `-a` names an account and none is marked `default = true`.
+    AccountDefaultMissing,
+    /// No `-a` names an account and several are marked `default = true`.
+    AccountDefaultSeveral,
+    /// The backend the account resolves to is configured but left out of
+    /// this build: the message names the cargo feature to rebuild with.
+    BackendNotBuilt,
     /// A command would read its input off stdin inside a session, where
     /// stdin carries the commands: the caller passes it as an argument or
     /// a file path.
@@ -150,20 +162,21 @@ impl ErrorCode {
         }
     }
 }
-
 /// The code of `err`: the one a coded error in its chain carries, else
-/// the server refusal's under it.
+/// the one a typed error under it names.
 pub fn code(err: &Error) -> Option<ErrorCode> {
-    code_of(err).or_else(|| refusal_code(err))
+    code_of(err).or_else(|| typed_code(err))
 }
 
-/// A reader of one backend's typed errors, coding those it knows.
+/// A reader of one kind of typed errors, coding those it knows.
 type Reader = fn(&(dyn std::error::Error + 'static)) -> Option<ErrorCode>;
 
-/// The code of the refusal `err`'s chain carries, read from the typed
-/// error of the backend that answered it: the first cause a reader codes.
-fn refusal_code(err: &Error) -> Option<ErrorCode> {
+/// The code a typed error of `err`'s chain names, the account taken or
+/// the refusal of the backend that answered: the first cause a reader
+/// codes.
+fn typed_code(err: &Error) -> Option<ErrorCode> {
     let readers: &[Reader] = &[
+        account_code,
         #[cfg(feature = "carddav")]
         crate::carddav::client::refusal_code,
         #[cfg(feature = "gpeople")]
@@ -178,36 +191,13 @@ fn refusal_code(err: &Error) -> Option<ErrorCode> {
         .find_map(|cause| readers.iter().find_map(|reader| reader(cause)))
 }
 
-/// The failure as it is reported: `err` itself when the report reads its
-/// code already, else its messages over a coded innermost one, so the
-/// code a backend's typed error names reaches the failure object, which
-/// pimalaya-cli reads from coded errors alone.
-pub fn with_code(err: Error) -> Error {
-    if code_of::<ErrorCode>(&err).is_some() {
-        return err;
+/// The code of the account `-a` names, or the default one, not taken.
+fn account_code(cause: &(dyn std::error::Error + 'static)) -> Option<ErrorCode> {
+    match cause.downcast_ref::<AccountError>()? {
+        AccountError::Missing { .. } => Some(ErrorCode::AccountMissing),
+        AccountError::NoDefault => Some(ErrorCode::AccountDefaultMissing),
+        AccountError::SeveralDefaults(_) => Some(ErrorCode::AccountDefaultSeveral),
     }
-
-    match refusal_code(&err) {
-        Some(code) => chained(code, err),
-        None => err,
-    }
-}
-
-/// `err` carrying `code`, its message and causes printing as before.
-///
-/// A coded error is found as an error of the chain only, never as a
-/// context, so the chain is rebuilt over one holding the innermost
-/// message. The typed errors are gone from the result: it is built once
-/// nothing reads them any more.
-fn chained(code: ErrorCode, err: Error) -> Error {
-    let mut messages: Vec<String> = err.chain().map(ToString::to_string).collect();
-    let root = messages.pop().unwrap_or_default();
-    let root = Error::new(CodedError::new(code, root));
-
-    messages
-        .into_iter()
-        .rev()
-        .fold(root, |err, message| err.context(message))
 }
 
 /// The error of one item a listing could not read.
@@ -216,7 +206,7 @@ pub type ItemError = pimalaya_cli::error::ItemError<ErrorCode>;
 /// The entry of the card `id` a listing could not read, `err` saying why:
 /// coded as `err` is, else `card-unreadable`.
 pub fn unreadable_card(id: Option<&str>, err: Error) -> ItemError {
-    let mut entry = ItemError::new(id, &with_code(err));
+    let mut entry = ItemError::new(id, &with_code(err, code));
     entry.code = entry.code.or(Some(ErrorCode::CardUnreadable));
     entry
 }
@@ -233,24 +223,38 @@ pub fn partial_when(errors: &[ItemError]) -> anyhow::Result<()> {
 /// `cause` what the server answered.
 #[cfg(any(feature = "carddav", feature = "gpeople", feature = "msgraph"))]
 pub fn card_not_found(card_id: &str, cause: Error) -> Error {
-    chained(ErrorCode::CardNotFound, cause).context(format!("Card `{card_id}` not found"))
+    with_code(cause, |_| Some(ErrorCode::CardNotFound))
+        .context(format!("Card `{card_id}` not found"))
 }
 
 #[cfg(test)]
-mod chain_tests {
-    use anyhow::anyhow;
-
+mod account_tests {
     use super::*;
 
-    /// A code added under a chain keeps its messages, outermost first.
+    /// Every way of not taking an account carries its own code, read off
+    /// the error pimalaya-config returns as `resolve_account` passes it.
     #[test]
-    fn a_code_added_keeps_the_messages_of_the_chain() {
-        let err = anyhow!("root").context("middle").context("outer");
-        let coded = chained(ErrorCode::RateLimited, err);
+    fn an_account_not_taken_is_coded() {
+        let failures = [
+            (
+                AccountError::Missing {
+                    name: "default".into(),
+                    names: vec!["work".into()],
+                },
+                ErrorCode::AccountMissing,
+            ),
+            (AccountError::NoDefault, ErrorCode::AccountDefaultMissing),
+            (
+                AccountError::SeveralDefaults(vec!["a".into(), "b".into()]),
+                ErrorCode::AccountDefaultSeveral,
+            ),
+        ];
 
-        assert_eq!(code_of(&coded), Some(ErrorCode::RateLimited));
-        let chain: Vec<String> = coded.chain().map(ToString::to_string).collect();
-        assert_eq!(chain, ["outer", "middle", "root"]);
+        for (err, expected) in failures {
+            let err = Error::from(err);
+            assert_eq!(code(&err), Some(expected));
+            assert_eq!(code_of(&with_code(err, code)), Some(expected));
+        }
     }
 }
 

@@ -136,6 +136,25 @@ impl TomlConfig for Config {
 }
 
 impl AccountConfig {
+    /// The backends the account configures a block for, built or not, in
+    /// the order `auto` resolves them.
+    pub fn backends(&self) -> Vec<&'static str> {
+        let declared = [
+            self.vdir.is_some(),
+            self.pimdir.is_some(),
+            self.carddav.is_some(),
+            self.jmap.is_some(),
+            self.msgraph.is_some(),
+            self.gpeople.is_some(),
+        ];
+
+        let names = crate::backend::NAMES.into_iter().zip(declared);
+        names
+            .filter(|(_, declared)| *declared)
+            .map(|(name, _)| name)
+            .collect()
+    }
+
     /// Hands the account proxy to every network backend naming none of
     /// its own.
     #[cfg(any(
@@ -169,7 +188,8 @@ impl AccountConfig {
 /// Account configuration, refusing a key it does not know.
 ///
 /// The block of a backend the build leaves out loads unread, so one file
-/// serves every build.
+/// serves every build, and a command reaching it fails coded
+/// `backend-not-built`.
 #[derive(Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct AccountConfig {

@@ -74,39 +74,23 @@ pub struct AddressbookClient {
 
 /// The backend the unified commands run against: the first one the account
 /// configures that `backend` allows, in priority order.
-#[allow(unused_variables)]
-pub fn resolve_backend(account_config: &AccountConfig, backend: Backend) -> Option<Backend> {
-    #[cfg(feature = "vdir")]
-    if backend.allows_vdir() && account_config.vdir.is_some() {
-        return Some(Backend::Vdir);
+///
+/// Fails coded `backend-not-built` when, under `auto`, that first one is
+/// a backend the build leaves out: the account's backend is the same in
+/// every build, so another build never silently takes the next one.
+pub fn resolve_backend(
+    account_config: &AccountConfig,
+    backend: Backend,
+) -> Result<Option<Backend>> {
+    for name in account_config.backends() {
+        match name.parse::<Backend>() {
+            Ok(found) if backend == Backend::Auto || backend == found => return Ok(Some(found)),
+            Err(_) if backend == Backend::Auto => return Err(crate::backend::not_built(name)),
+            _ => continue,
+        }
     }
 
-    #[cfg(feature = "pimdir")]
-    if backend.allows_pimdir() && account_config.pimdir.is_some() {
-        return Some(Backend::Pimdir);
-    }
-
-    #[cfg(feature = "carddav")]
-    if backend.allows_carddav() && account_config.carddav.is_some() {
-        return Some(Backend::Carddav);
-    }
-
-    #[cfg(feature = "jmap")]
-    if backend.allows_jmap() && account_config.jmap.is_some() {
-        return Some(Backend::Jmap);
-    }
-
-    #[cfg(feature = "msgraph")]
-    if backend.allows_msgraph() && account_config.msgraph.is_some() {
-        return Some(Backend::Msgraph);
-    }
-
-    #[cfg(feature = "gpeople")]
-    if backend.allows_gpeople() && account_config.gpeople.is_some() {
-        return Some(Backend::Gpeople);
-    }
-
-    None
+    Ok(None)
 }
 
 /// The configuration of the backend an [`AddressbookClient`] speaks to.
@@ -167,15 +151,17 @@ impl AddressbookClient {
     /// Selects the backend from the account configuration.
     ///
     /// The first configured backend that `backend` allows wins, and the
-    /// call bails when the account configures none of them. Nothing is
-    /// connected here: the first call that needs the network opens it.
+    /// call bails when the account configures none of them, or fails
+    /// coded `backend-not-built` when that first one is left out of the
+    /// build ([`resolve_backend`]). Nothing is connected here: the first
+    /// call that needs the network opens it.
     pub fn new(
         config: Config,
         name: String,
         #[allow(unused_mut)] mut account_config: AccountConfig,
         backend: Backend,
     ) -> Result<Self> {
-        let inner = match resolve_backend(&account_config, backend) {
+        let inner = match resolve_backend(&account_config, backend)? {
             #[cfg(feature = "vdir")]
             Some(Backend::Vdir) => account_config.vdir.take().map(BackendConfig::Vdir),
             #[cfg(feature = "pimdir")]

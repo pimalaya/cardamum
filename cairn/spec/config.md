@@ -12,16 +12,21 @@ Configuration is loaded by pimalaya-config from a TOML file. The schema ([config
 Without `-c/--config`, the configuration SHALL load every existing canonical path as a layer, in this order: `$XDG_CONFIG_HOME/cardamum/config.toml`, `$HOME/.config/cardamum/config.toml`, `$HOME/.cardamumrc`, each deep-merged on top of the ones before, paths naming the same file read once. `-c/--config` SHALL replace the canonical paths entirely. It MAY be repeated: the first path is the base and the next ones are deep-merged on top, in order. Each occurrence SHALL be one path, never split on a delimiter, and no environment variable SHALL be read for it.
 
 ### Requirement: Account resolution is explicit or default
-`cli::resolve_account` SHALL load the configuration through pimalaya-config's `TomlConfig::load` and take the account through its `take_account`: the one named by `-a`, else the one marked `default = true`. A config that exists but lacks the requested account, or has no default, is a hard error naming the fix. When no configuration is found at all, a command needing one SHALL fail with a `ConfigMissingError` naming the path it looked at (the first `-c` path, else the default location) and pointing at the documented sample, unless a person meets the welcome instead. Cardamum SHALL NOT prompt to create a configuration, nor write one.
+`cli::resolve_account` SHALL load the configuration through pimalaya-config's `TomlConfig::load` and take the account through its `take_account`: the one named by `-a`, `default` being a name like any other, else, when `-a` is absent or empty, the one marked `default = true`. A config that exists but lacks the requested account, or has no default, is a hard error naming the fix. When no configuration is found at all, a command needing one SHALL fail with a `ConfigMissingError` naming the path it looked at (the first `-c` path, else the default location) and pointing at the documented sample, unless a person meets the welcome instead. Cardamum SHALL NOT prompt to create a configuration, nor write one.
 
 ### Requirement: Account resolution failures name what is missing
-Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for, a missing named account lists the accounts the configuration does hold, and a missing default names both ways of picking one.
+Each of the three ways account resolution fails SHALL name what is missing and what to do about it: a missing configuration names the path it looked for, a missing named account lists the accounts the configuration does hold (and, for the name `default`, says to omit `-a` to take the account marked default), and a missing default names both ways of picking one. An account not taken SHALL carry its code under `--json`, read from pimalaya-config's `AccountError`: `account-missing` (`Missing`), `account-default-missing` (`NoDefault`) and `account-default-several` (`SeveralDefaults`).
+
+#### Scenario: `-a default` names an account
+- GIVEN `[accounts.a]` marked `default = true` and no account named `default`
+- WHEN `cardamum --json -a default account capability` runs
+- THEN it exits 1, its failure object coded `account-missing`, its error saying to omit `-a`
 
 ### Requirement: One backend block per backend
 Each account block SHALL carry at most one sub-block per backend (`vdir`, `pimdir`, `carddav`, `jmap`, `msgraph`, `gpeople`), each deserialized with `deny_unknown_fields` when its backend is compiled in. An account may declare several, and `--backend` picks between them (see [backends.md](backends.md)).
 
 ### Requirement: An unknown key is refused
-Every table of the configuration, the root and each account included, SHALL refuse a key it does not know, failing the load with the key's name, so a typo is an error rather than a silently ignored option. The block of a backend the build leaves out (and `proxy` in a build with no network backend) SHALL load unread, so one file serves every build.
+Every table of the configuration, the root and each account included, SHALL refuse a key it does not know, failing the load with the key's name, so a typo is an error rather than a silently ignored option. The block of a backend the build leaves out (and `proxy` in a build with no network backend) SHALL load unread, so one file serves every build; a command reaching that backend fails coded `backend-not-built` (see [backends.md](backends.md), "A backend left out of the build is named"). A key inside such a block is not checked by that build.
 
 #### Scenario: A typo in an account
 - GIVEN `[accounts.example]` holding `defualt = true`

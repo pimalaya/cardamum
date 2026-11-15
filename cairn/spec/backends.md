@@ -165,7 +165,20 @@ The pimdir backend SHALL expand `~` and environment variables on `pimdir.root` b
 Every `addressbook` write SHALL fail on pimdir, each naming its reason. `create_addressbook` refuses because declaring a collection is an owner write and this backend is a producer, and because a collection no sync knows about is one no sync would carry. `update_addressbook` refuses because the collection row (id, display name, description, colour) is what a sync writes from the server, and io-pimdir's `rename_collection` renames the identifier rather than the display name. `delete_addressbook` refuses, because io-pimdir exposes no collection removal, with a message naming the alternative: delete it on the server and sync. It SHALL NOT advise removing the store, which loses the queued writes a resync never restores.
 
 ### Requirement: Backend selection is local-first
-The unified commands run over an `AddressbookClient` owning one `BackendClient` variant per compiled-in backend. The global `--backend` flag picks it: `auto` (the default) SHALL take the first configured-and-allowed backend in priority order, which puts the local stores (vdir, then pimdir) before the network ones so an offline store wins over a round-trip. A named value pins that backend and bails when the account has no matching config block. The protocol-specific commands build their own client and ignore `--backend` entirely.
+The unified commands run over an `AddressbookClient` owning one `BackendClient` variant per compiled-in backend. The global `--backend` flag picks it: `auto` (the default) SHALL take the first configured-and-allowed backend in priority order, which puts the local stores (vdir, then pimdir) before the network ones so an offline store wins over a round-trip. A named value pins that backend and bails when the account has no matching config block. The order SHALL walk every block the account declares, the backends the build leaves out included, so the backend `auto` resolves to is the same in every build. The protocol-specific commands build their own client and ignore `--backend` entirely.
+
+### Requirement: A backend left out of the build is named
+When the backend `auto` resolves to is one the build leaves out, the unified commands and `account capability` SHALL fail coded `backend-not-built`, the message naming the cargo feature ("This build leaves out the `gpeople` backend, rebuild with `--features gpeople`"), rather than take the next declared backend or report none configured. `--backend` naming a backend the build leaves out SHALL be refused as a command line (`usage-invalid`, exit 2), with the same message. Under `auto`, `account check` SHALL report each declared backend the build leaves out as a failed row coded `backend-not-built`, at its place in the resolution order. `account list` SHALL name every declared backend, built or not, in the resolution order, under `--json` in `backends`, and those the build leaves out in `notBuilt` too, the text marking each `(not built)`.
+
+#### Scenario: An account over a backend left out
+- GIVEN a build without `gpeople` and an account declaring `gpeople` alone
+- WHEN `cardamum --json card list -k book` runs
+- THEN it exits 1, its failure object coded `backend-not-built`, its error naming `--features gpeople`
+
+#### Scenario: auto keeps its choice across builds
+- GIVEN a build without `vdir` and an account declaring `vdir` and `carddav`
+- WHEN `cardamum --json account capability` runs
+- THEN it fails coded `backend-not-built`, where `--backend carddav` resolves to CardDAV
 
 ### Requirement: CardDAV home-set resolution routes
 The `[carddav]` block SHALL resolve the addressbook home set through one of three routes, in decreasing order of magic. `home` short-circuits all discovery and is used as the home set directly. `server` connects to the given context root, then walks current-user-principal (RFC 5397) and addressbook-home-set (RFC 6352). `discover` resolves a bare domain to a context root before that same walk: PACC first, then RFC 6764 (SRV record, its TXT `path`, then `.well-known`) through io-pim-discovery, with Google domains using an authenticated `.well-known` probe.

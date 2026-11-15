@@ -28,7 +28,8 @@ const NO_BACKEND: Support = Support::None("the account configures no backend `--
 /// configured one `--backend` allows) and prints, for each capability,
 /// that backend, its level (`full`, `partial`, `server` or `none`) and
 /// what the level leaves out. Nothing is reached: this reads the
-/// configuration only.
+/// configuration only. A backend the build leaves out serves nothing:
+/// resolving to one fails coded `backend-not-built`.
 ///
 /// JSON output: `{"account", "capabilities": [{"name", "backend",
 /// "level", "detail"}]}`, `backend` `null` when the account configures
@@ -45,7 +46,7 @@ impl AccountCapabilityCommand {
         backend: Backend,
     ) -> Result<()> {
         let (_, name, account_config) = resolve_account(config_paths, account_name)?;
-        let backend = resolve_backend(&account_config, backend).map(|b| b.to_string());
+        let backend = resolve_backend(&account_config, backend)?.map(|b| b.to_string());
 
         let capabilities = Capability::ALL
             .into_iter()

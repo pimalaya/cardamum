@@ -7,11 +7,45 @@
 //! priority order, a named value pins that one and bails when the
 //! account declares no matching block. Protocol-specific commands
 //! ignore the flag, since their backend is their name.
+//!
+//! A backend the build leaves out still names its configuration block,
+//! which loads unread so one file serves every build: a command reaching
+//! it fails coded `backend-not-built`, naming the cargo feature.
 
 use std::{fmt, str::FromStr};
 
 use anyhow::{Error, bail};
 use clap::Parser;
+use pimalaya_cli::error::CodedError;
+
+use crate::error::ErrorCode;
+
+/// Every backend an account may configure, in the order `auto` resolves
+/// them. Each one's cargo feature is its name.
+pub const NAMES: [&str; 6] = ["vdir", "pimdir", "carddav", "jmap", "msgraph", "gpeople"];
+
+/// Whether this build carries the backend `name`.
+pub fn is_built(name: &str) -> bool {
+    let built = [
+        cfg!(feature = "vdir"),
+        cfg!(feature = "pimdir"),
+        cfg!(feature = "carddav"),
+        cfg!(feature = "jmap"),
+        cfg!(feature = "msgraph"),
+        cfg!(feature = "gpeople"),
+    ];
+
+    let mut names = NAMES.into_iter().zip(built);
+    names.any(|(known, built)| built && known == name)
+}
+
+/// The failure of a command reaching the backend `name`, which this build
+/// leaves out.
+pub fn not_built(name: &str) -> Error {
+    let message =
+        format!("This build leaves out the `{name}` backend, rebuild with `--features {name}`");
+    CodedError::new(ErrorCode::BackendNotBuilt, message).into()
+}
 
 /// The backend a unified command targets.
 #[derive(Clone, Copy, Debug, Default, Parser, PartialEq, Eq)]
@@ -96,6 +130,7 @@ impl FromStr for Backend {
             "pimdir" => Ok(Self::Pimdir),
             #[cfg(feature = "vdir")]
             "vdir" => Ok(Self::Vdir),
+            backend if NAMES.contains(&backend) => Err(not_built(backend)),
             backend => bail!("Invalid backend {backend}"),
         }
     }

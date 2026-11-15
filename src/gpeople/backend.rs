@@ -423,7 +423,7 @@ mod tests {
 
     use io_gpeople::v1::{client::GpeopleClientStd, rest::people::GpeoplePerson};
     use log::{LevelFilter, Log, Metadata, Record};
-    use pimalaya_cli::error::code_of;
+    use pimalaya_cli::error::{code_of, with_code};
     use serde_json::{Value, json};
 
     use crate::{
@@ -564,7 +564,7 @@ mod tests {
             .delete_card(MY_CONTACTS_GROUP, "c1", None)
             .unwrap_err();
         let code = error::code(&err);
-        assert_eq!(code_of(&error::with_code(err)), code);
+        assert_eq!(code_of(&with_code(err, error::code)), code);
         code
     }
 

@@ -32,7 +32,7 @@ CLI to manage contacts, written in Rust
   - [Native TLS](https://crates.io/crates/native-tls) (requires `native-tls` feature)
 
 > [!TIP]
-> Each backend sits behind its own cargo feature. `carddav`, `jmap`, `msgraph`, `gpeople`, `vdir` and `pimdir` are all enabled by default. Build with `--no-default-features` and pick the ones you need.
+> Each backend sits behind its own cargo feature. `carddav`, `jmap`, `msgraph`, `gpeople`, `vdir` and `pimdir` are all enabled by default. Build with `--no-default-features` and pick the ones you need. A configuration naming a backend the build leaves out still loads, and a command reaching that backend fails naming the feature to rebuild with.
 >
 > The default `vendored` feature builds SQLite and OpenSSL from source; leave it out (`--no-default-features --features …`) to link the system ones.
 

@@ -314,7 +314,7 @@ fn fresh_card_id() -> Result<String> {
 #[cfg(test)]
 mod tests {
     use io_webdav::{client::WebdavClientStd, rfc4918::WebdavAuth};
-    use pimalaya_cli::error::code_of;
+    use pimalaya_cli::error::{code_of, with_code};
     use url::Url;
 
     use super::CarddavBackend;
@@ -343,7 +343,7 @@ mod tests {
             .create_card("book", CARD.to_vec())
             .unwrap_err();
         let code = error::code(&err);
-        assert_eq!(code_of(&error::with_code(err)), code);
+        assert_eq!(code_of(&with_code(err, error::code)), code);
         code
     }
 
@@ -397,7 +397,7 @@ mod tests {
             .context("Delete card `c1.vcf`");
         let text = format!("{err:#}");
 
-        let report = ErrorReport::<ErrorCode>::from(error::with_code(err));
+        let report = ErrorReport::<ErrorCode>::from(with_code(err, error::code));
         let object = serde_json::to_value(&report).unwrap();
         assert_eq!(object["code"], "permission-denied", "{object}");
 

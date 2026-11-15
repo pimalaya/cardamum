@@ -304,7 +304,7 @@ fn card_error(card_id: &str, err: MsgraphClientStdError) -> Error {
 #[cfg(test)]
 mod tests {
     use io_msgraph::v1::client::MsgraphClientStd;
-    use pimalaya_cli::error::code_of;
+    use pimalaya_cli::error::{code_of, with_code};
     use serde_json::json;
 
     use super::{CONTACTS_FOLDER, MsgraphBackend};
@@ -330,7 +330,7 @@ mod tests {
             .delete_card(CONTACTS_FOLDER, "AAMk", None)
             .unwrap_err();
         let code = error::code(&err);
-        assert_eq!(code_of(&error::with_code(err)), code);
+        assert_eq!(code_of(&with_code(err, error::code)), code);
         code
     }
 

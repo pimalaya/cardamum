@@ -12,15 +12,19 @@ use pimalaya_config::toml::TomlConfig;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::config::{AccountConfig, Config};
+use crate::{
+    backend::is_built,
+    config::{AccountConfig, Config},
+};
 
 /// List all accounts declared in the configuration.
 ///
 /// Each row names the account, the backends it declares a config block
-/// for, and whether it is the default one. Nothing is reached: this
-/// reads the configuration only.
+/// for, marking those this build leaves out, and whether it is the
+/// default one. Nothing is reached: this reads the configuration only.
 ///
-/// JSON output: `{"accounts": [{"name", "default", "backends"}]}`.
+/// JSON output: `{"accounts": [{"name", "default", "backends",
+/// "notBuilt"}]}`.
 #[derive(Debug, Parser)]
 pub struct AccountListCommand;
 
@@ -47,53 +51,28 @@ pub struct AccountRow {
     pub name: String,
     /// Whether a command passing no `-a <NAME>` runs against it.
     pub default: bool,
-    /// The backends the account declares a config block for.
+    /// The backends the account declares a config block for, built or
+    /// not, in the order `auto` resolves them.
     pub backends: Vec<&'static str>,
+    /// Those of `backends` this build leaves out, which a command
+    /// reaching fails coded `backend-not-built`.
+    pub not_built: Vec<&'static str>,
 }
 
 impl AccountRow {
     fn from_account(name: &str, account: &AccountConfig) -> Self {
-        #[cfg_attr(
-            not(any(
-                feature = "vdir",
-                feature = "pimdir",
-                feature = "carddav",
-                feature = "jmap",
-                feature = "msgraph",
-                feature = "gpeople"
-            )),
-            allow(unused_mut)
-        )]
-        let mut backends = Vec::new();
-        #[cfg(feature = "carddav")]
-        if account.carddav.is_some() {
-            backends.push("carddav");
-        }
-        #[cfg(feature = "jmap")]
-        if account.jmap.is_some() {
-            backends.push("jmap");
-        }
-        #[cfg(feature = "msgraph")]
-        if account.msgraph.is_some() {
-            backends.push("msgraph");
-        }
-        #[cfg(feature = "gpeople")]
-        if account.gpeople.is_some() {
-            backends.push("gpeople");
-        }
-        #[cfg(feature = "vdir")]
-        if account.vdir.is_some() {
-            backends.push("vdir");
-        }
-        #[cfg(feature = "pimdir")]
-        if account.pimdir.is_some() {
-            backends.push("pimdir");
-        }
+        let backends = account.backends();
+        let not_built = backends
+            .iter()
+            .copied()
+            .filter(|name| !is_built(name))
+            .collect();
 
         Self {
             name: name.to_owned(),
             default: account.default,
             backends,
+            not_built,
         }
     }
 }
@@ -111,9 +90,18 @@ impl fmt::Display for AccountListOutput {
         let mut columns = Columns::new(["NAME", "BACKENDS", "DEFAULT"]);
 
         for account in &self.accounts {
+            let backends: Vec<String> = account
+                .backends
+                .iter()
+                .map(|name| match account.not_built.contains(name) {
+                    true => format!("{name} (not built)"),
+                    false => name.to_string(),
+                })
+                .collect();
+
             columns.push([
                 account.name.clone(),
-                account.backends.join(","),
+                backends.join(","),
                 String::from(if account.default { "yes" } else { "" }),
             ]);
         }

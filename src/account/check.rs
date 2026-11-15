@@ -22,14 +22,19 @@ use pimalaya_config::toml::TomlConfig;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{backend::Backend, config::Config, error::ErrorCode};
+use crate::{
+    backend::{Backend, NAMES, is_built, not_built},
+    config::Config,
+    error::ErrorCode,
+};
 
 /// Validate the account configuration.
 ///
 /// Picks the active account, from the global `--account` flag or from
 /// the default, then reaches every backend `--backend` allows. Each
 /// check walks the same handshake and authentication path the other
-/// commands take, so a bad credential surfaces here.
+/// commands take, so a bad credential surfaces here. Under `auto`, a
+/// backend the build leaves out fails coded `backend-not-built`.
 ///
 /// The report is printed whole, each backend with its outcome and, when
 /// it failed, its code and why. A failed backend exits the command with
@@ -131,6 +136,19 @@ impl AccountCheckCommand {
                 "gpeople",
                 connect_gpeople(gpeople_config, &mut resolver),
             ));
+        }
+
+        // NOTE: under `auto`, a backend the build leaves out is reported
+        // rather than skipped, at its place in the resolution order.
+        if backend == Backend::Auto {
+            let names = account_config.backends().into_iter();
+            for name in names.filter(|name| !is_built(name)) {
+                let check = BackendCheck::from(name, Err(not_built(name)));
+                report.backends.push(check);
+            }
+            report
+                .backends
+                .sort_by_key(|check| NAMES.iter().position(|name| *name == check.backend));
         }
 
         if report.backends.is_empty() {
@@ -264,17 +282,6 @@ pub struct BackendCheck {
 }
 
 impl BackendCheck {
-    #[cfg_attr(
-        not(any(
-            feature = "vdir",
-            feature = "pimdir",
-            feature = "carddav",
-            feature = "jmap",
-            feature = "msgraph",
-            feature = "gpeople"
-        )),
-        allow(dead_code)
-    )]
     fn from(backend: &'static str, result: Result<()>) -> Self {
         match result {
             Ok(()) => Self {

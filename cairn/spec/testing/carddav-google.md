@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # CardDAV on Google: shared and specific test report
 
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; every Pimalaya dep at its current git revision)

@@ -329,6 +329,13 @@ impl AddressbookClient {
     pub fn open_msgraph(&mut self, backend: crate::msgraph::backend::MsgraphBackend) {
         self.inner = Some(BackendClient::Msgraph(Box::new(backend)));
     }
+
+    /// Opens the client on `backend`, a CardDAV client over a scripted
+    /// stream, rather than connecting.
+    #[cfg(all(test, feature = "carddav"))]
+    pub fn open_carddav(&mut self, backend: crate::carddav::backend::CarddavBackend) {
+        self.inner = Some(BackendClient::Carddav(Box::new(backend)));
+    }
 }
 
 impl BackendConfig {

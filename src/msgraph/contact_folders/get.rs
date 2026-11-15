@@ -6,7 +6,10 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::{client::MsgraphClient, contact_folders::render::MsgraphContactFolderOutput};
+use crate::msgraph::{
+    client::{MsgraphClient, folder_refusal},
+    contact_folders::render::MsgraphContactFolderOutput,
+};
 
 /// GET a contact folder by id.
 ///
@@ -20,7 +23,10 @@ pub struct MsgraphContactFolderGetCommand {
 
 impl MsgraphContactFolderGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
-        let folder = client.contact_folder_get(&self.folder_id)?.response;
+        let folder = client
+            .contact_folder_get(&self.folder_id)
+            .map_err(folder_refusal)?
+            .response;
         printer.out(MsgraphContactFolderOutput(folder))
     }
 }

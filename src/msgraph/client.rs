@@ -87,8 +87,19 @@ pub(crate) fn contact_refusal(err: MsgraphClientStdError) -> anyhow::Error {
     }
 }
 
-/// Whether a contact request found no contact: a 404, or the 400 Graph
-/// answers an id that cannot name one (`ErrorInvalidIdMalformed`).
+/// The failure of a request naming one contact folder, coded
+/// `addressbook-not-found` when Graph holds no such folder, its message
+/// Graph's: the specific commands code it as the unified ones do.
+pub(crate) fn folder_refusal(err: MsgraphClientStdError) -> anyhow::Error {
+    match is_missing(&err) {
+        true => with_code(err.into(), |_| Some(ErrorCode::AddressbookNotFound)),
+        false => err.into(),
+    }
+}
+
+/// Whether a request naming one contact or one folder found none: a 404,
+/// or the 400 Graph answers an id that cannot name one
+/// (`ErrorInvalidIdMalformed`).
 pub(crate) fn is_missing(err: &MsgraphClientStdError) -> bool {
     let MsgraphClientStdError::Send(send) = err else {
         return false;
@@ -156,5 +167,69 @@ mod tests {
             delete(403, "ErrorAccessDenied"),
             Some(ErrorCode::PermissionDenied)
         );
+    }
+
+    /// Every specific command naming a contact folder Graph does not hold
+    /// carries `addressbook-not-found`, as `card list -k` does, Graph's
+    /// message kept; another refusal keeps its own code.
+    #[test]
+    fn a_specific_command_on_a_missing_folder_is_coded() {
+        use clap::Parser;
+
+        use crate::msgraph::{
+            contact_folders::{
+                child_folders::MsgraphContactFolderChildFoldersCommand,
+                delete::MsgraphContactFolderDeleteCommand, get::MsgraphContactFolderGetCommand,
+                rename::MsgraphContactFolderRenameCommand,
+            },
+            contacts::{
+                create::MsgraphContactCreateCommand, delta::MsgraphContactDeltaCommand,
+                list::MsgraphContactListCommand,
+            },
+        };
+
+        let run = |line: &str, status, code| {
+            let args = line.split_whitespace();
+            let client = refusing(status, code);
+            let printer = &mut CapturePrinter::default();
+
+            let result = match line.split_whitespace().next().unwrap() {
+                "get" => MsgraphContactFolderGetCommand::parse_from(args).execute(printer, client),
+                "child-folders" => MsgraphContactFolderChildFoldersCommand::parse_from(args)
+                    .execute(printer, client),
+                "rename" => {
+                    MsgraphContactFolderRenameCommand::parse_from(args).execute(printer, client)
+                }
+                "delete" => {
+                    MsgraphContactFolderDeleteCommand::parse_from(args).execute(printer, client)
+                }
+                "list" => MsgraphContactListCommand::parse_from(args).execute(printer, client),
+                "create" => MsgraphContactCreateCommand::parse_from(args).execute(printer, client),
+                "delta" => MsgraphContactDeltaCommand::parse_from(args).execute(printer, client),
+                other => panic!("{other}"),
+            };
+
+            let err = result.unwrap_err();
+            assert!(format!("{err:#}").contains("Refused"), "{line}: {err:#}");
+            error::code(&err)
+        };
+
+        let missing = Some(ErrorCode::AddressbookNotFound);
+        let lines = [
+            "get AAMk",
+            "child-folders AAMk",
+            "rename AAMk Work",
+            "delete AAMk",
+            "list -f AAMk",
+            "create -f AAMk {}",
+            "delta -f AAMk",
+        ];
+
+        for line in lines {
+            assert_eq!(run(line, 404, "ErrorItemNotFound"), missing, "{line}");
+            assert_eq!(run(line, 400, "ErrorInvalidIdMalformed"), missing, "{line}");
+            let denied = run(line, 403, "ErrorAccessDenied");
+            assert_eq!(denied, Some(ErrorCode::PermissionDenied), "{line}");
+        }
     }
 }

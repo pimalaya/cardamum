@@ -24,11 +24,12 @@ use crate::carddav::client::CarddavClient;
 ///
 /// Without an addressbook, lists the addressbook collections with their
 /// DAV properties, including the CTag and sync token the unified
-/// `addressbook list` hides. With one, enumerates its card resources
-/// with ids and ETags but no bodies: the lightweight `getetag` PROPFIND.
+/// `addressbook list` hides. With one, enumerates its card resources with
+/// ids and ETags but no bodies, through the `addressbook-query` REPORT
+/// asking `getetag` alone, as io-webdav enumerates a collection.
 ///
-/// JSON output: `{"addressbooks": [...]}` (no arg) or `{"cards":
-/// [{"id", "etag"}]}` (with arg).
+/// JSON output: `{"addressbooks": [...]}` (no arg) or `{"cards": [{"id",
+/// "etag"}], "truncated"}` (with arg).
 #[derive(Debug, Parser)]
 pub struct CarddavPropfindCommand {
     /// Addressbook to enumerate; omit to list the addressbook
@@ -94,7 +95,8 @@ pub struct CarddavPropfindAddressbooksOutput {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddressbookRow {
-    /// Collection id, its href last path segment.
+    /// Collection id, the last segment of its href, percent-decoded when the
+    /// decoding encodes back to it.
     pub id: String,
     /// The `displayname` property.
     pub display_name: Option<String>,
@@ -172,7 +174,8 @@ pub struct CarddavPropfindCardsOutput {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CardRefRow {
-    /// Card resource id, its href last path segment.
+    /// Card resource id, the last segment of its href, percent-decoded when the
+    /// decoding encodes back to it.
     pub id: String,
     /// The server ETag, when it sent one.
     pub etag: Option<String>,
@@ -265,5 +268,45 @@ Color:       #0000FF
 Sync token:  data:,1
 ";
         assert_eq!(output.to_string(), expected);
+    }
+
+    /// The request `carddav propfind` sends, given `addressbook_id` or not.
+    fn sent(addressbook_id: Option<&str>) -> String {
+        use io_webdav::{client::WebdavClientStd, rfc4918::WebdavAuth};
+        use pimalaya_cli::printer::CapturePrinter;
+        use url::Url;
+
+        use crate::script::{self, Script};
+
+        let empty = r#"<d:multistatus xmlns:d="DAV:"/>"#;
+        let (script, requests) = Script::new([script::response(207, "application/xml", empty)]);
+        let base = Url::parse("https://dav.example.org/").unwrap();
+        let home = base.join("/dav/").unwrap();
+        let inner =
+            WebdavClientStd::from_parts(script, WebdavAuth::None, base, None, None, Some(home));
+
+        let command = CarddavPropfindCommand {
+            addressbook_id: addressbook_id.map(str::to_string),
+        };
+        let printer = &mut CapturePrinter::default();
+        command.execute(printer, CarddavClient::new(inner)).unwrap();
+
+        let requests = requests.lock().unwrap();
+        String::from_utf8_lossy(&requests[0]).into_owned()
+    }
+
+    /// Without an address book the command sends a PROPFIND of the home set,
+    /// with one the `addressbook-query` REPORT asking `getetag` alone, as its
+    /// help says.
+    #[test]
+    fn an_addressbook_is_enumerated_through_a_report() {
+        let home = sent(None);
+        assert!(home.starts_with("PROPFIND /dav/ HTTP/1.1\r\n"), "{home}");
+
+        let book = sent(Some("book"));
+        assert!(book.starts_with("REPORT /dav/book/ HTTP/1.1\r\n"), "{book}");
+        assert!(book.contains("addressbook-query"), "{book}");
+        assert!(book.contains("getetag"), "{book}");
+        assert!(!book.contains("address-data"), "{book}");
     }
 }

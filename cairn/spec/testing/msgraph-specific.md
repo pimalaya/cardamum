@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # Microsoft Graph specific API: test report
 
 The `msgraph` protocol-specific subcommands (nested by Graph resource), distinct from the unified `addressbook` / `card` report ([msgraph-microsoft.md](msgraph-microsoft.md)).

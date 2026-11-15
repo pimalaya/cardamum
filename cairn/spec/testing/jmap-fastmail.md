@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # JMAP on Fastmail: shared-command test report
 
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; io-jmap 0.2, JSContact projection on vcard-rs 0.2)

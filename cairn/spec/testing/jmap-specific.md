@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # JMAP specific API: test report
 
 The `jmap` protocol-specific subcommands (nested by JMAP object type), distinct from the unified `addressbook` / `card` report ([jmap-fastmail.md](jmap-fastmail.md)).

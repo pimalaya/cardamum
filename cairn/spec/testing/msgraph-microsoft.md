@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # Microsoft Graph: shared-command test report
 
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; io-msgraph 0.2, io-webdav / vcard-rs / pimalaya-cli at their current git revisions)

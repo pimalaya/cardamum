@@ -7,7 +7,10 @@ use clap::Parser;
 use io_msgraph::v1::rest::users::contact_folders::list::MsgraphContactFoldersListParams;
 use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::{client::MsgraphClient, contact_folders::render::MsgraphContactFoldersOutput};
+use crate::msgraph::{
+    client::{MsgraphClient, folder_refusal},
+    contact_folders::render::MsgraphContactFoldersOutput,
+};
 
 /// List the child folders of a contact folder (one Graph page).
 ///
@@ -29,7 +32,8 @@ impl MsgraphContactFolderChildFoldersCommand {
             ..Default::default()
         };
         let page = client
-            .contact_child_folders_list(&self.folder_id, &params)?
+            .contact_child_folders_list(&self.folder_id, &params)
+            .map_err(folder_refusal)?
             .response;
 
         printer.out(MsgraphContactFoldersOutput {

@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # Manually testing a provider
 
 A followable checklist to deeply exercise every **shared** command (`addressbook`, `card`) against a real provider/account. Unit tests run each `io-*` crate and each projection in isolation; this pass catches behaviour that only shows up end-to-end against a live server (resource-path handling, vCard round-trips, metadata updates, error surfaces, flag rendering).

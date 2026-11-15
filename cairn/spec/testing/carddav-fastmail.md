@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # CardDAV on Fastmail: shared-command test report
 
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; `+carddav +jmap +msgraph +people +vdir +pimdir`)

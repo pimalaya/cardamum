@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # Google People specific API: test report
 
 The `people` protocol-specific subcommands (nested by People resource), distinct from the unified `addressbook` / `card` report ([google-people.md](google-people.md)).

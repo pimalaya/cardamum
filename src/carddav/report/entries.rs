@@ -38,7 +38,8 @@ pub struct CarddavCardEntriesOutput {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct EntryRow {
-    /// Card resource id, its href last path segment.
+    /// Card resource id, the last segment of its href, percent-decoded when the
+    /// decoding encodes back to it.
     pub id: String,
     /// The server ETag, when it sent one.
     pub etag: Option<String>,

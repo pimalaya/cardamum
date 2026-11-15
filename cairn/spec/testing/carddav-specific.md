@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # CardDAV specific API: test report
 
 The `carddav` protocol-specific subcommands (the flat WebDAV-method list), distinct from the unified `addressbook` / `card` reports.

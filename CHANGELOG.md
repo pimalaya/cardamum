@@ -71,13 +71,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed `account list` and `account check` to print pimalaya-cli's shared outputs, their JSON unchanged: the `account list` text has no header row, marks the default account `default` rather than `yes`, and names the built backends before those left out, as Himalaya and Calendula print it.
 - **Breaking:** changed `card read --json` to print the row `card list` prints for the card (`addressbookId`, `fnValue`, `email` and `tel` join) plus its vCard, and the vCard of `card read` and `card build` to carry `encoding` beside `contents`: `utf-8` when `contents` is the text, `base64` when the bytes are not UTF-8 and `contents` holds their base64, where such a card failed. Calendula prints an item's bytes the same way.
 - Changed the protocol commands naming one card, `carddav get` and `delete`, `msgraph contacts get`, `update` and `delete`, `gpeople connections get`, `update` and `delete`, to fail `card-not-found` when the server holds no such card, as `card read` does, the server's message kept, where they carried no code.
+- Changed the protocol commands naming one contact folder, `msgraph contact-folders get`, `child-folders`, `rename` and `delete`, and `msgraph contacts list`, `create` and `delta` under `-f`, to fail `addressbook-not-found` when Graph holds no such folder, as `card list -k` does, Graph's message kept, where they carried no code, as calendula codes its Graph calendar commands `calendar-not-found`.
+- Changed `carddav create` to a hidden alias of `carddav mkcol`, where the help showed it, as calendula hides `caldav create`.
+- **Breaking:** changed the `carddav discover` text to print its endpoints as fields, `Server:`, `Principal:` and `Addressbook home-set:` with the values aligned, as calendula's `caldav discover` prints them, where it printed bare `server: …` lines; `--json` is unchanged.
+- Changed the help of `carddav propfind <ADDRESSBOOK>` to say it enumerates the cards through an `addressbook-query` REPORT asking `getetag` alone, as io-webdav does and calendula's `caldav propfind` says, where it named a PROPFIND.
 - Changed the text of `carddav propfind`, `vdir list` and `msgraph contacts` to print the fields an item holds and no other: `carddav propfind` and `vdir list` print the description and the colour their JSON carries, a property the server did not send prints no line where `Name:` and `Color:` printed empty, and a Graph contact prints every email and every phone, the business and home ones beside the mobile one.
 - Changed a CardDAV write refused 412 (a stale `--if-match`) to fail `precondition-failed`, and one refused for a `UID` the address book holds (`no-uid-conflict`) `item-duplicate`, where both carried no code, as calendula codes CalDAV.
 - Changed a card a vdir or JMAP account does not hold to fail as on the other backends, ``Card `<id>` not found`` with the backend's answer in `sources`, where the error was io-vdir's or JMAP's own text.
 - Changed a `repl` or `mcp` line inside a session to fail coded `usage-invalid`, refused by pimalaya-cli, where it carried no code.
 - Changed an MCP tool call missing an argument or giving a value the grammar refuses to name the argument as the tool takes it (``Missing argument `card-id` ``, ``Invalid value `-1` for `page-size`: …``), where it printed clap's usage text.
 - Changed the refusal of a removed table or key to pimalaya-config's sentence, ``The `table` table is removed, …: delete it, see MIGRATION.md``, its shape unchanged.
-- Changed pimalaya-cli to 0.5.1 and pimalaya-config to 0.5.1.
+- Changed pimalaya-cli to 0.5.1.
+- Bumped pimalaya-config to 0.5.2: an unknown key's error lists no removed key.
 - Changed the `pimdir` feature to build io-pimdir's search, adding ical-rs, mime-rs and ariadne to the binary.
 - **Breaking:** changed every write printing a confirmation to print a receipt instead of `{"message": ...}` under `--json`: `addressbook update|delete` and `card delete` print `{id, queued}`, the item acted on and whether the write waits for a sync, `card add` `{id, queued}`, `card update` `{id, keptProperties, queued}` and `addressbook create` `{id, name, queued}`, `queued` `true` on pimdir and `false` elsewhere; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-groups members` `{id, added, removed}` and `card build -o` `{path, size}`, its text `Saved <size> bytes to <path>` (pimalaya-cli's `SavedOutput`). The text form keeps its sentence. Every command now has a schema under `json-schema` (pimalaya-cli 0.3).
 - Bumped pimalaya-cli, pimalaya-config and pimalaya-stream to 0.4 and io-jmap to 0.9. The `--json` failure object always carries `code`, `null` when none applies.
@@ -93,10 +98,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Bumped io-webdav to 0.9.1.
 
   A card `card list`, `carddav report query` or `carddav report multiget` reads keeps its final CRLF, which iCloud and Fastmail escape and the listing trimmed, so it matches the body `card read` and `carddav get` return; a relative address book or card id is sent percent-encoded, a `\` no longer read as a separator.
+- **Breaking:** bumped io-webdav to 0.10.0: a CardDAV address book or card id prints percent-decoded when the decoding encodes back to it, in every listing (`addressbook list`, `card list`, `carddav propfind`, `report query` and `report multiget`) and in the id `card add` and `carddav put` print, so `addressbook create "My Book"` prints `My Book`, the id `addressbook list` then shows, where the listing printed `My%20Book`.
+
+  A segment whose decoding would not be sent back as served (`%2F`, `%40`, lowercase hex) keeps its served form, and an id printed before still addresses its resource.
 - Bumped io-vdir to 0.3.
 
   A vdir listing leaves out a card removed while it lists and holds regular files only, and an id that is empty or holds a path separator is refused.
-- Changed `carddav put` to print the id the write answered, percent-encoded as a listing shows it, where it echoed its argument.
+- Changed `carddav put` to print the id the write answered, as a listing shows it, where it echoed its argument.
 - Changed a JMAP set error of a type io-jmap does not model to be named as the server sent it, where it read `unknown`.
 - Bumped vcard-rs to 0.6.
 

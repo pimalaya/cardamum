@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # pimdir (local store): shared-command test report
 
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; io-pimdir and io-replica at their current git revisions)

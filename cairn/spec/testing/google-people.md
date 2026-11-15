@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # Google People API: shared-command test report
 
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; io-people 0.2, the other Pimalaya deps at their current git revisions)

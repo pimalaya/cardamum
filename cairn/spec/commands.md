@@ -22,6 +22,22 @@ A protocol-specific command set SHALL match the remote protocol's own structure 
 
 pimdir is a store rather than a protocol: its `pimdir` family covers `status`, what a reader can tell of the store behind the account, `queue list`, `queue show` and `queue cancel`, the writes cardamum queued, and `search` and `count`, the store's search index queried in the pimdir SEARCH language. The other operator commands (retrying a parked action, the retained items) ship as the separate `pimdir` binary in io-pimdir.
 
+### Requirement: A former command name stays hidden
+A command renamed SHALL keep its former name as an alias hidden from the help, the manual and the completions, so a script keeps working, and the alias SHALL have no schema of its own, its schema being its command's: `card create` for `card add` ("A card is added"), `carddav create` for `carddav mkcol` (`cardamum-carddav-mkcol`), the singular `gpeople` nouns for the plural ones ("Specific commands mirror their protocol"), as calendula keeps `caldav create` for `caldav mkcalendar`.
+
+#### Scenario: The former name of mkcol
+- GIVEN a CardDAV account
+- WHEN `cardamum --json carddav create book -n Book` runs
+- THEN it runs `carddav mkcol book -n Book` and prints `{"id":"book"}`, and `cardamum carddav --help` lists `mkcol` with no `create`
+
+### Requirement: carddav propfind lists the home set or one address book
+`carddav propfind` with no address book SHALL list the address book collections under the home set with a Depth 1 PROPFIND, `{"addressbooks": [{id, displayName, description, color, ctag, syncToken}]}`; with one, the cards it holds by id and entity tag, no body, through an `addressbook-query` REPORT asking `getetag` alone (RFC 6352 §8.6), as io-webdav enumerates a collection and as calendula's `caldav propfind` does, `{"cards": [{id, etag}], "truncated"}`, `truncated` when a 507 row cut the listing. Its help SHALL name the request each form sends.
+
+#### Scenario: An address book enumerated
+- GIVEN a CardDAV home set `/dav/` holding the address book `book`
+- WHEN `cardamum carddav propfind book` runs
+- THEN it sends `REPORT /dav/book/`, an `addressbook-query` asking `getetag` alone and no `address-data`
+
 ### Requirement: pimdir status reports the store and its parked actions
 `pimdir status`, gated on the `pimdir` feature, SHALL report the account being read, every account the store groups collections under, one row per address book of that account (how many cards it holds, how many of them carry a local body, how many creations are queued for the next sync), and every action the store's owner parked in those address books (`PimdirReader::parked_actions`), by its queue row (ROW), its address book, its kind and the error that parked it. A parked action addresses no card, so its row is the only id shown, under its own name. Another account's address books and parked rows SHALL NOT show. Its JSON output is `{"account", "accounts", "addressbooks": [{"id", "name", "total", "hydrated", "queued"}], "parked": [{"row", "addressbookId", "kind", "error"}]}`, `parked` always present, `kind` the key a queue row names its action kind by in `pimdir queue list` and Himalaya. It mirrors calendula's `pimdir status`, `calendars` named `addressbooks`. It is no alias of `pimdir queue list`: it reports the store (its accounts, each address book's cards and how many are downloaded), which no queue command carries, where the queue commands list and retract the rows themselves.
 
@@ -238,7 +254,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `stdin-taken` | a command inside a session (`repl`, `mcp`) would read its input off stdin, which carries the session's commands |
 | `capability-missing` | the backend the account resolves to does not serve a capability the command reaches; nothing was read or written |
 | `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete`, worded by cardamum ("A not-found failure is cardamum's sentence"); an `errors` entry of `carddav report multiget`; a protocol command naming one card (`carddav get` and `delete`, `msgraph contacts get`, `update` and `delete`, `gpeople connections get`, `update` and `delete`), the server's message kept; a card id no CardDAV card can have, before anything connects (backends, "A CardDAV id addresses its own resource") |
-| `addressbook-not-found` | the address book a command names does not exist, or no address book can have its id (empty, not one vdir directory name, refused by io-webdav on CardDAV); nothing was read or written |
+| `addressbook-not-found` | the address book a command names does not exist, or no address book can have its id (empty, not one vdir directory name, refused by io-webdav on CardDAV); a protocol command naming one Graph contact folder Graph does not hold (`msgraph contact-folders get`, `child-folders`, `rename` and `delete`, `msgraph contacts list`, `create` and `delta` under `-f`), Graph's message kept; nothing was read or written |
 | `addressbook-default-missing` | a command needing an address book got no `-k` and the account sets no `addressbook.default`; nothing was read or written |
 | `permission-denied` | the server refused the request to the account (see "A server's refusal carries its code") |
 | `quota-exceeded` | the write would exceed the account's quota |
@@ -377,12 +393,17 @@ The output of `pimdir search` and `pimdir count` SHALL carry the coverage of the
 A store with no search index SHALL fail both commands with the code `index-missing`, an index another version built with `index-outdated`, one of another draft or shape with `index-version`, and a SQLite lacking FTS5 with `index-fts5-missing`, each saying the store's sync engine builds or rebuilds the index and none advising to delete anything. A query the language refuses SHALL fail with `query-refused`: in plain output the SEARCH §8.4 fault drawn over the query, under `--json` the §8.4 code, span and expectations in `error`. An accepted query the index cannot answer SHALL fail with `query-unanswerable`.
 
 ### Requirement: Text output is plain text
-A text output SHALL be plain text: no border, no colour, nothing sized to or truncated for the terminal, and it SHALL end with a newline: the `card read` view of a card whose last line lacks one, and the pretty JSON of the `jmap`, `msgraph` and `gpeople` `request` commands, included. A list of short rows prints as aligned columns, a list of wide items as records, a single item as `Label:  value` fields (pimalaya-cli `Columns`, `Records`, `Fields`).
+A text output SHALL be plain text: no border, no colour, nothing sized to or truncated for the terminal, and it SHALL end with a newline: the `card read` view of a card whose last line lacks one, and the pretty JSON of the `jmap`, `msgraph` and `gpeople` `request` commands, included. A list of short rows prints as aligned columns, a list of wide items as records, a single item as `Label:  value` fields (pimalaya-cli `Columns`, `Records`, `Fields`). `carddav discover` SHALL print its endpoints as fields, `Server`, `Principal` and `Addressbook home-set`, `(unresolved)` for one it could not resolve, as calendula's `caldav discover` prints its own.
 
 #### Scenario: A card read through a REPORT
 - GIVEN a pimdir card whose body ends `END:VCARD` with no line break, as a CardDAV `REPORT` stored it
 - WHEN `cardamum card read` prints it
 - THEN the text ends `END:VCARD` and one newline, while `--json` keeps the bytes
+
+#### Scenario: A principal left unresolved
+- GIVEN a CardDAV account naming its home, whose server answers no principal
+- WHEN `cardamum carddav discover` runs
+- THEN it prints the `Server:`, `Principal:` and `Addressbook home-set:` fields, the values aligned, `Principal:` reading `(unresolved)`, and `--json` prints `"principal":null`
 
 ### Requirement: Help is plain text
 `--help` and `-h` SHALL print without colour, each paragraph on one line, never wrapped to the terminal width.

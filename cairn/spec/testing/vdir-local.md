@@ -1,3 +1,9 @@
+---
+cairn: spec
+capability: testing
+status: current
+---
+
 # vdir (local filesystem): shared and specific command test report
 
 - cardamum: v0.2.0 `--all-features` (rev `42ca366`, working tree; io-vdir 0.1)

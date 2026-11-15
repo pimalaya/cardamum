@@ -15,7 +15,7 @@ use crate::{carddav::client::CarddavClient, shared::receipt::IdReceipt};
 ///
 /// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
-#[command(visible_alias = "create")]
+#[command(alias = "create")]
 pub struct CarddavMkcolCommand {
     /// Identifier (last URL segment) of the addressbook to create.
     #[arg(value_name = "ID")]

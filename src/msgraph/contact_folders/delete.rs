@@ -6,7 +6,10 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
-use crate::{msgraph::client::MsgraphClient, shared::receipt::IdReceipt};
+use crate::{
+    msgraph::client::{MsgraphClient, folder_refusal},
+    shared::receipt::IdReceipt,
+};
 
 /// Delete a contact folder and every contact it contains.
 ///
@@ -20,7 +23,9 @@ pub struct MsgraphContactFolderDeleteCommand {
 
 impl MsgraphContactFolderDeleteCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
-        client.contact_folder_delete(&self.folder_id)?;
+        client
+            .contact_folder_delete(&self.folder_id)
+            .map_err(folder_refusal)?;
 
         printer.out(IdReceipt {
             id: self.folder_id,

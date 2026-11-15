@@ -7,7 +7,7 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{fields::Fields, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
@@ -60,16 +60,38 @@ pub struct CarddavDiscoverOutput {
 impl fmt::Display for CarddavDiscoverOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let unresolved = "(unresolved)";
-        writeln!(f, "server: {}", self.server)?;
-        writeln!(
-            f,
-            "principal: {}",
-            self.principal.as_deref().unwrap_or(unresolved)
-        )?;
-        writeln!(
-            f,
-            "addressbook-home-set: {}",
-            self.addressbook_home_set.as_deref().unwrap_or(unresolved)
-        )
+        let principal = self.principal.as_deref().unwrap_or(unresolved);
+        let home = self.addressbook_home_set.as_deref().unwrap_or(unresolved);
+
+        let mut fields = Fields::default();
+        fields.push("Server", sanitize::text(&self.server));
+        fields.push("Principal", sanitize::text(principal));
+        fields.push("Addressbook home-set", sanitize::text(home));
+        write!(f, "{fields}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::CarddavDiscoverOutput;
+
+    /// The endpoints print as the family's fields, an unresolved one as
+    /// such, the JSON keeping its keys.
+    #[test]
+    fn the_endpoints_print_as_fields() {
+        let output = CarddavDiscoverOutput {
+            server: String::from("https://dav.example.org/"),
+            principal: None,
+            addressbook_home_set: Some(String::from("https://dav.example.org/dav/")),
+        };
+
+        let text = "Server:                https://dav.example.org/\n\
+                    Principal:             (unresolved)\n\
+                    Addressbook home-set:  https://dav.example.org/dav/\n";
+        assert_eq!(output.to_string(), text);
+        assert_eq!(
+            serde_json::to_string(&output).unwrap(),
+            r#"{"server":"https://dav.example.org/","principal":null,"addressbookHomeSet":"https://dav.example.org/dav/"}"#
+        );
     }
 }

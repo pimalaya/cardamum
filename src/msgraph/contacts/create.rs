@@ -7,7 +7,7 @@ use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
 use crate::msgraph::{
-    client::MsgraphClient,
+    client::{MsgraphClient, folder_refusal},
     contacts::{input::ContactJsonArg, render::MsgraphContactOutput},
 };
 
@@ -28,7 +28,8 @@ impl MsgraphContactCreateCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
         let contact = self.json.read()?;
         let created = client
-            .contact_create(self.folder.as_deref(), &contact)?
+            .contact_create(self.folder.as_deref(), &contact)
+            .map_err(folder_refusal)?
             .response;
 
         printer.out(MsgraphContactOutput(created))

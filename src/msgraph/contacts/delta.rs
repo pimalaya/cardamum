@@ -17,7 +17,10 @@ use pimalaya_cli::{
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::msgraph::{client::MsgraphClient, contacts::render::contact_name};
+use crate::msgraph::{
+    client::{MsgraphClient, folder_refusal},
+    contacts::render::contact_name,
+};
 
 /// List one page of the contacts changed or removed since the last round
 /// (the Graph incremental sync).
@@ -56,7 +59,9 @@ impl MsgraphContactDeltaCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
         let page = match &self.delta_link {
             Some(link) => client.contacts_delta_from_link(link)?,
-            None => client.contacts_delta(self.folder.as_deref(), self.select.as_deref())?,
+            None => client
+                .contacts_delta(self.folder.as_deref(), self.select.as_deref())
+                .map_err(folder_refusal)?,
         }
         .response;
 

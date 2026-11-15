@@ -7,7 +7,10 @@ use clap::Parser;
 use io_msgraph::v1::rest::users::contacts::list::MsgraphContactsListParams;
 use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::{client::MsgraphClient, contacts::render::MsgraphContactsOutput};
+use crate::msgraph::{
+    client::{MsgraphClient, folder_refusal},
+    contacts::render::MsgraphContactsOutput,
+};
 
 /// List contacts of the default Contacts folder, or of `--folder` (one
 /// Graph page).
@@ -38,7 +41,8 @@ impl MsgraphContactListCommand {
             ..Default::default()
         };
         let page = client
-            .contacts_list(self.folder.as_deref(), &params)?
+            .contacts_list(self.folder.as_deref(), &params)
+            .map_err(folder_refusal)?
             .response;
 
         printer.out(MsgraphContactsOutput {

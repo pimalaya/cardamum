@@ -636,4 +636,92 @@ END:VCARD&#13;
         assert!(listed.cards.is_empty());
         assert!(listed.errors.is_empty());
     }
+
+    /// A home set listing `My Book`, served percent-encoded, and a
+    /// collection whose name holds an encoded slash.
+    const BOOKS: &str = r#"<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:" xmlns:c="urn:ietf:params:xml:ns:carddav">
+  <d:response>
+    <d:href>/dav/My%20Book/</d:href>
+    <d:propstat>
+      <d:prop>
+        <d:resourcetype><d:collection/><c:addressbook/></d:resourcetype>
+        <d:displayname>My Book</d:displayname>
+      </d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+  <d:response>
+    <d:href>/dav/a%2Fb/</d:href>
+    <d:propstat>
+      <d:prop><d:resourcetype><d:collection/><c:addressbook/></d:resourcetype></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>"#;
+
+    /// `addressbook create "My Book"` sends the name percent-encoded and
+    /// prints the id `addressbook list` then shows, `My Book`, where the
+    /// listing showed `My%20Book`; a segment whose decoding would name
+    /// another path keeps its served form.
+    #[test]
+    fn a_created_addressbook_prints_the_id_its_listing_shows() {
+        use clap::Parser;
+        use pimalaya_cli::printer::CapturePrinter;
+
+        use crate::{
+            backend::Backend,
+            config::{AccountConfig, Config},
+            shared::{
+                addressbook::{create::AddressbookCreateCommand, list::AddressbookListCommand},
+                client::AddressbookClient,
+            },
+        };
+
+        let (script, requests) = Script::new([
+            script::response(201, "text/plain", ""),
+            script::response(207, "application/xml", BOOKS),
+        ]);
+        let base = Url::parse("https://dav.example.org/").unwrap();
+        let home = base.join("/dav/").unwrap();
+        let inner =
+            WebdavClientStd::from_parts(script, WebdavAuth::None, base, None, None, Some(home));
+
+        let config = "home = \"https://dav.example.org/dav/\"\nauth = \"none\"";
+        let account = AccountConfig {
+            carddav: Some(toml::from_str(config).unwrap()),
+            ..Default::default()
+        };
+        let mut client =
+            AddressbookClient::new(Config::default(), "dav".into(), account, Backend::Auto)
+                .unwrap();
+        client.open_carddav(CarddavBackend { inner });
+
+        let mut printer = CapturePrinter::default();
+        AddressbookCreateCommand::parse_from(["create", "My Book"])
+            .execute(&mut printer, &mut client)
+            .unwrap();
+        AddressbookListCommand::parse_from(["list"])
+            .execute(&mut printer, &mut client)
+            .unwrap();
+
+        let [created, listed] = &printer.values[..] else {
+            panic!("{:?}", printer.values);
+        };
+        assert_eq!(created["id"], "My Book", "{created}");
+        let ids: Vec<&str> = listed["addressbooks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|book| book["id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, ["My Book", "a%2Fb"], "{listed}");
+
+        let requests = requests.lock().unwrap();
+        let mkcol = String::from_utf8_lossy(&requests[0]);
+        assert!(
+            mkcol.starts_with("MKCOL /dav/My%20Book/ HTTP/1.1\r\n"),
+            "{mkcol}"
+        );
+    }
 }

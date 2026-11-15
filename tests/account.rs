@@ -133,15 +133,36 @@ fn account_check_reports_a_backend_left_out_as_failed() {
     assert_eq!(json["backends"][0]["code"], "backend-not-built", "{json}");
 }
 
-#[cfg(not(feature = "gpeople"))]
+/// `backends` holds the built backends alone, each a `--backend` value,
+/// the ones left out in `notBuilt`, the text marking them in one cell.
+#[cfg(all(feature = "vdir", not(feature = "gpeople")))]
 #[test]
-fn account_list_names_a_backend_left_out() {
+fn account_list_names_a_backend_left_out_apart() {
     let home = TempDir::new().unwrap();
+    let toml = format!("{GPEOPLE}vdir.home-dir = \"/nonexistent\"\n");
 
-    let output = run(home.path(), GPEOPLE, &["account", "list"]);
+    let output = run(home.path(), &toml, &["account", "list"]);
     let json = printed(&output, 0);
-    assert_eq!(json["accounts"][0]["backends"][0], "gpeople", "{json}");
-    assert_eq!(json["accounts"][0]["notBuilt"][0], "gpeople", "{json}");
+    let account = &json["accounts"][0];
+    assert_eq!(account["backends"], serde_json::json!(["vdir"]), "{json}");
+    assert_eq!(
+        account["notBuilt"],
+        serde_json::json!(["gpeople"]),
+        "{json}"
+    );
+
+    let config = home.path().join("config.toml");
+    let output = Command::new(env!("CARGO_BIN_EXE_cardamum"))
+        .args(["-c", config.to_str().unwrap(), "account", "list"])
+        .env("HOME", home.path())
+        .env("XDG_CONFIG_HOME", home.path())
+        .env_remove("XDG_CONFIG_DIRS")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&output.stdout);
+    assert_eq!(output.status.code(), Some(0), "{text}");
+    assert!(text.contains("vdir,gpeople (not built)"), "{text}");
 }
 
 #[cfg(not(feature = "gpeople"))]

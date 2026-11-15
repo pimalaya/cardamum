@@ -13,15 +13,15 @@ use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
-    backend::is_built,
+    backend::{NAMES, is_built},
     config::{AccountConfig, Config},
 };
 
 /// List all accounts declared in the configuration.
 ///
 /// Each row names the account, the backends it declares a config block
-/// for, marking those this build leaves out, and whether it is the
-/// default one. Nothing is reached: this reads the configuration only.
+/// for, those this build leaves out marked `(not built)`, and whether it
+/// is the default one. Nothing is reached: this reads the configuration only.
 ///
 /// JSON output: `{"accounts": [{"name", "default", "backends",
 /// "notBuilt"}]}`.
@@ -51,22 +51,21 @@ pub struct AccountRow {
     pub name: String,
     /// Whether a command passing no `-a <NAME>` runs against it.
     pub default: bool,
-    /// The backends the account declares a config block for, built or
-    /// not, in the order `auto` resolves them.
+    /// The built backends the account declares a config block for, in
+    /// the order `auto` resolves them: each one a `--backend` value.
     pub backends: Vec<&'static str>,
-    /// Those of `backends` this build leaves out, which a command
-    /// reaching fails coded `backend-not-built`.
+    /// The backends it declares a block for that this build leaves out,
+    /// in the same order: a command reaching one fails coded
+    /// `backend-not-built`.
     pub not_built: Vec<&'static str>,
 }
 
 impl AccountRow {
     fn from_account(name: &str, account: &AccountConfig) -> Self {
-        let backends = account.backends();
-        let not_built = backends
-            .iter()
-            .copied()
-            .filter(|name| !is_built(name))
-            .collect();
+        let (backends, not_built) = account
+            .backends()
+            .into_iter()
+            .partition(|name| is_built(name));
 
         Self {
             name: name.to_owned(),
@@ -90,14 +89,20 @@ impl fmt::Display for AccountListOutput {
         let mut columns = Columns::new(["NAME", "BACKENDS", "DEFAULT"]);
 
         for account in &self.accounts {
-            let backends: Vec<String> = account
+            // NOTE: one cell, both lists merged back into the order.
+            let mut backends: Vec<(&str, String)> = account
                 .backends
                 .iter()
-                .map(|name| match account.not_built.contains(name) {
-                    true => format!("{name} (not built)"),
-                    false => name.to_string(),
-                })
+                .map(|name| (*name, name.to_string()))
+                .chain(
+                    account
+                        .not_built
+                        .iter()
+                        .map(|name| (*name, format!("{name} (not built)"))),
+                )
                 .collect();
+            backends.sort_by_key(|(name, _)| NAMES.iter().position(|known| known == name));
+            let backends: Vec<String> = backends.into_iter().map(|(_, cell)| cell).collect();
 
             columns.push([
                 account.name.clone(),

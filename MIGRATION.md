@@ -208,7 +208,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   cardamum --backend jmap card list
   ```
 
-  `account check` reports such a backend as a failed row (exit 3), and `account list --json` names it in `backends` and in `notBuilt`; `backends` follows the order `auto` resolves them (vdir, pimdir, carddav, jmap, msgraph, gpeople), where it started with CardDAV.
+  `account check` reports such a backend as a failed row (exit 3), and `account list --json` names it in the new `notBuilt`, `backends` still holding the backends the build carries alone; both follow the order `auto` resolves them (vdir, pimdir, carddav, jmap, msgraph, gpeople), where `backends` started with CardDAV.
 - **A CardDAV answer that is not one whole multistatus fails** (an HTML page, a cut or empty body) instead of listing fewer cards (io-webdav 0.8).
 - **A vdir id that is empty or holds a path separator is refused** (io-vdir 0.3).
 

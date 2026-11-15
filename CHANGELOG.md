@@ -101,6 +101,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Breaking:** bumped io-webdav to 0.10.0: a CardDAV address book or card id prints percent-decoded when the decoding encodes back to it, in every listing (`addressbook list`, `card list`, `carddav propfind`, `report query` and `report multiget`) and in the id `card add` and `carddav put` print, so `addressbook create "My Book"` prints `My Book`, the id `addressbook list` then shows, where the listing printed `My%20Book`.
 
   A segment whose decoding would not be sent back as served (`%2F`, `%40`, lowercase hex) keeps its served form, and an id printed before still addresses its resource.
+- Bumped io-webdav to 0.11.0, whose client runs the two requests cardamum sent by hand (see Fixed).
 - Bumped io-vdir to 0.3.
 
   A vdir listing leaves out a card removed while it lists and holds regular files only, and an id that is empty or holds a path separator is refused.
@@ -163,6 +164,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed `card list` naming an address book a CardDAV server, JMAP or Microsoft Graph does not hold failing with the server's bare refusal and no code: it fails `addressbook-not-found` naming it, the server's answer in `sources`, as vdir, pimdir and People do. On JMAP a query that fails or finds nothing is checked with one `AddressBook/get`; on CardDAV a 404 or 410 of the collection is read so, on Graph a 404 or a malformed folder id, `card add` included; `addressbook update` and `delete` on CardDAV and Graph too.
 - Fixed a CardDAV address book or card id addressing another resource reaching the server: `addressbook delete ..` could send a DELETE to the parent of the home set, `/` to the server root and `""` to the home set, `addressbook update` a PROPPATCH there. An id that is empty or holds an empty, `.` or `..` segment now fails before the account's secret is resolved or anything connects, on every unified and `carddav` command: an address book id `addressbook-not-found`, a card id `card-not-found`, as vdir refuses an id that is not one directory name, and a name `addressbook create` or `carddav mkcol` cannot give a collection uncoded.
 - Fixed `carddav report raw` counting a card two bytes short in `dataBytes` when the server escapes its final CRLF, and building its path by hand: the REPORT goes to the path io-webdav builds, percent-encoded, an id out of the home refused.
+- Fixed `carddav report raw` and the `PROPFIND` `account check` sends a `carddav.home` failing with `reached unexpected EOF` when the server had closed the connection (a keep-alive timed out, `Connection: close`): sent by hand over the client's stream, they missed the resend every other CardDAV request gets. Both now run through io-webdav's client, which sends the request again once on a fresh connection, and a refused `report raw` carries the code a CardDAV refusal carries (`permission-denied`, `quota-exceeded`, `rate-limited`), as `report query` does, where it carried none.
 
 ## [0.3.0] - 2026-10-02
 

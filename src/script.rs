@@ -67,6 +67,27 @@ impl Write for Script {
     }
 }
 
+/// A server that closed the connection: it takes each request written and
+/// answers the end of the stream, and the requests it received.
+#[cfg(feature = "carddav")]
+pub fn closed() -> (Script, Requests) {
+    Script::new([])
+}
+
+/// A way for an io-webdav client to reconnect, opening `script` the first
+/// time and failing after.
+#[cfg(feature = "carddav")]
+pub fn reconnect(script: Script) -> io_webdav::client::WebdavReconnect {
+    let mut script = Some(script);
+
+    Box::new(move || {
+        let script = script
+            .take()
+            .ok_or_else(|| std::io::Error::other("Reconnected twice"))?;
+        Ok(Box::new(script))
+    })
+}
+
 /// An HTTP/1.1 response of `status` carrying `body` as `content_type`.
 pub fn response(status: u16, content_type: &str, body: &str) -> Vec<u8> {
     let len = body.len();

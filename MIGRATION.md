@@ -303,7 +303,7 @@ The commands take the names Himalaya and Calendula give them. Every v0.3 spellin
 
 ### The libraries
 
-The release moves onto the family line every Pimalaya CLI shares: pimalaya-cli, pimalaya-config and pimalaya-stream 0.4, io-pimdir 0.12, io-webdav 0.10, io-vdir 0.3, io-jmap 0.9, io-msgraph 0.9, io-gpeople 0.7 and io-http 0.8; io-pim-discovery leaves with `carddav.discover`. Most of it shows in the sections above (the failure object, the list frame, the exit contract, the pimdir store); the rest to act on:
+The release moves onto the family line every Pimalaya CLI shares: pimalaya-cli, pimalaya-config and pimalaya-stream 0.4, io-pimdir 0.12, io-webdav 0.11, io-vdir 0.3, io-jmap 0.9, io-msgraph 0.9, io-gpeople 0.7 and io-http 0.8; io-pim-discovery leaves with `carddav.discover`. Most of it shows in the sections above (the failure object, the list frame, the exit contract, the pimdir store); the rest to act on:
 
 - **A CardDAV address book outside the home set is listed and addressed by its path** rather than its last segment. A script that stored such an id reads it again from `addressbook list`.
 - **A CardDAV id prints decoded** (io-webdav 0.10): an address book or card whose href escapes a byte the decoding gives back lists by the decoded name, `My Book` for `My%20Book`, the id `addressbook create "My Book"` prints; a segment whose decoding would name another path (`%2F`) keeps its served form. An id stored from v0.3 still addresses its resource, but no longer matches the listing: a script comparing ids reads them again from `addressbook list` or `card list`.

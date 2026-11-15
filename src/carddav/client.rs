@@ -22,7 +22,6 @@ use io_http::{
 };
 use io_webdav::{
     client::{WebdavClientStd as Inner, WebdavClientStdConnectOptions, WebdavClientStdError},
-    coroutine::{WebdavCoroutine, WebdavCoroutineState, WebdavYield},
     rfc4918::{
         RESOURCETYPE, WebdavAuth, check_collection_id, check_resource_id,
         follow_redirects::WebdavFollowRedirectsError, propfind::WebdavPropfind,
@@ -142,7 +141,9 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
 /// The `home` route opens the connection and sends nothing, where the
 /// `server` route authenticates its discovery walk, so `account check`
 /// proves the credential of a `home` block with this request. The error
-/// is io-webdav's, as the walk's: the same message and the same code.
+/// is io-webdav's, as the walk's: the same message and the same code. The
+/// client runs it as it runs the walk, resending it once on a fresh
+/// connection when the server closed this one.
 pub fn propfind_home(client: &mut Inner) -> Result<(), WebdavClientStdError> {
     let home = client
         .addressbook_home_set
@@ -153,23 +154,9 @@ pub fn propfind_home(client: &mut Inner) -> Result<(), WebdavClientStdError> {
     let auth = client.auth().clone();
 
     let props = [RESOURCETYPE];
-    let mut coroutine: WebdavPropfind =
+    let coroutine: WebdavPropfind =
         WebdavPropfind::new(&base_url, &auth, &user_agent, home.path(), 0, &props);
-    let mut buf = [0u8; 8 * 1024];
-    let mut arg: Option<&[u8]> = None;
-
-    loop {
-        match coroutine.resume(arg.take()) {
-            WebdavCoroutineState::Complete(result) => return result.map(drop).map_err(Into::into),
-            WebdavCoroutineState::Yielded(WebdavYield::WantsWrite(bytes)) => {
-                client.stream.write_all(&bytes)?;
-            }
-            WebdavCoroutineState::Yielded(WebdavYield::WantsRead) => {
-                let n = client.stream.read(&mut buf)?;
-                arg = Some(&buf[..n]);
-            }
-        }
-    }
+    client.run(coroutine).map(drop)
 }
 
 /// Probes `.well-known/carddav` on a bare-origin `server` with a GET.
@@ -374,4 +361,53 @@ pub(crate) fn check_addressbook_name(name: &str) -> Result<()> {
 
     check_collection_id(name)
         .with_context(|| format!("Addressbook name `{name}` names no CardDAV collection"))
+}
+
+#[cfg(test)]
+mod tests {
+    use io_webdav::{client::WebdavClientStd, rfc4918::WebdavAuth};
+    use url::Url;
+
+    use super::propfind_home;
+    use crate::script::{self, Script};
+
+    /// The home set answering its `PROPFIND` as a collection.
+    const MULTISTATUS: &str = r#"<?xml version="1.0"?>
+<d:multistatus xmlns:d="DAV:">
+  <d:response>
+    <d:href>/dav/</d:href>
+    <d:propstat>
+      <d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop>
+      <d:status>HTTP/1.1 200 OK</d:status>
+    </d:propstat>
+  </d:response>
+</d:multistatus>"#;
+
+    /// The `PROPFIND` `account check` sends a `home` block, meeting a
+    /// connection the server closed (a keep-alive timed out), is resent once
+    /// on a fresh one, which answers it.
+    #[test]
+    fn the_home_propfind_is_resent_after_the_server_closed_the_connection() {
+        let (closed, sent_closed) = script::closed();
+        let response = script::response(207, "application/xml", MULTISTATUS);
+        let (fresh, sent_fresh) = Script::new([response]);
+        let base = Url::parse("https://dav.example.org/").unwrap();
+        let home = base.join("/dav/").unwrap();
+        let mut client =
+            WebdavClientStd::from_parts(closed, WebdavAuth::None, base, None, None, Some(home));
+        client.set_reconnect(script::reconnect(fresh));
+
+        propfind_home(&mut client).unwrap();
+
+        let sent_closed = sent_closed.lock().unwrap();
+        let sent_fresh = sent_fresh.lock().unwrap();
+        assert_eq!(sent_fresh.len(), 1);
+        assert_eq!(*sent_fresh, *sent_closed);
+
+        let request = String::from_utf8_lossy(&sent_fresh[0]);
+        assert!(
+            request.starts_with("PROPFIND /dav/ HTTP/1.1\r\n"),
+            "{request}"
+        );
+    }
 }

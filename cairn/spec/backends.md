@@ -263,3 +263,11 @@ A card a CardDAV listing (`card list`, `carddav report query`) or `carddav repor
 That last case is why the rule exists rather than being an optimization. A server closes an idle connection, and an editor session lasts minutes: a write landing after one reads the end of a socket whose far side is gone, and reports `unexpected end of file` for a card that is perfectly good. `card add -i` connects for the first time when it creates, after the editor has exited.
 
 A command that must read before the editor SHALL drop that connection before spawning the composer, so the write after it opens a fresh one. `card update -i` is the only such command: it reads the card to seed the editor with it.
+
+### Requirement: A closed CardDAV connection is reopened
+Every CardDAV request SHALL run through io-webdav's client: one of its methods, or `WebdavClientStd::run` for a request it has no method for (the `carddav report raw` REPORT, the `PROPFIND` `account check` sends a `carddav.home`). A request meeting a connection the server closed before answering it (a keep-alive timed out, `Connection: close`) is then sent again once on a fresh connection, as io-webdav sends its own. No command SHALL write to or read from the client's stream by hand.
+
+#### Scenario: A raw report after the server closed the connection
+- GIVEN a CardDAV home set `/dav/` whose server closed the connection the client holds
+- WHEN `cardamum --json carddav report raw "My Book" '<x/>'` runs
+- THEN the REPORT is sent on that connection, then the same request on a fresh one, whose multistatus prints, where the command failed with `reached unexpected EOF`

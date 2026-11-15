@@ -445,7 +445,7 @@ In the text output, each `errors` entry SHALL print as one `Error:` line, `<id> 
 - THEN it prints `c1.vcf` in `cards` and `"errors":[{"id":"c9.vcf","code":"card-not-found",…}]`, and the exit status is 3
 
 ### Requirement: A raw CardDAV report addresses and counts as io-webdav does
-`carddav report raw` SHALL send its REPORT to the path io-webdav builds for the address book (`rfc4918::collection_path`): an absolute id as given, a relative one joined to the home set and percent-encoded, a slash closing it; the id is refused first, as every CardDAV command refuses one ("A CardDAV id addresses its own resource" in backends). Its `dataBytes` SHALL be the size of the row's whole `address-data` text, the final CRLF included, the size of the body `carddav get` returns.
+`carddav report raw` SHALL send its REPORT to the path io-webdav builds for the address book (`rfc4918::collection_path`): an absolute id as given, a relative one joined to the home set and percent-encoded, a slash closing it; the id is refused first, as every CardDAV command refuses one ("A CardDAV id addresses its own resource" in backends). It SHALL run it through io-webdav's client ("A closed CardDAV connection is reopened" in backends), a refusal carrying the code any CardDAV refusal carries ("A server's refusal carries its code" in backends). Its `dataBytes` SHALL be the size of the row's whole `address-data` text, the final CRLF included, the size of the body `carddav get` returns.
 
 #### Scenario: A card whose CRLF the server escapes
 - GIVEN a home set `/dav/` whose server answers a REPORT with one 54-byte card ending in `END:VCARD&#13;` and a line feed

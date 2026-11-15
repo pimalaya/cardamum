@@ -5,15 +5,14 @@
 
 use std::{
     fmt, fs,
-    io::{Read, Write, stdin},
+    io::{Read, stdin},
     path::PathBuf,
 };
 
 use anyhow::{Context, Result, anyhow, bail};
 use clap::Parser;
 use io_webdav::{
-    coroutine::{WebdavCoroutine, WebdavCoroutineState, WebdavYield},
-    rfc4918::{GETETAG, WebdavMultistatus, collection_path, report::WebdavReport},
+    rfc4918::{GETETAG, collection_path, report::WebdavReport},
     rfc6352::addressbook::ADDRESS_DATA,
 };
 use pimalaya_cli::{columns::Columns, printer::Printer, sanitize};
@@ -48,6 +47,9 @@ impl CarddavReportRawCommand {
     /// Runs the REPORT on the address book's path, built as io-webdav
     /// builds it for its own requests: an id addressing another collection
     /// is refused first, a relative one percent-encoded.
+    ///
+    /// The client runs it as it runs its own requests, resending it once on
+    /// a fresh connection when the server closed this one.
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
         check_addressbook_id(&self.addressbook_id)?;
         let body = read_xml(&self.xml)?;
@@ -61,8 +63,9 @@ impl CarddavReportRawCommand {
         let user_agent = client.user_agent.clone();
         let auth = client.auth().clone();
 
-        let coroutine = WebdavReport::new(&base_url, &auth, &user_agent, &path, self.depth, body);
-        let multistatus = run_report(&mut client, coroutine)?;
+        let coroutine: WebdavReport =
+            WebdavReport::new(&base_url, &auth, &user_agent, &path, self.depth, body);
+        let multistatus = client.run(coroutine)?;
 
         printer.out(CarddavReportRawOutput {
             sync_token: multistatus.sync_token,
@@ -96,28 +99,6 @@ fn read_xml(source: &str) -> Result<Vec<u8>> {
     }
 
     bail!("Source `{source}` is neither a readable file nor XML");
-}
-
-/// Pumps a [`WebdavReport`] coroutine over the client's stream.
-fn run_report(
-    client: &mut CarddavClient,
-    mut coroutine: WebdavReport,
-) -> Result<WebdavMultistatus> {
-    let mut buf = [0u8; 8 * 1024];
-    let mut arg: Option<&[u8]> = None;
-
-    loop {
-        match coroutine.resume(arg.take()) {
-            WebdavCoroutineState::Complete(result) => return Ok(result?),
-            WebdavCoroutineState::Yielded(WebdavYield::WantsWrite(bytes)) => {
-                client.stream.write_all(&bytes)?;
-            }
-            WebdavCoroutineState::Yielded(WebdavYield::WantsRead) => {
-                let n = client.stream.read(&mut buf)?;
-                arg = Some(&buf[..n]);
-            }
-        }
-    }
 }
 
 /// Multistatus a raw REPORT answered.
@@ -204,7 +185,7 @@ mod tests {
     use super::CarddavReportRawCommand;
     use crate::{
         carddav::client::CarddavClient,
-        error::ErrorCode,
+        error::{ErrorCode, code},
         script::{self, Requests, Script},
     };
 
@@ -232,16 +213,25 @@ END:VCARD&#13;
   </d:response>
 </d:multistatus>"#;
 
+    /// The server's answer: [`MULTISTATUS`], status 207.
+    fn multistatus() -> Vec<u8> {
+        script::response(207, "application/xml", MULTISTATUS)
+    }
+
     /// A client whose home set is `/dav/`, over a server answering
     /// [`MULTISTATUS`], and the requests it receives.
     fn client() -> (CarddavClient, Requests) {
-        let response = script::response(207, "application/xml", MULTISTATUS);
-        let (script, requests) = Script::new([response]);
+        let (script, requests) = Script::new([multistatus()]);
+        (client_over(script), requests)
+    }
+
+    /// A client whose home set is `/dav/`, over `script`.
+    fn client_over(script: Script) -> CarddavClient {
         let base = Url::parse("https://dav.example.org/").unwrap();
         let home = base.join("/dav/").unwrap();
         let inner =
             WebdavClientStd::from_parts(script, WebdavAuth::None, base, None, None, Some(home));
-        (CarddavClient::new(inner), requests)
+        CarddavClient::new(inner)
     }
 
     /// The command running a REPORT on `addressbook_id`.
@@ -289,5 +279,47 @@ END:VCARD&#13;
             assert_eq!(err.to_string(), format!("Addressbook `{id}` not found"));
             assert!(requests.lock().unwrap().is_empty(), "{id:?}");
         }
+    }
+
+    /// A REPORT meeting a connection the server closed (a keep-alive timed
+    /// out) is resent once on a fresh one, which answers it.
+    #[test]
+    fn a_raw_report_is_resent_after_the_server_closed_the_connection() {
+        let (closed, sent_closed) = script::closed();
+        let (fresh, sent_fresh) = Script::new([multistatus()]);
+        let mut client = client_over(closed);
+        client.set_reconnect(script::reconnect(fresh));
+
+        let mut printer = CapturePrinter::default();
+        report("My Book").execute(&mut printer, client).unwrap();
+
+        let output = printer.into_single().unwrap();
+        assert_eq!(output["responses"][0]["dataBytes"], CARD.len(), "{output}");
+
+        let sent_closed = sent_closed.lock().unwrap();
+        let sent_fresh = sent_fresh.lock().unwrap();
+        assert_eq!(sent_fresh.len(), 1);
+        assert_eq!(*sent_fresh, *sent_closed);
+
+        let request = String::from_utf8_lossy(&sent_fresh[0]);
+        assert!(
+            request.starts_with("REPORT /dav/My%20Book/ HTTP/1.1\r\n"),
+            "{request}"
+        );
+    }
+
+    /// A REPORT the server refuses carries the code of its refusal, as every
+    /// CardDAV request does: a 403 naming no precondition is
+    /// `permission-denied`, its message io-webdav's.
+    #[test]
+    fn a_refused_raw_report_is_coded() {
+        let (script, _) = Script::new([script::response(403, "text/plain", "Forbidden")]);
+        let mut printer = CapturePrinter::default();
+        let err = report("book")
+            .execute(&mut printer, client_over(script))
+            .unwrap_err();
+
+        assert_eq!(code(&err), Some(ErrorCode::PermissionDenied), "{err:#}");
+        assert!(err.to_string().contains("403"), "{err:#}");
     }
 }

@@ -2,8 +2,6 @@
 //!
 //! Creates an addressbook collection with an RFC 5689 extended `MKCOL`.
 
-use std::collections::BTreeSet;
-
 use anyhow::Result;
 use clap::Parser;
 use io_webdav::rfc6352::addressbook::CarddavAddressbook;
@@ -38,9 +36,7 @@ impl CarddavMkcolCommand {
             display_name: self.name,
             description: self.description,
             color: self.color,
-            ctag: None,
-            sync_token: None,
-            supported_reports: BTreeSet::new(),
+            ..Default::default()
         };
 
         client.create_addressbook(&wire)?;

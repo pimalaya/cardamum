@@ -217,7 +217,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   # v0.4: {"id":"urn:uuid:…","queued":true}
   cardamum --json card add -k book card.vcf | jq -r 'if .queued then "queued" else .id end'
   ```
-- **`card read` prints its `card list` row plus the vCard.** The keys `card list` prints join (`addressbookId`, `fnValue`, `email`, `tel`), and `encoding` comes beside `contents`: `utf-8` when `contents` is the vCard text, `base64` when its bytes are not UTF-8 and `contents` holds their base64; v0.3 failed on such a card. `card build` carries its card the same way:
+- **`card read` prints its `card list` row plus the vCard.** The keys `card list` prints join (`addressbookId` and the common fields), and `encoding` comes beside `contents`: `utf-8` when `contents` is the vCard text, `base64` when its bytes are not UTF-8 and `contents` holds their base64; v0.3 failed on such a card. `card build` carries its card the same way:
 
   ```sh
   # v0.3
@@ -264,6 +264,14 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   cardamum --json account check | jq -r '.backends[] | select(.ok | not) | [.backend, .code] | @tsv'
   ```
 - **`card list` prints `nextPage`** beside `cards`: the next page number while cards follow, `null` on the last page. Give it back through `--page-token`. The cards also carry `uid`, `fullName`, `givenName`, `familyName`, `emails`, `phones`, `organization`, `organizationUnits`, `title` and `note`, and the address books `default`; a strict consumer accepts the new keys.
+- **`card list` drops `fnValue`, `email` and `tel`** from its cards, which repeated `fullName`, `emails` and `phones` as the vCard wrote them. Read the decoded fields; an escape comes decoded and a `tel:` URI as its number, as the text columns now print them:
+
+  ```sh
+  # v0.3
+  cardamum --json card list -k book | jq -r '.cards[] | [.fnValue, .email, .tel] | @tsv'
+  # v0.4
+  cardamum --json card list -k book | jq -r '.cards[] | [.fullName, .emails[0], .phones[0]] | @tsv'
+  ```
 - **The `gpeople` and `msgraph` listings print `nextPage`** where they printed the provider's `nextPageToken` or `@odata.nextLink`, `null` on the last page, and take it back through `--page-token`, as every listing of the family pages: `gpeople connections list`, `other-contacts list` and `contact-groups list`, `msgraph contacts list`, `contact-folders list`, `contact-folders child-folders` and `contacts delta`. The value is the provider's cursor as it was. A Graph link carries the folder and the query, so `--page-token` takes no `--folder`, `--top`, `--select` or `--filter`, and `child-folders` no folder id. The delta's `@odata.deltaLink`, opening the next round, and People's `nextSyncToken` stay as they were:
 
   ```sh

@@ -29,17 +29,16 @@ use crate::{
 
 /// List vCards inside the given addressbook.
 ///
-/// JSON output: `{"cards": [{"id", "addressbookId", "etag", "fnValue",
-/// "email", "tel", "uid", "fullName", "givenName", "familyName",
-/// "emails", "phones", "organization", "organizationUnits", "title",
-/// "note"}], "nextPage", "errors": [{"id", "code", "error",
-/// "sources"}]}`: the first `FN`, `EMAIL` and `TEL` as before, then the
-/// common fields read through the decoded vCard, every address and
-/// number included, then the cursor of the next page, `null` on the last
-/// one, then the error of each card the page could not read, which
-/// `cards` leaves out, and of a listing the server cut short (its `id`
-/// `null`), `[]` when none, the command then exiting 3. A card whose body
-/// is not available yet carries what its backend knows of it.
+/// JSON output: `{"cards": [{"id", "addressbookId", "etag", "uid",
+/// "fullName", "givenName", "familyName", "emails", "phones",
+/// "organization", "organizationUnits", "title", "note"}], "nextPage",
+/// "errors": [{"id", "code", "error", "sources"}]}`: the common fields
+/// read through the decoded vCard, every address and number included,
+/// then the cursor of the next page, `null` on the last one, then the
+/// error of each card the page could not read, which `cards` leaves out,
+/// and of a listing the server cut short (its `id` `null`), `[]` when
+/// none, the command then exiting 3. A card whose body is not available
+/// yet carries what its backend knows of it.
 #[derive(Debug, Parser)]
 pub struct CardListCommand {
     /// Addressbook to list the cards of.
@@ -131,12 +130,6 @@ pub struct CardRow {
     pub addressbook_id: String,
     /// Entity tag, when the backend exposes one.
     pub etag: Option<String>,
-    /// First `FN` value found in the vCard.
-    pub fn_value: Option<String>,
-    /// First `EMAIL` value found in the vCard.
-    pub email: Option<String>,
-    /// First `TEL` value found in the vCard.
-    pub tel: Option<String>,
     /// The common fields, read through the vCard's decoded model.
     #[serde(flatten)]
     pub fields: CardFields,
@@ -144,16 +137,30 @@ pub struct CardRow {
 
 impl From<Card> for CardRow {
     fn from(card: Card) -> Self {
-        let (fn_value, email, tel) = vcard_preview(&card.contents);
         Self {
             fields: CardFields::project(&card.contents),
             id: card.id,
             addressbook_id: card.addressbook_id,
             etag: card.etag,
-            fn_value,
-            email,
-            tel,
         }
+    }
+}
+
+impl CardRow {
+    /// The text cells of the card: its id, its first address, its first
+    /// number and its full name, as the JSON reads them.
+    pub fn cells(&self) -> [String; 4] {
+        let cell = |value: Option<&String>| match value {
+            Some(value) => sanitize::text(value).into_owned(),
+            None => String::new(),
+        };
+
+        [
+            sanitize::text(&self.id).into_owned(),
+            cell(self.fields.emails.first()),
+            cell(self.fields.phones.first()),
+            cell(self.fields.full_name.as_ref()),
+        ]
     }
 }
 
@@ -176,17 +183,7 @@ impl fmt::Display for CardListOutput {
 
         // NOTE: a name is free text, so it reads last.
         for card in &self.cards {
-            let cell = |value: &Option<String>| match value {
-                Some(value) => sanitize::text(value).into_owned(),
-                None => String::new(),
-            };
-
-            listing.items.push([
-                sanitize::text(&card.id).into_owned(),
-                cell(&card.email),
-                cell(&card.tel),
-                cell(&card.fn_value),
-            ]);
+            listing.items.push(card.cells());
         }
 
         for error in &self.errors {
@@ -195,88 +192,6 @@ impl fmt::Display for CardListOutput {
 
         write!(f, "{listing}")
     }
-}
-
-/// Pulls the first `FN`, `EMAIL` and `TEL` value out of the raw bytes,
-/// as written: escapes kept, a `tel:` URI whole.
-///
-/// The lines are unfolded first (RFC 6350 §3.2), and a property is read
-/// whatever its group and parameters (§3.3), so `FN;DERIVED=TRUE:Jane`
-/// names Jane and a folded `EMAIL` reads whole.
-fn vcard_preview(bytes: &[u8]) -> (Option<String>, Option<String>, Option<String>) {
-    let text = match std::str::from_utf8(bytes) {
-        Ok(s) => s,
-        Err(_) => return (None, None, None),
-    };
-
-    let mut fn_value = None;
-    let mut email = None;
-    let mut tel = None;
-
-    // NOTE: the three reads are independent. Chained, a line that failed
-    // the EMAIL read never reached the TEL one, so a card writing its TEL
-    // above its EMAIL listed with an empty TEL column.
-    for line in unfold(text) {
-        let Some((name, value)) = property(&line) else {
-            continue;
-        };
-        let value = value.trim();
-
-        let slot = match name {
-            name if name.eq_ignore_ascii_case("FN") => &mut fn_value,
-            name if name.eq_ignore_ascii_case("EMAIL") => &mut email,
-            name if name.eq_ignore_ascii_case("TEL") => &mut tel,
-            _ => continue,
-        };
-
-        if slot.is_none() {
-            *slot = Some(value.to_string());
-        }
-    }
-
-    (fn_value, email, tel)
-}
-
-/// The content lines of `text`, each folded continuation (a line break
-/// followed by one space or tab) joined back onto the line it continues.
-fn unfold(text: &str) -> Vec<String> {
-    let mut lines: Vec<String> = Vec::new();
-
-    for line in text.split('\n') {
-        let line = line.strip_suffix('\r').unwrap_or(line);
-
-        match line.strip_prefix([' ', '\t']) {
-            Some(rest) if !lines.is_empty() => {
-                if let Some(last) = lines.last_mut() {
-                    last.push_str(rest);
-                }
-            }
-            _ => lines.push(line.to_string()),
-        }
-    }
-
-    lines
-}
-
-/// The name and the value of a content line, `[group "."] name *(";"
-/// param) ":" value`: the value starts at the first colon outside a
-/// quoted parameter value.
-fn property(line: &str) -> Option<(&str, &str)> {
-    let mut quoted = false;
-    let colon = line.char_indices().find_map(|(i, c)| match c {
-        '"' => {
-            quoted = !quoted;
-            None
-        }
-        ':' if !quoted => Some(i),
-        _ => None,
-    })?;
-
-    let head = &line[..colon];
-    let name = head.split(';').next()?;
-    let name = name.rsplit('.').next()?.trim();
-
-    Some((name, &line[colon + 1..]))
 }
 
 #[cfg(all(test, feature = "vdir"))]
@@ -398,26 +313,54 @@ Error:  bad  card-unreadable  Cannot parse the card body as a vCard
         assert_eq!(output.to_string(), expected);
     }
 
-    /// The preview reads a property whatever its group and parameters, and
-    /// a folded line whole (RFC 6350 §3.2, §3.3): Fastmail writes
+    /// The cells read the projected fields, so a property is read whatever
+    /// its group and parameters, a folded line whole (RFC 6350 §3.2, §3.3),
+    /// an escape decoded and a `tel:` URI as its number: Fastmail writes
     /// `FN;DERIVED=TRUE` on every name it derives, and folds a line its
     /// `PROP-ID` makes longer than 75 octets.
     #[test]
-    fn the_preview_reads_parameters_groups_and_folds() {
+    fn the_cells_read_the_projected_fields() {
         let row = card(
             "c1",
-            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN;DERIVED=TRUE:Jane Marie Doe\r\n\
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN;DERIVED=TRUE:Doe\\, Jane Marie\r\n\
              EMAIL;PROP-ID=e1;TYPE=home:alan@examp\r\n le.org\r\n\
-             item1.TEL;TYPE=\"cell,voice\";X-NOTE=\"a:b\":+33 6 00\r\n\t00\r\n\
-             END:VCARD\r\n",
+             item1.TEL;VALUE=uri;TYPE=\"cell,voice\";X-NOTE=\"a:b\":tel:+33-6-00\r\n\
+             \t00\r\nEND:VCARD\r\n",
         );
-        assert_eq!(row.fn_value.as_deref(), Some("Jane Marie Doe"));
-        assert_eq!(row.email.as_deref(), Some("alan@example.org"));
-        assert_eq!(row.tel.as_deref(), Some("+33 6 0000"));
+        assert_eq!(
+            row.cells(),
+            ["c1", "alan@example.org", "+33-6-0000", "Doe, Jane Marie"]
+        );
 
         let row = card("c2", "BEGIN:VCARD\nfn:Bob\nTELEX:1\nTEL:2\nEND:VCARD\n");
-        assert_eq!(row.fn_value.as_deref(), Some("Bob"));
-        assert_eq!(row.tel.as_deref(), Some("2"));
+        assert_eq!(row.cells(), ["c2", "", "2", "Bob"]);
+    }
+
+    /// A row prints each value once: the full name, the addresses and the
+    /// numbers, never a raw first `FN`, `EMAIL` or `TEL` beside them.
+    #[test]
+    fn a_row_prints_each_value_once() {
+        let json = serde_json::to_value(&output().cards[0]).unwrap();
+        let keys: Vec<_> = json.as_object().unwrap().keys().cloned().collect();
+        let expected = [
+            "addressbookId",
+            "emails",
+            "etag",
+            "familyName",
+            "fullName",
+            "givenName",
+            "id",
+            "note",
+            "organization",
+            "organizationUnits",
+            "phones",
+            "title",
+            "uid",
+        ];
+        assert_eq!(keys, expected);
+        assert_eq!(json["fullName"], "Ada Lovelace");
+        assert_eq!(json["emails"], serde_json::json!(["ada@example.org"]));
+        assert_eq!(json["phones"], serde_json::json!(["+33 6"]));
     }
 
     /// The text-only context stays out of the JSON, the cursor and the

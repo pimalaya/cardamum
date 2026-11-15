@@ -18,11 +18,11 @@ use crate::shared::{arg::AddressbookIdArg, card::list::CardRow, client::Addressb
 /// Read a card: its row as `card list` prints it, and its raw vCard.
 ///
 /// JSON output: the `card list` row (`{"id", "addressbookId", "etag",
-/// "fnValue", "email", "tel", "uid", "fullName", "givenName",
-/// "familyName", "emails", "phones", "organization", "organizationUnits",
-/// "title", "note"}`, `etag` `null` where the backend versions no card)
-/// plus `"contents"`, the raw vCard as text (`"encoding"` `utf-8`), or its
-/// bytes in base64 when they are not UTF-8 (`"encoding"` `base64`).
+/// "uid", "fullName", "givenName", "familyName", "emails", "phones",
+/// "organization", "organizationUnits", "title", "note"}`, `etag` `null`
+/// where the backend versions no card) plus `"contents"`, the raw vCard
+/// as text (`"encoding"` `utf-8`), or its bytes in base64 when they are
+/// not UTF-8 (`"encoding"` `base64`).
 #[derive(Debug, Parser)]
 pub struct CardReadCommand {
     /// Addressbook holding the card.
@@ -198,9 +198,10 @@ mod tests {
             assert_eq!(&read[key], value, "{key}: {read}");
         }
         assert_eq!(read["addressbookId"], "personal", "{read}");
-        assert_eq!(read["fnValue"], "Ada Lovelace", "{read}");
-        assert_eq!(read["email"], "ada@example.org", "{read}");
-        assert_eq!(read["tel"], "+33 6", "{read}");
+        assert_eq!(read["fullName"], "Ada Lovelace", "{read}");
+        assert_eq!(read["emails"][0], "ada@example.org", "{read}");
+        assert_eq!(read["phones"][0], "+33 6", "{read}");
+        assert!(read.get("fnValue").is_none(), "{read}");
         assert!(read["etag"].is_null(), "{read}");
         assert_eq!(read["contents"], contents, "{read}");
     }

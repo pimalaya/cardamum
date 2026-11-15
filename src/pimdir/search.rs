@@ -192,23 +192,15 @@ impl fmt::Display for PimdirSearchOutput {
 
         // NOTE: a name is free text, so it reads last, as in `card list`.
         for hit in &self.hits {
-            let card = &hit.card;
-            let cell = |value: &Option<String>| match value {
-                Some(value) => sanitize::text(value).into_owned(),
-                None => String::new(),
-            };
-
-            let mut line = vec![
-                sanitize::text(&card.id).into_owned(),
-                sanitize::text(&card.addressbook_id).into_owned(),
-            ];
+            let [id, email, phone, name] = hit.card.cells();
+            let mut line = vec![id, sanitize::text(&hit.card.addressbook_id).into_owned()];
 
             if matched {
                 let matched = hit.matched.map(|matched| matched.to_string());
                 line.push(matched.unwrap_or_default());
             }
 
-            line.extend([cell(&card.email), cell(&card.tel), cell(&card.fn_value)]);
+            line.extend([email, phone, name]);
             listing.items.push(line);
         }
 

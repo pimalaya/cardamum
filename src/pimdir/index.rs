@@ -666,7 +666,7 @@ mod tests {
         page(backend, text, addressbook)
             .hits
             .into_iter()
-            .map(|hit| hit.card.fn_value.unwrap_or_default())
+            .map(|hit| hit.card.fields.full_name.unwrap_or_default())
             .collect()
     }
 
@@ -677,7 +677,7 @@ mod tests {
         let peanuts = page(&backend, "peanuts", None);
         assert_eq!(peanuts.hits.len(), 1);
         let hit = &peanuts.hits[0];
-        assert_eq!(hit.card.fn_value.as_deref(), Some("Alice Martin"));
+        assert_eq!(hit.card.fields.full_name.as_deref(), Some("Alice Martin"));
         assert_eq!(hit.card.addressbook_id, BOOK);
         assert_eq!(hit.card.fields.note.as_deref(), Some("Allergic to peanuts"));
         assert!(hit.card.etag.is_some());
@@ -721,7 +721,7 @@ mod tests {
         let quill = page(&backend, "quill", None);
         assert_eq!(quill.hits.len(), 1);
         let hit = &quill.hits[0];
-        assert_eq!(hit.card.fn_value.as_deref(), Some("Erin Quill"));
+        assert_eq!(hit.card.fields.full_name.as_deref(), Some("Erin Quill"));
         assert_eq!(hit.card.etag, None);
         assert_eq!(hit.matched, Some(PimdirCardMatched::Summary));
 
@@ -790,7 +790,11 @@ mod tests {
         );
 
         let team = page(&backend, "offsite", Some(TEAM));
-        let names: Vec<_> = team.hits.iter().map(|hit| &hit.card.fn_value).collect();
+        let names: Vec<_> = team
+            .hits
+            .iter()
+            .map(|hit| &hit.card.fields.full_name)
+            .collect();
         assert_eq!(names, [&Some(String::from("Dave Petit"))]);
         assert_eq!(team.hits[0].card.addressbook_id, TEAM);
         assert_eq!(team.coverage.bodiless, 0);
@@ -888,7 +892,7 @@ mod tests {
         let names: Vec<_> = found
             .hits
             .iter()
-            .map(|hit| hit.card.fn_value.as_deref().unwrap_or_default())
+            .map(|hit| hit.card.fields.full_name.as_deref().unwrap_or_default())
             .collect();
         assert_eq!(
             names,

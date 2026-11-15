@@ -150,7 +150,11 @@ pub fn assert_cards(list: &Value, book: &str, size: usize) {
         assert!(card["id"].is_string(), "card {i}: no string id");
         assert_eq!(card["addressbookId"], book, "card {i}: addressbookId");
 
-        for key in ["etag", "fnValue", "email", "tel", "uid", "fullName"] {
+        for key in ["fnValue", "email", "tel"] {
+            assert!(card.get(key).is_none(), "card {i}: {key} printed");
+        }
+
+        for key in ["etag", "uid", "fullName"] {
             let value = &card[key];
             let valid = value.is_string() || value.is_null();
             assert!(valid, "card {i}: {key} neither a string nor null");

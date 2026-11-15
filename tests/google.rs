@@ -9,7 +9,7 @@
 //! `CARDAMUM_GOOGLE_SERVICE_ACCOUNT_KEY_FILE` names. It only reads.
 //!
 //! Both accounts are sections of config.sample.toml: Google People, and
-//! Google CardDAV, found through `gmail.com`.
+//! Google CardDAV, its address book home the subject's in `credentialed`.
 //!
 //! Run with `cargo test --test google -- --ignored`. A failure never shows
 //! a token: the binary reads it from its environment only.
@@ -30,10 +30,16 @@ fn write_people_account(dir: &Path) -> PathBuf {
 }
 
 /// Writes the sample's Google CardDAV account, its bearer token read
-/// through [`TOKEN_COMMAND`].
-fn write_carddav_account(dir: &Path) -> PathBuf {
-    let token = [("carddav.auth.bearer.token.command", TOKEN_COMMAND)];
-    write_config(dir, "google", &sample_section("Google CardDAV", &token))
+/// through [`TOKEN_COMMAND`] and, given a `user`, its address book home
+/// that user's rather than the sample's.
+fn write_carddav_account(dir: &Path, user: Option<&str>) -> PathBuf {
+    let home = user
+        .map(|user| format!("\"https://www.googleapis.com/carddav/v1/principals/{user}/lists\""));
+    let mut overrides = vec![("carddav.auth.bearer.token.command", TOKEN_COMMAND)];
+    if let Some(home) = &home {
+        overrides.push(("carddav.home", home.as_str()));
+    }
+    write_config(dir, "google", &sample_section("Google CardDAV", &overrides))
 }
 
 mod anonymous {
@@ -65,7 +71,7 @@ mod anonymous {
     #[ignore = "requires network and --ignored"]
     fn carddav_account_check_refused() {
         let dir = TempDir::new().unwrap();
-        let config = write_carddav_account(dir.path());
+        let config = write_carddav_account(dir.path(), None);
 
         let out = cardamum(&config, MADE_UP, &["--json", "account", "check"]);
         json_check_failure(&out, "carddav", REFUSED);
@@ -75,7 +81,7 @@ mod anonymous {
     #[ignore = "requires network and --ignored"]
     fn carddav_addressbook_list_refused() {
         let dir = TempDir::new().unwrap();
-        let config = write_carddav_account(dir.path());
+        let config = write_carddav_account(dir.path(), None);
 
         let args = ["--json", "addressbook", "list"];
         json_failure(&cardamum(&config, MADE_UP, &args), REFUSED);
@@ -212,7 +218,7 @@ mod credentialed {
     #[ignore = "requires Google credentials and --ignored"]
     fn carddav_account_check() {
         let dir = TempDir::new().unwrap();
-        let config = write_carddav_account(dir.path());
+        let config = write_carddav_account(dir.path(), Some(&subject()));
 
         let out = cardamum(&config, token(), &["--json", "account", "check"]);
         assert_check(&json(&out, 0), "carddav");
@@ -222,7 +228,7 @@ mod credentialed {
     #[ignore = "requires Google credentials and --ignored"]
     fn carddav_addressbook_list() {
         let dir = TempDir::new().unwrap();
-        let config = write_carddav_account(dir.path());
+        let config = write_carddav_account(dir.path(), Some(&subject()));
 
         let out = cardamum(&config, token(), &["--json", "addressbook", "list"]);
         assert_addressbooks(&json(&out, 0), CARDDAV_BOOK);
@@ -232,7 +238,7 @@ mod credentialed {
     #[ignore = "requires Google credentials and --ignored"]
     fn carddav_card_list() {
         let dir = TempDir::new().unwrap();
-        let config = write_carddav_account(dir.path());
+        let config = write_carddav_account(dir.path(), Some(&subject()));
 
         let args = ["--json", "card", "list", "-s", "5", "-k", CARDDAV_BOOK];
         let out = cardamum(&config, token(), &args);

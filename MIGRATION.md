@@ -2,7 +2,7 @@
 
 ## From v0.3 to the next release
 
-The next release brings Cardamum to the standards Himalaya and Ortie share: no configuration wizard, one configuration path per `-c`, plain text with no table nor colour, one exit contract, a coded failure for what a caller acts on, an `errors` list on every command that reads several cards, a unified API whose backends say what they serve, and a REPL and an MCP server. A v0.3 configuration loads as it is, unless it sets a table or colour key, holds a key Cardamum does not know, or marks several accounts default.
+The next release brings Cardamum to the standards Himalaya and Ortie share: no configuration wizard, one configuration path per `-c`, plain text with no table nor colour, one exit contract, a coded failure for what a caller acts on, an `errors` list on every command that reads several cards, a unified API whose backends say what they serve, and a REPL and an MCP server. A v0.3 configuration loads as it is, unless it sets a table or colour key, resolves its CardDAV server through `carddav.discover`, holds a key Cardamum does not know, or marks several accounts default.
 
 The text output changes everywhere, the JSON of the writes and of the raw `request` commands changes shape, exit 3 is new, and a few commands now fail earlier or report differently. The CHANGELOG lists every change; these are the ones to act on.
 
@@ -50,6 +50,34 @@ The text output changes everywhere, the JSON of the writes and of the raw `reque
 
   # next release
   card.list.page-size = 50
+  ```
+- **`carddav.discover` is gone.** Cardamum no longer resolves a domain to its CardDAV server (PACC, SRV and TXT records, `.well-known`) on every run, and a configuration holding `carddav.discover` fails by name (``The `carddav.discover` key is removed, …, see MIGRATION.md``). Name the server in `carddav.server`: a bare host still goes through its `/.well-known/carddav` over https, a URL with a path is the context root the principal walk starts from. Google answers its `.well-known` to an authenticated request alone, which Cardamum does not make: name the address book home in `carddav.home` instead, the account's address in it.
+
+  ```toml
+  # v0.3
+  carddav.discover = "example.org"
+  # next release, the host its SRV record named
+  carddav.server = "dav.example.org"
+
+  # v0.3, Fastmail
+  carddav.discover = "fastmail.com"
+  # next release
+  carddav.server = "https://carddav.fastmail.com/dav/"
+
+  # v0.3, iCloud
+  carddav.discover = "icloud.com"
+  # next release
+  carddav.server = "https://contacts.icloud.com/"
+
+  # v0.3, Posteo
+  carddav.discover = "posteo.de"
+  # next release
+  carddav.server = "https://posteo.de:8843/"
+
+  # v0.3, Google
+  carddav.discover = "gmail.com"
+  # next release
+  carddav.home = "https://www.googleapis.com/carddav/v1/principals/alice@gmail.com/lists"
   ```
 - **An unknown key fails the configuration**, at the top level and in an account too, naming the key, where v0.3 ignored it there (the backend and option tables refused one already): a misspelt `default` or `addressbook` no longer loads silently. Fix or delete it. A block for a backend the build leaves out still loads, unread, so one file serves a reduced build.
 
@@ -214,7 +242,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
 
 ### The libraries
 
-The release moves onto the family line every Pimalaya CLI shares: pimalaya-cli, pimalaya-config and pimalaya-stream 0.4, io-pimdir 0.12, io-webdav 0.8, io-vdir 0.3, io-jmap 0.9, io-msgraph 0.9, io-gpeople 0.7, io-http 0.8 and io-pim-discovery 0.12. Most of it shows in the sections above (the failure object, the list frame, the exit contract, the pimdir store); the rest to act on:
+The release moves onto the family line every Pimalaya CLI shares: pimalaya-cli, pimalaya-config and pimalaya-stream 0.4, io-pimdir 0.12, io-webdav 0.8, io-vdir 0.3, io-jmap 0.9, io-msgraph 0.9, io-gpeople 0.7 and io-http 0.8; io-pim-discovery leaves with `carddav.discover`. Most of it shows in the sections above (the failure object, the list frame, the exit contract, the pimdir store); the rest to act on:
 
 - **A CardDAV address book outside the home set is listed and addressed by its path** rather than its last segment. A script that stored such an id reads it again from `addressbook list`.
 - **A response whose head passes 64 KiB or whose body passes 256 MiB fails the exchange** with a typed error, and a connection closing mid-body fails, where they grew the buffer or spun.

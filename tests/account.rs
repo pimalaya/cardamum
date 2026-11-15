@@ -1,11 +1,11 @@
 //! # Account and backend resolution
 //!
-//! The built binary's failure object for an account it cannot take, and
-//! for a backend the build leaves out: its block loads, so one file
-//! serves every build, but a command reaching it fails coded
-//! `backend-not-built`, naming the cargo feature. The second half runs on
-//! a reduced build, such as `cargo test --no-default-features --features
-//! rustls-ring,vdir --test account`.
+//! The built binary's failure object for an account it cannot take, for
+//! a removed key, and for a backend the build leaves out: its block
+//! loads, so one file serves every build, but a command reaching it fails
+//! coded `backend-not-built`, naming the cargo feature. The second half
+//! runs on a reduced build, such as `cargo test --no-default-features
+//! --features rustls-ring,vdir --test account`.
 
 use std::{
     fs,
@@ -84,6 +84,28 @@ fn several_accounts_marked_default_are_coded_account_default_several() {
     let output = run(home.path(), toml, &["account", "capability"]);
     let json = printed(&output, 1);
     assert_eq!(json["code"], "account-default-several", "{json}");
+}
+
+/// A CardDAV block still naming the removed `discover` route is refused
+/// by name, the error naming its replacements and the migration notes.
+#[cfg(feature = "carddav")]
+#[test]
+fn a_carddav_discover_key_is_refused_by_name() {
+    let home = TempDir::new().unwrap();
+    let toml = "[accounts.a]\ndefault = true\n\
+                carddav.discover = \"fastmail.com\"\n\
+                carddav.auth = \"none\"\n";
+
+    let output = run(home.path(), toml, &["account", "capability"]);
+    let json = printed(&output, 1);
+    let error = json["sources"][0].as_str().unwrap();
+    assert!(
+        error.contains("`carddav.discover` key is removed"),
+        "{error}"
+    );
+    assert!(error.contains("`carddav.server`"), "{error}");
+    assert!(error.contains("`carddav.home`"), "{error}");
+    assert!(error.contains("MIGRATION.md"), "{error}");
 }
 
 /// An account over the People backend alone, which the build leaves out.

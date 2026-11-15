@@ -23,7 +23,7 @@ Each backend sits behind its own cargo feature, and a network backend needs a TL
 
 | Feature       | What it pulls in                                                     |
 |---------------|----------------------------------------------------------------------|
-| `carddav`     | io-webdav and io-pim-discovery: the CardDAV backend and its discovery |
+| `carddav`     | io-webdav: the CardDAV backend                                       |
 | `jmap`        | io-jmap and the vcard-rs JSContact codec                             |
 | `msgraph`     | io-msgraph: the Microsoft Graph contacts API                         |
 | `gpeople`     | io-gpeople: the Google People API                                    |

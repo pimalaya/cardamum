@@ -3,30 +3,22 @@
 //! Wraps [`io_webdav::client::WebdavClientStd`], built from the
 //! account's `[carddav]` block.
 //!
-//! The block picks one of three routes: `home` short-circuits every
-//! discovery step, `server` runs only the principal and
-//! addressbook-home-set walk, and `discover` resolves a bare domain to
-//! a server URL (PACC, then RFC 6764) before that walk.
-//!
-//! Google domains take a dedicated authenticated `.well-known` path,
-//! since Google publishes nothing discoverable on `gmail.com`.
+//! The block picks one of two routes: `home` is the addressbook home set
+//! itself, and `server` the context root the principal and
+//! addressbook-home-set walk starts from.
 
 use std::{
     io::{Read, Write},
     ops::{Deref, DerefMut},
 };
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Result, anyhow};
 use io_http::{
     coroutine::{HttpCoroutine, HttpCoroutineState, HttpYield},
     rfc6750::bearer::HttpAuthBearer,
     rfc7617::basic::HttpAuthBasic,
     rfc8615::well_known::{Http11WellKnown, Http11WellKnownOutput},
     rfc9110::request::HttpRequest,
-};
-use io_pim_discovery::{
-    pacc::client::DiscoveryPaccClientStd,
-    rfc6764::{client::DiscoveryWebdavClientStd, service::DiscoveryDavService},
 };
 use io_webdav::{
     client::{WebdavClientStd as Inner, WebdavClientStdConnectOptions, WebdavClientStdError},
@@ -46,14 +38,6 @@ use crate::{
     config::{AccountConfig, CarddavAuthConfig, CarddavConfig, ProxyConfig},
     error::ErrorCode,
 };
-
-/// DNS resolver the discovery mechanisms query.
-const DEFAULT_RESOLVER: &str = "tcp://1.1.1.1:53";
-
-/// Host of [`GOOGLE_API_ORIGIN`], used to open the TLS stream.
-const GOOGLE_API_HOST: &str = "www.googleapis.com";
-/// Origin hosting Google's CardDAV `.well-known` entry point.
-const GOOGLE_API_ORIGIN: &str = "https://www.googleapis.com/";
 
 /// CardDAV client the protocol-specific commands run against.
 ///
@@ -104,11 +88,10 @@ pub fn build_carddav_client(
 /// spawns it once.
 ///
 /// `home` skips every discovery step; `server` resolves the principal
-/// and addressbook-home-set from the given context root; `discover`
-/// resolves a bare domain to that root through io-pim-discovery first.
+/// and addressbook-home-set from the given context root.
 pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver) -> Result<Inner> {
     let CarddavConfig {
-        discover,
+        discover: _,
         server,
         home,
         tls,
@@ -128,24 +111,12 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
         return Ok(client);
     }
 
-    let server = match server {
-        Some(server) => parse_carddav_server(&server)?,
-        None => {
-            let domain = discover
-                .ok_or_else(|| anyhow!("CardDAV config needs `server`, `home`, or `discover`"))?;
-            if is_google(&domain) {
-                google_carddav_server(&auth, &tls, &proxy)?
-            } else {
-                discover_server(&domain, &tls)
-                    .ok_or_else(|| anyhow!("CardDAV discovery failed for `{domain}`"))?
-            }
-        }
-    };
+    let server = server.ok_or_else(|| anyhow!("CardDAV config needs `server` or `home`"))?;
+    let server = parse_carddav_server(&server)?;
 
-    // NOTE: a bare origin is not necessarily the DAV context root.
-    // Discovery hands back `https://carddav.fastmail.com/`, yet Fastmail
-    // 404s everything outside `/dav/*`, so probe `.well-known/carddav`
-    // and follow its redirect.
+    // NOTE: a bare origin is not necessarily the DAV context root: Fastmail
+    // 404s everything outside `/dav/*`, so probe `.well-known/carddav` and
+    // follow its redirect.
     let server = match server.path() {
         "" | "/" => probe_carddav_context_root(&server, &tls, &proxy).unwrap_or(server),
         _ => server,
@@ -203,81 +174,6 @@ fn run_well_known(
             }
         }
     }
-}
-
-/// Discovers a CardDAV server URL for `domain`, first hit winning.
-///
-/// Tries PACC, then the RFC 6764 chain.
-fn discover_server(domain: &str, tls: &Tls) -> Option<Url> {
-    discover_via_pacc(domain, tls).or_else(|| discover_via_rfc6764(domain, tls))
-}
-
-/// PACC discovery of the CardDAV URL (draft-ietf-mailmaint-pacc).
-fn discover_via_pacc(domain: &str, tls: &Tls) -> Option<Url> {
-    let resolver = Url::parse(DEFAULT_RESOLVER).expect("DEFAULT_RESOLVER must be a valid URL");
-    let mut client = DiscoveryPaccClientStd::new(resolver).with_tls(tls.clone());
-    let config = client.discover(domain).ok()?;
-    let carddav = config.protocols.carddav?;
-    Url::parse(&carddav.url).ok()
-}
-
-/// RFC 6764 §6 discovery of the CardDAV URL.
-///
-/// Resolves the SRV record (secure first), its TXT `path` context, then
-/// `.well-known` on the resolved host, falling back to
-/// `https://<domain>` when the domain publishes nothing.
-fn discover_via_rfc6764(domain: &str, tls: &Tls) -> Option<Url> {
-    let resolver = Url::parse(DEFAULT_RESOLVER).expect("DEFAULT_RESOLVER must be a valid URL");
-    let mut client = DiscoveryWebdavClientStd::new(resolver).with_tls(tls.clone());
-    client.resolve(domain, DiscoveryDavService::Carddav).ok()
-}
-
-/// Whether `domain` is a Google consumer mail domain.
-///
-/// Google serves CardDAV behind a non-standard authenticated entry
-/// point rather than the records RFC 6764 relies on.
-fn is_google(domain: &str) -> bool {
-    matches!(
-        domain.to_ascii_lowercase().as_str(),
-        "gmail.com" | "googlemail.com"
-    )
-}
-
-/// Resolves the Google CardDAV context root with a PROPFIND probe.
-///
-/// Google publishes neither SRV nor `.well-known` records on
-/// `gmail.com`, and its `.well-known` endpoint only 301-redirects for
-/// an authenticated PROPFIND (a plain GET 404s), so the well-known
-/// builder is reused with its method swapped and a bearer added.
-fn google_carddav_server(auth: &WebdavAuth, tls: &Tls, proxy: &Proxy) -> Result<Url> {
-    let WebdavAuth::Bearer(bearer) = auth else {
-        bail!("Google CardDAV requires OAuth 2.0 bearer authentication");
-    };
-
-    let mut request = Http11WellKnown::prepare_request(GOOGLE_API_ORIGIN, "carddav")?;
-    request.method = "PROPFIND".into();
-    let request = request
-        .header("Authorization", bearer.to_authorization())
-        .header("Depth", "0");
-
-    let output = run_well_known(GOOGLE_API_HOST, 443, request, tls, proxy)?;
-
-    if let Some(url) = output.redirect_url {
-        return Ok(url);
-    }
-
-    // NOTE: no redirect means Google rejected the probe, most often a
-    // 401 from an expired token, so surface its status and body rather
-    // than a generic "no redirect".
-    let status = *output.response.status;
-    let body = String::from_utf8_lossy(&output.response.body);
-    let body = body.trim();
-
-    if body.is_empty() {
-        bail!("Google `.well-known/carddav` probe failed with HTTP {status}");
-    }
-
-    bail!("Google `.well-known/carddav` probe failed with HTTP {status}: {body}")
 }
 
 /// Parses a `server` config string into a [`Url`].

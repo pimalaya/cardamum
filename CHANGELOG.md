@@ -60,7 +60,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed `account list` to name an account's backends in the order `auto` resolves them (vdir, pimdir, carddav, jmap, msgraph, gpeople), where CardDAV came first.
 - Changed the `pimdir` feature to build io-pimdir's search, adding ical-rs, mime-rs and ariadne to the binary.
 - **Breaking:** changed every write printing a confirmation to print a receipt instead of `{"message": ...}` under `--json`: `addressbook update|delete` and `card delete` print `{id, queued}`, the item acted on and whether the write waits for a sync; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-group members` `{id, added, removed}` and `card build -o` `{path, size}`. The text form keeps its sentence. Every command now has a schema under `json-schema` (pimalaya-cli 0.3).
-- Bumped pimalaya-cli, pimalaya-config and pimalaya-stream to 0.4, io-jmap to 0.9 and io-pim-discovery to 0.12. The `--json` failure object always carries `code`, `null` when none applies.
+- Bumped pimalaya-cli, pimalaya-config and pimalaya-stream to 0.4 and io-jmap to 0.9. The `--json` failure object always carries `code`, `null` when none applies.
 
 - Bumped rustls-webpki to 0.103.16 and webpki-root-certs to 1.0.11, fixing RUSTSEC-2026-0382 and RUSTSEC-2026-0383.
 - Changed piped `--json` output to print one value per line, each schema of `json-schema` to carry an `$id` naming the contract version (`v0.3`), and added `cardamum-error`, the schema of the JSON failure object (pimalaya-cli `55b6693`). The wire objects of `gpeople`, `jmap` and `msgraph` are now described as JSON objects, and the abandoned arm of `card create` and `card update`, which `--json` never prints, is now `{}` rather than `null`.
@@ -99,6 +99,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Breaking:** removed the `configure` command and its `wizard` alias, with the `wizard` cargo feature.
 
   A bare `cardamum` prints the help, and a command meeting no configuration fails naming the path it looked at and the documented sample.
+- **Breaking:** removed the `discover` route of the `[carddav]` block, which resolved a bare domain on every run through PACC and RFC 6764 SRV and TXT records. Name the server in `carddav.server` (a bare host still goes through its `.well-known/carddav`), or the address book home in `carddav.home`, as Google needs. A configuration holding `carddav.discover` is refused by name, the error pointing at MIGRATION.md.
+- Removed the io-pim-discovery dependency, and with it the DNS stack only it pulled (domain, octseq, psl, resolv-conf, ipconfig).
 
 ### Fixed
 

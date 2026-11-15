@@ -22,7 +22,6 @@ CLI to manage contacts, written in Rust
 - **Unified API**: `addressbook` and `card` work the same whichever backend serves the account, each backend declaring what it serves: `account capability` lists it, every command's `--help` names it, and a verb a backend does not serve is refused before connecting.
 - **Protocol-specific APIs**: `carddav`, `jmap`, `msgraph`, `gpeople` and `vdir` each expose what only that backend has, down to a raw request escape hatch.
 - **Offline store report and search**: `pimdir status` shows what the local pimdir store holds for the account, and the queued writes its sync engine parked rather than applied; `pimdir search` and `pimdir count` find cards by any word of them through the store's search index.
-- **Discovery**: a domain is enough to find a provider's CardDAV server (`carddav.discover`), through the provider configuration document, SRV records and `.well-known`.
 - **Multi-account**: one TOML file, one block per account, several files deep-merged when you want secrets apart.
 - **JSON output**: every command switches to JSON with `--json`, and `cardamum json-schema` describes what each one emits, for scripts and other tools.
 - **REPL and MCP**: `cardamum repl` runs commands over one account in a session, and `cardamum mcp` serves the unified API to an AI agent over the Model Context Protocol, reads only unless `--allow-write`.
@@ -118,7 +117,6 @@ Apple exposes contacts via CardDAV, but you cannot use your regular password. Yo
 
 ```toml
 [accounts.example]
-carddav.discover = "icloud.com"
 carddav.server = "https://contacts.icloud.com/"
 # The home URL is usually of this shape:
 #carddav.home = "https://contacts.icloud.com/<id>/principal/"
@@ -174,7 +172,6 @@ Standard CardDAV with the mailbox address and its [app password](https://www.fas
 
 ```toml
 [accounts.example]
-carddav.discover = "fastmail.com"
 carddav.server = "https://carddav.fastmail.com/dav/"
 # The home URL is usually of this shape:
 #carddav.home = "https://carddav.fastmail.com/dav/addressbooks/user/<email>/"
@@ -199,7 +196,6 @@ Standard CardDAV with the mailbox address and its password:
 
 ```toml
 [accounts.example]
-carddav.discover = "posteo.de"
 carddav.server = "https://posteo.de:8843/"
 # The home URL is usually of this shape:
 #carddav.home = "https://posteo.de:8843/addressbooks/<username>/"

@@ -15,11 +15,10 @@ use crate::carddav::client::CarddavClient;
 
 /// Report the resolved CardDAV endpoints for the active account.
 ///
-/// The client resolves its server URL (RFC 6764),
-/// `current-user-principal` (RFC 5397) and `addressbook-home-set` (RFC
-/// 6352) at connection time. A `home`-configured account skips the
-/// principal walk, so `principal` shows as unresolved rather than
-/// failing the command.
+/// The client resolves `current-user-principal` (RFC 5397) and
+/// `addressbook-home-set` (RFC 6352) from its server at connection time.
+/// A `home`-configured account skips the principal walk, so `principal`
+/// shows as unresolved rather than failing the command.
 ///
 /// JSON output: `{"server", "principal", "addressbookHomeSet"}`, with
 /// unresolved endpoints as `null`.

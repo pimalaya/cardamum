@@ -313,14 +313,7 @@ pub struct PimdirConfig {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct CarddavConfig {
-    /// Bare domain resolved to a server URL on every run.
-    ///
-    /// PACC first, then RFC 6764: SRV record, its TXT `path`, then
-    /// `.well-known`, which a Google domain probes authenticated. It
-    /// costs DNS and HTTP round-trips, and `server` or `home` skip it.
-    pub discover: Option<String>,
-    /// DAV context root, where the principal and home set walk starts,
-    /// skipping the DNS and PACC round-trips `discover` pays.
+    /// DAV context root, where the principal and home set walk starts.
     ///
     /// Accepts a full URL, a bare domain or `domain:port`, a bare
     /// authority defaulting to `https`. A value naming no path is probed
@@ -342,6 +335,10 @@ pub struct CarddavConfig {
     pub proxy: Option<ProxyConfig>,
     /// Authentication configuration.
     pub auth: CarddavAuthConfig,
+    /// Refused: cardamum resolves no domain, `server` naming the server.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub discover: Option<CarddavDiscoverRemoved>,
 }
 
 /// CardDAV authentication configuration.
@@ -588,6 +585,26 @@ pub enum CardListTableRemoved {}
 impl<'de> Deserialize<'de> for CardListTableRemoved {
     fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
         Err(removed("card.list.table", "`card list` printing no colour"))
+    }
+}
+
+/// The `carddav.discover` key, which no configuration holds any more:
+/// cardamum resolves no domain.
+#[cfg(feature = "carddav")]
+#[derive(Clone, Debug)]
+pub enum CarddavDiscoverRemoved {}
+
+#[cfg(feature = "carddav")]
+impl<'de> Deserialize<'de> for CarddavDiscoverRemoved {
+    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
+        Err(serde::de::Error::custom(
+            "The `carddav.discover` key is removed, cardamum resolving no \
+             domain: name the server in `carddav.server` instead \
+             (Fastmail's `https://carddav.fastmail.com/dav/`), or on Google \
+             the address book home in `carddav.home` \
+             (`https://www.googleapis.com/carddav/v1/principals/<email>/lists`), \
+             see MIGRATION.md",
+        ))
     }
 }
 

@@ -55,7 +55,7 @@ A configuration field naming a filesystem path SHALL expand `~` and environment 
 It SHALL be a pimalaya-config `CommandConfig`, taking the shell line and the argv list every other command field takes. The command must block until the edit is done, which the documentation SHALL say, since a graphical editor returning immediately is the way this fails in practice.
 
 ### Requirement: A proxy is set per account and per backend
-An account's `proxy` SHALL apply to every network backend of that account (CardDAV, JMAP, Microsoft Graph, Google People) whose own block names no `proxy`, and a backend's own `proxy` SHALL win over it. With neither, the connection SHALL read the `all_proxy` and `https_proxy` environment variables, honouring `no_proxy`. CardDAV `discover` lookups SHALL read the environment only, io-pim-discovery taking no proxy.
+An account's `proxy` SHALL apply to every network backend of that account (CardDAV, JMAP, Microsoft Graph, Google People) whose own block names no `proxy`, and a backend's own `proxy` SHALL win over it. With neither, the connection SHALL read the `all_proxy` and `https_proxy` environment variables, honouring `no_proxy`.
 
 `proxy.url` SHALL take `socks5://`, `socks5h://` or `http://`. `proxy.username` and `proxy.password` SHALL override the URL's user info, the password being a secret like any credential; a password without a username SHALL be rejected.
 
@@ -75,6 +75,14 @@ The configuration SHALL hold no colour and no table shape. The tables v0.3 read 
 - GIVEN a configuration holding `table.preset`
 - WHEN it is loaded
 - THEN it fails naming the `table` table as removed and MIGRATION.md
+
+### Requirement: CardDAV resolves no domain
+`carddav.discover` SHALL be refused by name, the error naming `carddav.server` as its replacement (Fastmail's `https://carddav.fastmail.com/dav/`), `carddav.home` on Google, and MIGRATION.md. A build without `carddav` loads the block unread.
+
+#### Scenario: A v0.3 discover route
+- GIVEN an account holding `carddav.discover = "fastmail.com"`
+- WHEN a command loads the configuration
+- THEN it fails naming the `carddav.discover` key as removed, `carddav.server`, `carddav.home` and MIGRATION.md
 
 ### Requirement: A CardDAV account names its ALPN identifiers
 `carddav.alpn` SHALL list the ALPN protocol identifiers offered during the TLS handshake, `["http/1.1"]` by default, as `jmap`, `msgraph` and `gpeople` do.

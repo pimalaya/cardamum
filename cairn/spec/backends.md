@@ -186,10 +186,10 @@ When the backend `auto` resolves to is one the build leaves out, the unified com
 - THEN it fails coded `backend-not-built`, where `--backend carddav` resolves to CardDAV
 
 ### Requirement: CardDAV home-set resolution routes
-The `[carddav]` block SHALL resolve the addressbook home set through one of three routes, in decreasing order of magic. `home` short-circuits all discovery and is used as the home set directly. `server` connects to the given context root, then walks current-user-principal (RFC 5397) and addressbook-home-set (RFC 6352). `discover` resolves a bare domain to a context root before that same walk: PACC first, then RFC 6764 (SRV record, its TXT `path`, then `.well-known`) through io-pim-discovery, with Google domains using an authenticated `.well-known` probe.
+The `[carddav]` block SHALL resolve the addressbook home set through one of two routes. `home` short-circuits all discovery and is used as the home set directly. `server` connects to the given context root, then walks current-user-principal (RFC 5397) and addressbook-home-set (RFC 6352). A block naming neither SHALL fail naming both.
 
 ### Requirement: CardDAV probes a bare origin before walking
-Because PACC and RFC 6764 can hand back a bare origin rather than the real context root (Fastmail serves contacts under `/dav/` and 404s everything else), the `server` and `discover` routes SHALL probe `.well-known/carddav` and follow its redirect before the principal walk whenever the resolved path is `/`.
+Because a bare origin is not necessarily the context root (Fastmail serves contacts under `/dav/` and 404s everything else), the `server` route SHALL probe `.well-known/carddav` and follow its redirect before the principal walk whenever the server names no path.
 
 ### Requirement: The connection is opened by the call that needs it
 `AddressbookClient` SHALL select its backend from the configuration without connecting, and open the connection on the first call that needs one. A command that never reaches the network therefore never opens a socket, and a command that runs a composer holds none open while the editor is up.

@@ -15,7 +15,6 @@ card.list.page-size = 25		# cards per page, absent -s, 0 listing every card
 #
 #carddav.server = "https://dav.example.org/dav"		# the DAV context root, where the principal walk starts
 ##carddav.server = "dav.example.org"			# its /.well-known/carddav, over https
-##carddav.discover = "example.org"			# a domain, resolved on every run through PACC, SRV and .well-known
 ##carddav.home = "https://dav.example.org/dav/alice/"	# the addressbook home set, skipping every discovery step
 #carddav.auth.basic.username = "alice@example.org"	# HTTP Basic; or bearer.token, or auth = "none"
 #carddav.auth.basic.password.command = "exit 127"	# prints the password
@@ -36,7 +35,7 @@ card.list.page-size = 25		# cards per page, absent -s, 0 listing every card
 
 # Google CardDAV
 #
-#carddav.discover = "gmail.com"								# Google's entry point, found authenticated
+#carddav.home = "https://www.googleapis.com/carddav/v1/principals/alice@gmail.com/lists"	# the address book home of the account, addressed by hand
 #carddav.auth.bearer.token.command = ["ortie", "token", "show", "-a", "example"]	# an access token, from Ortie's Google section
 
 # JMAP

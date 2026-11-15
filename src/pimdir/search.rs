@@ -317,9 +317,10 @@ Account:      work (pimdir)
 Addressbook:  book
 Query:        peanuts
 Page:         1, card 1
-Next page:    --page 2
 
 7  book  body  alice@example.org  -  Alice Martin
+
+Next page: --page 2
 
 Error:  9  card-unreadable  Body blob missing from the store
 ";

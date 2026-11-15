@@ -15,7 +15,9 @@ use crate::{gpeople::client::GpeopleClient, shared::raw_json::RawJsonOutput};
 /// Send a raw Google People API request and print the JSON response.
 ///
 /// The path is joined onto the People `v1/` base, or a full URL is used
-/// as-is. JSON output: `{response}`, the raw People response.
+/// as-is. A URL off the People origin (another host, scheme or port) is
+/// refused before anything is sent, the account's token going to People
+/// alone. JSON output: `{response}`, the raw People response.
 #[derive(Debug, Parser)]
 pub struct GpeopleRequestCommand {
     /// HTTP method: get, post, put, patch, delete.
@@ -55,11 +57,56 @@ fn parse_body(body: Option<&str>) -> Result<Value> {
     serde_json::from_str(body.unwrap_or("null")).context("Parse request body JSON error")
 }
 
-/// The request URL: a full URL as-is, else joined onto the People base.
+/// The request URL: a full URL as-is, else joined onto the People base,
+/// refused off the People origin.
 fn resolve_url(path: &str) -> Result<Url> {
-    if path.starts_with("http") {
-        Ok(Url::parse(path)?)
-    } else {
-        Ok(Url::parse(GPEOPLE_API_BASE)?.join(path.trim_start_matches('/'))?)
+    let base = Url::parse(GPEOPLE_API_BASE)?;
+    let url = match path.starts_with("http") {
+        true => Url::parse(path)?,
+        false => base.join(path.trim_start_matches('/'))?,
+    };
+
+    if url.origin() != base.origin() {
+        bail!(
+            "Cannot send a request to `{}`: it is off the API origin `{}`, \
+             which alone receives the account's token",
+            url.origin().ascii_serialization(),
+            base.origin().ascii_serialization(),
+        );
+    }
+
+    Ok(url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_url;
+
+    /// A path and a full URL on the People origin resolve.
+    #[test]
+    fn a_url_on_the_people_origin_resolves() {
+        let url = resolve_url("people/me").unwrap();
+        assert_eq!(url.as_str(), "https://people.googleapis.com/v1/people/me");
+
+        let full = "https://people.googleapis.com/v1/contactGroups";
+        assert_eq!(resolve_url(full).unwrap().as_str(), full);
+    }
+
+    /// A URL off the People origin is refused before the token is sent:
+    /// another host, plain HTTP, another port, and an absolute URL a path
+    /// would join over the base.
+    #[test]
+    fn a_url_off_the_people_origin_is_refused() {
+        for url in [
+            "https://attacker.example/v1/people/me",
+            "http://people.googleapis.com/v1/people/me",
+            "https://people.googleapis.com:8443/v1/people/me",
+            "https://www.googleapis.com/drive/v3/files",
+            "HTTPS://attacker.example/people/me",
+            "ftp://attacker.example/people/me",
+        ] {
+            let err = resolve_url(url).expect_err(url).to_string();
+            assert!(err.contains("off the API origin"), "{url}: {err}");
+        }
     }
 }

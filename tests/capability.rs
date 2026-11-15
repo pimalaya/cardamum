@@ -105,7 +105,7 @@ fn the_capabilities_print_one_line_each_under_the_account() {
     let output = run(home.path(), &config, &["account", "capability"]);
     let text = String::from_utf8(output.stdout).unwrap();
 
-    assert!(text.starts_with("Account:    example\n\n"), "{text}");
+    assert!(text.starts_with("Account:  example\n\n"), "{text}");
     assert!(
         text.contains("\ncard.add                 vdir  full  -\n"),
         "{text}"

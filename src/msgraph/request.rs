@@ -15,7 +15,9 @@ use crate::{msgraph::client::MsgraphClient, shared::raw_json::RawJsonOutput};
 /// Send a raw Microsoft Graph request and print the JSON response.
 ///
 /// The path is joined onto the Graph `v1.0/` base, or a full URL is used
-/// as-is. JSON output: `{response}`, the raw Graph response.
+/// as-is. A URL off the Graph origin (another host, scheme or port) is
+/// refused before anything is sent, the account's token going to Graph
+/// alone. JSON output: `{response}`, the raw Graph response.
 #[derive(Debug, Parser)]
 pub struct MsgraphRequestCommand {
     /// HTTP method: get, post, patch, delete.
@@ -55,11 +57,59 @@ fn parse_body(body: Option<&str>) -> Result<Value> {
 }
 
 /// Resolves a Graph path onto the `v1.0/` base, a full URL being taken
-/// as-is.
+/// as-is, and refuses a URL off the Graph origin.
 fn resolve_url(path: &str) -> Result<Url> {
-    if path.starts_with("http") {
-        Ok(Url::parse(path)?)
-    } else {
-        Ok(Url::parse(MSGRAPH_API_BASE)?.join(path.trim_start_matches('/'))?)
+    let base = Url::parse(MSGRAPH_API_BASE)?;
+    let url = match path.starts_with("http") {
+        true => Url::parse(path)?,
+        false => base.join(path.trim_start_matches('/'))?,
+    };
+
+    if url.origin() != base.origin() {
+        bail!(
+            "Cannot send a request to `{}`: it is off the API origin `{}`, \
+             which alone receives the account's token",
+            url.origin().ascii_serialization(),
+            base.origin().ascii_serialization(),
+        );
+    }
+
+    Ok(url)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_url;
+
+    /// A path and a full URL on the Graph origin resolve, the `beta`
+    /// endpoint and a next link included.
+    #[test]
+    fn a_url_on_the_graph_origin_resolves() {
+        let url = resolve_url("/me/contacts").unwrap();
+        assert_eq!(url.as_str(), "https://graph.microsoft.com/v1.0/me/contacts");
+
+        let next = "https://graph.microsoft.com/v1.0/me/contacts?$skiptoken=x";
+        assert_eq!(resolve_url(next).unwrap().as_str(), next);
+
+        let beta = "https://graph.microsoft.com/beta/me";
+        assert_eq!(resolve_url(beta).unwrap().as_str(), beta);
+    }
+
+    /// A URL off the Graph origin is refused before the token is sent:
+    /// another host, plain HTTP, another port, and an absolute URL a path
+    /// would join over the base.
+    #[test]
+    fn a_url_off_the_graph_origin_is_refused() {
+        for url in [
+            "https://attacker.example/v1.0/me",
+            "http://graph.microsoft.com/v1.0/me",
+            "https://graph.microsoft.com:8443/v1.0/me",
+            "https://graph.microsoft.com.attacker.example/v1.0/me",
+            "HTTPS://attacker.example/me",
+            "ftp://attacker.example/me",
+        ] {
+            let err = resolve_url(url).expect_err(url).to_string();
+            assert!(err.contains("off the API origin"), "{url}: {err}");
+        }
     }
 }

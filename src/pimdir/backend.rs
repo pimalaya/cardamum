@@ -39,7 +39,9 @@ use crate::{
     pimdir::{
         client::{PimdirClient, refusal},
         queue::list::PimdirQueueRow,
-        status::{PimdirAddressbookStatus, PimdirParkedStatus, PimdirStatusOutput},
+        status::{
+            PimdirAddressbookStatus, PimdirParkedStatus, PimdirRefusedStatus, PimdirStatusOutput,
+        },
     },
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
@@ -100,8 +102,8 @@ impl PimdirBackend {
     }
 
     /// Reports what the store holds for the account read: its address
-    /// books, how much of each is downloaded and queued, and the actions
-    /// the store's owner parked in them.
+    /// books, how much of each is downloaded and queued, the actions the
+    /// store's owner parked in them, and the refusals standing there.
     ///
     /// A parked action is one the owner will never apply (pimdir STORAGE
     /// §15.3), so the write a command reported as queued is lost unless
@@ -110,8 +112,22 @@ impl PimdirBackend {
     pub fn status(&mut self) -> Result<PimdirStatusOutput> {
         let accounts = self.inner.reader.list_accounts()?;
         let mut addressbooks = Vec::new();
+        let mut refused = Vec::new();
 
         for collection in self.collections()? {
+            let refusals = self
+                .inner
+                .reader
+                .refusals(&collection.id)
+                .map_err(|err| refusal(err, "Read the pimdir refusals"))?;
+            refused.extend(refusals.into_iter().map(|row| PimdirRefusedStatus {
+                addressbook_id: collection.id.clone(),
+                item_id: row.seq.to_string(),
+                source: row.source,
+                reason: row.reason,
+                refused_at: row.refused_at,
+            }));
+
             let (mut total, mut hydrated) = (0, 0);
             self.scan(&collection.id, |item| {
                 total += 1;
@@ -162,6 +178,7 @@ impl PimdirBackend {
             accounts,
             addressbooks,
             parked,
+            refused,
         })
     }
 
@@ -296,7 +313,8 @@ impl PimdirBackend {
     }
 
     /// Where the queue row `id` stands: pending, parked, unconfirmed,
-    /// applied with the card an `add` created, or unknown.
+    /// applied with the card it acted on and the refusals standing there,
+    /// or unknown.
     ///
     /// A row anchored on a collection that is not one of the account's
     /// address books reads as unknown, as another account's row reads in
@@ -2030,6 +2048,70 @@ mod tests {
         assert_eq!(json["parked"][0]["row"], parked.row);
     }
 
+    /// An update applied, then refused for good by the server it was
+    /// pushed to, reads applied on its card with the refusal in `pimdir
+    /// queue show`, and lists in `pimdir status` (pimdir STORAGE §15.4).
+    #[test]
+    fn a_refused_push_shows_on_its_row_and_in_the_status() {
+        use io_pimdir::{
+            change::{PimdirChangeKey, PimdirWriteOp},
+            collection::PimdirCollectionId,
+            placement::PimdirHandle,
+        };
+
+        let (dir, mut backend) = store();
+        pulled(&dir, "book", JANE);
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
+        let renamed = String::from_utf8(JANE.to_vec())
+            .unwrap()
+            .replace("Jane Doe", "Jane Roe")
+            .into_bytes();
+        backend.update_card("book", &id, renamed, None).unwrap();
+        drain(&dir);
+        io_pimdir::client::PimdirStore::open(dir.path())
+            .unwrap()
+            .for_source("carddav")
+            .write(vec![PimdirWriteOp::RefusePlacement {
+                collection: PimdirCollectionId::from("book"),
+                handle: PimdirHandle("jane.vcf".into()),
+                key: PimdirChangeKey::from("892471aec94fc225"),
+                reason: String::from("403 Forbidden"),
+            }])
+            .unwrap();
+
+        // The update is the first row this store queued.
+        let show = crate::pimdir::queue::show::PimdirQueueShowOutput::new(
+            1,
+            backend.queue_row(1).unwrap(),
+        );
+        let json = serde_json::to_value(&show).unwrap();
+        assert_eq!(json["state"], "applied", "{json}");
+        assert_eq!(json["seq"].to_string(), id, "{json}");
+        assert_eq!(json["refusals"][0]["source"], "carddav", "{json}");
+        assert_eq!(json["refusals"][0]["collection"], "book", "{json}");
+        assert_eq!(json["refusals"][0]["reason"], "403 Forbidden", "{json}");
+        assert!(
+            show.to_string().contains("Refused by carddav in book at "),
+            "{show}"
+        );
+
+        let status = backend.status().unwrap();
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["refused"][0]["addressbookId"], "book", "{json}");
+        assert_eq!(json["refused"][0]["itemId"], id.as_str(), "{json}");
+        assert_eq!(json["refused"][0]["source"], "carddav", "{json}");
+        assert_eq!(json["refused"][0]["reason"], "403 Forbidden", "{json}");
+        let text = status.to_string();
+        let row = [id.as_str(), "book", "carddav", "403"];
+        let found = text
+            .lines()
+            .any(|line| line.split_whitespace().take(4).eq(row));
+        assert!(found, "{text}");
+        assert!(text.contains("held until the card is edited"), "{text}");
+    }
+
     /// A composed card refused as a duplicate keeps its composer file,
     /// named in the error, as any failed write does: the edit is not lost
     /// to a success that never was.
@@ -2160,8 +2242,8 @@ mod tests {
         std::fs::write(&path, db).unwrap();
     }
 
-    /// A store of another format version, here one an earlier neverest
-    /// wrote, carries `store-version` and asks for a reinstall through
+    /// A store of another format version, here a draft-11 one an earlier
+    /// neverest wrote, carries `store-version` and asks for a reinstall through
     /// neverest, the queue drained first, never for its removal.
     #[test]
     fn a_store_of_another_version_asks_for_a_reinstall() {
@@ -2169,7 +2251,7 @@ mod tests {
 
         let (dir, backend) = store();
         drop(backend);
-        rewrite(dir.path(), FORMAT_VERSION, "storage-draft-10");
+        rewrite(dir.path(), FORMAT_VERSION, "storage-draft-11");
 
         let err = match PimdirBackend::new(PimdirConfig {
             root: dir.path().to_path_buf(),
@@ -2180,7 +2262,9 @@ mod tests {
         };
         assert_eq!(code_of(&err), Some(ErrorCode::StoreVersion), "{err:#}");
         let message = format!("{err:#}");
-        assert!(message.contains("storage-draft-10"), "{message}");
+        assert!(message.contains("storage-draft-11"), "{message}");
+        assert!(message.contains(FORMAT_VERSION), "{message}");
+        assert!(message.contains("move the store aside"), "{message}");
         assert!(message.contains("until nothing is queued"), "{message}");
         assert!(message.contains("neverest init"), "{message}");
         assert!(!message.contains("delete"), "{message}");

@@ -182,12 +182,12 @@ A refusal none of these name SHALL carry no code, its reason kept in `sources`. 
 - THEN it exits 1 printing a failure object coded `permission-denied`
 
 ### Requirement: A pimdir store of another version is reinstalled
-The pimdir backend SHALL open a store of the format version the io-pimdir it builds against reads (`io_pimdir::sql::FORMAT_VERSION`, `storage-draft-11` at the io-pimdir commit Cargo.toml pins) and no other, earlier or later, refusing it as `store-version` and reading nothing in it (pimdir STORAGE §4.2, §6). Nothing migrates a draft store. The refusal's message is cardamum's, not io-pimdir's: it names the version the store records, or that it records none, and the one this cardamum reads, and says that a store an earlier neverest wrote is reinstalled (that neverest's sync run until nothing is queued, neverest upgraded, the store moved aside, `neverest init` and a sync), while a store a later neverest wrote asks for a cardamum upgrade. It SHALL NOT advise deleting the store, nor syncing a new one before the queue is drained: the queued writes live in that store alone.
+The pimdir backend SHALL open a store of the format version the io-pimdir it builds against reads (`io_pimdir::sql::FORMAT_VERSION`, `storage-draft-13` in io-pimdir 0.14) and no other, earlier or later, refusing it as `store-version` and reading nothing in it (pimdir STORAGE §4.2, §6). Nothing migrates a draft store. The refusal's message is cardamum's, not io-pimdir's: it names the version the store records, or that it records none, and the one this cardamum reads, and says that a store an earlier neverest wrote is reinstalled (that neverest's sync run until nothing is queued, neverest upgraded, the store moved aside, `neverest init` and a sync), while a store a later neverest wrote asks for a cardamum upgrade. It SHALL NOT advise deleting the store, nor syncing a new one before the queue is drained: the queued writes live in that store alone.
 
 #### Scenario: A store an earlier neverest wrote
-- GIVEN a pimdir store whose `store_meta.format_version` is `storage-draft-10`
+- GIVEN a pimdir store whose `store_meta.format_version` is `storage-draft-11`, the draft cardamum read before
 - WHEN any cardamum command opens it
-- THEN it fails with the code `store-version` and a message naming `storage-draft-10` and the neverest reinstall, its queue drained first
+- THEN it fails with the code `store-version` and a message naming `storage-draft-11`, `storage-draft-13` and the neverest rebuild (the queue drained, the store moved aside, `neverest init` and a sync)
 
 ### Requirement: A pimdir store others can read is refused
 The pimdir backend SHALL carry `store-exposed` when io-pimdir refuses a store whose directory or pimdir.db another user can read or write, or a link where a lock file belongs (pimdir STORAGE §18), before anything in it is opened. The message is io-pimdir's: restrict the store (`chmod 700` its directory, `600` its pimdir.db), never remove it.

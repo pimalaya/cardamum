@@ -1077,7 +1077,7 @@ mod tests {
         let path = dir.path().join("index.db");
         assert!(!dir.path().join("index.db-wal").exists());
         let mut db = std::fs::read(&path).unwrap();
-        let (from, to) = (FORMAT_VERSION.as_bytes(), b"search-draft-10");
+        let (from, to) = (FORMAT_VERSION.as_bytes(), b"search-draft-11");
         let mut found = false;
         for at in 0..=db.len() - from.len() {
             if &db[at..at + from.len()] == from {
@@ -1089,7 +1089,7 @@ mod tests {
         std::fs::write(&path, &db).unwrap();
 
         let err = assert_refused(&backend, ErrorCode::IndexVersion);
-        assert!(err.contains("search-draft-10"), "{err}");
+        assert!(err.contains("search-draft-11"), "{err}");
         assert_eq!(std::fs::read(&path).unwrap(), db, "the index was rebuilt");
     }
 

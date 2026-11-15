@@ -6,7 +6,7 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use io_pimdir::client::producer::PimdirActionStatus;
+use io_pimdir::client::producer::{PimdirActionStatus, PimdirReceiptRefusal};
 use pimalaya_cli::{printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -20,14 +20,18 @@ use crate::pimdir::backend::PimdirBackend;
 /// engine gave up on it (with why), `unconfirmed` when the engine sent its
 /// request and cannot tell whether it took effect (it waits for the engine
 /// to confirm it, or for a cancellation), and `applied` once done, with
-/// the id of the card an add created. The store keeps what became of an
-/// applied row for seven days, under the address book it was queued on,
+/// the id of the card it acted on. An applied row lists the refusals
+/// standing on that card: a server that refused for good the change the
+/// row led to, with its reason, held until the card is edited or removed.
+/// The store keeps what became of an applied row for seven days, and while
+/// a refusal stands on its card, under the address book it was queued on,
 /// or under none once that address book is gone; past that, and for a
 /// cancelled row, the state is `unknown`. A row of another account reads
 /// as `unknown` too.
 ///
 /// JSON output: `{"row", "state", "collection", "kind", "attempts",
-/// "error", "appliedAt", "seq"}`.
+/// "error", "appliedAt", "seq", "refusals": [{"collection", "source",
+/// "reason", "refusedAt"}]}`.
 #[derive(Debug, Parser)]
 pub struct PimdirQueueShowCommand {
     /// The queue row id.
@@ -55,7 +59,8 @@ pub enum PimdirQueueState {
     /// it may have, and waits for the engine to confirm it or for a
     /// cancellation; `error` holds what the engine recorded.
     Unconfirmed,
-    /// Applied by the sync engine; `seq` is the card an add created.
+    /// Applied by the sync engine; `seq` is the card it acted on, and
+    /// `refusals` the servers that refused the change it led to.
     Applied,
     /// Neither queued nor known applied: cancelled, or applied long ago.
     Unknown,
@@ -85,9 +90,38 @@ pub struct PimdirQueueShowOutput {
     pub error: Option<String>,
     /// When the row was applied, RFC 3339.
     pub applied_at: Option<String>,
-    /// The id of the card an applied add created, in `collection`, as
-    /// `card read` takes it.
+    /// The id of the card an applied row acted on (the one an add
+    /// created), as `card read` takes it.
     pub seq: Option<i64>,
+    /// The refusals standing on that card, empty but for an applied row.
+    pub refusals: Vec<PimdirQueueRefusal>,
+}
+
+/// A refusal standing on the card an applied row acted on (pimdir
+/// STORAGE §15.4): the server of `source` refused for good the change the
+/// row led to, and the sync engine holds it until the card changes again.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PimdirQueueRefusal {
+    /// The address book filing the card, the target of a move.
+    pub collection: String,
+    /// The source whose server refused the change.
+    pub source: String,
+    /// The text the server gave.
+    pub reason: String,
+    /// When the refusal was recorded, RFC 3339.
+    pub refused_at: String,
+}
+
+impl From<PimdirReceiptRefusal> for PimdirQueueRefusal {
+    fn from(refusal: PimdirReceiptRefusal) -> Self {
+        Self {
+            collection: refusal.collection,
+            source: refusal.source,
+            reason: refusal.reason,
+            refused_at: refusal.refused_at,
+        }
+    }
 }
 
 impl PimdirQueueShowOutput {
@@ -102,6 +136,7 @@ impl PimdirQueueShowOutput {
             error: None,
             applied_at: None,
             seq: None,
+            refusals: Vec::new(),
         };
 
         match status {
@@ -146,11 +181,13 @@ impl PimdirQueueShowOutput {
                 applied_at,
                 collection,
                 seq,
+                refusals,
             } => Self {
                 state: PimdirQueueState::Applied,
                 collection,
                 applied_at: Some(applied_at),
                 seq,
+                refusals: refusals.into_iter().map(Into::into).collect(),
                 ..row
             },
             PimdirActionStatus::Unknown => row,
@@ -190,9 +227,20 @@ impl fmt::Display for PimdirQueueShowOutput {
                     None => write!(f, "Row {id} was applied in an address book deleted since")?,
                 }
                 if let Some(seq) = self.seq {
-                    write!(f, ", creating card {seq}")?;
+                    write!(f, ", on card {seq}")?;
                 }
-                writeln!(f)
+                writeln!(f)?;
+                for refusal in &self.refusals {
+                    writeln!(
+                        f,
+                        "Refused by {} in {} at {}: {}",
+                        sanitize::text(&refusal.source),
+                        sanitize::text(&refusal.collection),
+                        sanitize::text(&refusal.refused_at),
+                        sanitize::text(&refusal.reason),
+                    )?;
+                }
+                Ok(())
             }
             PimdirQueueState::Unknown => writeln!(
                 f,
@@ -219,6 +267,7 @@ mod tests {
                 applied_at: "2026-10-04T20:00:00Z".into(),
                 collection: Some("carddav/contacts".into()),
                 seq: Some(42),
+                refusals: Vec::new(),
             },
         );
         let json = serde_json::to_value(&row).unwrap();
@@ -233,7 +282,46 @@ mod tests {
                 "error": null,
                 "appliedAt": "2026-10-04T20:00:00Z",
                 "seq": 42,
+                "refusals": [],
             })
+        );
+    }
+
+    /// An applied row whose change a server refused for good shows applied,
+    /// then a line per refusal with its source and reason (pimdir STORAGE
+    /// §15.4), and the JSON lists them.
+    #[test]
+    fn an_applied_row_prints_the_refusals_on_its_card() {
+        let row = PimdirQueueShowOutput::new(
+            12,
+            PimdirActionStatus::Applied {
+                applied_at: "2026-11-15T20:00:00.000Z".into(),
+                collection: Some("book".into()),
+                seq: Some(42),
+                refusals: vec![PimdirReceiptRefusal {
+                    collection: "book".into(),
+                    source: "carddav".into(),
+                    reason: "403 Forbidden".into(),
+                    refused_at: "2026-11-15T20:05:00.000Z".into(),
+                }],
+            },
+        );
+
+        let json = serde_json::to_value(&row).unwrap();
+        assert_eq!(json["state"], "applied");
+        assert_eq!(
+            json["refusals"],
+            serde_json::json!([{
+                "collection": "book",
+                "source": "carddav",
+                "reason": "403 Forbidden",
+                "refusedAt": "2026-11-15T20:05:00.000Z",
+            }])
+        );
+        assert_eq!(
+            row.to_string(),
+            "Row 12 was applied in book, on card 42\n\
+             Refused by carddav in book at 2026-11-15T20:05:00.000Z: 403 Forbidden\n"
         );
     }
 
@@ -273,6 +361,7 @@ mod tests {
                 applied_at: "2026-11-13T09:00:00Z".into(),
                 collection: None,
                 seq: None,
+                refusals: Vec::new(),
             },
         );
 
@@ -297,6 +386,7 @@ mod tests {
                 "error": null,
                 "appliedAt": null,
                 "seq": null,
+                "refusals": [],
             })
         );
     }

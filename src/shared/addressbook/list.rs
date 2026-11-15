@@ -159,7 +159,7 @@ mod tests {
     #[test]
     fn address_books_print_one_line_each_under_the_account() {
         let expected = "\
-Account:    perso (vdir)
+Account:  perso (vdir)
 
 personal  default  #ff0000  Personal\u{fffd}[2J
 work      -        -        Work
@@ -178,7 +178,7 @@ work      -        -        Work
         ];
 
         let expected = "\
-Account:    perso (vdir)
+Account:  perso (vdir)
 
 personal  default  #ff0000  Personal\u{fffd}[2J
 

@@ -19,7 +19,8 @@ use crate::{
 /// The body is a JMAP request object (`{"using": [...], "methodCalls":
 /// [...]}`), so any method can be driven with custom `using`
 /// capabilities. `using` defaults to the core and contacts capabilities
-/// when omitted.
+/// when omitted. It is posted to the session's `apiUrl` alone, so the
+/// account's token reaches no other host.
 ///
 /// JSON output: `{response}`, the raw JMAP response.
 #[derive(Debug, Parser)]

@@ -235,10 +235,11 @@ mod tests {
 Account:      work (vdir)
 Addressbook:  personal
 Page:         1, cards 1 to 2
-Next page:    --page 2
 
 ada  ada@example.org  +33 6  Ada Lovelace
 bob  -                -      Bob
+
+Next page: --page 2
 ";
         assert_eq!(output().to_string(), expected);
     }
@@ -290,10 +291,11 @@ Page:         3, empty
 Account:      work (vdir)
 Addressbook:  personal
 Page:         1, cards 1 to 2
-Next page:    --page 2
 
 ada  ada@example.org  +33 6  Ada Lovelace
 bob  -                -      Bob
+
+Next page: --page 2
 
 Error:  bad  card-unreadable  Cannot parse the card body as a vCard
 Error:  42   -                Gone
@@ -306,7 +308,8 @@ Error:  42   -                Gone
 Account:      work (vdir)
 Addressbook:  personal
 Page:         1, empty
-Next page:    --page 2
+
+Next page: --page 2
 
 Error:  bad  card-unreadable  Cannot parse the card body as a vCard
 ";

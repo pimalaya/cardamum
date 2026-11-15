@@ -83,7 +83,7 @@ card.list.page-size = 25		# cards per page, absent -s, 0 listing every card
 
 # vdir
 #
-#vdir.home-dir = "~/.local/share/vdirsyncer/contacts"	# a directory per addressbook, a .vcf file per card
+#vdir.root = "~/.local/share/vdirsyncer/contacts"	# a directory per addressbook, a .vcf file per card
 
 # pimdir
 #

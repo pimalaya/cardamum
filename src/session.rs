@@ -85,7 +85,8 @@ mod tests {
     fn session() -> Session<'static> {
         let account = AccountConfig {
             vdir: Some(VdirConfig {
-                home_dir: String::from("/nonexistent"),
+                root: String::from("/nonexistent"),
+                home_dir: None,
             }),
             ..Default::default()
         };

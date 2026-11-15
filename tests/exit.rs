@@ -66,7 +66,7 @@ fn a_missing_default_addressbook_is_coded() {
     let home = TempDir::new().unwrap();
     let config = home.path().join("config.toml");
     let toml = format!(
-        "[accounts.a]\ndefault = true\nvdir.home-dir = {:?}\n",
+        "[accounts.a]\ndefault = true\nvdir.root = {:?}\n",
         home.path().display().to_string(),
     );
     fs::write(&config, toml).unwrap();
@@ -89,7 +89,7 @@ fn a_failed_account_check_prints_its_report_and_exits_3() {
     let config = home.path().join("config.toml");
     let missing = home.path().join("missing");
     let toml = format!(
-        "[accounts.a]\ndefault = true\nvdir.home-dir = {:?}\n",
+        "[accounts.a]\ndefault = true\nvdir.root = {:?}\n",
         missing.display().to_string(),
     );
     fs::write(&config, toml).unwrap();
@@ -113,7 +113,7 @@ fn a_listing_with_errors_prints_its_result_and_exits_3() {
 
     let config = home.path().join("config.toml");
     let toml = format!(
-        "[accounts.a]\ndefault = true\nvdir.home-dir = {:?}\n",
+        "[accounts.a]\ndefault = true\nvdir.root = {:?}\n",
         home.path().join("vdir").display().to_string(),
     );
     fs::write(&config, toml).unwrap();

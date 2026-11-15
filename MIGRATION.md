@@ -2,7 +2,7 @@
 
 ## From v0.3 to v0.4
 
-v0.4 brings Cardamum to the standards Himalaya and Ortie share: no configuration wizard, one configuration path per `-c`, plain text with no table nor colour, one exit contract, a coded failure for what a caller acts on, an `errors` list on every command that reads several cards, a unified API whose backends say what they serve, and a REPL and an MCP server. A v0.3 configuration loads as it is, unless it sets a table or colour key, resolves its CardDAV server through `carddav.discover`, holds a key Cardamum does not know, or marks several accounts default.
+v0.4 brings Cardamum to the standards Himalaya and Ortie share: no configuration wizard, one configuration path per `-c`, plain text with no table nor colour, one exit contract, a coded failure for what a caller acts on, an `errors` list on every command that reads several cards, a unified API whose backends say what they serve, and a REPL and an MCP server. A v0.3 configuration loads as it is, unless it sets a table or colour key, resolves its CardDAV server through `carddav.discover`, names its vdir home `vdir.home-dir`, holds a key Cardamum does not know, or marks several accounts default.
 
 The text output changes everywhere, the JSON of the writes and of the raw `request` commands changes shape, exit 3 is new, and a few commands now fail earlier or report differently. The CHANGELOG lists every change; these are the ones to act on.
 
@@ -97,6 +97,14 @@ The text output changes everywhere, the JSON of the writes and of the raw `reque
   carddav.server = "https://bücher.example"
   # v0.4
   carddav.server = "https://xn--bcher-kva.example"
+  ```
+- **`vdir.home-dir` is now `vdir.root`**, as `pimdir.root` names a store. A configuration still holding `vdir.home-dir` fails by name (``The `vdir.home-dir` key is removed, …: rename it `vdir.root`, the path unchanged, see MIGRATION.md``). Rename the key and keep its path; `~` and environment variables still expand.
+
+  ```toml
+  # v0.3
+  vdir.home-dir = "~/.local/share/vdirsyncer/contacts"
+  # v0.4
+  vdir.root = "~/.local/share/vdirsyncer/contacts"
   ```
 - **`pimdir.account` unset reads the store's one account.** Where v0.3 left it unset and read the collections grouped under no account, the backend now reads the one account the store groups its collections under, and refuses a store several accounts share, naming them. Set it on a shared store:
 

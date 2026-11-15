@@ -31,7 +31,7 @@ fn vdir() -> (TempDir, String) {
 
     let config = home.path().join("config.toml");
     let toml = format!(
-        "[accounts.a]\ndefault = true\nvdir.home-dir = {:?}\n",
+        "[accounts.a]\ndefault = true\nvdir.root = {:?}\n",
         home.path().join("vdir").display().to_string(),
     );
     fs::write(&config, toml).unwrap();

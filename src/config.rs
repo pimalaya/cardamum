@@ -281,10 +281,17 @@ pub struct AccountConfig {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct VdirConfig {
-    /// Directory holding the account's collections, one addressbook per
-    /// immediate subdirectory.
+    /// The vdir home: the directory holding the account's collections, one
+    /// addressbook per immediate subdirectory.
+    ///
+    /// Environment variables and a leading tilde are expanded as the value
+    /// is read, as `pimdir.root`.
     #[serde(deserialize_with = "shell_expanded_string")]
-    pub home_dir: String,
+    pub root: String,
+    /// Refused: the home is `root`, as a pimdir store's.
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub home_dir: Option<VdirHomeDirRemoved>,
 }
 
 /// pimdir configuration.
@@ -576,6 +583,17 @@ pimalaya_config::removed_key! {
                   `https://carddav.fastmail.com/dav/`), or on Google the \
                   address book home in `carddav.home` \
                   (`https://www.googleapis.com/carddav/v1/principals/<email>/lists`)",
+    }
+}
+
+#[cfg(feature = "vdir")]
+pimalaya_config::removed_key! {
+    /// The `vdir.home-dir` key, which no configuration holds any more: the
+    /// vdir home is `vdir.root`.
+    pub VdirHomeDirRemoved: Key {
+        name: "vdir.home-dir",
+        why: "the vdir home being named `root` as a store root is",
+        instead: "rename it `vdir.root`, the path unchanged",
     }
 }
 
@@ -968,8 +986,8 @@ mod tests {
     #[cfg(all(feature = "vdir", feature = "carddav"))]
     #[test]
     fn an_unknown_backend_or_nested_key_is_refused() {
-        let err = refusal("[accounts.example]\nvdir.home-dri = \"~/Contacts\"\n");
-        assert!(err.contains("unknown field `home-dri`"), "{err}");
+        let err = refusal("[accounts.example]\nvdir.rot = \"~/Contacts\"\n");
+        assert!(err.contains("unknown field `rot`"), "{err}");
 
         let toml = "[accounts.example]\ncarddav.server = \"dav.example.org\"\n\
                     carddav.auth = \"none\"\ncarddav.tls.certificate = \"ca.pem\"\n";
@@ -978,6 +996,39 @@ mod tests {
 
         let err = refusal("[accounts.example]\ncard.list.page-sise = 10\n");
         assert!(err.contains("unknown field `page-sise`"), "{err}");
+    }
+
+    /// `vdir.root` expands a leading tilde and an environment variable as it
+    /// is read, as `pimdir.root` does.
+    #[cfg(feature = "vdir")]
+    #[test]
+    fn a_vdir_root_expands_its_tilde_and_variables() {
+        use super::VdirConfig;
+
+        let home = std::env::var("HOME").expect("HOME must be set");
+
+        for root in ["~/Contacts", "$HOME/Contacts"] {
+            let config: VdirConfig = toml::from_str(&format!("root = {root:?}")).unwrap();
+            assert_eq!(config.root, format!("{home}/Contacts"), "{root}");
+        }
+    }
+
+    /// `vdir.home-dir`, the vdir home v0.3 read, is refused by name in the
+    /// family sentence, alone or beside `vdir.root`.
+    #[cfg(feature = "vdir")]
+    #[test]
+    fn a_vdir_home_dir_is_refused_by_name() {
+        let sentence = "The `vdir.home-dir` key is removed, the vdir home being \
+                        named `root` as a store root is: rename it `vdir.root`, \
+                        the path unchanged, see MIGRATION.md";
+
+        for vdir in [
+            "vdir.home-dir = \"~/Contacts\"\n",
+            "vdir.root = \"~/Contacts\"\nvdir.home-dir = \"~/Contacts\"\n",
+        ] {
+            let err = refusal(&format!("[accounts.example]\n{vdir}"));
+            assert!(err.contains(sentence), "{err}");
+        }
     }
 
     /// The tables v0.3 read and this release removed are refused by name in

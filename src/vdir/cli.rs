@@ -16,7 +16,7 @@ use crate::vdir::{
 /// Manage vdir collections and items on the filesystem.
 ///
 /// Operates on the raw vdir API rooted at the active account's
-/// `vdir.home-dir`. The flat verbs act on collections, which are
+/// `vdir.root`. The flat verbs act on collections, which are
 /// directories, and `item` on the raw item files inside them.
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]

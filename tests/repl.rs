@@ -32,7 +32,7 @@ fn account() -> TempDir {
     let contacts = home.path().join("contacts");
     let toml = format!(
         "[accounts.example]\ndefault = true\naddressbook.default = \"personal\"\n\
-         vdir.home-dir = {:?}\n",
+         vdir.root = {:?}\n",
         contacts.display().to_string(),
     );
     fs::write(home.path().join("config.toml"), toml).unwrap();

@@ -108,6 +108,31 @@ fn a_carddav_discover_key_is_refused_by_name() {
     assert!(error.contains("MIGRATION.md"), "{error}");
 }
 
+/// A vdir block naming its home `home-dir`, as v0.3 did, is refused by name,
+/// the error naming `vdir.root` and the migration notes; the same path under
+/// `root` lists the home.
+#[cfg(feature = "vdir")]
+#[test]
+fn a_vdir_home_dir_key_is_refused_by_name_and_root_is_read() {
+    let home = TempDir::new().unwrap();
+    let contacts = home.path().join("contacts");
+    fs::create_dir_all(contacts.join("family")).unwrap();
+
+    let toml = format!("[accounts.a]\ndefault = true\nvdir.home-dir = {contacts:?}\n");
+    let output = run(home.path(), &toml, &["addressbook", "list"]);
+    let json = printed(&output, 1);
+    let error = json["sources"][0].as_str().unwrap();
+    let sentence = "The `vdir.home-dir` key is removed, the vdir home being named \
+                    `root` as a store root is: rename it `vdir.root`, the path \
+                    unchanged, see MIGRATION.md";
+    assert!(error.contains(sentence), "{error}");
+
+    let toml = format!("[accounts.a]\ndefault = true\nvdir.root = {contacts:?}\n");
+    let output = run(home.path(), &toml, &["addressbook", "list"]);
+    let json = printed(&output, 0);
+    assert_eq!(json["addressbooks"][0]["id"], "family", "{json}");
+}
+
 /// An account over the People backend alone, which the build leaves out.
 #[cfg(not(feature = "gpeople"))]
 const GPEOPLE: &str = "[accounts.a]\ndefault = true\n\
@@ -161,7 +186,7 @@ fn account_check_reports_a_backend_left_out_as_failed() {
 #[test]
 fn account_list_names_a_backend_left_out_apart() {
     let home = TempDir::new().unwrap();
-    let toml = format!("{GPEOPLE}vdir.home-dir = \"/nonexistent\"\n");
+    let toml = format!("{GPEOPLE}vdir.root = \"/nonexistent\"\n");
 
     let output = run(home.path(), &toml, &["account", "list"]);
     let json = printed(&output, 0);
@@ -207,7 +232,7 @@ fn a_backend_flag_naming_a_backend_left_out_names_its_feature() {
 #[test]
 fn auto_never_skips_a_backend_left_out() {
     let home = TempDir::new().unwrap();
-    let toml = "[accounts.a]\ndefault = true\nvdir.home-dir = \"/nonexistent\"\n\
+    let toml = "[accounts.a]\ndefault = true\nvdir.root = \"/nonexistent\"\n\
                 carddav.server = \"https://example.org\"\n\
                 carddav.auth = \"none\"\n";
 

@@ -45,7 +45,7 @@ fn vdir(home: &Path) -> String {
     let vdir = home.join("vdir");
     fs::create_dir_all(vdir.join("book")).unwrap();
     format!(
-        "[accounts.a]\ndefault = true\nvdir.home-dir = {:?}\n",
+        "[accounts.a]\ndefault = true\nvdir.root = {:?}\n",
         vdir.display().to_string(),
     )
 }

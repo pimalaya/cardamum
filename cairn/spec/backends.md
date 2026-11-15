@@ -64,7 +64,7 @@ A unified command naming an address book a CardDAV server, JMAP or Microsoft Gra
 - THEN it exits 1 coded `addressbook-not-found`, ``Addressbook `nope` not found``, the `invalidArguments` refusal in `sources`, after the query and one `AddressBook/get`
 
 ### Requirement: Local storage backends
-vdir and pimdir SHALL adapt io-vdir and io-pimdir. vdir stores each addressbook as an immediate subdirectory of `vdir.home-dir` and each card as a `.vcf` file inside it, byte-faithfully. pimdir is an offline cache a sync engine populates through io-pimdir, which holds both the store and the engine, and follows the cache requirements below.
+vdir and pimdir SHALL adapt io-vdir and io-pimdir. vdir stores each addressbook as an immediate subdirectory of `vdir.root` and each card as a `.vcf` file inside it, byte-faithfully. pimdir is an offline cache a sync engine populates through io-pimdir, which holds both the store and the engine, and follows the cache requirements below.
 
 ### Requirement: vdir refuses an unknown addressbook
 A vdir addressbook id SHALL name an addressbook only when it is one directory name, one path segment that is neither `.` nor `..` and holds no separator (a trailing one included), naming a directory under the home. Every vdir command naming another SHALL fail before anything is read or written, coded `addressbook-not-found`: `addressbook update`, `addressbook delete` and every `card` read and write with ``Addressbook `<id>` not found``, `vdir delete`, `vdir rename` and every `vdir item` command with ``Collection `<id>` not found``. A new name that is not one directory name SHALL be refused before anything is written: `addressbook create` and `vdir create` uncoded, the new name of `vdir rename` by io-vdir.

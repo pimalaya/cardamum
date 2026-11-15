@@ -177,7 +177,7 @@ impl AccountCheckCommand {
 fn connect_vdir(vdir_config: &crate::config::VdirConfig) -> Result<()> {
     use std::path::Path;
 
-    let home = Path::new(&vdir_config.home_dir);
+    let home = Path::new(&vdir_config.root);
     if !home.is_dir() {
         bail!(
             "Vdir home `{}` does not exist or is not a directory",
@@ -415,7 +415,7 @@ mod vdir_tests {
             std::fs::write(
                 &config,
                 format!(
-                    "[accounts.test]\ndefault = true\nvdir.home-dir = {:?}\n",
+                    "[accounts.test]\ndefault = true\nvdir.root = {:?}\n",
                     home.display().to_string(),
                 ),
             )

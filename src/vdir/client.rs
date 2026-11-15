@@ -32,7 +32,7 @@ pub struct VdirClient {
 impl VdirClient {
     /// Opens the client rooted at the configured home directory.
     pub fn new(config: VdirConfig) -> Self {
-        let inner = Inner::new(config.home_dir);
+        let inner = Inner::new(config.root);
         Self { inner }
     }
 

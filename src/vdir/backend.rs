@@ -35,7 +35,7 @@ impl VdirBackend {
     /// Opens the backend against the configured home directory.
     pub fn new(config: VdirConfig) -> Self {
         Self {
-            inner: VdirClient::new(config.home_dir),
+            inner: VdirClient::new(config.root),
         }
     }
 

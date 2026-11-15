@@ -98,7 +98,7 @@ fn a_config_path_holding_a_colon_is_one_path() {
     let path = home.path().join("a:b.toml");
     fs::write(
         &path,
-        "[accounts.a]\ndefault = true\nvdir.home-dir = \"/nowhere\"\n",
+        "[accounts.a]\ndefault = true\nvdir.root = \"/nowhere\"\n",
     )
     .unwrap();
     let args = ["--json", "-c", path.to_str().unwrap(), "account", "list"];

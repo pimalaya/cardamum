@@ -15,7 +15,7 @@ use io_webdav::{
 use pimalaya_config::secret::SecretResolver;
 
 use crate::{
-    carddav::client::{is_missing, rejects_card, row_code},
+    carddav::client::{is_missing, refused, rejects_card, row_code},
     config::CarddavConfig,
     error::{self, ErrorCode, ItemError},
     shared::{
@@ -68,9 +68,33 @@ impl CarddavBackend {
             color: color.map(str::to_string),
             ..Default::default()
         };
-        self.inner.create_addressbook(&wire)?;
+
+        if let Err(err) = self.inner.create_addressbook(&wire) {
+            return Err(self.create_error(name, err));
+        }
 
         Ok(name.to_string())
+    }
+
+    /// The failure of the `MKCOL` creating the address book `id`,
+    /// `addressbook-duplicate` when the home set lists it.
+    ///
+    /// RFC 4918 §9.3.1 answers 405 a `MKCOL` on a URL already mapped, but
+    /// Fastmail answers 403 (cairn/spec/testing/carddav-specific.md), a
+    /// status a server forbidding any `MKCOL` (iCloud) may answer too: on
+    /// either status the listing tells, its own failure leaving the refusal
+    /// as it was.
+    fn create_error(&mut self, id: &str, err: WebdavClientStdError) -> Error {
+        if !matches!(refused(&err), Some((403 | 405, _))) {
+            return err.into();
+        }
+
+        match self.inner.list_addressbooks() {
+            Ok(books) if books.iter().any(|book| book.id == id) => {
+                error::addressbook_duplicate(id, err.into())
+            }
+            _ => err.into(),
+        }
     }
 
     /// Applies `patch` to the addressbook identified by `id`.
@@ -480,6 +504,42 @@ mod tests {
         assert_eq!(code_of(&err), missing, "{err:#}");
 
         let err = answering(403, "").list_cards("book", 0, None).unwrap_err();
+        assert_eq!(error::code(&err), Some(ErrorCode::PermissionDenied));
+    }
+
+    /// The backend over a CardDAV server refusing the `MKCOL` with
+    /// `status`, then listing [`BOOKS`] in its home set.
+    fn refusing_mkcol(status: u16) -> CarddavBackend {
+        let (script, _) = Script::new([
+            script::response(status, "application/xml", ""),
+            script::response(207, "application/xml", BOOKS),
+        ]);
+        let base = Url::parse("https://dav.example.org/").unwrap();
+        let home = base.join("/dav/").unwrap();
+        let inner =
+            WebdavClientStd::from_parts(script, WebdavAuth::None, base, None, None, Some(home));
+        CarddavBackend { inner }
+    }
+
+    /// A `MKCOL` refused on an address book the home set lists, by its
+    /// decoded id, is `addressbook-duplicate` naming it, the server's
+    /// answer in `sources`: the 405 of RFC 4918 §9.3.1 as Fastmail's 403. A
+    /// name the home set does not list keeps the refusal as it was.
+    #[test]
+    fn an_address_book_created_twice_is_a_duplicate() {
+        for status in [403, 405] {
+            let err = refusing_mkcol(status)
+                .create_addressbook("My Book", None, None)
+                .unwrap_err();
+            let duplicate = Some(ErrorCode::AddressbookDuplicate);
+            assert_eq!(code_of(&err), duplicate, "{err:#}");
+            assert_eq!(err.to_string(), "Addressbook `My Book` already exists");
+            assert!(format!("{err:#}").contains(&status.to_string()), "{err:#}");
+        }
+
+        let err = refusing_mkcol(403)
+            .create_addressbook("fresh", None, None)
+            .unwrap_err();
         assert_eq!(error::code(&err), Some(ErrorCode::PermissionDenied));
     }
 

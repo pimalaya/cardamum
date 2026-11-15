@@ -18,6 +18,14 @@ pub struct JmapClient {
     inner: JmapClientStd,
 }
 
+#[cfg(test)]
+impl JmapClient {
+    /// Wraps an io-jmap client whose session is already set.
+    pub fn new(inner: JmapClientStd) -> Self {
+        Self { inner }
+    }
+}
+
 impl Deref for JmapClient {
     type Target = JmapClientStd;
 

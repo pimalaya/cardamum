@@ -10,13 +10,14 @@ use pimalaya_cli::printer::Printer;
 
 use crate::{
     shared::receipt::IdReceipt,
-    vdir::client::{VdirClient, is_dir_name},
+    vdir::client::{VdirClient, check_collection_absent, is_dir_name},
 };
 
 /// Create a new vdir collection under the configured root.
 ///
 /// The directory is made under the configured root, and each metadata
-/// flag below writes the file vdir reads that value from.
+/// flag below writes the file vdir reads that value from. An id the root
+/// holds already is refused, coded `addressbook-duplicate`.
 ///
 /// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
@@ -42,6 +43,8 @@ impl VdirCollectionCreateCommand {
         if !is_dir_name(&self.id) {
             bail!("Collection id `{}` is not one directory name", self.id);
         }
+
+        check_collection_absent(client.root(), &self.id)?;
 
         let path = client.root().join(&self.id);
         let collection = VdirCollection {

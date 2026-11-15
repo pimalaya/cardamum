@@ -69,6 +69,10 @@ pub enum ErrorCode {
     /// The address book a command names does not exist: nothing was read
     /// or written.
     AddressbookNotFound,
+    /// A create names an address book that already exists: a vdir
+    /// directory, a CardDAV collection of the home set, a Graph contact
+    /// folder or a People contact group of that name. Nothing was created.
+    AddressbookDuplicate,
     /// A command naming no address book found no `addressbook.default`
     /// either: the caller names one with `-k` or sets the key. Nothing was
     /// read or written.
@@ -325,6 +329,15 @@ pub fn card_not_found(addressbook_id: &str, card_id: &str, cause: Error) -> Erro
 pub fn addressbook_not_found(id: &str, cause: Error) -> Error {
     with_code(cause, |_| Some(ErrorCode::AddressbookNotFound))
         .context(format!("Addressbook `{id}` not found"))
+}
+
+/// The failure of a create naming the address book `name` the backend
+/// already holds, `cause` what it answered: cardamum's sentence naming it,
+/// the backend's text in `sources`.
+#[cfg(any(feature = "carddav", feature = "gpeople", feature = "msgraph"))]
+pub fn addressbook_duplicate(name: &str, cause: Error) -> Error {
+    with_code(cause, |_| Some(ErrorCode::AddressbookDuplicate))
+        .context(format!("Addressbook `{name}` already exists"))
 }
 
 #[cfg(test)]

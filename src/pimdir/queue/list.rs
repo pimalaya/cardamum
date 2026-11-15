@@ -26,9 +26,9 @@ use crate::{backend::Backend, pimdir::backend::PimdirBackend};
 /// or fix what parked it. One the engine sent without learning its outcome
 /// is listed `unconfirmed` instead: it may have taken effect.
 ///
-/// JSON output: `{"cards": [{"row", "queuedAt", "producer", "collection",
-/// "kind", "linkId", "fullName"}], "parked": [{"row", "queuedAt", "producer",
-/// "collection", "kind", "attempts", "unconfirmed", "error"}]}`.
+/// JSON output: `{"cards": [<row>], "parked": [<row>]}`, each row the
+/// family's `{"row", "kind", "collection", "linkId", "itemId", "producer",
+/// "queuedAt", "attempts", "unconfirmed", "error"}` plus `fullName`.
 #[derive(Debug, Parser)]
 pub struct PimdirQueueListCommand {
     /// Address book to list, every one of the account's when omitted.
@@ -57,54 +57,43 @@ impl PimdirQueueListCommand {
     }
 }
 
-/// One card creation waiting in the store's queue.
+/// One row of the store's queue, pending or parked: the family's queue row
+/// (pimalaya-cli's output.md, "A queue row keeps one shape") plus the full
+/// name of the card it concerns.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct PimdirQueuedCard {
-    /// The queue row id, which `pimdir queue cancel` takes. It names a
-    /// pending action, not a card: the card has no id until the sync
-    /// engine applies the action.
+pub struct PimdirQueueRow {
+    /// The queue row id, which `pimdir queue show` and `pimdir queue
+    /// cancel` take. It names an action, not a card: a card created has no
+    /// id until the sync engine applies the action.
     #[serde(rename = "row")]
     pub id: i64,
-    /// When the row was appended, stamped by the store's own clock.
-    pub queued_at: String,
-    /// The process that staged it.
-    pub producer: String,
-    /// The address book the card is staged in.
-    pub collection: String,
-    /// The action kind, `add`: the one row a card has no id for.
+    /// The action kind as the store holds it (pimdir STORAGE §15.3):
+    /// `add`, `update`, `remove`, ..., an intent or an application's own.
     pub kind: String,
-    /// The link id `card add` reported, derived from the card's `UID`.
+    /// The address book the row is queued on.
+    pub collection: String,
+    /// The link id of the card the row creates, the `id` `card add`
+    /// reported, `null` when the row creates none.
     pub link_id: Option<String>,
-    /// The card's full name, from the body the row pins, `null` when that
-    /// body is not in the store.
-    pub full_name: Option<String>,
-}
-
-/// One row the sync engine parked: it will not apply it again without an
-/// operator.
-#[derive(Clone, Debug, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct PimdirParkedRow {
-    /// The queue row id, which `pimdir queue cancel` takes.
-    #[serde(rename = "row")]
-    pub id: i64,
-    /// When the row was appended, stamped by the store's own clock.
-    pub queued_at: String,
+    /// The id of the stored card the row addresses, as `card list` prints
+    /// it, `null` when it addresses none, a creation among them.
+    pub item_id: Option<String>,
     /// The process that staged it.
     pub producer: String,
-    /// The address book the row targets.
-    pub collection: String,
-    /// The action kind: `add`, `update`, `remove`, ...
-    pub kind: String,
-    /// How many times the engine tried it before parking it.
-    pub attempts: i64,
-    /// Whether the row is unconfirmed: the engine sent its request and
-    /// cannot tell whether it took effect, so it may have.
+    /// When the row was appended, stamped by the store's own clock.
+    pub queued_at: String,
+    /// How many times the sync engine tried it.
+    pub attempts: u64,
+    /// Whether the row's outcome is unknown: the engine sent its request
+    /// and cannot tell whether it took effect, so it may have.
     pub unconfirmed: bool,
-    /// Why it was parked, as the store records it: an unconfirmed row's
-    /// starts with `unconfirmed: `.
-    pub error: String,
+    /// Why the row was parked, as the store records it, `null` while it is
+    /// pending: an unconfirmed row's starts with `unconfirmed: `.
+    pub error: Option<String>,
+    /// The card's full name, from the body the row pins or the card it
+    /// addresses, `null` when there is none to read.
+    pub full_name: Option<String>,
 }
 
 /// The `pimdir queue list` output.
@@ -117,10 +106,10 @@ pub struct PimdirQueueListOutput {
     /// The address book listed, `None` for every one of the account's.
     #[serde(skip)]
     pub addressbook: Option<String>,
-    /// The cards staged for creation.
-    pub cards: Vec<PimdirQueuedCard>,
+    /// The cards staged for creation, pending.
+    pub cards: Vec<PimdirQueueRow>,
     /// The parked rows, any kind.
-    pub parked: Vec<PimdirParkedRow>,
+    pub parked: Vec<PimdirQueueRow>,
 }
 
 impl fmt::Display for PimdirQueueListOutput {
@@ -152,7 +141,7 @@ impl fmt::Display for PimdirQueueListOutput {
                 sanitize::text(&parked.queued_at).into_owned(),
                 sanitize::text(&parked.kind).into_owned(),
                 sanitize::text(&parked.collection).into_owned(),
-                sanitize::text(&parked.error).into_owned(),
+                sanitize::text(parked.error.as_deref().unwrap_or_default()).into_owned(),
             ]);
         }
 
@@ -169,31 +158,39 @@ impl fmt::Display for PimdirQueueListOutput {
 mod tests {
     use super::*;
 
-    /// The JSON keys are Himalaya's `pimdir queue list` ones, `row` and
-    /// `kind` among them, and the text names the cancelling command.
+    /// A pending and a parked row print one shape, the family's queue row
+    /// with every key, `null` or not, and the text names the cancelling
+    /// command.
     #[test]
-    fn a_listing_keys_its_rows_as_himalaya_does() {
+    fn a_listing_keys_its_rows_as_the_family_does() {
         let output = PimdirQueueListOutput {
             account: String::from("perso"),
             addressbook: None,
-            cards: vec![PimdirQueuedCard {
+            cards: vec![PimdirQueueRow {
                 id: 3,
-                queued_at: String::from("2026-11-15T10:00:00Z"),
-                producer: String::from("cardamum"),
-                collection: String::from("book"),
                 kind: String::from("add"),
+                collection: String::from("book"),
                 link_id: Some(String::from("urn:uuid:1")),
+                item_id: None,
+                producer: String::from("cardamum"),
+                queued_at: String::from("2026-11-15T10:00:00.000Z"),
+                attempts: 0,
+                unconfirmed: false,
+                error: None,
                 full_name: Some(String::from("Jane Doe")),
             }],
-            parked: vec![PimdirParkedRow {
+            parked: vec![PimdirQueueRow {
                 id: 4,
-                queued_at: String::from("2026-11-15T10:01:00Z"),
-                producer: String::from("cardamum"),
-                collection: String::from("book"),
                 kind: String::from("update"),
+                collection: String::from("book"),
+                link_id: None,
+                item_id: Some(String::from("7")),
+                producer: String::from("cardamum"),
+                queued_at: String::from("2026-11-15T10:01:00.000Z"),
                 attempts: 1,
                 unconfirmed: false,
-                error: String::from("conflict"),
+                error: Some(String::from("conflict")),
+                full_name: None,
             }],
         };
 
@@ -202,15 +199,18 @@ mod tests {
             json,
             serde_json::json!({
                 "cards": [{
-                    "row": 3, "queuedAt": "2026-11-15T10:00:00Z",
-                    "producer": "cardamum", "collection": "book",
-                    "kind": "add", "linkId": "urn:uuid:1", "fullName": "Jane Doe",
+                    "row": 3, "kind": "add", "collection": "book",
+                    "linkId": "urn:uuid:1", "itemId": null,
+                    "producer": "cardamum", "queuedAt": "2026-11-15T10:00:00.000Z",
+                    "attempts": 0, "unconfirmed": false, "error": null,
+                    "fullName": "Jane Doe",
                 }],
                 "parked": [{
-                    "row": 4, "queuedAt": "2026-11-15T10:01:00Z",
-                    "producer": "cardamum", "collection": "book",
-                    "kind": "update", "attempts": 1, "unconfirmed": false,
-                    "error": "conflict",
+                    "row": 4, "kind": "update", "collection": "book",
+                    "linkId": null, "itemId": "7",
+                    "producer": "cardamum", "queuedAt": "2026-11-15T10:01:00.000Z",
+                    "attempts": 1, "unconfirmed": false, "error": "conflict",
+                    "fullName": null,
                 }],
             })
         );

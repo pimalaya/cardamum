@@ -16,7 +16,10 @@ use serde::Serialize;
 /// A page of contact folders.
 ///
 /// The text prints each folder by its id with its name and parent, while
-/// `--json` emits the raw Graph folder objects plus any next-page link.
+/// `--json` emits the raw Graph folder objects. It prints through
+/// [`Paginated`], Graph's `@odata.nextLink` lifted into `nextPage`.
+///
+/// [`Paginated`]: pimalaya_cli::output::Paginated
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MsgraphContactFoldersOutput {
@@ -24,9 +27,6 @@ pub struct MsgraphContactFoldersOutput {
     #[serde(rename = "folders")]
     #[schemars(with = "Vec<serde_json::Value>")]
     pub folders: Vec<MsgraphContactFolder>,
-    /// The link to the next page, when the page was truncated.
-    #[serde(rename = "@odata.nextLink", skip_serializing_if = "Option::is_none")]
-    pub next_link: Option<String>,
 }
 
 impl fmt::Display for MsgraphContactFoldersOutput {
@@ -42,17 +42,7 @@ impl fmt::Display for MsgraphContactFoldersOutput {
             });
         }
 
-        write!(f, "{records}")?;
-
-        if self.next_link.is_some() {
-            if !records.items.is_empty() {
-                writeln!(f)?;
-            }
-
-            writeln!(f, "(more folders available: raise --top)")?;
-        }
-
-        Ok(())
+        write!(f, "{records}")
     }
 }
 

@@ -38,7 +38,6 @@ impl GpeopleOtherContactSearchCommand {
 
         printer.out(GpeoplePersonsOutput {
             people,
-            next_page_token: None,
             next_sync_token: None,
         })
     }

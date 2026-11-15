@@ -9,7 +9,9 @@ use anyhow::Result;
 use clap::Parser;
 use io_msgraph::v1::rest::users::contacts::delta::MsgraphContactDelta;
 use pimalaya_cli::{
+    clap::args::PageTokenArg,
     fields::Fields,
+    output::Paginated,
     printer::Printer,
     records::{Record, Records},
     sanitize,
@@ -28,11 +30,12 @@ use crate::msgraph::{
 /// Without `--delta-link` this opens a fresh round, enumerating everything
 /// and ending with an `@odata.deltaLink`. Feed that link back through
 /// `--delta-link` for the next round, which returns only what changed
-/// since. A page ending with an `@odata.nextLink` was truncated, and that
-/// link goes back through the same flag to drain the rest.
+/// since. A page printing a `nextPage` was truncated: that link goes back
+/// through `--page-token` to drain the rest of the round.
 ///
-/// JSON output: `{"contacts": [<raw Graph delta>...], "@odata.nextLink",
-/// "@odata.deltaLink"}`.
+/// JSON output: `{"contacts": [<raw Graph delta>...], "@odata.deltaLink",
+/// "nextPage"}`, `nextPage` Graph's `@odata.nextLink`, `null` once the
+/// round ends.
 #[derive(Debug, Parser)]
 pub struct MsgraphContactDeltaCommand {
     /// Contact folder id; omit for the default Contacts folder.
@@ -40,24 +43,30 @@ pub struct MsgraphContactDeltaCommand {
         short = 'f',
         long,
         value_name = "FOLDER-ID",
-        conflicts_with = "delta_link"
+        conflicts_with_all = ["delta_link", "page_token"]
     )]
     pub folder: Option<String>,
     /// Comma-separated properties to return (`$select`).
-    #[arg(long, value_name = "CSV", conflicts_with = "delta_link")]
+    #[arg(
+        long,
+        value_name = "CSV",
+        conflicts_with_all = ["delta_link", "page_token"]
+    )]
     pub select: Option<String>,
-    /// Continue a round from a previous page instead of opening a new one.
+    /// Open the next round from the `@odata.deltaLink` a round ended with.
     ///
-    /// Takes the `@odata.deltaLink` or `@odata.nextLink` that page
-    /// returned. The link already carries the folder and the properties,
-    /// so neither is passed again.
-    #[arg(long, value_name = "URL")]
+    /// The link already carries the folder and the properties, so neither
+    /// is passed again.
+    #[arg(long, value_name = "URL", conflicts_with = "page_token")]
     pub delta_link: Option<String>,
+    #[command(flatten)]
+    pub page_token: PageTokenArg,
 }
 
 impl MsgraphContactDeltaCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
-        let page = match &self.delta_link {
+        let link = self.page_token.token.as_ref().or(self.delta_link.as_ref());
+        let page = match link {
             Some(link) => client.contacts_delta_from_link(link)?,
             None => client
                 .contacts_delta(self.folder.as_deref(), self.select.as_deref())
@@ -65,15 +74,21 @@ impl MsgraphContactDeltaCommand {
         }
         .response;
 
-        printer.out(MsgraphContactDeltaOutput {
-            contacts: page.value,
-            next_link: page.next_link,
-            delta_link: page.delta_link,
+        printer.out(Paginated {
+            inner: MsgraphContactDeltaOutput {
+                contacts: page.value,
+                delta_link: page.delta_link,
+            },
+            next_page: page.next_link,
         })
     }
 }
 
-/// A page of the contacts delta, with the links continuing the round.
+/// A page of the contacts delta, with the link opening the next round.
+///
+/// It prints through [`Paginated`], Graph's `@odata.nextLink`, which drains
+/// the round, lifted into `nextPage`; the `@odata.deltaLink` ending the
+/// round stays raw.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MsgraphContactDeltaOutput {
@@ -81,9 +96,6 @@ pub struct MsgraphContactDeltaOutput {
     #[serde(rename = "contacts")]
     #[schemars(with = "Vec<serde_json::Value>")]
     pub contacts: Vec<MsgraphContactDelta>,
-    /// The link draining the rest of the page, when it was truncated.
-    #[serde(rename = "@odata.nextLink", skip_serializing_if = "Option::is_none")]
-    pub next_link: Option<String>,
     /// The link opening the next round, when the round ended here.
     #[serde(rename = "@odata.deltaLink", skip_serializing_if = "Option::is_none")]
     pub delta_link: Option<String>,
@@ -117,17 +129,14 @@ impl fmt::Display for MsgraphContactDeltaOutput {
 
         write!(f, "{records}")?;
 
-        if !records.items.is_empty() && (self.delta_link.is_some() || self.next_link.is_some()) {
-            writeln!(f)?;
-        }
-
         if let Some(delta_link) = &self.delta_link {
+            if !records.items.is_empty() {
+                writeln!(f)?;
+            }
+
             writeln!(f, "delta-link: {}", sanitize::text(delta_link))?;
         }
-        if let Some(next_link) = &self.next_link {
-            writeln!(f, "next-link: {}", sanitize::text(next_link))?;
-            writeln!(f, "(page truncated: pass the next-link to --delta-link)")?;
-        }
+
         Ok(())
     }
 }

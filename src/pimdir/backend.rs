@@ -25,7 +25,7 @@ use io_pimdir::{
         producer::PimdirActionStatus,
         reader::{PimdirCollection, PimdirItem},
     },
-    codec::PimdirAction,
+    codec::{PimdirAction, action_from_payload},
     object::PimdirHash,
     placement::PimdirFlags,
     summary::{PimdirSummary, contact},
@@ -38,7 +38,7 @@ use crate::{
     error::{self, ErrorCode},
     pimdir::{
         client::{PimdirClient, refusal},
-        queue::list::{PimdirParkedRow, PimdirQueuedCard},
+        queue::list::PimdirQueueRow,
         status::{PimdirAddressbookStatus, PimdirParkedStatus, PimdirStatusOutput},
     },
     shared::{
@@ -186,7 +186,7 @@ impl PimdirBackend {
     /// no listing shows it: this is where it does, by its queue row, the
     /// link id `card add` reported, and the full name of the body it pins
     /// when that body is local.
-    pub fn queued_cards(&self, addressbook: Option<&str>) -> Result<Vec<PimdirQueuedCard>> {
+    pub fn queued_cards(&self, addressbook: Option<&str>) -> Result<Vec<PimdirQueueRow>> {
         let mut cards = Vec::new();
 
         for collection in self.queue_collections(addressbook)? {
@@ -197,30 +197,21 @@ impl PimdirBackend {
                 .map_err(|err| refusal(err, "Read the pimdir queue"))?;
 
             for queued in pending {
-                let PimdirAction::Add {
-                    link_id, object, ..
-                } = queued.action
-                else {
-                    continue;
-                };
+                let kind = queued.action.kind().to_owned();
+                let target = self.row_target(&queued.collection, queued.action)?;
 
-                let body = match &object {
-                    Some(hash) => self.inner.reader.blobs().get(hash)?,
-                    None => None,
-                };
-                let full_name = body.and_then(|body| match contact::derive(&body).summary {
-                    Some(PimdirSummary::Contact(summary)) => Some(summary.full_name),
-                    _ => None,
-                });
-
-                cards.push(PimdirQueuedCard {
+                cards.push(PimdirQueueRow {
                     id: queued.id,
-                    queued_at: queued.created_at,
-                    producer: queued.producer,
+                    kind,
                     collection: queued.collection,
-                    kind: String::from("add"),
-                    link_id: link_id.map(|link_id| link_id.0),
-                    full_name,
+                    link_id: target.link_id,
+                    item_id: target.item_id,
+                    producer: queued.producer,
+                    queued_at: queued.created_at,
+                    attempts: u64::try_from(queued.attempts).unwrap_or_default(),
+                    unconfirmed: false,
+                    error: None,
+                    full_name: target.full_name,
                 });
             }
         }
@@ -231,26 +222,77 @@ impl PimdirBackend {
 
     /// The rows of any kind the owner parked in the account's address
     /// books, or in `addressbook` alone, in the order they were queued.
-    pub fn parked_rows(&self, addressbook: Option<&str>) -> Result<Vec<PimdirParkedRow>> {
+    ///
+    /// The row's payload is read for the card it creates or addresses: one
+    /// that does not decode, or an intent, names none.
+    pub fn parked_rows(&self, addressbook: Option<&str>) -> Result<Vec<PimdirQueueRow>> {
         let collections = self.queue_collections(addressbook)?;
+        let mut rows = Vec::new();
 
-        Ok(self
-            .inner
-            .reader
-            .parked_actions()?
-            .into_iter()
-            .filter(|parked| collections.contains(&parked.collection))
-            .map(|parked| PimdirParkedRow {
+        for parked in self.inner.reader.parked_actions()? {
+            if !collections.contains(&parked.collection) {
+                continue;
+            }
+
+            let target = match action_from_payload(&parked.action, &parked.payload) {
+                Ok(action) => self.row_target(&parked.collection, action)?,
+                Err(_) => PimdirRowTarget::default(),
+            };
+
+            rows.push(PimdirQueueRow {
                 unconfirmed: parked.unconfirmed().is_some(),
                 id: parked.id,
-                queued_at: parked.created_at,
-                producer: parked.producer,
-                collection: parked.collection,
                 kind: parked.action,
-                attempts: parked.attempts,
-                error: parked.error,
-            })
-            .collect())
+                collection: parked.collection,
+                link_id: target.link_id,
+                item_id: target.item_id,
+                producer: parked.producer,
+                queued_at: parked.created_at,
+                attempts: u64::try_from(parked.attempts).unwrap_or_default(),
+                error: Some(parked.error),
+                full_name: target.full_name,
+            });
+        }
+
+        Ok(rows)
+    }
+
+    /// The card a queued `action` on `collection` creates or addresses,
+    /// and its full name: read from the body the action pins, else from
+    /// the summary of the card it addresses.
+    fn row_target(&self, collection: &str, action: PimdirAction) -> Result<PimdirRowTarget> {
+        let (link_id, seq, object) = match action {
+            PimdirAction::Add {
+                link_id, object, ..
+            } => (link_id.map(|link_id| link_id.0), None, object),
+            PimdirAction::Update { seq, object, .. } => (None, Some(seq), Some(object)),
+            PimdirAction::SetFlags { seq, .. }
+            | PimdirAction::Remove { seq, .. }
+            | PimdirAction::Move { seq, .. }
+            | PimdirAction::Copy { seq, .. } => (None, Some(seq), None),
+            PimdirAction::SetPerformer { .. } | PimdirAction::Unknown { .. } => {
+                return Ok(PimdirRowTarget::default());
+            }
+        };
+
+        let full_name = match (object, seq) {
+            (Some(hash), _) => {
+                let body = self.inner.reader.blobs().get(&hash)?;
+                body.and_then(|body| contact_full_name(contact::derive(&body).summary))
+            }
+            (None, Some(seq)) => self
+                .inner
+                .reader
+                .get_item(collection, seq)?
+                .and_then(|item| contact_full_name(item.summary)),
+            (None, None) => None,
+        };
+
+        Ok(PimdirRowTarget {
+            link_id,
+            item_id: seq.map(|seq| seq.to_string()),
+            full_name,
+        })
     }
 
     /// Where the queue row `id` stands: pending, parked, unconfirmed,
@@ -835,6 +877,26 @@ fn check_version(
 /// having left it so.
 fn is_card_kind(kind: &str) -> bool {
     kind.is_empty() || kind.split(';').next().unwrap_or_default().trim() == CARD_KIND
+}
+
+/// The card a queue row creates or addresses, as `pimdir queue list`
+/// prints it.
+#[derive(Debug, Default)]
+struct PimdirRowTarget {
+    /// The link id of the card the row creates.
+    link_id: Option<String>,
+    /// The public id of the stored card the row addresses.
+    item_id: Option<String>,
+    /// The card's full name.
+    full_name: Option<String>,
+}
+
+/// The full name a summary holds, when it is a contact's.
+fn contact_full_name(summary: Option<PimdirSummary>) -> Option<String> {
+    match summary? {
+        PimdirSummary::Contact(summary) => Some(summary.full_name),
+        _ => None,
+    }
 }
 
 /// A body an item names that its blob tree no longer holds, an
@@ -2188,7 +2250,10 @@ mod tests {
         assert_eq!(queued[0].collection, "book");
         assert_eq!(queued[0].kind, "add");
         assert_eq!(queued[0].link_id.as_deref(), Some(link_id.as_str()));
+        assert_eq!(queued[0].item_id, None);
         assert_eq!(queued[0].full_name.as_deref(), Some("Jane Doe"));
+        assert_eq!((queued[0].attempts, queued[0].unconfirmed), (0, false));
+        assert_eq!(queued[0].error, None);
         assert_eq!(backend.queued_cards(Some("book")).unwrap().len(), 1);
 
         let row = queued[0].id;
@@ -2259,6 +2324,10 @@ mod tests {
         assert_eq!(parked[0].kind, "remove");
         assert_eq!(parked[0].collection, "book");
         assert!(!parked[0].unconfirmed);
+        assert_eq!(parked[0].link_id, None);
+        assert_eq!(parked[0].item_id.as_deref(), Some(id.as_str()));
+        assert_eq!(parked[0].full_name.as_deref(), Some("Jane Poe"));
+        assert!(parked[0].error.is_some(), "{parked:?}");
         assert_eq!(backend.parked_rows(Some("book")).unwrap().len(), 1);
 
         let err = backend.parked_rows(Some("nope")).unwrap_err();
@@ -2269,5 +2338,83 @@ mod tests {
 
         assert_eq!(backend.cancel_queued(parked[0].id).unwrap(), "remove");
         assert!(backend.parked_rows(None).unwrap().is_empty());
+    }
+
+    /// A pending creation and a parked update print one row, the family's
+    /// (pimalaya-cli's output.md, scenario "A pending creation and a parked
+    /// update"): every key, the `add` with its link id and no card, the
+    /// `update` with the card it updates and why it was parked.
+    #[test]
+    fn a_pending_creation_and_a_parked_update_share_the_row() {
+        use crate::pimdir::queue::list::PimdirQueueListOutput;
+
+        const ANN: &[u8] =
+            b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:c2\r\nFN:Ann Lee\r\nEND:VCARD\r\n";
+
+        let (dir, mut backend) = store();
+        pulled(&dir, "book", JANE);
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
+        let read = backend.get_card("book", &id).unwrap();
+        let rename = |name: &str| {
+            String::from_utf8(JANE.to_vec())
+                .unwrap()
+                .replace("Jane Doe", name)
+                .into_bytes()
+        };
+        backend
+            .update_card("book", &id, rename("Jane Roe"), read.etag.as_deref())
+            .unwrap();
+        pulled(&dir, "book", &rename("Jane Poe"));
+        drain(&dir);
+        let link_id = backend.create_card("book", ANN.to_vec()).unwrap();
+
+        let output = PimdirQueueListOutput {
+            account: String::from("perso"),
+            addressbook: None,
+            cards: backend.queued_cards(None).unwrap(),
+            parked: backend.parked_rows(None).unwrap(),
+        };
+        let json = serde_json::to_value(&output).unwrap();
+        let (add, update) = (&json["cards"][0], &json["parked"][0]);
+
+        let keys = [
+            "row",
+            "kind",
+            "collection",
+            "linkId",
+            "itemId",
+            "producer",
+            "queuedAt",
+            "attempts",
+            "unconfirmed",
+            "error",
+            "fullName",
+        ];
+        for row in [add, update] {
+            let mut printed: Vec<&str> = row
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect();
+            printed.sort_unstable();
+            let mut expected = keys.to_vec();
+            expected.sort_unstable();
+            assert_eq!(printed, expected, "{row}");
+        }
+
+        assert_eq!(add["kind"], "add", "{add}");
+        assert_eq!(add["linkId"], link_id.as_str(), "{add}");
+        assert_eq!(add["itemId"], serde_json::Value::Null, "{add}");
+        assert_eq!(add["error"], serde_json::Value::Null, "{add}");
+        assert_eq!(add["fullName"], "Ann Lee", "{add}");
+
+        assert_eq!(update["kind"], "update", "{update}");
+        assert_eq!(update["linkId"], serde_json::Value::Null, "{update}");
+        assert_eq!(update["itemId"], id.as_str(), "{update}");
+        assert!(update["error"].is_string(), "{update}");
+        assert_eq!(update["fullName"], "Jane Roe", "{update}");
     }
 }

@@ -23,7 +23,7 @@ use crate::{
         card::{Card, CardUpdateOutcome},
         client::{CardWindow, first_page, window},
     },
-    vdir::client::{collection_dir, is_dir_name, missing_code},
+    vdir::client::{check_collection_absent, collection_dir, is_dir_name, missing_code},
 };
 
 /// Vdir backend of the unified-API client, rooted at the home directory.
@@ -49,7 +49,8 @@ impl VdirBackend {
     ///
     /// Returns the new addressbook id, which is its directory name. A name
     /// that is not one directory name is refused, as it would reach out of
-    /// the home or below one of its addressbooks.
+    /// the home or below one of its addressbooks, and so is one the home
+    /// holds already.
     pub fn create_addressbook(
         &mut self,
         name: &str,
@@ -63,6 +64,8 @@ impl VdirBackend {
         if !is_dir_name(name) {
             bail!("Addressbook name `{name}` is not one directory name");
         }
+
+        check_collection_absent(self.inner.root(), name)?;
 
         let collection = VdirCollection {
             path: self.inner.root().join(name),

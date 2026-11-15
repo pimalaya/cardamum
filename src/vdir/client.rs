@@ -56,6 +56,19 @@ pub(crate) fn collection_dir(root: &VdirPath, id: &str) -> Option<VdirPath> {
     (is_dir_name(id) && Path::new(path.as_str()).is_dir()).then_some(path)
 }
 
+/// Refuses to create the collection `id` when `root` already holds it,
+/// coded `addressbook-duplicate`: io-vdir creates its directory over an
+/// existing one and rewrites its metadata files.
+pub(crate) fn check_collection_absent(root: &VdirPath, id: &str) -> Result<()> {
+    match collection_dir(root, id) {
+        Some(_) => {
+            let message = format!("Addressbook `{id}` already exists");
+            Err(CodedError::new(ErrorCode::AddressbookDuplicate, message).into())
+        }
+        None => Ok(()),
+    }
+}
+
 /// Whether `id` is one directory name: a single normal path component
 /// that is the whole of `id`, so neither empty, `.` nor `..`, and holding
 /// no separator, a trailing one included.

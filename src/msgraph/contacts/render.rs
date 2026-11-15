@@ -43,8 +43,10 @@ pub fn contact_phones(contact: &MsgraphContact) -> Vec<&str> {
 /// A page of contacts.
 ///
 /// The text prints each contact by its id with its name, emails and phones,
-/// while `--json` emits the raw Graph contact objects plus any next-page
-/// link.
+/// while `--json` emits the raw Graph contact objects. It prints through
+/// [`Paginated`], Graph's `@odata.nextLink` lifted into `nextPage`.
+///
+/// [`Paginated`]: pimalaya_cli::output::Paginated
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MsgraphContactsOutput {
@@ -52,9 +54,6 @@ pub struct MsgraphContactsOutput {
     #[serde(rename = "contacts")]
     #[schemars(with = "Vec<serde_json::Value>")]
     pub contacts: Vec<MsgraphContact>,
-    /// The link to the next page, when the page was truncated.
-    #[serde(rename = "@odata.nextLink", skip_serializing_if = "Option::is_none")]
-    pub next_link: Option<String>,
 }
 
 impl fmt::Display for MsgraphContactsOutput {
@@ -70,17 +69,7 @@ impl fmt::Display for MsgraphContactsOutput {
             });
         }
 
-        write!(f, "{records}")?;
-
-        if self.next_link.is_some() {
-            if !records.items.is_empty() {
-                writeln!(f)?;
-            }
-
-            writeln!(f, "(more contacts available: raise --top)")?;
-        }
-
-        Ok(())
+        write!(f, "{records}")
     }
 }
 

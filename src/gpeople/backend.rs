@@ -31,7 +31,7 @@ use secrecy::ExposeSecret;
 use crate::{
     config::{GpeopleConfig, ProxyConfig},
     error,
-    gpeople::client::is_missing,
+    gpeople::client::{is_group_taken, is_missing},
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -143,7 +143,13 @@ impl GpeopleBackend {
             name: Some(name.to_string()),
             ..Default::default()
         };
-        let created = self.inner.contact_group_create(&group, &[])?.response;
+        let created = match self.inner.contact_group_create(&group, &[]) {
+            Ok(created) => created.response,
+            Err(err) if is_group_taken(&err) => {
+                return Err(error::addressbook_duplicate(name, err.into()));
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(group_id(&created.resource_name).to_string())
     }
@@ -669,6 +675,26 @@ mod tests {
         let code = Some(ErrorCode::AddressbookNotFound);
         assert_eq!(code_of(&err), code, "{err:#}");
         assert_eq!(err.to_string(), "Addressbook `g9` not found");
+    }
+
+    /// A group People refuses as one of that name existing, the 409 its
+    /// contactGroups.create documents, is `addressbook-duplicate` naming
+    /// it, People's message in `sources`.
+    #[test]
+    fn an_address_book_created_twice_is_a_duplicate() {
+        let exists = json!({"error": {
+            "code": 409,
+            "message": "Contact group name already exists.",
+            "status": "ALREADY_EXISTS",
+        }});
+
+        let err = refusing(409, &exists)
+            .create_addressbook("Work", None, None)
+            .unwrap_err();
+        let duplicate = Some(ErrorCode::AddressbookDuplicate);
+        assert_eq!(code_of(&err), duplicate, "{err:#}");
+        assert_eq!(err.to_string(), "Addressbook `Work` already exists");
+        assert!(format!("{err:#}").contains("already exists."), "{err:#}");
     }
 
     /// myContacts, which holds every person People does, is the default

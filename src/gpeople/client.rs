@@ -78,6 +78,16 @@ pub(crate) fn person_refusal(err: GpeopleClientStdError) -> anyhow::Error {
     }
 }
 
+/// Whether People refused to create a contact group because the user
+/// holds one of that name already: the 409 contactGroups.create answers a
+/// duplicate name.
+pub(crate) fn is_group_taken(err: &GpeopleClientStdError) -> bool {
+    match err {
+        GpeopleClientStdError::Send(send) => send.status() == Some(409),
+        _ => false,
+    }
+}
+
 /// Whether a person request found no person: 404, or 410 for one gone.
 pub(crate) fn is_missing(err: &GpeopleClientStdError) -> bool {
     match err {
@@ -188,5 +198,62 @@ mod tests {
         };
         let err = delete.execute(printer, refusing(404, found)).unwrap_err();
         assert_eq!(error::code(&err), missing, "{err:#}");
+    }
+
+    /// A People listing lifts `nextPageToken` into `nextPage`, `null` on
+    /// the last page, the sync token staying as People sent it, and
+    /// `--page-token` sends `nextPage` back as the `pageToken`.
+    #[test]
+    fn a_people_listing_pages_by_next_page() {
+        use clap::Parser;
+        use serde_json::Value;
+
+        use crate::gpeople::{
+            connection::list::GpeopleConnectionListCommand,
+            contact_group::list::GpeopleContactGroupListCommand,
+            other_contact::list::GpeopleOtherContactListCommand,
+        };
+
+        let run = |args: &[&str], body: Value| {
+            let response = script::response(200, "application/json", &body.to_string());
+            let (script, requests) = Script::new([response]);
+            let client = GpeopleClient {
+                inner: GpeopleClientStd::new(script, "token"),
+            };
+            let mut printer = CapturePrinter::default();
+
+            match args[0] {
+                "connections" => GpeopleConnectionListCommand::parse_from(args)
+                    .execute(&mut printer, client)
+                    .unwrap(),
+                "other-contacts" => GpeopleOtherContactListCommand::parse_from(args)
+                    .execute(&mut printer, client)
+                    .unwrap(),
+                "contact-groups" => GpeopleContactGroupListCommand::parse_from(args)
+                    .execute(&mut printer, client)
+                    .unwrap(),
+                other => panic!("{other}"),
+            }
+
+            let request = String::from_utf8_lossy(&requests.lock().unwrap()[0]).into_owned();
+            (printer.into_single().unwrap(), request)
+        };
+
+        for (command, key) in [
+            ("connections", "connections"),
+            ("other-contacts", "otherContacts"),
+            ("contact-groups", "contactGroups"),
+        ] {
+            let first = json!({key: [], "nextPageToken": "t2"});
+            let (json, _) = run(&[command], first);
+            assert_eq!(json["nextPage"], "t2", "{json}");
+            assert!(json.get("nextPageToken").is_none(), "{json}");
+
+            let last = json!({key: [], "nextSyncToken": "s1"});
+            let (json, request) = run(&[command, "--page-token", "t2"], last);
+            assert!(request.contains("pageToken=t2"), "{request}");
+            assert_eq!(json["nextPage"], Value::Null, "{json}");
+            assert_eq!(json["nextSyncToken"], "s1", "{json}");
+        }
     }
 }

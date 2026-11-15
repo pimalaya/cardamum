@@ -200,7 +200,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   {"code":"card-not-found","error":"…","sources":["…"],"backtrace":null}
   ```
 
-  The codes a caller acts on: `account-missing`, `account-default-missing`, `account-default-several`, `backend-not-built`, `card-not-found`, `addressbook-not-found`, `addressbook-default-missing`, `card-unreadable`, `card-invalid`, `permission-denied`, `quota-exceeded`, `rate-limited`, `capability-missing`, `usage-invalid`, `stdin-taken`, `body-pending`, `precondition-failed`, and on pimdir the store, write and search codes io-pimdir names (`store-version`, `store-busy`, `item-duplicate`, `index-version`, `query-refused`…). `cardamum json-schema` describes the failure object as `cardamum-error`.
+  The codes a caller acts on: `account-missing`, `account-default-missing`, `account-default-several`, `backend-not-built`, `card-not-found`, `addressbook-not-found`, `addressbook-duplicate`, `addressbook-default-missing`, `card-unreadable`, `card-invalid`, `permission-denied`, `quota-exceeded`, `rate-limited`, `capability-missing`, `usage-invalid`, `stdin-taken`, `body-pending`, `precondition-failed`, and on pimdir the store, write and search codes io-pimdir names (`store-version`, `store-busy`, `item-duplicate`, `index-version`, `query-refused`…). `cardamum json-schema` describes the failure object as `cardamum-error`.
 - **Every write prints a receipt** instead of `{"message": …}`; the text form keeps its sentence.
 
   ```sh
@@ -264,6 +264,22 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   cardamum --json account check | jq -r '.backends[] | select(.ok | not) | [.backend, .code] | @tsv'
   ```
 - **`card list` prints `nextPage`** beside `cards`: the next page number while cards follow, `null` on the last page. Give it back through `--page-token`. The cards also carry `uid`, `fullName`, `givenName`, `familyName`, `emails`, `phones`, `organization`, `organizationUnits`, `title` and `note`, and the address books `default`; a strict consumer accepts the new keys.
+- **The `gpeople` and `msgraph` listings print `nextPage`** where they printed the provider's `nextPageToken` or `@odata.nextLink`, `null` on the last page, and take it back through `--page-token`, as every listing of the family pages: `gpeople connections list`, `other-contacts list` and `contact-groups list`, `msgraph contacts list`, `contact-folders list`, `contact-folders child-folders` and `contacts delta`. The value is the provider's cursor as it was. A Graph link carries the folder and the query, so `--page-token` takes no `--folder`, `--top`, `--select` or `--filter`, and `child-folders` no folder id. The delta's `@odata.deltaLink`, opening the next round, and People's `nextSyncToken` stay as they were:
+
+  ```sh
+  # v0.3: {"people":[…],"nextPageToken":"…"}, no flag to resume
+  cardamum --json gpeople connection list | jq -r '.nextPageToken'
+  # v0.4: {"people":[…],"nextPage":"…"}
+  next=$(cardamum --json gpeople connections list | jq -r '.nextPage // empty')
+  cardamum --json gpeople connections list --page-token "$next"
+
+  # v0.3: a truncated delta page went back through --delta-link
+  cardamum --json msgraph contacts delta --delta-link "$(jq -r '.["@odata.nextLink"]' page.json)"
+  # v0.4: through --page-token; --delta-link takes the @odata.deltaLink alone
+  cardamum --json msgraph contacts delta --page-token "$(jq -r '.nextPage' page.json)"
+  ```
+
+  `jmap contact-card query` gains `nextPage` too, the position its next page starts at, taken back by `--page-token`.
 - **`carddav put` prints the id the write answered**, as a listing shows it, where it echoed its argument.
 - **A JMAP set error of a type io-jmap does not model is named as the server sent it**, where it read `unknown`.
 - **Piped `--json` prints one value per line**, and each schema of `cardamum json-schema` carries an `$id` naming the contract version.
@@ -306,6 +322,14 @@ The commands take the names Himalaya and Calendula give them. Every v0.3 spellin
   ```
 
   `account check` reports such a backend as a failed row (exit 3), and `account list --json` names it in the new `notBuilt`, `backends` still holding the backends the build carries alone; both follow the order `auto` resolves them (vdir, pimdir, carddav, jmap, msgraph, gpeople), where `backends` started with CardDAV.
+- **Creating an address book that exists fails coded `addressbook-duplicate`**, ``Addressbook `<name>` already exists``, exit 1, nothing created. On vdir, `addressbook create` and `vdir create` of a name the home holds succeeded and rewrote its name, description and colour; a CardDAV server's refusal read `permission-denied` or carried no code, and Graph's and People's no code. JMAP lets two address books share a name, so it still creates the second:
+
+  ```sh
+  # v0.3: exit 0, {"message":"…"}, the existing `work` renamed `work`
+  cardamum addressbook create work
+  # v0.4: exit 1
+  cardamum --json addressbook create work | jq -r '.code'   # addressbook-duplicate
+  ```
 - **A CardDAV answer that is not one whole multistatus fails** (an HTML page, a cut or empty body) instead of listing fewer cards (io-webdav 0.8).
 - **A vdir id that is empty or holds a path separator is refused** (io-vdir 0.3).
 
@@ -326,7 +350,7 @@ The release moves onto the family line every Pimalaya CLI shares: pimalaya-cli 0
 ### New
 
 - `cardamum pimdir status` reports the store behind the account: its address books, how many of their cards are downloaded, how many creations are queued, and the parked writes.
-- `cardamum pimdir queue list`, `show` and `cancel`, as in Himalaya, list the cards queued for creation, which no listing shows before a sync applies them, and the parked rows (`row` and `kind` under `--json`), say where one row stands, and retract one, taking the store owner's role for that one write.
+- `cardamum pimdir queue list`, `show` and `cancel`, as in Himalaya, list the cards queued for creation, which no listing shows before a sync applies them, and the parked rows, each as the family's queue row under `--json`, `{row, kind, collection, linkId, itemId, producer, queuedAt, attempts, unconfirmed, error}` plus `fullName`, say where one row stands, and retract one, taking the store owner's role for that one write.
 - `cardamum pimdir search` and `cardamum pimdir count` answer from the store's search index, with the coverage of the answer: under `--json`, `coverage` carries `complete`, `bodiless`, `missing`, `unparseable`, `unindexed`, `behind` and `filling`, the three counts of bodies out of sight standing at 0 under a query none of whose terms reads a card's body. `pimdir search` pages as `card list` does, `nextPage` taken back by `--page-token`, and lists a card the store cannot read in `errors`, exiting 3. Their options are read wherever they stand, after the query too, so a query word starting with `-`, a negated term, goes after `--`, or reads as `not`:
 
   ```sh

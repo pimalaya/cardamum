@@ -45,7 +45,11 @@ pub fn person_phone(person: &GpeoplePerson) -> &str {
 /// A list of people: connections, other contacts or search results.
 ///
 /// The text lists ID / EMAIL / PHONE / NAME; `--json` emits the raw
-/// People person objects, plus any page and sync tokens.
+/// People person objects, plus any sync token. A listing that pages prints
+/// it through [`Paginated`], People's `nextPageToken` lifted into
+/// `nextPage`.
+///
+/// [`Paginated`]: pimalaya_cli::output::Paginated
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GpeoplePersonsOutput {
@@ -53,9 +57,6 @@ pub struct GpeoplePersonsOutput {
     #[serde(rename = "people")]
     #[schemars(with = "Vec<serde_json::Value>")]
     pub people: Vec<GpeoplePerson>,
-    /// The token to the next page, when the page was truncated.
-    #[serde(rename = "nextPageToken", skip_serializing_if = "Option::is_none")]
-    pub next_page_token: Option<String>,
     /// The token opening the next sync round, when the API sent one.
     #[serde(rename = "nextSyncToken", skip_serializing_if = "Option::is_none")]
     pub next_sync_token: Option<String>,
@@ -76,20 +77,24 @@ impl fmt::Display for GpeoplePersonsOutput {
             }
 
             write!(f, "{columns}")?;
-
-            if self.next_sync_token.is_some() || self.next_page_token.is_some() {
-                writeln!(f)?;
-            }
         }
 
-        if let Some(token) = &self.next_sync_token {
-            writeln!(f, "sync-token: {}", sanitize::text(token))?;
-        }
-        if self.next_page_token.is_some() {
-            writeln!(f, "(more people available: follow nextPageToken)")?;
-        }
-        Ok(())
+        sync_token(f, !self.people.is_empty(), &self.next_sync_token)
     }
+}
+
+/// Writes the `sync-token:` line of `token`, after a blank line when
+/// `listed` printed rows.
+fn sync_token(f: &mut fmt::Formatter<'_>, listed: bool, token: &Option<String>) -> fmt::Result {
+    let Some(token) = token else {
+        return Ok(());
+    };
+
+    if listed {
+        writeln!(f)?;
+    }
+
+    writeln!(f, "sync-token: {}", sanitize::text(token))
 }
 
 /// A single person; `--json` emits the raw People object.
@@ -131,7 +136,10 @@ pub fn group_name(group: &GpeopleContactGroup) -> &str {
 /// A list of contact groups.
 ///
 /// The text lists ID / TYPE / MEMBERS / NAME; `--json` emits the raw
-/// People group objects, plus any tokens.
+/// People group objects, plus any sync token. It prints through
+/// [`Paginated`], People's `nextPageToken` lifted into `nextPage`.
+///
+/// [`Paginated`]: pimalaya_cli::output::Paginated
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GpeopleContactGroupsOutput {
@@ -139,9 +147,6 @@ pub struct GpeopleContactGroupsOutput {
     #[serde(rename = "contactGroups")]
     #[schemars(with = "Vec<serde_json::Value>")]
     pub groups: Vec<GpeopleContactGroup>,
-    /// The token to the next page, when the page was truncated.
-    #[serde(rename = "nextPageToken", skip_serializing_if = "Option::is_none")]
-    pub next_page_token: Option<String>,
     /// The token opening the next sync round, when the API sent one.
     #[serde(rename = "nextSyncToken", skip_serializing_if = "Option::is_none")]
     pub next_sync_token: Option<String>,
@@ -168,16 +173,9 @@ impl fmt::Display for GpeopleContactGroupsOutput {
             }
 
             write!(f, "{columns}")?;
-
-            if self.next_page_token.is_some() {
-                writeln!(f)?;
-            }
         }
 
-        if self.next_page_token.is_some() {
-            writeln!(f, "(more groups available: follow nextPageToken)")?;
-        }
-        Ok(())
+        sync_token(f, !self.groups.is_empty(), &self.next_sync_token)
     }
 }
 

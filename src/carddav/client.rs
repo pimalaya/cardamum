@@ -240,7 +240,7 @@ fn build_auth(auth: CarddavAuthConfig, resolver: &mut SecretResolver) -> Result<
 
 /// The status and body of an answer that refused a request, wherever
 /// io-webdav surfaces it.
-fn refused(err: &WebdavClientStdError) -> Option<(u16, &str)> {
+pub(crate) fn refused(err: &WebdavClientStdError) -> Option<(u16, &str)> {
     match err {
         WebdavClientStdError::Send(WebdavSendError::HttpStatus { status, body })
         | WebdavClientStdError::WebdavSyncCollection(WebdavSyncCollectionError::Send(

@@ -13,6 +13,8 @@
 //!
 //! [`JsonSchemaCommand`]: pimalaya_cli::clap::commands::json_schema::JsonSchemaCommand
 
+#[cfg(any(feature = "gpeople", feature = "jmap", feature = "msgraph"))]
+use pimalaya_cli::output::Paginated;
 use pimalaya_cli::{clap::commands::json_schema::JsonSchemaRegistry, error::ErrorReport};
 use schemars::JsonSchema;
 
@@ -149,7 +151,10 @@ pub fn registry() -> JsonSchemaRegistry {
         insert!("cardamum-jmap-address-book-destroy", IdReceipt);
         insert!("cardamum-jmap-address-book-changes", JmapChangesOutput);
         insert!("cardamum-jmap-contact-card-get", JmapContactCardsOutput);
-        insert!("cardamum-jmap-contact-card-query", JmapContactCardsOutput);
+        insert!(
+            "cardamum-jmap-contact-card-query",
+            Paginated<JmapContactCardsOutput>
+        );
         insert!("cardamum-jmap-contact-card-create", JmapContactCardOutput);
         insert!(
             "cardamum-jmap-contact-card-update",
@@ -180,11 +185,11 @@ pub fn registry() -> JsonSchemaRegistry {
 
         insert!(
             "cardamum-msgraph-contact-folders-list",
-            MsgraphContactFoldersOutput
+            Paginated<MsgraphContactFoldersOutput>
         );
         insert!(
             "cardamum-msgraph-contact-folders-child-folders",
-            MsgraphContactFoldersOutput
+            Paginated<MsgraphContactFoldersOutput>
         );
         insert!(
             "cardamum-msgraph-contact-folders-get",
@@ -198,13 +203,16 @@ pub fn registry() -> JsonSchemaRegistry {
             "cardamum-msgraph-contact-folders-rename",
             MsgraphContactFolderOutput
         );
-        insert!("cardamum-msgraph-contacts-list", MsgraphContactsOutput);
+        insert!(
+            "cardamum-msgraph-contacts-list",
+            Paginated<MsgraphContactsOutput>
+        );
         insert!("cardamum-msgraph-contacts-get", MsgraphContactOutput);
         insert!("cardamum-msgraph-contacts-create", MsgraphContactOutput);
         insert!("cardamum-msgraph-contacts-update", MsgraphContactOutput);
         insert!(
             "cardamum-msgraph-contacts-delta",
-            crate::msgraph::contacts::delta::MsgraphContactDeltaOutput
+            Paginated<crate::msgraph::contacts::delta::MsgraphContactDeltaOutput>
         );
         insert!(
             "cardamum-msgraph-profile-get",
@@ -227,7 +235,7 @@ pub fn registry() -> JsonSchemaRegistry {
 
         insert!(
             "cardamum-gpeople-contact-groups-list",
-            GpeopleContactGroupsOutput
+            Paginated<GpeopleContactGroupsOutput>
         );
         insert!(
             "cardamum-gpeople-contact-groups-get",
@@ -241,12 +249,18 @@ pub fn registry() -> JsonSchemaRegistry {
             "cardamum-gpeople-contact-groups-update",
             GpeopleContactGroupOutput
         );
-        insert!("cardamum-gpeople-connections-list", GpeoplePersonsOutput);
+        insert!(
+            "cardamum-gpeople-connections-list",
+            Paginated<GpeoplePersonsOutput>
+        );
         insert!("cardamum-gpeople-connections-get", GpeoplePersonOutput);
         insert!("cardamum-gpeople-connections-create", GpeoplePersonOutput);
         insert!("cardamum-gpeople-connections-update", GpeoplePersonOutput);
         insert!("cardamum-gpeople-connections-search", GpeoplePersonsOutput);
-        insert!("cardamum-gpeople-other-contacts-list", GpeoplePersonsOutput);
+        insert!(
+            "cardamum-gpeople-other-contacts-list",
+            Paginated<GpeoplePersonsOutput>
+        );
         insert!(
             "cardamum-gpeople-other-contacts-search",
             GpeoplePersonsOutput

@@ -97,6 +97,17 @@ pub(crate) fn folder_refusal(err: MsgraphClientStdError) -> anyhow::Error {
     }
 }
 
+/// Whether Graph refused to create a folder because its parent holds one
+/// of that name already: `ErrorFolderExists`, answered on a 409.
+pub(crate) fn is_folder_taken(err: &MsgraphClientStdError) -> bool {
+    let MsgraphClientStdError::Send(send) = err else {
+        return false;
+    };
+
+    send.api()
+        .is_some_and(|err| err.code == "ErrorFolderExists")
+}
+
 /// Whether a request naming one contact or one folder found none: a 404,
 /// or the 400 Graph answers an id that cannot name one
 /// (`ErrorInvalidIdMalformed`).
@@ -231,5 +242,87 @@ mod tests {
             let denied = run(line, 403, "ErrorAccessDenied");
             assert_eq!(denied, Some(ErrorCode::PermissionDenied), "{line}");
         }
+    }
+
+    /// A Graph listing lifts `@odata.nextLink` into `nextPage`, `null` on
+    /// the last page, and `--page-token` gets that link as it is, a link off
+    /// the Graph origin refused before anything is sent; the delta's
+    /// `@odata.deltaLink` ending a round stays as Graph sent it.
+    #[test]
+    fn a_graph_listing_pages_by_next_page() {
+        use clap::Parser;
+        use serde_json::Value;
+
+        use crate::msgraph::{
+            contact_folders::{
+                child_folders::MsgraphContactFolderChildFoldersCommand,
+                list::MsgraphContactFolderListCommand,
+            },
+            contacts::{delta::MsgraphContactDeltaCommand, list::MsgraphContactListCommand},
+        };
+
+        let link = "https://graph.microsoft.com/v1.0/me/contacts?$skip=1";
+        let delta = "https://graph.microsoft.com/v1.0/me/contacts/delta?$deltatoken=d1";
+
+        let run = |args: &[&str], body: Value| {
+            let response = script::response(200, "application/json", &body.to_string());
+            let (script, requests) = Script::new([response]);
+            let client = MsgraphClient {
+                inner: MsgraphClientStd::new(script, "token", Default::default()),
+            };
+            let mut printer = CapturePrinter::default();
+
+            let result = match args[0] {
+                "list" => MsgraphContactListCommand::parse_from(args).execute(&mut printer, client),
+                "folders" => {
+                    MsgraphContactFolderListCommand::parse_from(args).execute(&mut printer, client)
+                }
+                "child-folders" => MsgraphContactFolderChildFoldersCommand::parse_from(args)
+                    .execute(&mut printer, client),
+                "delta" => {
+                    MsgraphContactDeltaCommand::parse_from(args).execute(&mut printer, client)
+                }
+                other => panic!("{other}"),
+            };
+
+            let requests = requests.lock().unwrap();
+            let request = requests
+                .first()
+                .map(|r| String::from_utf8_lossy(r).into_owned());
+            (result.map(|()| printer.into_single().unwrap()), request)
+        };
+
+        for first in [
+            &["list"][..],
+            &["folders"],
+            &["child-folders", "AAMk"],
+            &["delta"],
+        ] {
+            let (json, _) = run(first, json!({"value": [], "@odata.nextLink": link}));
+            let json = json.unwrap();
+            assert_eq!(json["nextPage"], link, "{json}");
+            assert!(json.get("@odata.nextLink").is_none(), "{json}");
+
+            let next = [first[0], "--page-token", link];
+            let (json, request) = run(&next, json!({"value": [], "@odata.deltaLink": delta}));
+            let json = json.unwrap();
+            let request = request.unwrap();
+            assert!(request.starts_with("GET /v1.0/me/contacts?"), "{request}");
+            assert_eq!(json["nextPage"], Value::Null, "{json}");
+
+            let off = [
+                first[0],
+                "--page-token",
+                "https://example.org/v1.0/me/contacts",
+            ];
+            let (result, request) = run(&off, json!({}));
+            assert!(result.is_err(), "{off:?}");
+            assert_eq!(request, None, "{off:?}");
+        }
+
+        let (json, _) = run(&["delta"], json!({"value": [], "@odata.deltaLink": delta}));
+        let json = json.unwrap();
+        assert_eq!(json["@odata.deltaLink"], delta, "{json}");
+        assert_eq!(json["nextPage"], Value::Null, "{json}");
     }
 }

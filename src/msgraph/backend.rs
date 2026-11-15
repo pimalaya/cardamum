@@ -28,7 +28,7 @@ use secrecy::ExposeSecret;
 use crate::{
     config::{MsgraphConfig, ProxyConfig},
     error,
-    msgraph::client::is_missing,
+    msgraph::client::{is_folder_taken, is_missing},
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
@@ -120,7 +120,13 @@ impl MsgraphBackend {
             display_name: name.to_string(),
             ..Default::default()
         };
-        let created = self.inner.contact_folder_create(&folder)?.response;
+        let created = match self.inner.contact_folder_create(&folder) {
+            Ok(created) => created.response,
+            Err(err) if is_folder_taken(&err) => {
+                return Err(error::addressbook_duplicate(name, err.into()));
+            }
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(created.id)
     }
@@ -386,6 +392,24 @@ mod tests {
             Some(ErrorCode::RateLimited)
         );
         assert_eq!(delete_code(500, "ErrorInternalServerError"), None);
+    }
+
+    /// A folder Graph refuses as one of that name existing is
+    /// `addressbook-duplicate` naming it, Graph's answer in `sources`.
+    #[test]
+    fn an_address_book_created_twice_is_a_duplicate() {
+        let err = refusing(409, "ErrorFolderExists")
+            .create_addressbook("Work", None, None)
+            .unwrap_err();
+        let duplicate = Some(ErrorCode::AddressbookDuplicate);
+        assert_eq!(code_of(&err), duplicate, "{err:#}");
+        assert_eq!(err.to_string(), "Addressbook `Work` already exists");
+        assert!(format!("{err:#}").contains("Refused"), "{err:#}");
+
+        let err = refusing(403, "ErrorAccessDenied")
+            .create_addressbook("Work", None, None)
+            .unwrap_err();
+        assert_eq!(error::code(&err), Some(ErrorCode::PermissionDenied));
     }
 
     /// The backend over a Graph server answering each request with the

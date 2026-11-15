@@ -4,7 +4,7 @@
 //! card operations onto [`io_vdir::client::VdirClient`] calls against the
 //! configured home directory.
 
-use std::{io, path::Path};
+use std::io;
 
 use anyhow::{Error, Result, bail};
 use io_vdir::{client::VdirClient, collection::VdirCollection, item::VdirItemKind, path::VdirPath};
@@ -18,6 +18,7 @@ use crate::{
         card::{Card, CardUpdateOutcome},
         client::{CardWindow, first_page, window},
     },
+    vdir::client::{collection_dir, is_dir_name},
 };
 
 /// Vdir backend of the unified-API client, rooted at the home directory.
@@ -41,7 +42,9 @@ impl VdirBackend {
 
     /// Creates a collection named after `name` under the home directory.
     ///
-    /// Returns the new addressbook id, which is its directory name.
+    /// Returns the new addressbook id, which is its directory name. A name
+    /// that is not one directory name is refused, as it would reach out of
+    /// the home or below one of its addressbooks.
     pub fn create_addressbook(
         &mut self,
         name: &str,
@@ -50,6 +53,10 @@ impl VdirBackend {
     ) -> Result<String> {
         if name.is_empty() {
             bail!("Addressbook name cannot be empty");
+        }
+
+        if !is_dir_name(name) {
+            bail!("Addressbook name `{name}` is not one directory name");
         }
 
         let collection = VdirCollection {
@@ -65,6 +72,7 @@ impl VdirBackend {
 
     /// Applies `patch` to the collection `id`, over its current metadata.
     pub fn update_addressbook(&mut self, id: &str, patch: AddressbookDiff) -> Result<()> {
+        let path = self.addressbook_path(id)?;
         let collections = self.inner.list_collections()?;
         let current = collections
             .into_iter()
@@ -72,7 +80,7 @@ impl VdirBackend {
             .ok_or_else(|| addressbook_not_found(id))?;
 
         let next = VdirCollection {
-            path: self.addressbook_path(id)?,
+            path,
             display_name: match patch.name {
                 Some(name) => Some(name),
                 None => current.display_name,
@@ -210,20 +218,14 @@ impl VdirBackend {
 
     /// Resolves `addressbook_id` to an existing collection directory.
     ///
-    /// A write creates whatever directory it is handed and a read of a
-    /// missing one lists nothing, so a path built without looking would let
-    /// a typo in `-k` invent an addressbook, then list it as empty.
+    /// A write creates whatever directory it is handed, a read of a missing
+    /// one lists nothing and a delete removes whatever the path reaches, so
+    /// a path built without looking would let a typo in `-k` invent an
+    /// addressbook, then list it as empty, and an id that is not one
+    /// directory name (`..`, `../keep`) remove a directory out of the home.
     fn addressbook_path(&self, addressbook_id: &str) -> Result<VdirPath> {
-        if addressbook_id.is_empty() {
-            bail!("Addressbook id cannot be empty");
-        }
-
-        let path = self.inner.root().join(addressbook_id);
-        if !Path::new(path.as_str()).is_dir() {
-            return Err(addressbook_not_found(addressbook_id));
-        }
-
-        Ok(path)
+        collection_dir(self.inner.root(), addressbook_id)
+            .ok_or_else(|| addressbook_not_found(addressbook_id))
     }
 }
 

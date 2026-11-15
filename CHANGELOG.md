@@ -121,6 +121,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fixed a credential command prompting for a password (`systemd-ask-password`) hanging the run: it now reads the terminal when cardamum runs in one (pimalaya-config 0.4.1).
 - Fixed `account check` passing a CardDAV account that names `carddav.home` whatever its credential, as the home route connected without a request: the check now sends the home one `PROPFIND`, so a refused credential fails its row as with `carddav.server`.
 - Fixed `card list` printing a card it could not read as a row of empty fields (a pimdir one as its preview) beside its `errors` entry: the card is in `errors` alone, under `--json` and in text, and keeps its place in the pages.
+- Fixed a data loss on vdir: an addressbook id that is not one directory name reached out of the home, so `addressbook delete -k ..` deleted everything in the directory holding the home, the home and its siblings included, `-k ../<name>` a directory beside the home, `-k .` and `-k <book>/..` every addressbook of the home, and `vdir delete ""` the home itself. Such an id (empty, `.`, `..`, holding a separator) is now not found: every vdir command fails `addressbook-not-found` before reading or writing anything, `vdir delete`, `vdir rename` and `vdir item` included, and `addressbook create` and `vdir create` refuse such a name rather than write out of the home. An empty `-k` is coded `addressbook-not-found` on every backend.
 
 ## [0.3.0] - 2026-10-02
 

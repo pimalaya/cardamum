@@ -47,6 +47,16 @@ A backend SHALL report a card it could not read as an `errors` entry and SHALL n
 ### Requirement: Local storage backends
 vdir and pimdir SHALL adapt io-vdir and io-pimdir. vdir stores each addressbook as an immediate subdirectory of `vdir.home-dir` and each card as a `.vcf` file inside it, byte-faithfully. pimdir is an offline cache a sync engine populates through io-pimdir, which holds both the store and the engine, and follows the cache requirements below.
 
+### Requirement: vdir refuses an unknown addressbook
+A vdir addressbook id SHALL name an addressbook only when it is one directory name, one path segment that is neither `.` nor `..` and holds no separator (a trailing one included), naming a directory under the home. Every vdir command naming another SHALL fail before anything is read or written, coded `addressbook-not-found`: `addressbook update`, `addressbook delete` and every `card` read and write with ``Addressbook `<id>` not found``, `vdir delete`, `vdir rename` and every `vdir item` command with ``Collection `<id>` not found``. A new name that is not one directory name SHALL be refused before anything is written: `addressbook create` and `vdir create` uncoded, the new name of `vdir rename` by io-vdir.
+
+A write creates whatever directory it is handed, a listing of a missing one answers nothing and a delete removes whatever the path reaches, so without it a typo in `-k` would read as an empty addressbook or invent one, and an id reaching out of the home (`..`, `../keep`, `friends/..`) would remove a directory there.
+
+#### Scenario: An id reaching out of the home
+- GIVEN the account `perso` whose vdir home `outer/home` holds the addressbook `friends` alone, beside the directory `outer/keep`
+- WHEN `cardamum --json addressbook delete -k ..`, `addressbook delete -k ../keep` or `card list -k nope` runs
+- THEN each exits 1 with the failure object coded `addressbook-not-found`, and the home, `outer/keep` and the directory holding them are left as they were
+
 ### Requirement: A cache renames nothing it cannot push
 The pimdir backend SHALL refuse every `addressbook update` field. Its collection row (id, display name, description, colour) is written by the sync from the server, and the backend stages item actions only, so any local edit of it is a change no sync would carry. A missing body SHALL fall back to the summary preview in a listing, as an unhydrated card does, rather than render as a blank row.
 

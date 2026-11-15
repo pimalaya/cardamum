@@ -7,9 +7,13 @@
 //! that, so the narrower value always wins.
 
 use anyhow::{Result, bail};
+use pimalaya_cli::error::CodedError;
 use pimalaya_config::command::CommandConfig;
 
-use crate::config::{AccountConfig, Config};
+use crate::{
+    config::{AccountConfig, Config},
+    error::ErrorCode,
+};
 
 /// Page size a `card list` falls back to when nothing sets one.
 const DEFAULT_CARDS_LIST_PAGE_SIZE: u32 = 25;
@@ -46,15 +50,17 @@ impl Account {
     /// Resolves the addressbook id a command operates on.
     ///
     /// The flag wins, then the `addressbook.default` config, otherwise
-    /// this bails. An empty id bails too: a backend builds a path from
-    /// it, where an empty segment addresses the parent collection.
+    /// this bails. An empty id bails too, coded `addressbook-not-found` as
+    /// it names none: a backend builds a path from it, where an empty
+    /// segment addresses the parent collection.
     pub fn addressbook_id(&self, flag: Option<String>) -> Result<String> {
         let Some(id) = flag.or_else(|| self.addressbook_default.clone()) else {
             bail!("Missing addressbook id; pass -k/--addressbook or set addressbook.default")
         };
 
         if id.trim().is_empty() {
-            bail!("Addressbook id cannot be empty");
+            let message = "Addressbook id cannot be empty";
+            return Err(CodedError::new(ErrorCode::AddressbookNotFound, message).into());
         }
 
         Ok(id)

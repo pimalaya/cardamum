@@ -5,7 +5,7 @@
 
 use std::{
     ops::{Deref, DerefMut},
-    path::Path,
+    path::{Component, Path},
 };
 
 use anyhow::{Result, anyhow};
@@ -38,15 +38,33 @@ impl VdirClient {
 
     /// Resolves a collection name to its path under the vdir root.
     ///
-    /// A missing directory is rejected here, io-vdir would otherwise
-    /// surface a raw OS error.
+    /// A name the root holds no directory of is rejected here, io-vdir
+    /// would otherwise surface a raw OS error, or remove whatever a name
+    /// that is not one directory name reaches.
     pub fn collection_path(&self, name: &str) -> Result<VdirPath> {
-        let path = self.root().join(name);
-        if !Path::new(path.as_str()).is_dir() {
+        collection_dir(self.root(), name).ok_or_else(|| {
             let message = format!("Collection `{name}` not found");
-            return Err(CodedError::new(ErrorCode::AddressbookNotFound, message).into());
-        }
-        Ok(path)
+            CodedError::new(ErrorCode::AddressbookNotFound, message).into()
+        })
+    }
+}
+
+/// The directory of the collection `id` under `root`, when `id` is one
+/// directory name naming a directory that exists.
+pub(crate) fn collection_dir(root: &VdirPath, id: &str) -> Option<VdirPath> {
+    let path = root.join(id);
+    (is_dir_name(id) && Path::new(path.as_str()).is_dir()).then_some(path)
+}
+
+/// Whether `id` is one directory name: a single normal path component
+/// that is the whole of `id`, so neither empty, `.` nor `..`, and holding
+/// no separator, a trailing one included.
+pub(crate) fn is_dir_name(id: &str) -> bool {
+    let mut components = Path::new(id).components();
+
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(name)), None) => name == id,
+        _ => false,
     }
 }
 

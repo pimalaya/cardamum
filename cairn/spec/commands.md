@@ -23,7 +23,7 @@ A protocol-specific command set SHALL match the remote protocol's own structure 
 pimdir is a store rather than a protocol: its `pimdir` family covers `status`, what a reader can tell of the store behind the account, `queue list`, `queue show` and `queue cancel`, the writes cardamum queued, and `search` and `count`, the store's search index queried in the pimdir SEARCH language. The other operator commands (retrying a parked action, the retained items) ship as the separate `pimdir` binary in io-pimdir.
 
 ### Requirement: A former command name stays hidden
-A command renamed SHALL keep its former name as an alias hidden from the help, the manual and the completions, so a script keeps working, and the alias SHALL have no schema of its own, its schema being its command's: `card create` for `card add` ("A card is added"), `carddav create` for `carddav mkcol` (`cardamum-carddav-mkcol`), the singular `gpeople` nouns for the plural ones ("Specific commands mirror their protocol"), as calendula keeps `caldav create` for `caldav mkcalendar`.
+A command renamed SHALL keep its former name as an alias hidden from the help, the manual and the completions, so a script keeps working, and the alias SHALL have no schema of its own, its schema being its command's: `card create` for `card add` ("A card is added"), `carddav create` for `carddav mkcol` (`cardamum-carddav-mkcol`), the singular `gpeople` nouns for the plural ones ("Specific commands mirror their protocol"), as calendula keeps `caldav create` for `caldav mkcalendar`. A short name SHALL stay accepted the same way, hidden, where calendula shows none for the counterpart: `rm` for `addressbook delete` and `card delete`, `new` for `card add`, `folders` for `msgraph contact-folders`.
 
 #### Scenario: The former name of mkcol
 - GIVEN a CardDAV account
@@ -90,13 +90,21 @@ The shared `-k/--addressbook` resolver SHALL reject an empty id rather than pass
 ### Requirement: A collection command takes its address book as a positional
 `addressbook delete` SHALL take the address book it deletes as a required positional, `addressbook delete <ADDRESSBOOK>`, and `addressbook update` as an optional one, `addressbook update [ADDRESSBOOK]`, falling back to `addressbook.default` as the card commands do, as Himalaya's `mailbox delete <MAILBOX>` takes its mailbox; `addressbook create <NAME>` takes its name so already. `-k/--addressbook`, the v0.3 spelling, SHALL stay accepted on both as a hidden alias of the positional: a second argument conflicting with it, so a line giving both is refused `usage-invalid`, and clap waives the required positional when that option is present. The help, the manual and the MCP input schema SHALL show the positional alone, the tool property named `addressbook` as the option named it, required on `addressbook_delete`. `--color` keeps its short letter `-C` on `addressbook create` and `addressbook update`.
 
+### Requirement: The collection arguments are named as the twin's
+`vdir create` SHALL take the collection's directory name as `<ID>` and its display name as `-n/--display-name <NAME>`, written to the `displayname` file, the id written there when the flag is omitted; `vdir rename` SHALL take `<OLD-ID> <NEW-ID>` and `vdir delete` `<ID>`, as calendula's `vdir` commands name them. `addressbook update -n/--name` SHALL take a `<NAME>`, as calendula's `calendar update` does.
+
+#### Scenario: A display name apart from the id
+- GIVEN a vdir account
+- WHEN `cardamum --json vdir create friends -n Friends` runs
+- THEN it prints `{"id":"friends"}`, makes the directory `friends` and writes `Friends` to its `displayname` file, where `cardamum vdir create bare` writes `bare`
+
 #### Scenario: The v0.3 option still deletes
 - GIVEN a vdir account holding the address books `personal` and `work`
 - WHEN `cardamum --json addressbook delete work` runs, or `cardamum --json addressbook delete -k work`
 - THEN either deletes `work` alone and prints `{"id":"work","queued":false}`; `cardamum --json addressbook delete work -k personal` is refused `usage-invalid`, exit 2, deleting nothing
 
 ### Requirement: A card is added
-The unified verb creating a card SHALL be `card add`, as Himalaya's `message add`, its MCP tool `card_add` and its schema `cardamum-card-add`. `card add`, the v0.3 name, SHALL stay accepted as a hidden alias, and `card new` as a visible one. The capability it reaches is `card.add`, pimdir's `contacts.card.add`.
+The unified verb creating a card SHALL be `card add`, as Himalaya's `message add`, its MCP tool `card_add` and its schema `cardamum-card-add`. `card create`, the v0.3 name, SHALL stay accepted as a hidden alias, as SHALL `card new`. The capability it reaches is `card.add`, pimdir's `contacts.card.add`.
 
 ### Requirement: A partial write says so
 When a backend cannot carry out part of a write, and the protocol offers no way to insist, the command SHALL report what was left undone rather than print a plain success. On Google People an unmappable vCard property lives in a `clientData` entry the API will not clear, so an update dropping one keeps it, and the command names it.
@@ -299,12 +307,12 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 - THEN the command exits 1, queues nothing and prints `{"code":"precondition-failed","error":"Precondition failed: …","sources":[],"backtrace":null}`
 
 #### Scenario: An unknown card
-- GIVEN a vdir address book holding no card `nope`
-- WHEN `cardamum --json card read nope` runs
-- THEN the command exits 1 and prints a failure object coded `card-not-found`, its `error` ``Card `nope` not found`` and io-vdir's text in `sources`
+- GIVEN a vdir address book `book` holding no card `nope`
+- WHEN `cardamum --json card read -k book nope` runs
+- THEN the command exits 1 and prints a failure object coded `card-not-found`, its `error` ``Card `nope` not found in address book `book` `` and io-vdir's text in `sources`
 
 ### Requirement: A not-found failure is cardamum's sentence
-A card a command names that the address book does not hold SHALL fail with cardamum's own sentence, ``Card `<id>` not found`` (``… not found in `<book>` `` on pimdir, which has no text of its own to add), the backend's answer below it in `sources` (io-vdir's, the CardDAV, Graph or People refusal, the JMAP `notFound`), as calendula words an item not found: the backend's wording never stands as the error. An item error SHALL NOT repeat its card's id in `error`, the id being its own key.
+A card a command names that the address book does not hold SHALL fail with cardamum's own sentence on every backend, ``Card `<id>` not found in address book `<book>` ``, as Himalaya words a message not found (``Message `<id>` not found in mailbox `<mailbox>` ``), the backend's answer below it in `sources` (io-vdir's, the CardDAV, Graph or People refusal, the JMAP `notFound`; pimdir has no text of its own to add): the backend's wording never stands as the error. An item error SHALL NOT repeat its card's id in `error`, the id being its own key.
 
 ### Requirement: A command with no address book is coded
 A card command given no `-k/--addressbook`, and `addressbook update` given no address book, over an account setting no `addressbook.default` SHALL fail coded `addressbook-default-missing`, exit 1, the error naming the flag and the key: ``No default addressbook found, name one with `-k <ADDRESSBOOK-ID>` or set `addressbook.default` ``, as calendula refuses a missing default calendar (`calendar-default-missing`) and the family a missing default account (`account-default-missing`).
@@ -336,6 +344,14 @@ The vCard SHALL travel as `contents`, a string: the text when its bytes are vali
 - GIVEN a card whose bytes hold a Latin-1 `é`
 - WHEN `cardamum --json card read` reads it
 - THEN it exits 0 and prints `"contents"` holding its bytes in base64 and `"encoding":"base64"`, its common fields `null`
+
+### Requirement: A CardDAV read carries its vCard beside its encoding
+`carddav get`, `carddav report query` and `carddav report multiget` SHALL carry each vCard as `card read` does ("A card read prints its listing row and its vCard") and as calendula's `caldav get`, `report query` and `report multiget` carry an item: `contents` beside `encoding`, the text when the bytes are valid UTF-8, `encoding` then `utf-8`, and their base64 (RFC 4648 standard alphabet, padded) otherwise, `encoding` then `base64` (pimalaya-cli output.md, "Bytes are never raw under JSON"). A card that is not UTF-8 SHALL read rather than fail, and the `carddav get` text SHALL print it as its bytes, as `card build` hands one over. A REPORT row's card is the `address-data` text io-webdav reads, so its `encoding` is `utf-8`.
+
+#### Scenario: A CardDAV card that is not UTF-8
+- GIVEN a CardDAV server answering the GET of `c1.vcf` with a vCard holding the byte `0xE9`
+- WHEN `cardamum --json carddav get book c1.vcf` runs
+- THEN it exits 0 and prints `id`, `etag`, `contents` holding the bytes in base64 and `"encoding":"base64"`
 
 ### Requirement: pimdir searches cards through the store's index
 `cardamum pimdir search <query>...`, gated on the `pimdir` feature, SHALL answer the pimdir SEARCH query language (search-draft-11 §8) from the store's search index, scoped to the account's cards: the query is read as its conjuncts plus `kind:contact`, `account:<account>` when the store groups the account under a name, and `collection:<id>` when `-k/--addressbook` names an address book. The scope is added beside the query, never around it, so a group that is itself a conjunct of the query keeps narrowing the answer and its coverage as its terms do bare (SEARCH §8.2). Without `-k` it SHALL search every address book of the account, `addressbook.default` not applied, and a `-k` naming no address book of the account SHALL fail naming those it holds rather than answer nothing. The words of the query are joined by spaces into one query. An option of `pimdir search` or `pimdir count` SHALL be read wherever it stands, before the query or after it, `--json` included; a query word starting with `-`, a negated term, SHALL pass after `--` alone, a word starting with `-` before it being refused as an unknown option or read as the option it spells, as calendula and Himalaya read theirs. Cardamum SHALL open the index read-only (io-pimdir `PimdirIndex::open_query`) and SHALL NOT create, rebuild nor refresh it: the store's owner, its sync engine, does. The answer SHALL be the store as of the owner's last refresh: a queued write is not listed nor folded in.
@@ -416,6 +432,14 @@ A field taken from a card or a server (a name, an address, an id, an error a ser
 
 ### Requirement: A card page names its context and its next page
 `card list` SHALL print as a pimalaya-cli `listing::Listing`: above the cards `Account: <name> (<backend>)`, `Addressbook: <id>`, `Page: <n>, cards <a> to <b>` (`card <a>` for one, `empty` for none, `all` when unpaged) followed by `, the last` when no card follows, and `Next page: --page <n>` while one does, the values aligned in one column; then a blank line and one line per card with no column header (`id  email  phone  name`, the free-text name last, `-` for an empty cell). Below the cards SHALL print only the command's errors ("A command's errors print at its end").
+
+### Requirement: An address book listing names its account
+`addressbook list` SHALL print as a pimalaya-cli `listing::Listing`, as calendula's `calendar list` and Himalaya's `mailbox list` print theirs: `Account: <name> (<backend>)`, then a blank line and one line per address book with no column header, `id  default  color  name`, `default` on the one the server names the default, the free-text name last, `-` for an empty cell; the description is left to `--json`. Below the address books SHALL print only the command's errors ("A command's errors print at its end").
+
+#### Scenario: Two address books
+- GIVEN a vdir account `perso` holding `personal`, coloured `#ff0000`, and `work`, with no colour
+- WHEN `cardamum addressbook list` runs
+- THEN it prints `Account:    perso (vdir)`, a blank line, then `personal  -  #ff0000  Personal` and `work` with `-` in its default and colour cells, aligned, and no header row
 
 ### Requirement: Listings resume from their cursor
 `card list` SHALL print `nextPage` beside `cards`: the next page number, as a string, while cards follow the page, `null` otherwise, and SHALL take it back through `--page-token`, which wins over `--page`. Whether cards follow is exact on every backend: the unified client reads one card past the page.

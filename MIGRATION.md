@@ -141,7 +141,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
 
 - **Every list is plain text**, with no border, no colour and no truncation: an uppercase header then one item per line, columns two spaces apart, an empty cell as `-`, the free-text column last; or, for a list of wide items (the CardDAV and JMAP addressbooks, Graph folders and contacts, vdir collections), each item the way `git log` prints a commit, a field the item does not hold printing no line. A single item prints as `Label:  value` lines. The list frame, the `Error:` lines and the `account capability` output are pimalaya-cli's, the same in Himalaya.
 - **`account list` prints one line per account with no header row**, the default account marked `default`, the backends this build leaves out after the others; a script reads `cardamum --json account list`.
-- **`card list` prints one line per card**, `id  email  phone  name`, with no header row, under `Account:`, `Addressbook:`, `Page:` and `Next page:`. `addressbook list` leaves the description to `--json`.
+- **`card list` prints one line per card**, `id  email  phone  name`, with no header row, under `Account:`, `Addressbook:`, `Page:` and `Next page:`. `addressbook list` prints the same way, `id  default  color  name` under `Account:`, and leaves the description to `--json`.
 
   ```text
   v0.3
@@ -225,6 +225,14 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   # v0.4
   cardamum --json card read -k book c1.vcf | jq -r 'if .encoding == "base64" then .contents | @base64d else .contents end'
   ```
+- **`carddav get`, `report query` and `report multiget` carry `encoding` beside each vCard**, as `card read` does: `utf-8` when `contents` is the vCard text, `base64` when its bytes are not UTF-8 and `contents` holds their base64, where v0.3's `carddav get` failed on such a card. A REPORT row reads as text, so its `encoding` is `utf-8`:
+
+  ```sh
+  # v0.3
+  cardamum --json carddav get book c1.vcf | jq -r '.contents'
+  # v0.4
+  cardamum --json carddav get book c1.vcf | jq -r 'if .encoding == "base64" then .contents | @base64d else .contents end'
+  ```
 - **The raw `request` commands wrap the response**: `gpeople request`, `jmap request` and `msgraph request` print `{"response": …}`, `null` when the server sent no body, where they printed the response itself.
 
   ```sh
@@ -274,7 +282,7 @@ The commands take the names Himalaya and Calendula give them. Every v0.3 spellin
   cardamum addressbook delete work
   cardamum addressbook update work --name Work
   ```
-- **`card create` is `card add`**, as `himalaya message add`; `card new` stays. `cardamum json-schema` names its schema `cardamum-card-add`, where v0.3 wrote `cardamum-card-create`, and the MCP tool is `card_add`.
+- **`card create` is `card add`**, as `himalaya message add`; `card new` stays, hidden from the help as `card create` is. `cardamum json-schema` names its schema `cardamum-card-add`, where v0.3 wrote `cardamum-card-create`, and the MCP tool is `card_add`.
 
   ```sh
   # v0.3
@@ -303,7 +311,7 @@ The commands take the names Himalaya and Calendula give them. Every v0.3 spellin
 
 ### The libraries
 
-The release moves onto the family line every Pimalaya CLI shares: pimalaya-cli, pimalaya-config and pimalaya-stream 0.4, io-pimdir 0.12, io-webdav 0.11, io-vdir 0.3, io-jmap 0.9, io-msgraph 0.9, io-gpeople 0.7 and io-http 0.8; io-pim-discovery leaves with `carddav.discover`. Most of it shows in the sections above (the failure object, the list frame, the exit contract, the pimdir store); the rest to act on:
+The release moves onto the family line every Pimalaya CLI shares: pimalaya-cli 0.5.1, pimalaya-config 0.5.2, pimalaya-stream 0.4, io-pimdir 0.13, io-webdav 0.11, io-vdir 0.3, io-jmap 0.10, io-msgraph 0.9, io-gpeople 0.8 and io-http 0.8; io-pim-discovery leaves with `carddav.discover`. Most of it shows in the sections above (the failure object, the list frame, the exit contract, the pimdir store); the rest to act on:
 
 - **A CardDAV address book outside the home set is listed and addressed by its path** rather than its last segment. A script that stored such an id reads it again from `addressbook list`.
 - **A CardDAV id prints decoded** (io-webdav 0.10): an address book or card whose href escapes a byte the decoding gives back lists by the decoded name, `My Book` for `My%20Book`, the id `addressbook create "My Book"` prints; a segment whose decoding would name another path (`%2F`) keeps its served form. An id stored from v0.3 still addresses its resource, but no longer matches the listing: a script comparing ids reads them again from `addressbook list` or `card list`.

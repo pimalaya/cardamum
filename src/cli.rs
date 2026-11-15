@@ -34,7 +34,7 @@ use crate::msgraph::{cli::MsgraphCommand, client::build_msgraph_client};
 use crate::vdir::{cli::VdirCommand, client::build_vdir_client};
 use crate::{
     account::cli::AccountCommand,
-    backend::Backend,
+    backend::{self, Backend},
     config::{AccountConfig, Config},
     error::{self, ErrorCode},
     json_schema,
@@ -68,14 +68,13 @@ pub struct Cli {
     pub config: ConfigFlags,
     #[command(flatten)]
     pub account: AccountFlag,
-    /// Force a specific backend for the unified commands.
+    /// Force a specific backend for cross-protocol commands.
     ///
-    /// Only the unified commands `addressbook` and `card` consume it, the
-    /// protocol-specific ones always use their own backend. The default
-    /// `auto` picks the first configured backend they support, an
-    /// explicit value uses that one alone and bails when the account
-    /// declares no matching block or the operation has no arm for it.
-    #[arg(short, long, global = true, default_value_t)]
+    /// Only the unified commands read it, the protocol-specific ones always
+    /// using their own backend. `auto`, the default, picks the first
+    /// configured backend the command supports; an explicit value bails when
+    /// the account has no such block, or the command no such implementation.
+    #[arg(short, long, global = true, default_value_t, value_parser = backend::parser())]
     pub backend: Backend,
     #[command(flatten)]
     pub json: JsonFlag,
@@ -309,5 +308,96 @@ mod tests {
 
         assert!(parse(&["pimdir", "search", "alice", "-zoe"]).is_err());
         assert!(parse(&["pimdir", "count", "alice", "-zoe"]).is_err());
+    }
+}
+
+#[cfg(test)]
+mod usage_tests {
+    use clap::{CommandFactory, Parser, error::ErrorKind};
+
+    use crate::{
+        backend::{Backend, NAMES},
+        cli::Cli,
+    };
+
+    /// The short names of `addressbook delete`, `card add`, `card delete`
+    /// and `msgraph contact-folders` still run, hidden from the help as
+    /// calendula shows none for their counterparts.
+    #[test]
+    fn the_short_names_are_hidden_aliases() {
+        let mut aliases = vec![
+            (["addressbook", "delete"], "rm"),
+            (["card", "add"], "new"),
+            (["card", "delete"], "rm"),
+        ];
+
+        if cfg!(feature = "msgraph") {
+            aliases.push((["msgraph", "contact-folders"], "folders"));
+        }
+
+        let mut cli = Cli::command();
+        cli.build();
+
+        for ([group, leaf], alias) in aliases {
+            let cmd = cli
+                .find_subcommand(group)
+                .and_then(|group| group.find_subcommand(leaf))
+                .unwrap();
+            assert!(cmd.get_all_aliases().any(|name| name == alias), "{leaf}");
+            assert!(cmd.get_visible_aliases().next().is_none(), "{leaf}");
+        }
+    }
+
+    /// `-b` reads as Himalaya's, and a value it does not know is refused
+    /// with the possible ones, every backend an account may name.
+    #[test]
+    fn the_backend_flag_lists_its_values() {
+        let mut cli = Cli::command();
+        cli.build();
+        let flag = cli
+            .get_arguments()
+            .find(|arg| arg.get_id() == "backend")
+            .unwrap();
+
+        let help = flag.get_help().unwrap().to_string();
+        assert_eq!(help, "Force a specific backend for cross-protocol commands");
+
+        let values: Vec<String> = flag
+            .get_possible_values()
+            .iter()
+            .map(|value| value.get_name().to_string())
+            .collect();
+        assert_eq!(values[0], "auto");
+        assert_eq!(values[1..], NAMES);
+
+        let err = Cli::try_parse_from(["cardamum", "-b", "nope", "card", "list"]).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidValue);
+        let message = err.to_string();
+        assert!(
+            message
+                .contains("[possible values: auto, vdir, pimdir, carddav, jmap, msgraph, gpeople]"),
+            "{message}"
+        );
+
+        let cli = Cli::try_parse_from(["cardamum", "-b", "auto", "card", "list"]).unwrap();
+        assert_eq!(cli.backend, Backend::Auto);
+    }
+
+    /// A backend this build leaves out is a possible value still, refused
+    /// naming the feature it needs.
+    #[cfg(not(feature = "jmap"))]
+    #[test]
+    fn a_backend_left_out_names_its_feature() {
+        let err = Cli::try_parse_from(["cardamum", "-b", "jmap", "card", "list"]).unwrap_err();
+        let message = err.to_string();
+        assert!(message.contains("--features jmap"), "{message}");
+    }
+
+    /// A backend this build carries is taken by its name.
+    #[cfg(feature = "vdir")]
+    #[test]
+    fn a_built_backend_is_taken_by_its_name() {
+        let cli = Cli::try_parse_from(["cardamum", "-b", "vdir", "card", "list"]).unwrap();
+        assert_eq!(cli.backend, Backend::Vdir);
     }
 }

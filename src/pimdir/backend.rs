@@ -757,10 +757,11 @@ impl PimdirBackend {
             .parse::<i64>()
             .map_err(|_| missing(format!("Invalid card id `{card_id}` (expected a number)")))?;
 
-        self.inner
-            .reader
-            .get_item(collection, seq)?
-            .ok_or_else(|| missing(format!("Card `{card_id}` not found in `{collection}`")))
+        self.inner.reader.get_item(collection, seq)?.ok_or_else(|| {
+            missing(format!(
+                "Card `{card_id}` not found in address book `{collection}`"
+            ))
+        })
     }
 
     /// Stages a body and the action naming it as one step.

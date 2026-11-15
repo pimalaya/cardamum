@@ -22,7 +22,7 @@ use crate::msgraph::{
 #[derive(Debug, Subcommand)]
 #[command(rename_all = "kebab-case")]
 pub enum MsgraphCommand {
-    #[command(subcommand, visible_alias = "folders", aliases = ["contact-folder", "folder"])]
+    #[command(subcommand, aliases = ["contact-folder", "folder", "folders"])]
     ContactFolders(MsgraphContactFoldersCommand),
     #[command(subcommand, alias = "contact")]
     Contacts(MsgraphContactsCommand),

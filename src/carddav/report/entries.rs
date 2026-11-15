@@ -14,7 +14,7 @@ use vcard::{
     value::VcardValue,
 };
 
-use crate::error::ItemError;
+use crate::{error::ItemError, shared::card::read::CardContents};
 
 /// Cards returned by a `query` or `multiget` REPORT.
 ///
@@ -43,8 +43,9 @@ pub struct EntryRow {
     pub id: String,
     /// The server ETag, when it sent one.
     pub etag: Option<String>,
-    /// The raw vCard, as text.
-    pub contents: String,
+    /// The raw vCard, as text or as base64.
+    #[serde(flatten)]
+    pub contents: CardContents,
     /// The first `FN` of the vCard, for the text output only.
     #[serde(skip)]
     pub fn_value: Option<String>,
@@ -54,9 +55,9 @@ impl From<CarddavCardEntry> for EntryRow {
     fn from(entry: CarddavCardEntry) -> Self {
         Self {
             fn_value: formatted_name(&entry.data),
+            contents: CardContents::new(entry.data),
             id: entry.id,
             etag: entry.etag,
-            contents: String::from_utf8_lossy(&entry.data).into_owned(),
         }
     }
 }
@@ -146,7 +147,7 @@ mod report_tests {
     use serde_json::{Value, json};
     use url::Url;
 
-    use super::{CarddavCardEntriesOutput, EntryRow};
+    use super::{CardContents, CarddavCardEntriesOutput, EntryRow};
     use crate::{
         carddav::{
             client::CarddavClient,
@@ -321,7 +322,8 @@ END:VCARD&#13;
         assert_eq!(status, 3);
     }
 
-    /// Every card read: `errors` is `[]` and the command succeeds.
+    /// Every card read: `errors` is `[]` and the command succeeds, each
+    /// vCard beside its `encoding`.
     #[test]
     fn a_multiget_reading_every_card_prints_no_error() {
         let body = multistatus(&[C1]);
@@ -329,6 +331,9 @@ END:VCARD&#13;
         let cmd = CarddavReportMultigetCommand::try_parse_from(["multiget", "book", "c1.vcf"]);
         let (json, status) = run(|printer| cmd.unwrap().execute(printer, answering(&body)));
 
+        let card = "BEGIN:VCARD\r\nVERSION:4.0\r\nUID:c1\r\nFN:Jane\r\nEND:VCARD\r\n";
+        assert_eq!(json["cards"][0]["contents"], card, "{json}");
+        assert_eq!(json["cards"][0]["encoding"], "utf-8", "{json}");
         assert_eq!(json["errors"], json!([]));
         assert_eq!(status, 0);
     }
@@ -337,7 +342,7 @@ END:VCARD&#13;
         EntryRow {
             id: String::from("c1.vcf"),
             etag: Some(String::from("e1")),
-            contents: String::new(),
+            contents: CardContents::new(Vec::new()),
             fn_value: Some(String::from("Jane")),
         }
     }

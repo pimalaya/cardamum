@@ -13,18 +13,18 @@ use crate::{shared::receipt::IdReceipt, vdir::client::VdirClient};
 /// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct VdirCollectionDeleteCommand {
-    /// Name of the collection (final path segment under the vdir root).
-    #[arg(value_name = "NAME")]
-    pub name: String,
+    /// Collection identifier (directory name).
+    #[arg(value_name = "ID")]
+    pub id: String,
 }
 
 impl VdirCollectionDeleteCommand {
     pub fn execute(self, printer: &mut impl Printer, client: VdirClient) -> Result<()> {
-        let path = client.collection_path(&self.name)?;
+        let path = client.collection_path(&self.id)?;
         client.delete_collection(path)?;
 
         printer.out(IdReceipt {
-            id: self.name,
+            id: self.id,
             done: "Collection deleted",
         })
     }

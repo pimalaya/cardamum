@@ -297,9 +297,10 @@ pub fn card_changed(card_id: &str, server: &str) -> Error {
     pimalaya_cli::error::CodedError::new(ErrorCode::PreconditionFailed, message).into()
 }
 
-/// The failure of the card `card_id` the address book does not hold,
-/// `cause` what the backend answered: cardamum's sentence, the backend's
-/// text in `sources`, as calendula words an item not found.
+/// The failure of the card `card_id` the address book `addressbook_id`
+/// does not hold, `cause` what the backend answered: cardamum's sentence,
+/// as Himalaya words a message not found in its mailbox, the backend's
+/// text in `sources`.
 #[cfg(any(
     feature = "carddav",
     feature = "gpeople",
@@ -307,9 +308,9 @@ pub fn card_changed(card_id: &str, server: &str) -> Error {
     feature = "msgraph",
     feature = "vdir"
 ))]
-pub fn card_not_found(card_id: &str, cause: Error) -> Error {
-    with_code(cause, |_| Some(ErrorCode::CardNotFound))
-        .context(format!("Card `{card_id}` not found"))
+pub fn card_not_found(addressbook_id: &str, card_id: &str, cause: Error) -> Error {
+    let message = format!("Card `{card_id}` not found in address book `{addressbook_id}`");
+    with_code(cause, |_| Some(ErrorCode::CardNotFound)).context(message)
 }
 
 /// The failure of the address book `id` the backend does not hold, `cause`

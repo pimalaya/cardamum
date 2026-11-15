@@ -13,21 +13,21 @@ use crate::{shared::receipt::IdReceipt, vdir::client::VdirClient};
 /// JSON output: `{"id"}`.
 #[derive(Debug, Parser)]
 pub struct VdirCollectionRenameCommand {
-    /// Name of the source collection (final path segment).
-    #[arg(value_name = "NAME")]
-    pub source: String,
-    /// New name (final path segment).
-    #[arg(value_name = "TARGET")]
-    pub target: String,
+    /// Current collection identifier (directory name).
+    #[arg(value_name = "OLD-ID")]
+    pub id: String,
+    /// New collection identifier (directory name).
+    #[arg(value_name = "NEW-ID")]
+    pub new_id: String,
 }
 
 impl VdirCollectionRenameCommand {
     pub fn execute(self, printer: &mut impl Printer, client: VdirClient) -> Result<()> {
-        let path = client.collection_path(&self.source)?;
-        client.rename_collection(path, &self.target)?;
+        let path = client.collection_path(&self.id)?;
+        client.rename_collection(path, &self.new_id)?;
 
         printer.out(IdReceipt {
-            id: self.target,
+            id: self.new_id,
             done: "Collection renamed",
         })
     }

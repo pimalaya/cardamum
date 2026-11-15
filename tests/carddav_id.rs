@@ -110,7 +110,7 @@ fn a_card_id_out_of_its_addressbook_is_not_found() {
     let code = Value::from("card-not-found");
 
     for id in ["..", ".", "", "/", "a/../..", "%2E%2E", "a/"] {
-        let error = format!("Card `{id}` not found");
+        let error = format!("Card `{id}` not found in address book `book`");
 
         let commands: &[&[&str]] = &[
             &["card", "read", "-k", "book", id],

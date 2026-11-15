@@ -12,10 +12,13 @@
 //! which loads unread so one file serves every build: a command reaching
 //! it fails coded `backend-not-built`, naming the cargo feature.
 
-use std::{fmt, str::FromStr};
+use std::{fmt, iter, str::FromStr};
 
 use anyhow::{Error, bail};
-use clap::Parser;
+use clap::{
+    Parser,
+    builder::{PossibleValue, PossibleValuesParser, TypedValueParser},
+};
 use pimalaya_cli::error::CodedError;
 
 use crate::error::ErrorCode;
@@ -37,6 +40,32 @@ pub fn is_built(name: &str) -> bool {
 
     let mut names = NAMES.into_iter().zip(built);
     names.any(|(known, built)| built && known == name)
+}
+
+/// What each backend of [`NAMES`] speaks, as the help names it.
+const PROTOCOLS: [&str; 6] = [
+    "vdir",
+    "pimdir",
+    "CardDAV",
+    "JMAP",
+    "Microsoft Graph",
+    "Google People",
+];
+
+/// The value parser of `--backend`: `auto` then every backend an account
+/// may name, built or not, so the help and a refused value list them all,
+/// as Himalaya's do; one the build leaves out then fails naming its
+/// feature.
+pub fn parser() -> impl TypedValueParser<Value = Backend> {
+    let auto = PossibleValue::new("auto")
+        .help("Let the command pick the first backend it is configured for");
+    let pinned = NAMES.into_iter().zip(PROTOCOLS).map(|(name, protocol)| {
+        let help = format!("Pin the command to the account's {protocol} backend");
+        PossibleValue::new(name).help(help)
+    });
+
+    let values = iter::once(auto).chain(pinned);
+    PossibleValuesParser::new(values).try_map(|name| name.parse::<Backend>())
 }
 
 /// The failure of a command reaching the backend `name`, which this build

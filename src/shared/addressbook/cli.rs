@@ -27,7 +27,7 @@ pub enum AddressbookCommand {
     Create(AddressbookCreateCommand),
     #[command(after_long_help = capability::help("addressbook", "update"))]
     Update(AddressbookUpdateCommand),
-    #[command(visible_alias = "rm", after_long_help = capability::help("addressbook", "delete"))]
+    #[command(alias = "rm", after_long_help = capability::help("addressbook", "delete"))]
     Delete(AddressbookDeleteCommand),
 }
 

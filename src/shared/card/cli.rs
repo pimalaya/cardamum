@@ -27,11 +27,11 @@ pub enum CardCommand {
     #[command(after_long_help = capability::help("card", "read"))]
     Read(CardReadCommand),
     Build(Box<CardBuildCommand>),
-    #[command(visible_alias = "new", alias = "create", after_long_help = capability::help("card", "add"))]
+    #[command(aliases = ["create", "new"], after_long_help = capability::help("card", "add"))]
     Add(Box<CardAddCommand>),
     #[command(after_long_help = capability::help("card", "update"))]
     Update(Box<CardUpdateCommand>),
-    #[command(visible_alias = "rm", after_long_help = capability::help("card", "delete"))]
+    #[command(alias = "rm", after_long_help = capability::help("card", "delete"))]
     Delete(CardDeleteCommand),
 }
 

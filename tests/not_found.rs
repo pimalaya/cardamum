@@ -63,7 +63,10 @@ fn a_vdir_card_read_of_an_unknown_id_is_a_card_not_found() {
 
         // NOTE: cardamum's sentence, io-vdir's text below it, as calendula
         // words an item not found.
-        assert_eq!(json["error"], "Card `nope` not found", "{json}");
+        assert_eq!(
+            json["error"], "Card `nope` not found in address book `book`",
+            "{json}"
+        );
         let source = json["sources"][0].as_str().unwrap_or_default();
         assert!(source.contains("not found"), "{json}");
     }
@@ -119,6 +122,13 @@ fn a_pimdir_card_read_of_an_unknown_id_is_a_card_not_found() {
         let json = failure(&output);
         assert_eq!(json["code"], "card-not-found", "{id}: {json}");
     }
+
+    // NOTE: the sentence every backend words, as Himalaya words a message
+    // not found in its mailbox.
+    let output = run(home.path(), &toml, &["card", "read", "-k", "book", "42"]);
+    let json = failure(&output);
+    let error = "Card `42` not found in address book `book`";
+    assert_eq!(json["error"], error, "{json}");
 }
 
 #[cfg(feature = "pimdir")]

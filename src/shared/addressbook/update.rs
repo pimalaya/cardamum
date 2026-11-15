@@ -38,7 +38,7 @@ pub struct AddressbookUpdateCommand {
     )]
     pub addressbook_flag: Option<String>,
     /// New display name.
-    #[arg(long, short, value_name = "TEXT")]
+    #[arg(long, short, value_name = "NAME")]
     pub name: Option<String>,
     /// New free-form description, `""` to clear it.
     #[arg(long, short, alias = "desc", value_name = "TEXT")]
@@ -117,5 +117,15 @@ mod tests {
             .render_long_help()
             .to_string();
         assert!(!help.contains("-k"), "{help}");
+    }
+
+    /// The new display name is a `NAME`, as calendula's `calendar update`
+    /// names it.
+    #[test]
+    fn the_new_name_is_a_name() {
+        let help = AddressbookUpdateCommand::command()
+            .render_long_help()
+            .to_string();
+        assert!(help.contains("-n, --name <NAME>"), "{help}");
     }
 }

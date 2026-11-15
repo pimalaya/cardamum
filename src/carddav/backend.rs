@@ -141,7 +141,7 @@ impl CarddavBackend {
         let body = self
             .inner
             .read_card(addressbook_id, card_id)
-            .map_err(|err| card_error(card_id, err))?;
+            .map_err(|err| card_error(addressbook_id, card_id, err))?;
 
         Ok(Card {
             id: card_id.to_string(),
@@ -179,7 +179,7 @@ impl CarddavBackend {
             None => {
                 self.inner
                     .read_card(addressbook_id, card_id)
-                    .map_err(|err| card_error(card_id, err))
+                    .map_err(|err| card_error(addressbook_id, card_id, err))
                     .with_context(|| {
                         format!("Cannot read the current version of card `{card_id}`")
                     })?
@@ -202,7 +202,7 @@ impl CarddavBackend {
     ) -> Result<()> {
         self.inner
             .delete_card(addressbook_id, card_id, if_match)
-            .map_err(|err| card_error(card_id, err))?;
+            .map_err(|err| card_error(addressbook_id, card_id, err))?;
         Ok(())
     }
 }
@@ -296,9 +296,9 @@ fn card_write_error(err: WebdavClientStdError) -> Error {
 
 /// The failure of a request on the card `card_id`, `card-not-found` when
 /// the server holds no such card.
-fn card_error(card_id: &str, err: WebdavClientStdError) -> Error {
+fn card_error(addressbook_id: &str, card_id: &str, err: WebdavClientStdError) -> Error {
     match is_missing(&err) {
-        true => error::card_not_found(card_id, err.into()),
+        true => error::card_not_found(addressbook_id, card_id, err.into()),
         false => err.into(),
     }
 }

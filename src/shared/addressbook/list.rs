@@ -7,15 +7,21 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::{columns::Columns, error::ItemErrors, printer::Printer, sanitize};
+use pimalaya_cli::{listing::Listing, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
+use crate::backend::Backend;
 use crate::capability::Capability;
 use crate::error::{ItemError, partial_when};
 use crate::shared::{addressbook::Addressbook, client::AddressbookClient};
 
 /// List every addressbook available to the active account.
+///
+/// Each line shows the id of an address book, `default` on the one the
+/// server names the default, its color, then its name, under a header
+/// naming the account. An address book the backend could not read is
+/// named by an `Error:` line at the end, and the command exits 3.
 ///
 /// JSON output: `{"addressbooks": [{"id", "name", "description",
 /// "color", "default"}], "errors": [{"id", "code", "error", "sources"}]}`:
@@ -30,6 +36,8 @@ impl AddressbookListCommand {
         let addressbooks = client.list_addressbooks()?;
 
         let output = AddressbookListOutput {
+            account: client.name.clone(),
+            backend: client.backend(),
             rows: addressbooks.into_iter().map(From::from).collect(),
             errors: Vec::new(),
         };
@@ -43,6 +51,12 @@ impl AddressbookListCommand {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct AddressbookListOutput {
+    /// The name of the account listed.
+    #[serde(skip)]
+    pub account: String,
+    /// The backend serving the account.
+    #[serde(skip)]
+    pub backend: Backend,
     /// The addressbooks the account exposes.
     #[serde(rename = "addressbooks")]
     pub rows: Vec<AddressbookRow>,
@@ -82,34 +96,34 @@ impl From<Addressbook> for AddressbookRow {
 
 impl fmt::Display for AddressbookListOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let backend = self.backend.to_string();
+        let mut listing = Listing::new(&self.account, Some(&backend));
+
         // NOTE: a name is free text, so it reads last; a description is
         // left to the JSON.
-        let mut columns = Columns::new(["ID", "DEFAULT", "COLOR", "NAME"]);
-
         for book in &self.rows {
-            let default = if book.default { "yes" } else { "" };
-            let color = book.color.as_deref().map(sanitize::text);
+            let default = match book.default {
+                true => String::from("default"),
+                false => String::new(),
+            };
 
-            columns.push([
+            listing.items.push([
                 sanitize::text(&book.id).into_owned(),
-                default.to_string(),
-                color.map(|color| color.into_owned()).unwrap_or_default(),
+                default,
+                sanitize::text(book.color.as_deref().unwrap_or_default()).into_owned(),
                 sanitize::text(&book.name).into_owned(),
             ]);
         }
 
-        let mut errors = ItemErrors::default();
-
         for error in &self.errors {
-            errors.push(error);
+            listing.errors.push(error);
         }
 
-        write!(f, "{columns}")?;
-        errors.write_after(f)
+        write!(f, "{listing}")
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "vdir"))]
 mod tests {
     use anyhow::anyhow;
 
@@ -117,39 +131,56 @@ mod tests {
 
     fn output() -> AddressbookListOutput {
         AddressbookListOutput {
-            rows: vec![AddressbookRow {
-                id: String::from("personal"),
-                name: String::from("Personal"),
-                description: None,
-                color: Some(String::from("#ff0000")),
-                default: true,
-            }],
+            account: String::from("perso"),
+            backend: Backend::Vdir,
+            rows: vec![
+                AddressbookRow {
+                    id: String::from("personal"),
+                    name: String::from("Personal\x1b[2J"),
+                    description: Some(String::from("Family")),
+                    color: Some(String::from("#ff0000")),
+                    default: true,
+                },
+                AddressbookRow {
+                    id: String::from("work"),
+                    name: String::from("Work"),
+                    description: None,
+                    color: None,
+                    default: false,
+                },
+            ],
             errors: Vec::new(),
         }
     }
 
-    /// The table alone when every address book was read.
+    /// The address books print one line each under the account, as
+    /// calendula's calendars and Himalaya's mailboxes do: no header row,
+    /// the id first, the name last, `-` for an empty cell.
     #[test]
-    fn a_listing_without_errors_prints_its_table_alone() {
+    fn address_books_print_one_line_each_under_the_account() {
         let expected = "\
-ID        DEFAULT  COLOR    NAME
-personal  yes      #ff0000  Personal
+Account:    perso (vdir)
+
+personal  default  #ff0000  Personal\u{fffd}[2J
+work      -        -        Work
 ";
         assert_eq!(output().to_string(), expected);
     }
 
-    /// The errors print last, after the table and one blank line.
+    /// The errors print last, after the lines and one blank line.
     #[test]
     fn the_errors_print_last_after_one_blank_line() {
         let mut output = output();
+        output.rows.truncate(1);
         output.errors = vec![
             ItemError::new(Some("work"), &anyhow!("Cannot read it")),
             ItemError::new(None, &anyhow!("Gone")),
         ];
 
         let expected = "\
-ID        DEFAULT  COLOR    NAME
-personal  yes      #ff0000  Personal
+Account:    perso (vdir)
+
+personal  default  #ff0000  Personal\u{fffd}[2J
 
 Error:  work  -  Cannot read it
 Error:  -     -  Gone

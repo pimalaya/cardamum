@@ -162,7 +162,7 @@ impl VdirBackend {
         let item = self
             .inner
             .get_item(path, card_id)
-            .map_err(|err| card_error(card_id, err))?;
+            .map_err(|err| card_error(addressbook_id, card_id, err))?;
 
         Ok(Card {
             id: card_id.to_string(),
@@ -200,7 +200,7 @@ impl VdirBackend {
         let path = self.addressbook_path(addressbook_id)?;
         self.inner
             .locate_item(path.clone(), card_id)
-            .map_err(|err| card_error(card_id, err))?;
+            .map_err(|err| card_error(addressbook_id, card_id, err))?;
 
         self.inner.store_item(
             path,
@@ -224,7 +224,7 @@ impl VdirBackend {
         let path = self.addressbook_path(addressbook_id)?;
         self.inner
             .delete_item(path, card_id)
-            .map_err(|err| card_error(card_id, err))?;
+            .map_err(|err| card_error(addressbook_id, card_id, err))?;
         Ok(())
     }
 
@@ -243,9 +243,9 @@ impl VdirBackend {
 
 /// The failure of a request on the card `card_id`, `card-not-found` when
 /// the address book holds no such card, io-vdir's text in `sources`.
-fn card_error(card_id: &str, err: VdirClientError) -> Error {
+fn card_error(addressbook_id: &str, card_id: &str, err: VdirClientError) -> Error {
     match missing_code(&err) {
-        Some(ErrorCode::CardNotFound) => error::card_not_found(card_id, err.into()),
+        Some(ErrorCode::CardNotFound) => error::card_not_found(addressbook_id, card_id, err.into()),
         _ => err.into(),
     }
 }

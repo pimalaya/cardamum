@@ -56,15 +56,16 @@ impl CarddavCommand {
             Self::Report(cmd) => cmd.check(),
             Self::Get(cmd) => {
                 check_addressbook_id(&cmd.addressbook_id)?;
-                check_card_id(&cmd.card_id)
+                check_card_id(&cmd.addressbook_id, &cmd.card_id)
             }
             Self::Put(cmd) => {
                 check_addressbook_id(&cmd.addressbook_id)?;
-                check_card_id(&cmd.card_id)
+                check_card_id(&cmd.addressbook_id, &cmd.card_id)
             }
             Self::Delete(cmd) => {
                 check_addressbook_id(&cmd.addressbook_id)?;
-                cmd.card_id.as_deref().map_or(Ok(()), check_card_id)
+                let card_id = cmd.card_id.as_deref();
+                card_id.map_or(Ok(()), |id| check_card_id(&cmd.addressbook_id, id))
             }
         }
     }

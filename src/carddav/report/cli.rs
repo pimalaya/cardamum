@@ -37,7 +37,10 @@ impl CarddavReportCommand {
             Self::Query(cmd) => check_addressbook_id(&cmd.addressbook_id),
             Self::Multiget(cmd) => {
                 check_addressbook_id(&cmd.addressbook_id)?;
-                cmd.card_ids.iter().try_for_each(|id| check_card_id(id))
+                let book = &cmd.addressbook_id;
+                cmd.card_ids
+                    .iter()
+                    .try_for_each(|id| check_card_id(book, id))
             }
             Self::Sync(cmd) => check_addressbook_id(&cmd.addressbook_id),
             Self::Raw(cmd) => check_addressbook_id(&cmd.addressbook_id),

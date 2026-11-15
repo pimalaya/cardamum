@@ -22,8 +22,10 @@ use crate::{
 /// The `addressbook-multiget` REPORT: one request brings back the body
 /// and ETag of every id given.
 ///
-/// JSON output: `{"cards": [{"id", "etag", "contents"}], "truncated",
-/// "errors": [{"id", "code", "error", "sources"}]}`: the error of each
+/// JSON output: `{"cards": [{"id", "etag", "contents", "encoding"}],
+/// "truncated", "errors": [{"id", "code", "error", "sources"}]}`, each
+/// vCard as text (`encoding` `utf-8`) or as the base64 of bytes that are
+/// not UTF-8 (`encoding` `base64`); `errors` holds the error of each
 /// card the server answered without its data, `card-not-found` for an id
 /// it does not hold, `[]` when none, the command then exiting 3.
 #[derive(Debug, Parser)]

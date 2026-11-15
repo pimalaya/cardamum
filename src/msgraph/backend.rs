@@ -208,7 +208,7 @@ impl MsgraphBackend {
         let contact = self
             .inner
             .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))
-            .map_err(|err| card_error(card_id, err))?
+            .map_err(|err| card_error(addressbook_id, card_id, err))?
             .response;
         Ok(into_card(addressbook_id, contact))
     }
@@ -238,7 +238,7 @@ impl MsgraphBackend {
     /// caught.
     pub fn update_card(
         &mut self,
-        _addressbook_id: &str,
+        addressbook_id: &str,
         card_id: &str,
         contents: Vec<u8>,
         if_match: Option<&str>,
@@ -248,7 +248,7 @@ impl MsgraphBackend {
         let base = self
             .inner
             .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))
-            .map_err(|err| card_error(card_id, err))?
+            .map_err(|err| card_error(addressbook_id, card_id, err))?
             .response;
 
         if let Some(expected) = if_match
@@ -262,7 +262,7 @@ impl MsgraphBackend {
         let contact = MsgraphContact::update_from_vcard(&vcard, &base_vcard)?;
         self.inner
             .contact_update(card_id, &contact)
-            .map_err(|err| card_error(card_id, err))?;
+            .map_err(|err| card_error(addressbook_id, card_id, err))?;
 
         Ok(CardUpdateOutcome::default())
     }
@@ -273,7 +273,7 @@ impl MsgraphBackend {
     /// first, as an update compares it.
     pub fn delete_card(
         &mut self,
-        _addressbook_id: &str,
+        addressbook_id: &str,
         card_id: &str,
         if_match: Option<&str>,
     ) -> Result<()> {
@@ -281,7 +281,7 @@ impl MsgraphBackend {
             let current = self
                 .inner
                 .contact_get(card_id, None)
-                .map_err(|err| card_error(card_id, err))?
+                .map_err(|err| card_error(addressbook_id, card_id, err))?
                 .response;
 
             if !error::version_matches(current.change_key.as_deref(), expected) {
@@ -291,7 +291,7 @@ impl MsgraphBackend {
 
         self.inner
             .contact_delete(card_id)
-            .map_err(|err| card_error(card_id, err))?;
+            .map_err(|err| card_error(addressbook_id, card_id, err))?;
         Ok(())
     }
 }
@@ -323,9 +323,9 @@ fn into_vcard_text(contents: Vec<u8>) -> Result<String> {
 
 /// The failure of a request on the contact `card_id`, `card-not-found`
 /// when Graph holds no such contact.
-fn card_error(card_id: &str, err: MsgraphClientStdError) -> Error {
+fn card_error(addressbook_id: &str, card_id: &str, err: MsgraphClientStdError) -> Error {
     match is_missing(&err) {
-        true => error::card_not_found(card_id, err.into()),
+        true => error::card_not_found(addressbook_id, card_id, err.into()),
         false => err.into(),
     }
 }

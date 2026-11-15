@@ -234,7 +234,7 @@ impl JmapBackend {
 
         let card = out.cards.into_iter().next().ok_or_else(|| {
             let cause = anyhow!("JMAP ContactCard/get answered the id as `notFound`");
-            error::card_not_found(card_id, cause)
+            error::card_not_found(addressbook_id, card_id, cause)
         })?;
 
         project::to_card(addressbook_id, card).map_err(Error::msg)
@@ -308,7 +308,7 @@ impl JmapBackend {
 
         if let Some(err) = out.not_updated.into_values().next() {
             let refusal = card_write_error("update", &err, &unmapped);
-            return Err(card_refusal(card_id, &err, refusal));
+            return Err(card_refusal(addressbook_id, card_id, &err, refusal));
         }
 
         Ok(CardUpdateOutcome::default())
@@ -340,7 +340,7 @@ impl JmapBackend {
 
         if let Some(err) = out.not_destroyed.into_values().next() {
             let refusal = set_error("JMAP ContactCard destroy rejected", &err);
-            return Err(card_refusal(card_id, &err, refusal));
+            return Err(card_refusal(addressbook_id, card_id, &err, refusal));
         }
 
         Ok(())
@@ -349,9 +349,14 @@ impl JmapBackend {
 
 /// The refusal of a write on the card `card_id`, worded `refusal`: a
 /// `notFound` is a card not found, the server's answer in `sources`.
-fn card_refusal(card_id: &str, err: &JmapContactCardSetItemError, refusal: Error) -> Error {
+fn card_refusal(
+    addressbook_id: &str,
+    card_id: &str,
+    err: &JmapContactCardSetItemError,
+    refusal: Error,
+) -> Error {
     match err.code() {
-        Some(ErrorCode::CardNotFound) => error::card_not_found(card_id, refusal),
+        Some(ErrorCode::CardNotFound) => error::card_not_found(addressbook_id, card_id, refusal),
         _ => refusal,
     }
 }
@@ -574,7 +579,10 @@ mod tests {
         let err = backend.get_card("book", "c9").unwrap_err();
 
         assert_eq!(code_of(&err), Some(ErrorCode::CardNotFound));
-        assert_eq!(err.to_string(), "Card `c9` not found");
+        assert_eq!(
+            err.to_string(),
+            "Card `c9` not found in address book `book`"
+        );
         assert!(err.chain().nth(1).is_some(), "{err:#}");
     }
 

@@ -347,8 +347,8 @@ pub(crate) fn check_addressbook_id(id: &str) -> Result<()> {
 /// Refuses a card id no resource of an address book can have, one
 /// io-webdav's `check_resource_id` refuses, before anything connects:
 /// `card-not-found`, io-webdav's reason in `sources`.
-pub(crate) fn check_card_id(id: &str) -> Result<()> {
-    check_resource_id(id).map_err(|err| error::card_not_found(id, err.into()))
+pub(crate) fn check_card_id(addressbook_id: &str, id: &str) -> Result<()> {
+    check_resource_id(id).map_err(|err| error::card_not_found(addressbook_id, id, err.into()))
 }
 
 /// Refuses the name of an address book to create that no collection can

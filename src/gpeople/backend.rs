@@ -269,7 +269,7 @@ impl GpeopleBackend {
                 GPEOPLE_PERSON_VCARD_FIELDS,
                 &[],
             )
-            .map_err(|err| card_error(card_id, err))?
+            .map_err(|err| card_error(addressbook_id, card_id, err))?
             .response;
 
         Ok(into_card(addressbook_id, person))
@@ -355,7 +355,7 @@ impl GpeopleBackend {
         let current = self
             .inner
             .person_get(&resource_name, GPEOPLE_PERSON_VCARD_FIELDS, &[])
-            .map_err(|err| card_error(card_id, err))?
+            .map_err(|err| card_error(addressbook_id, card_id, err))?
             .response;
 
         let base = current.to_vcard();
@@ -401,7 +401,7 @@ impl GpeopleBackend {
         self.resolve_group(addressbook_id)?;
         self.inner
             .contact_delete(&format!("people/{card_id}"))
-            .map_err(|err| card_error(card_id, err))?;
+            .map_err(|err| card_error(addressbook_id, card_id, err))?;
         Ok(())
     }
 }
@@ -447,9 +447,9 @@ fn group_id(resource_name: &str) -> &str {
 
 /// The failure of a request on the person `card_id`, `card-not-found` when
 /// People holds no such person.
-fn card_error(card_id: &str, err: GpeopleClientStdError) -> Error {
+fn card_error(addressbook_id: &str, card_id: &str, err: GpeopleClientStdError) -> Error {
     match is_missing(&err) {
-        true => error::card_not_found(card_id, err.into()),
+        true => error::card_not_found(addressbook_id, card_id, err.into()),
         false => err.into(),
     }
 }

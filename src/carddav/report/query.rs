@@ -33,8 +33,10 @@ use crate::{
 /// Param-filters and anything else the flags cannot express go through
 /// `report raw`.
 ///
-/// JSON output: `{"cards": [{"id", "etag", "contents"}], "truncated",
-/// "errors": [{"id", "code", "error", "sources"}]}`: the error of each
+/// JSON output: `{"cards": [{"id", "etag", "contents", "encoding"}],
+/// "truncated", "errors": [{"id", "code", "error", "sources"}]}`, each
+/// vCard as text (`encoding` `utf-8`) or as the base64 of bytes that are
+/// not UTF-8 (`encoding` `base64`); `errors` holds the error of each
 /// card the server answered without its data, `[]` when none, the command
 /// then exiting 3. A truncated result is `truncated`, no error.
 #[derive(Debug, Parser)]

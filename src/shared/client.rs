@@ -303,7 +303,9 @@ impl AddressbookClient {
             #[cfg(feature = "carddav")]
             BackendConfig::Carddav(_) => {
                 crate::carddav::client::check_addressbook_id(addressbook_id)?;
-                card_id.map_or(Ok(()), crate::carddav::client::check_card_id)
+                card_id.map_or(Ok(()), |id| {
+                    crate::carddav::client::check_card_id(addressbook_id, id)
+                })
             }
             #[allow(unreachable_patterns)]
             _ => Ok(()),

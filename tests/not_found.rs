@@ -56,9 +56,17 @@ fn a_vdir_card_read_of_an_unknown_id_is_a_card_not_found() {
     let home = TempDir::new().unwrap();
     let toml = vdir(home.path());
 
-    let output = run(home.path(), &toml, &["card", "read", "-k", "book", "nope"]);
-    let json = failure(&output);
-    assert_eq!(json["code"], "card-not-found", "{json}");
+    for verb in ["read", "delete"] {
+        let output = run(home.path(), &toml, &["card", verb, "-k", "book", "nope"]);
+        let json = failure(&output);
+        assert_eq!(json["code"], "card-not-found", "{json}");
+
+        // NOTE: cardamum's sentence, io-vdir's text below it, as calendula
+        // words an item not found.
+        assert_eq!(json["error"], "Card `nope` not found", "{json}");
+        let source = json["sources"][0].as_str().unwrap_or_default();
+        assert!(source.contains("not found"), "{json}");
+    }
 }
 
 #[cfg(feature = "vdir")]

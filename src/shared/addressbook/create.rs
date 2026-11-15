@@ -16,7 +16,8 @@ use crate::shared::client::AddressbookClient;
 
 /// Create a new addressbook.
 ///
-/// JSON output: `{"id"}`, the identifier the backend assigned.
+/// JSON output: `{"id", "name", "queued"}`, the identifier the backend
+/// assigned, the name given and whether a sync engine creates it later.
 #[derive(Debug, Parser)]
 pub struct AddressbookCreateCommand {
     /// Display name of the addressbook to create.
@@ -47,7 +48,11 @@ impl AddressbookCreateCommand {
             self.color.as_deref(),
         )?;
 
-        printer.out(AddressbookCreateOutput { id })
+        printer.out(AddressbookCreateOutput {
+            id,
+            name: self.name,
+            queued: client.queues_writes(),
+        })
     }
 }
 
@@ -57,14 +62,44 @@ impl AddressbookCreateCommand {
 pub struct AddressbookCreateOutput {
     /// Backend-assigned identifier of the new addressbook.
     pub id: String,
+    /// The display name it was created with.
+    pub name: String,
+    /// Whether a sync engine applies the write later rather than now.
+    pub queued: bool,
 }
 
 impl fmt::Display for AddressbookCreateOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(
-            f,
-            "Addressbook `{}` successfully created",
-            sanitize::text(&self.id)
-        )
+        let id = sanitize::text(&self.id);
+        match self.queued {
+            true => writeln!(
+                f,
+                "Addressbook `{id}` queued for creation; the next sync creates it"
+            ),
+            false => writeln!(f, "Addressbook `{id}` successfully created"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AddressbookCreateOutput;
+
+    /// The receipt names the address book created, by its id and the name
+    /// it was given, and says whether a sync creates it.
+    #[test]
+    fn the_receipt_carries_the_name_and_queued() {
+        let receipt = AddressbookCreateOutput {
+            id: String::from("AAMk"),
+            name: String::from("Work"),
+            queued: false,
+        };
+
+        let text = "Addressbook `AAMk` successfully created\n";
+        assert_eq!(receipt.to_string(), text);
+        assert_eq!(
+            serde_json::to_string(&receipt).unwrap(),
+            r#"{"id":"AAMk","name":"Work","queued":false}"#
+        );
     }
 }

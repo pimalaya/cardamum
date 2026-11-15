@@ -279,6 +279,14 @@ const PIMDIR_QUEUED: &str = "queued for the next sync, and refused when a source
 /// Why a backend without versions takes no `--if-match`.
 const NO_VERSION: &str = "the backend exposes no version to compare, so `--if-match` is refused";
 
+/// What a Graph version compared in a request of its own leaves open.
+const CHANGE_KEY: &str = "compared with the contact's `changeKey` read just before the write, \
+     so a write landing in between is not caught";
+
+/// What a JMAP version compared in a request of its own leaves open.
+const CARD_HASH: &str = "compared with a hash of the ContactCard read just before the write, \
+     so a write landing in between is not caught";
+
 /// CardDAV (RFC 6352).
 const CARDDAV: &[Row] = &[
     (C::AddressbookList, Full),
@@ -321,14 +329,8 @@ const JMAP: &[Row] = &[
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
     (C::CardRemove, Full),
-    (
-        C::CardUpdateIfMatch,
-        Not("a JMAP ContactCard write takes no version guard"),
-    ),
-    (
-        C::CardRemoveIfMatch,
-        Not("a JMAP ContactCard write takes no version guard"),
-    ),
+    (C::CardUpdateIfMatch, Partial(CARD_HASH)),
+    (C::CardRemoveIfMatch, Partial(CARD_HASH)),
 ];
 
 /// Microsoft Graph contacts.
@@ -356,14 +358,8 @@ const MSGRAPH: &[Row] = &[
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
     (C::CardRemove, Full),
-    (
-        C::CardUpdateIfMatch,
-        Not("a Graph contact write takes no version guard"),
-    ),
-    (
-        C::CardRemoveIfMatch,
-        Not("a Graph contact write takes no version guard"),
-    ),
+    (C::CardUpdateIfMatch, Partial(CHANGE_KEY)),
+    (C::CardRemoveIfMatch, Partial(CHANGE_KEY)),
 ];
 
 /// Google People.
@@ -450,14 +446,16 @@ mod tests {
 
     #[test]
     fn an_unserved_verb_is_refused_with_its_code_and_reason() {
-        let err = require("jmap", &[C::CardUpdate, C::CardUpdateIfMatch]).unwrap_err();
+        let err = require("vdir", &[C::CardUpdate, C::CardUpdateIfMatch]).unwrap_err();
         let code = pimalaya_cli::error::code_of::<ErrorCode>(&err);
         assert_eq!(code, Some(ErrorCode::CapabilityMissing));
         let message = err.to_string();
         assert!(message.contains("`card.update.if-match`"), "{message}");
-        assert!(message.contains("version guard"), "{message}");
+        assert!(message.contains("no version to compare"), "{message}");
 
         assert!(require("carddav", &[C::CardUpdate, C::CardUpdateIfMatch]).is_ok());
+        assert!(require("jmap", &[C::CardRemove, C::CardRemoveIfMatch]).is_ok());
+        assert!(require("msgraph", &[C::CardUpdate, C::CardUpdateIfMatch]).is_ok());
         assert!(require("msgraph", &[C::AddressbookRename]).is_ok());
     }
 
@@ -468,10 +466,10 @@ mod tests {
 Backends:
   card.remove: full on carddav, jmap, msgraph, gpeople, vdir; partial on pimdir
     pimdir: queued for the next sync, and refused when a source of the store does not support it
-  card.remove.if-match: partial on carddav; none on jmap, msgraph, gpeople, vdir; full on pimdir
+  card.remove.if-match: partial on carddav, jmap, msgraph; none on gpeople, vdir; full on pimdir
     carddav: sent as `If-Match`, which some servers ignore on a delete, as iCloud does
-    jmap: a JMAP ContactCard write takes no version guard
-    msgraph: a Graph contact write takes no version guard
+    jmap: compared with a hash of the ContactCard read just before the write, so a write landing in between is not caught
+    msgraph: compared with the contact's `changeKey` read just before the write, so a write landing in between is not caught
     gpeople: Google People cannot gate a delete on an etag
     vdir: the backend exposes no version to compare, so `--if-match` is refused";
         assert_eq!(help, expected);

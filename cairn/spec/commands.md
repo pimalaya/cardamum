@@ -28,6 +28,14 @@ pimdir is a store rather than a protocol: its `pimdir` family covers `status`, w
 ### Requirement: account check fails when a backend fails
 `account check` SHALL exercise every backend of the account `--backend` allows and print one verdict per backend, a backend the build leaves out failing coded `backend-not-built` under `auto`, under `--json` `ok`, the stable `code` and the error of a failed one (`code` `null` when the backend passed or its failure carries none), as the failure object of any other command names them. When any fails, it SHALL still print the report and exit 3, the family's partial outcome (`pimalaya_cli::error::PartialOutcome`), so a script reads the outcome from the exit code alone and which backends passed from the report. It mirrors Himalaya's `account check`.
 
+### Requirement: The account outputs are the family's
+`account list` SHALL print pimalaya-cli's `account::AccountListOutput` and `account check` its `account::AccountCheckOutput`, each row coded by cardamum's vocabulary, so both read as in Himalaya and Calendula. Their JSON keeps its shape: `{"accounts": [{"name", "default", "backends", "notBuilt"}]}` and `{"account", "backends": [{"backend", "ok", "code", "error"}]}`. The text of `account list` SHALL be one line per account with no header row: the name, its backends in one cell (the built ones, then those the build leaves out, each marked `(not built)`), and `default` on the default account. The text of `account check` SHALL be `Account: <name>`, then one `<backend>: OK` or `<backend>: FAIL (<error>)` line per backend, the name and the error defused.
+
+#### Scenario: Two accounts
+- GIVEN the accounts `home` over vdir and `work` over CardDAV, the default
+- WHEN `cardamum account list` runs
+- THEN it prints `home  vdir     -` then `work  carddav  default`, with no header line
+
 ### Requirement: Specific commands are raw-faithful
 A specific command SHALL surface the native ids and metadata the shared layer normalizes away (ETags, CTags, sync tokens, hrefs, the Graph `changeKey`, the People `etag` and `resourceName`), and SHALL make the incremental-sync primitive its headline (`report sync`, `changes`, `delta`). Default human output is a friendly table; `--json` SHALL emit the raw native payload, and create and update SHALL accept the raw native representation. Each backend keeps a raw escape hatch: a raw XML body for CardDAV, raw JSON in and out plus a generic request passthrough for the object backends, whose `--json` prints the response verbatim under `response` (`null` when the server sent no body), so the payload is an object whatever the server answered. Precondition control is offered only where the protocol has it (CardDAV `--if-match` and `--if-none-match`).
 
@@ -47,7 +55,12 @@ The shared `-k/--addressbook` resolver SHALL reject an empty id rather than pass
 When a backend cannot carry out part of a write, and the protocol offers no way to insist, the command SHALL report what was left undone rather than print a plain success. On Google People an unmappable vCard property lives in a `clientData` entry the API will not clear, so an update dropping one keeps it, and the command names it.
 
 ### Requirement: A queued write says it is queued
-A unified write SHALL say whether it reached the server or was queued for a sync. On pimdir, `card create`, `card update` and `card delete` SHALL say the write is queued and that the next sync carries it, never that the card was created, updated or deleted. Only the printed text SHALL say so: the `--json` output SHALL keep the shape every backend prints, with no `queued` field, a queued write being a pimdir detail that unified outputs do not carry.
+A unified write SHALL say whether it reached the server or was queued for a sync. On pimdir, `card create`, `card update` and `card delete` SHALL say the write is queued and that the next sync carries it, never that the card was created, updated or deleted. Under `--json`, every unified write SHALL print `queued`, the family's receipt key (pimalaya-cli output.md, "A write answers a receipt"), on every backend: `true` when a sync engine applies the write later (pimdir), `false` when it reached the server. `card create` prints `{id, queued}`, `card update` `{id, keptProperties, queued}`, `card delete`, `addressbook update` and `addressbook delete` `{id, queued}`, `addressbook create` `{id, name, queued}`, `name` the display name it was given, as Himalaya's `mailbox create` prints it.
+
+#### Scenario: A card queued on pimdir
+- GIVEN a pimdir address book a source syncs
+- WHEN `cardamum --json card create -k <book> <vcard>` runs
+- THEN it prints `{"id":"<link id>","queued":true}`, and the text form says the next sync creates the card
 
 A queued creation SHALL get no placeholder id (`q<id>`, `0`, `""`): `card create` reports the card's link id, which `card read` does not accept until a sync applies the create and the card lists under its public id.
 
@@ -72,7 +85,7 @@ The binary SHALL exit 0 on success, 1 with the failure object printed, 2 on a co
 - THEN it exits 2, prints nothing on stderr and prints `{"code":"usage-invalid","error":"unexpected argument '--nope' found…","sources":[],"backtrace":null}`
 
 ### Requirement: A data command answers a named output type
-A command returning data SHALL hand the printer a dedicated type named `<Domain><Target><Verb>Output`, deriving `Display`, `Serialize` and `JsonSchema`, with every public field documented. A write with no payload of its own SHALL print a receipt rather than a sentence: a unified write `{id, queued}` (`WriteReceipt`), the id of the item acted on and whether a sync engine applies the write later, a write in a protocol namespace `{id}` (`IdReceipt`) or `{ids}` (`IdsReceipt`), the ids as they are after the write (a renamed collection's new one), and a `card build -o` `{path, size}`. The sentence is the text form only; data a confirmation used to word (an ETag, member counts) is a key of its own.
+A command returning data SHALL hand the printer a dedicated type named `<Domain><Target><Verb>Output`, deriving `Display`, `Serialize` and `JsonSchema`, with every public field documented. A write with no payload of its own SHALL print a receipt rather than a sentence: a unified write `{id, queued}` (`WriteReceipt`), the id of the item acted on and whether a sync engine applies the write later, `addressbook create` `{id, name, queued}`, `card create` `{id, queued}`, `card update` `{id, keptProperties, queued}`, a write in a protocol namespace `{id}` (`IdReceipt`) or `{ids}` (`IdsReceipt`), the ids as they are after the write (a renamed collection's new one), and a `card build -o` `{path, size}` (pimalaya-cli's `output::SavedOutput`). `keptProperties` stays on `card update`: it names what a People update dropped and the server kept ("A partial write says so"), a result calendula's `event update` and `item update` print no counterpart of, so the twins align on `{id, queued}` and cardamum adds this one key. The sentence is the text form only; data a confirmation used to word (an ETag, member counts) is a key of its own.
 
 Every runnable command SHALL be described in the `json-schema` registry, a command printing one of two types through both (`OneOf`), which a test checks over the clap command tree.
 
@@ -138,7 +151,7 @@ A build given no source, no field flag and no `-i` has nothing to build and SHAL
 ### Requirement: A build can be composed, and captured
 `card build` SHALL take `-i/--interactive` and `--composer <COMMAND>`, the same pair the two write verbs carry, and SHALL print what the composer wrote rather than sending it anywhere. This is where a card is judged before it is written: the menu that used to offer a look is gone, and a build is the look.
 
-`-o/--output <PATH>` SHALL write the card to that file instead of printing it, answering a message rather than the card. The flag earns its place on this command alone: the composer inherits stdout, so `card build -i > card.vcf` hands the editor the file as its terminal, and with `-i` there is no redirection to fall back on.
+`-o/--output <PATH>` SHALL write the card to that file instead of printing it, answering pimalaya-cli's `output::SavedOutput` rather than the card: `{path, size}` under `--json`, `Saved <size> bytes to <path>` in text. The flag earns its place on this command alone: the composer inherits stdout, so `card build -i > card.vcf` hands the editor the file as its terminal, and with `-i` there is no redirection to fall back on.
 
 An abandoned interactive build SHALL print nothing at all, and exit as a success. The output of this command is a vCard someone pipes onwards, and a line saying no card was built is not one.
 
@@ -161,17 +174,17 @@ Writing a field flag SHALL drop every instance of the property it names and writ
 The name flags SHALL be named for the role, given and family, rather than for the position, first and last. Which of the two is written first is exactly what varies between cultures, which is why RFC 6350, RFC 9553 and CLDR all name the role.
 
 ### Requirement: An update guards on the version it read
-`card update` given no vCard source SHALL send the ETag of the card it read as `If-Match`, an explicit `--if-match` still winning, on a backend declaring `card.update.if-match` at a level above `none` (carddav, gpeople, pimdir). Having read the card to change it, the command knows the version it diverged from, and an edit that took a minute SHALL NOT silently overwrite a write that landed during it. A source given on the command line is a rewrite that was asked for, and carries no such guard of its own.
+`card update` given no vCard source SHALL guard the write with the version of the card it read, an explicit `--if-match` still winning, on a backend declaring `card.update.if-match` at a level above `none` (carddav, gpeople, pimdir, jmap, msgraph). Having read the card to change it, the command knows the version it diverged from, and an edit that took a minute SHALL NOT silently overwrite a write that landed during it. A source given on the command line is a rewrite that was asked for, and carries no such guard of its own.
 
-A backend declaring `card.update.if-match` at `none` (jmap, msgraph, vdir) SHALL get no guard from the read: its read may still report a version (the Graph `changeKey`, a hash of the JMAP card) that its write takes no guard on, and the update SHALL be the plain write the backend makes, last-write-wins, never a refusal of a guard the caller did not ask for. An explicit `--if-match` there SHALL still fail `capability-missing` ("An unsupported precondition is refused, not dropped").
+CardDAV and People send the version with the write (`If-Match`, the People `etag`) and pimdir checks it before queueing. Microsoft Graph and JMAP take no guard on a contact write, so they SHALL compare it themselves, as calendula guards a Graph event, at no request of their own on an update: Graph with the `changeKey` of the contact the update reads as its delta base, JMAP with the hash of the ContactCard the update reads as its patch base (the version `card list` and `card read` report). A version that differs, surrounding double quotes ignored, SHALL fail `precondition-failed` before the write, ``Card `<id>` changed on <server> since it was read``; a write landing between that read and the write is not caught, which their `partial` level says. vdir, declaring `none`, reports no version on a read and SHALL refuse an explicit `--if-match` with `capability-missing` ("An unsupported precondition is refused, not dropped").
 
 #### Scenario: An update on Microsoft Graph without --if-match
-- GIVEN a Microsoft Graph account holding the contact `AAMk` in its default Contacts folder, read with a `changeKey`
+- GIVEN a Microsoft Graph account holding the contact `AAMk` in its default Contacts folder, read with the `changeKey` `k1`
 - WHEN `cardamum --json card update -k contacts AAMk --full-name "Ada Byron"` runs, with no `--if-match`
-- THEN it sends one `PATCH` carrying no `If-Match`, prints `{"id":"AAMk","keptProperties":[]}` and exits 0; the same command with `--if-match k1` fails `capability-missing` before connecting
+- THEN it sends one `PATCH` carrying no `If-Match`, prints `{"id":"AAMk","keptProperties":[],"queued":false}` and exits 0; the same command with `--if-match k0` fails `precondition-failed` with no `PATCH` sent
 
 ### Requirement: A delete can be gated on a version
-`card delete` SHALL take `--if-match <ETAG>`. CardDAV SHALL send it as `If-Match` and pimdir SHALL check it as an update does; the backends that cannot gate a delete (vdir, jmap, msgraph, gpeople) SHALL refuse it rather than drop it.
+`card delete` SHALL take `--if-match <ETAG>`. CardDAV SHALL send it as `If-Match`, pimdir SHALL check it as an update does, and Graph and JMAP SHALL read the card first, only when `--if-match` is given, and compare its `changeKey` or its hash as an update does, failing `precondition-failed` before the delete. The backends that cannot gate a delete (vdir, gpeople) SHALL refuse it rather than drop it.
 
 ### Requirement: A JSON error carries a stable code
 A failure a caller is expected to act on SHALL carry a stable code, printed under `--json` as a `code` string beside `error`, `sources` and `backtrace`, and in an `errors` entry beside `id`, `error` and `sources`. The code SHALL be found anywhere in the error chain, so added context does not hide it, or read from the typed error of the protocol that refused ("A server's refusal carries its code"). A failure with no code SHALL print `"code": null`. The plain output SHALL stay unchanged. Codes are kebab-case and never renamed; `error` stays free wording. A pimdir store's code is the one io-pimdir names (`PimdirError::code()`), never read off its message. Every code SHALL be declared in every build, whatever the backends compiled in.
@@ -185,31 +198,44 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `backend-not-built` | the backend the account resolves to is configured but left out of the build; the error names the cargo feature (see backends.md, "A backend left out of the build is named") |
 | `stdin-taken` | a command inside a session (`repl`, `mcp`) would read its input off stdin, which carries the session's commands |
 | `capability-missing` | the backend the account resolves to does not serve a capability the command reaches; nothing was read or written |
-| `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete`; an `errors` entry of `carddav report multiget` |
+| `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete`, worded by cardamum ("A not-found failure is cardamum's sentence"); an `errors` entry of `carddav report multiget` |
 | `addressbook-not-found` | the address book a command names does not exist; nothing was read or written |
+| `addressbook-default-missing` | a command needing an address book got no `-k` and the account sets no `addressbook.default`; nothing was read or written |
 | `permission-denied` | the server refused the request to the account (see "A server's refusal carries its code") |
 | `quota-exceeded` | the write would exceed the account's quota |
 | `rate-limited` | the server throttled the request; cardamum retries nothing |
-| `card-unreadable` | the backend answered for a card cardamum could not read: its listing, `report query` or `report multiget` row came without its data (CardDAV), its file could not be read (vdir), its body did not parse as a vCard or is not UTF-8, it did not project (JMAP), its body could not be read (pimdir); an `errors` entry |
+| `card-unreadable` | the backend answered for a card cardamum could not read: its listing, `report query` or `report multiget` row came without its data (CardDAV), its file could not be read (vdir), its body did not parse as a vCard or is not UTF-8, it did not project (JMAP), its body could not be read or is gone from the blob tree (pimdir); an `errors` entry |
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
-| `precondition-failed` | a write's `--if-match` names a version the card no longer has (pimdir) |
+| `precondition-failed` | a write's `--if-match` names a version the card no longer has: pimdir's check, a CardDAV server answering 412, or the Graph `changeKey` or JMAP hash read before the write |
 | `store-uncreated` | the pimdir root holds no store; its sync engine creates it |
 | `store-version` | the pimdir store is of another format version than this cardamum reads; an earlier neverest's store is reinstalled through neverest, its queue drained first, a later one's asks for a cardamum upgrade |
 | `store-foreign` | the pimdir root holds a database another program wrote |
 | `store-corrupt` | the pimdir store's two version stamps disagree, or its schema differs from the one its version declares |
+| `store-not-current` | the pimdir store holds no schema yet and the verb creates none; its sync engine creates it |
 | `store-hash-algo` | the pimdir store names its bodies by a hash this cardamum does not know |
+| `sync-version` | the pimdir store's sync state was written by another version of its sync engine |
 | `store-exposed` | another user can read or write the pimdir store, or a link stands where a lock file belongs; restrict it |
 | `store-busy` | another writer held the pimdir store, past the wait on a write and at once on `account check`, which does not wait; retry |
+| `store-owned` | a sync owns the pimdir store; retry once it ends |
+| `store-staging` | a producer is staging a body in the pimdir store; retry |
+| `store-in-flight` | a pimdir store verb is between two of its chunks; retry |
+| `store-reset` | the pimdir store is not the one that answered a queue row's handle, a copy restored since; nothing was done with the row |
 | `lock-replaced` | the pimdir store's staging lock file was replaced while a write held it; nothing was queued, retry once no other process sets the store up |
 | `unsupported` | a source syncing the address book does not support the write (pimdir STORAGE §15.6); nothing was queued |
-| `item-duplicate` | a create names a `UID` the pimdir address book holds, synced or queued; nothing was queued |
+| `item-duplicate` | a create names a `UID` the address book holds: on pimdir synced or queued, nothing queued; on CardDAV the server's `no-uid-conflict` (RFC 6352 §6.3.2.1) |
+| `flag-invalid` | the pimdir store cannot hold a flag; nothing was staged |
 | `action-malformed` | a queued pimdir action's payload is malformed (`pimdir status`); the sync engine's drain parks it |
+| `conflict-unread` | a pimdir conflict holds a body nobody has read; fetch it first |
+| `no-performer` | no source of the pimdir store can perform the intent |
+| `ambiguous-performer` | several sources of the pimdir store can perform the intent and none is chosen |
 | `index-missing` | the pimdir store has no search index yet (`pimdir search`, `pimdir count`); its sync engine builds it |
 | `index-outdated` | the pimdir search index was built otherwise or from another store; its sync engine rebuilds it |
 | `index-version` | the pimdir search index is of another draft or shape; its sync engine rebuilds one of an earlier draft and leaves any other |
+| `index-zone-unknown` | the zone the pimdir search index reads floating times in is not an IANA zone |
 | `index-fts5-missing` | the SQLite cardamum links lacks FTS5 or predates 3.43, which the pimdir search index needs |
 | `query-refused` | the pimdir search query is malformed or names an unknown field or value (SEARCH §8.4); nothing was searched |
 | `query-unanswerable` | the pimdir search index could not answer an accepted query, an implementation fault |
+| `tag-refused` | a pimdir tag names no flag, or adds and removes one flag; nothing was staged |
 
 #### Scenario: A stale version
 - GIVEN a pimdir card whose body changed since it was read
@@ -219,13 +245,34 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 #### Scenario: An unknown card
 - GIVEN a vdir address book holding no card `nope`
 - WHEN `cardamum --json card read nope` runs
-- THEN the command exits 1 and prints a failure object coded `card-not-found`
+- THEN the command exits 1 and prints a failure object coded `card-not-found`, its `error` ``Card `nope` not found`` and io-vdir's text in `sources`
+
+### Requirement: A not-found failure is cardamum's sentence
+A card a command names that the address book does not hold SHALL fail with cardamum's own sentence, ``Card `<id>` not found`` (``… not found in `<book>` `` on pimdir, which has no text of its own to add), the backend's answer below it in `sources` (io-vdir's, the CardDAV, Graph or People refusal, the JMAP `notFound`), as calendula words an item not found: the backend's wording never stands as the error. An item error SHALL NOT repeat its card's id in `error`, the id being its own key.
+
+### Requirement: A command with no address book is coded
+A card command and `addressbook update` or `delete` given no `-k/--addressbook` over an account setting no `addressbook.default` SHALL fail coded `addressbook-default-missing`, exit 1, the error naming the flag and the key: ``No default addressbook found, name one with `-k <ADDRESSBOOK-ID>` or set `addressbook.default` ``, as calendula refuses a missing default calendar (`calendar-default-missing`) and the family a missing default account (`account-default-missing`).
 
 ### Requirement: The JSON contract is described and versioned
 `json-schema` SHALL describe the failure object under the key `cardamum-error`, its `code` typed by the code vocabulary and pimalaya-cli's `usage-invalid`, and the item error of an `errors` list under `cardamum-item-error`, its `code` typed by the code vocabulary. Every generated schema SHALL carry an `$id` naming the contract version: the major version of cardamum, or `0.<minor>` before 1.0. Every registered payload SHALL be a JSON object, checked by a test: a command whose shapes are one untagged type answers an empty object for a shape carrying nothing (an abandoned `card create -i`), never `null`. Piped `--json` output SHALL print one value per line.
 
 ### Requirement: A card projects its common fields
-`card list` rows and the `card read` output SHALL carry the card's common fields, read through vcard-rs's decoded model rather than off raw lines: `uid`, `fullName`, `givenName` and `familyName` (the `N` components, space-joined), `emails` and `phones` (every `EMAIL` and `TEL` in document order, a `tel:` URI as its number), `organization` and `organizationUnits` (the `ORG` components), `title` and `note`. A card that does not parse SHALL project nothing rather than fail the listing. The projection is read-only: the vCard stays the record.
+`card list` rows and the `card read` output SHALL carry the card's common fields, read through vcard-rs's decoded model rather than off raw lines: `uid`, `fullName`, `givenName` and `familyName` (the `N` components, space-joined), `emails` and `phones` (every `EMAIL` and `TEL` in document order, a `tel:` URI as its number), `organization` and `organizationUnits` (the `ORG` components), `title` and `note`. A card that does not parse, or whose bytes are not UTF-8, SHALL project nothing rather than fail the listing, never a lossy decode. The projection is read-only: the vCard stays the record.
+
+### Requirement: A card read prints its listing row and its vCard
+`card read` SHALL print the row `card list` prints for the card, every key with the same value (`id`, `addressbookId`, `etag`, `fnValue`, `email`, `tel` and the common fields), `etag` `null` where the backend versions no card, plus what only a read carries, the raw vCard, as pimalaya-cli's output.md says a read prints ("Collections are named and present").
+
+The vCard SHALL travel as `contents`, a string: the text when its bytes are valid UTF-8, `encoding` then `utf-8`, and their base64 (RFC 4648 standard alphabet, padded) when they are not, `encoding` then `base64`, so a script reads `encoding` and never takes base64 for a vCard (output.md, "Bytes are never raw under JSON"), as calendula prints an item's bytes. The bytes SHALL NOT be decoded lossily under `--json`, and a card that is not UTF-8 SHALL read rather than fail. The text form prints the card as it does, defused ("Plain output is printable"). `card build` SHALL carry its card the same way, `{contents, encoding}`, and in text SHALL print a card that is not UTF-8 as its bytes, which a pipe takes on unchanged.
+
+#### Scenario: A card read
+- GIVEN a vdir card `ada` whose `FN` is `Ada Lovelace`
+- WHEN `cardamum --json card read -k personal ada` runs
+- THEN it prints the keys its `card list` row prints with the same values, `"etag":null`, `"contents":"BEGIN:VCARD…"` and `"encoding":"utf-8"`
+
+#### Scenario: A card that is not UTF-8
+- GIVEN a card whose bytes hold a Latin-1 `é`
+- WHEN `cardamum --json card read` reads it
+- THEN it exits 0 and prints `"contents"` holding its bytes in base64 and `"encoding":"base64"`, its common fields `null`
 
 ### Requirement: pimdir searches cards through the store's index
 `cardamum pimdir search <query>...`, gated on the `pimdir` feature, SHALL answer the pimdir SEARCH query language (search-draft-11 §8) from the store's search index, scoped to the account's cards: the query is read as its conjuncts plus `kind:contact`, `account:<account>` when the store groups the account under a name, and `collection:<id>` when `-k/--addressbook` names an address book. The scope is added beside the query, never around it, so a group that is itself a conjunct of the query keeps narrowing the answer and its coverage as its terms do bare (SEARCH §8.2). Without `-k` it SHALL search every address book of the account, `addressbook.default` not applied, and a `-k` naming no address book of the account SHALL fail naming those it holds rather than answer nothing. The words of the query are joined by spaces into one query. Cardamum SHALL open the index read-only (io-pimdir `PimdirIndex::open_query`) and SHALL NOT create, rebuild nor refresh it: the store's owner, its sync engine, does. The answer SHALL be the store as of the owner's last refresh: a queued write is not listed nor folded in.

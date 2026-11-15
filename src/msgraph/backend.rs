@@ -7,8 +7,10 @@
 //!
 //! Graph contact folders are the addressbooks, except the default Contacts
 //! folder, which the folders endpoint does not list: it is surfaced under
-//! the [`CONTACTS_FOLDER`] sentinel id. Updates carry no If-Match guard
-//! server-side (last-write-wins), so passing one bails.
+//! the [`CONTACTS_FOLDER`] sentinel id. Graph takes no If-Match on a
+//! contact write (last-write-wins), so `--if-match` is compared with the
+//! `changeKey` read just before the write: the update reads the contact as
+//! its delta base anyway, the delete reads it for the guard alone.
 
 use anyhow::{Error, Result, bail};
 use io_msgraph::v1::{
@@ -224,7 +226,9 @@ impl MsgraphBackend {
     ///
     /// The server contact serves as delta base, so the PATCH body shrinks
     /// to the changed fields plus nulls for the removed ones. Graph updates
-    /// are last-write-wins, so passing an If-Match guard bails.
+    /// are last-write-wins, so `if_match` is compared with the base's
+    /// `changeKey`, a write landing between that read and the PATCH not
+    /// caught.
     pub fn update_card(
         &mut self,
         _addressbook_id: &str,
@@ -232,10 +236,6 @@ impl MsgraphBackend {
         contents: Vec<u8>,
         if_match: Option<&str>,
     ) -> Result<CardUpdateOutcome> {
-        if if_match.is_some() {
-            bail!("Microsoft Graph does not support If-Match guarded updates");
-        }
-
         let vcard = into_vcard_text(contents)?;
 
         let base = self
@@ -243,6 +243,13 @@ impl MsgraphBackend {
             .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))
             .map_err(|err| card_error(card_id, err))?
             .response;
+
+        if let Some(expected) = if_match
+            && !error::version_matches(base.change_key.as_deref(), expected)
+        {
+            return Err(error::card_changed(card_id, SERVER));
+        }
+
         let base_vcard = base.to_vcard();
 
         let contact = MsgraphContact::update_from_vcard(&vcard, &base_vcard)?;
@@ -254,21 +261,36 @@ impl MsgraphBackend {
     }
 
     /// Deletes the contact `card_id`.
+    ///
+    /// An `if_match` is compared with the contact's `changeKey`, read
+    /// first, as an update compares it.
     pub fn delete_card(
         &mut self,
         _addressbook_id: &str,
         card_id: &str,
         if_match: Option<&str>,
     ) -> Result<()> {
-        if if_match.is_some() {
-            bail!("Microsoft Graph contacts cannot gate a delete on an ETag");
+        if let Some(expected) = if_match {
+            let current = self
+                .inner
+                .contact_get(card_id, None)
+                .map_err(|err| card_error(card_id, err))?
+                .response;
+
+            if !error::version_matches(current.change_key.as_deref(), expected) {
+                return Err(error::card_changed(card_id, SERVER));
+            }
         }
+
         self.inner
             .contact_delete(card_id)
             .map_err(|err| card_error(card_id, err))?;
         Ok(())
     }
 }
+
+/// The server a refused guard names.
+const SERVER: &str = "Microsoft Graph";
 
 /// Maps the sentinel Contacts folder id to the omitted folder segment.
 fn folder(addressbook_id: &str) -> Option<&str> {
@@ -347,6 +369,83 @@ mod tests {
             Some(ErrorCode::RateLimited)
         );
         assert_eq!(delete_code(500, "ErrorInternalServerError"), None);
+    }
+
+    /// The backend over a Graph server answering each request with the
+    /// next of `responses`, and the requests it receives.
+    fn scripted(responses: Vec<Vec<u8>>) -> (MsgraphBackend, script::Requests) {
+        let (script, requests) = Script::new(responses);
+        let inner = MsgraphClientStd::new(script, "token", Default::default());
+        (MsgraphBackend { inner }, requests)
+    }
+
+    /// The contact `AAMk` at the version `k1`.
+    fn contact() -> Vec<u8> {
+        let body = r#"{"id":"AAMk","changeKey":"k1","displayName":"Ada"}"#;
+        script::response(200, "application/json", body)
+    }
+
+    /// The methods of the requests a server received, in order.
+    fn methods(requests: &script::Requests) -> Vec<String> {
+        let requests = requests.lock().unwrap();
+        requests
+            .iter()
+            .map(|request| {
+                let request = String::from_utf8_lossy(request);
+                request.split(' ').next().unwrap_or_default().to_owned()
+            })
+            .collect()
+    }
+
+    const CARD: &[u8] = b"BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ada Byron\r\nEND:VCARD\r\n";
+
+    /// An update `--if-match` guards is compared with the `changeKey` of
+    /// the contact it reads as its base anyway: a stale one is refused
+    /// `precondition-failed` before the `PATCH`, the one read lets it
+    /// through, quoted or not, no request added.
+    #[test]
+    fn an_update_is_guarded_by_the_change_key_it_reads() {
+        let (mut backend, requests) = scripted(vec![contact()]);
+        let err = backend
+            .update_card(CONTACTS_FOLDER, "AAMk", CARD.to_vec(), Some("k0"))
+            .unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));
+        assert_eq!(methods(&requests), ["GET"]);
+
+        let patched = script::response(200, "application/json", "{}");
+        let (mut backend, requests) = scripted(vec![contact(), patched]);
+        backend
+            .update_card(CONTACTS_FOLDER, "AAMk", CARD.to_vec(), Some("\"k1\""))
+            .unwrap();
+        assert_eq!(methods(&requests), ["GET", "PATCH"]);
+    }
+
+    /// A delete `--if-match` guards reads the contact first, refusing a
+    /// stale `changeKey` before the `DELETE`; without one it sends the
+    /// `DELETE` alone.
+    #[test]
+    fn a_delete_is_guarded_by_the_change_key_it_reads_first() {
+        let (mut backend, requests) = scripted(vec![contact()]);
+        let err = backend
+            .delete_card(CONTACTS_FOLDER, "AAMk", Some("k0"))
+            .unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));
+        assert!(
+            err.to_string().contains("changed on Microsoft Graph"),
+            "{err}"
+        );
+        assert_eq!(methods(&requests), ["GET"]);
+
+        let deleted = script::response(204, "application/json", "");
+        let (mut backend, requests) = scripted(vec![contact(), deleted.clone()]);
+        backend
+            .delete_card(CONTACTS_FOLDER, "AAMk", Some("k1"))
+            .unwrap();
+        assert_eq!(methods(&requests), ["GET", "DELETE"]);
+
+        let (mut backend, requests) = scripted(vec![deleted]);
+        backend.delete_card(CONTACTS_FOLDER, "AAMk", None).unwrap();
+        assert_eq!(methods(&requests), ["DELETE"]);
     }
 
     /// A contact Graph does not hold, or an id that cannot name one, is a

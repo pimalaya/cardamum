@@ -462,9 +462,20 @@ impl PimdirBackend {
     /// stored summary, which keeps a listing useful on a partly synced
     /// store. The preview is never the record: [`get_card`](Self::get_card)
     /// refuses an unhydrated card outright.
+    ///
+    /// A body its blob tree no longer holds previews too, with a warning,
+    /// a search hit having no `errors` to name it in.
     pub(crate) fn card_from_item(&self, addressbook_id: &str, item: PimdirItem) -> Result<Card> {
         match self.listed_card(addressbook_id, item) {
             (card, None) => Ok(card),
+            (card, Some(err)) if err.is::<BodyMissing>() => {
+                warn!(
+                    "body blob missing for card `{}` in `{addressbook_id}`, \
+                     previewing its summary instead",
+                    card.id
+                );
+                Ok(card)
+            }
             (_, Some(err)) => Err(err),
         }
     }
@@ -472,14 +483,16 @@ impl PimdirBackend {
     /// Builds a shared [`Card`] from a stored item as a listing shows it,
     /// beside the error its body could not be read with.
     ///
-    /// A body that cannot be read gives the preview an unhydrated card
+    /// A body that cannot be read, or that its blob tree no longer holds
+    /// though the item names one, gives the preview an unhydrated card
     /// lists as, the error left to the caller: a listing keeps the card's
-    /// place in the page and prints it in `errors` alone. A body the store
-    /// does not hold is no error.
+    /// place in the page and prints it in `errors` alone, as calendula
+    /// names such an item. A body not fetched yet is no error.
     fn listed_card(&self, addressbook_id: &str, item: PimdirItem) -> (Card, Option<Error>) {
         let (stored, err) = match &item.object {
             Some(hash) => match self.inner.reader.blobs().get(hash) {
-                Ok(stored) => (stored, None),
+                Ok(Some(stored)) => (Some(stored), None),
+                Ok(None) => (None, Some(Error::new(BodyMissing))),
                 Err(err) => {
                     let err = Error::from(err).context("Cannot read the card body");
                     (None, Some(err))
@@ -496,20 +509,7 @@ impl PimdirBackend {
 
         let contents = match stored {
             Some(contents) => contents,
-            None => {
-                // NOTE: the blob may be gone from an inconsistent store
-                // rather than never fetched, which is worth a word since
-                // `get_card` refuses outright.
-                if item.object.is_some() && err.is_none() {
-                    warn!(
-                        "body blob missing for card `{}` in `{addressbook_id}`, \
-                         listing its summary instead",
-                        item.seq
-                    );
-                }
-
-                preview_vcard(&item)
-            }
+            None => preview_vcard(&item),
         };
 
         let card = Card {
@@ -670,6 +670,19 @@ fn check_version(
 fn is_card_kind(kind: &str) -> bool {
     kind.is_empty() || kind.split(';').next().unwrap_or_default().trim() == CARD_KIND
 }
+
+/// A body an item names that its blob tree no longer holds, an
+/// inconsistent store.
+#[derive(Debug)]
+struct BodyMissing;
+
+impl std::fmt::Display for BodyMissing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Body blob missing from the store")
+    }
+}
+
+impl std::error::Error for BodyMissing {}
 
 /// Renders a stored item's contact summary as the listing preview of a
 /// card.
@@ -1183,6 +1196,47 @@ mod tests {
         assert_eq!(page.errors[0].code, Some(ErrorCode::CardUnreadable));
     }
 
+    /// A body the item names but its blob tree no longer holds is an entry
+    /// on the page holding its card, coded `card-unreadable` as calendula
+    /// codes it `item-unreadable`, its error not repeating the id; a
+    /// search hit still previews it, having no `errors`.
+    #[test]
+    fn a_missing_body_is_an_entry_alone() {
+        use crate::error::ErrorCode;
+
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        drain(&dir);
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
+        let item = backend.item("book", &id).unwrap();
+        let blob = backend
+            .inner
+            .reader
+            .blobs()
+            .path(item.object.as_ref().unwrap());
+        std::fs::remove_file(blob.unwrap()).unwrap();
+
+        let listed = backend.list_cards("book", 0, None).unwrap();
+        assert_eq!(listed.cards.len(), 1);
+        assert_eq!(listed.cards[0].etag, None);
+        assert_eq!(listed.errors.len(), 1, "{:?}", listed.errors);
+        let entry = &listed.errors[0];
+        assert_eq!(entry.id.as_deref(), Some(id.as_str()));
+        assert_eq!(entry.code, Some(ErrorCode::CardUnreadable));
+        assert_eq!(entry.error, "Body blob missing from the store");
+
+        let page = client(&dir).list_cards("book", Some(1), Some(25)).unwrap();
+        assert!(page.cards.is_empty(), "{:?}", page.cards);
+        assert_eq!(page.errors.len(), 1, "{:?}", page.errors);
+
+        let item = backend.item("book", &id).unwrap();
+        let card = backend.card_from_item("book", item).unwrap();
+        let preview = String::from_utf8(card.contents).unwrap();
+        assert!(preview.contains("FN:Jane Doe\r\n"), "{preview}");
+    }
+
     /// A card in the address book `local`, which the device keeps and no
     /// source syncs (pimdir STORAGE §14.3), answering its public id.
     fn kept(dir: &tempfile::TempDir) -> String {
@@ -1243,10 +1297,11 @@ mod tests {
         let hash = backend.item("book", &id).unwrap().object.unwrap();
         std::fs::remove_file(backend.inner.reader.blobs().path(&hash).unwrap()).unwrap();
 
-        // NOTE: a body the store does not hold is no error of the listing.
+        // NOTE: the body it names is gone, which the listing names as an
+        // unreadable card (see a_missing_body_is_an_entry_alone).
         let listed = backend.list_cards("book", 0, None).unwrap();
         assert_eq!(listed.cards[0].etag, None);
-        assert!(listed.errors.is_empty());
+        assert_eq!(listed.errors[0].code, Some(ErrorCode::CardUnreadable));
 
         let err = backend.delete_card("book", &id, Some(&hash.0)).unwrap_err();
         assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));
@@ -1365,8 +1420,8 @@ mod tests {
     }
 
     /// A pimdir write reaches the server on the next sync, so the unified
-    /// commands say it is queued, never that the card was written, while
-    /// their JSON stays the shape every backend prints.
+    /// commands say it is queued, never that the card was written, and
+    /// their JSON says so in `queued`, as every backend prints it.
     #[test]
     fn a_queued_write_says_it_is_queued() {
         use clap::Parser;
@@ -1392,7 +1447,10 @@ mod tests {
             .unwrap();
         assert!(out.text.contains("queued"), "{}", out.text);
         assert!(!out.text.contains("successfully"), "{}", out.text);
-        assert_eq!(out.json, serde_json::json!({ "id": "urn:uuid:card-1" }));
+        assert_eq!(
+            out.json,
+            serde_json::json!({ "id": "urn:uuid:card-1", "queued": true })
+        );
 
         CardUpdateCommand::parse_from(["update", "-k", "book", &id, &roe])
             .execute(&mut out, &mut client(&dir))
@@ -1401,7 +1459,7 @@ mod tests {
         assert!(!out.text.contains("successfully"), "{}", out.text);
         assert_eq!(
             out.json,
-            serde_json::json!({ "id": id, "keptProperties": [] })
+            serde_json::json!({ "id": id, "keptProperties": [], "queued": true })
         );
 
         CardDeleteCommand::parse_from(["delete", "-k", "book", &id])
@@ -1409,6 +1467,7 @@ mod tests {
             .unwrap();
         assert!(out.text.contains("queued"), "{}", out.text);
         assert!(!out.text.contains("successfully"), "{}", out.text);
+        assert_eq!(out.json, serde_json::json!({ "id": id, "queued": true }));
     }
 
     /// A create naming a `UID` the address book already holds, queued or

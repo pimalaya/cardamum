@@ -69,6 +69,10 @@ pub enum ErrorCode {
     /// The address book a command names does not exist: nothing was read
     /// or written.
     AddressbookNotFound,
+    /// A command naming no address book found no `addressbook.default`
+    /// either: the caller names one with `-k` or sets the key. Nothing was
+    /// read or written.
+    AddressbookDefaultMissing,
     /// The backend answered for a card cardamum could not read.
     CardUnreadable,
     /// The card is listed but its body is not local yet: a sync will
@@ -91,16 +95,31 @@ pub enum ErrorCode {
     /// The pimdir store's recorded version disagrees with itself, or its
     /// schema differs from the one its version declares.
     StoreCorrupt,
+    /// The pimdir store holds no schema yet, and the verb creates none:
+    /// its sync engine creates it.
+    StoreNotCurrent,
     /// The pimdir store names its bodies by a hash this cardamum does not
     /// know.
     StoreHashAlgo,
+    /// The pimdir store's sync state was written by another version of
+    /// its sync engine.
+    SyncVersion,
     /// Another user can read or write the pimdir store's directory or
     /// database, or a link stands where a lock file belongs (pimdir
     /// STORAGE §18): nothing was opened, and the user restricts it.
     StoreExposed,
+    /// The pimdir store is not the one that answered the queue row's
+    /// handle, a copy restored since: nothing was done with the row.
+    StoreReset,
     /// Another writer held the pimdir store: past the wait on a write, at
     /// once on a check, which does not wait. The caller tries again.
     StoreBusy,
+    /// A sync owns the pimdir store: retry once it ends.
+    StoreOwned,
+    /// A producer is staging a body in the pimdir store: retry.
+    StoreStaging,
+    /// A pimdir store verb is between two of its chunks: retry.
+    StoreInFlight,
     /// The store's staging lock file was replaced while a write held it
     /// (pimdir STORAGE §8): nothing was queued, and the caller tries
     /// again once no other process is setting the store up.
@@ -109,11 +128,22 @@ pub enum ErrorCode {
     /// (pimdir STORAGE §15.6): nothing was queued.
     Unsupported,
     /// A create names a card the address book already holds, live or
-    /// queued: the caller updates that card instead.
+    /// queued, on pimdir, or a `UID` a CardDAV address book holds: the
+    /// caller updates that card instead.
     ItemDuplicate,
+    /// The pimdir store cannot hold the flag: empty, or holding a space, a
+    /// control or a non-ASCII character. Nothing was staged.
+    FlagInvalid,
     /// A queued action's payload is malformed (pimdir STORAGE §15.3): the
     /// store's owner parks it on its next drain.
     ActionMalformed,
+    /// The pimdir conflict holds a body nobody has read: fetch it first.
+    ConflictUnread,
+    /// No source of the pimdir store can perform the intent.
+    NoPerformer,
+    /// Several sources of the pimdir store can perform the intent and
+    /// none is chosen.
+    AmbiguousPerformer,
     /// The pimdir store has no search index yet: its sync engine builds
     /// it.
     IndexMissing,
@@ -123,6 +153,9 @@ pub enum ErrorCode {
     /// The pimdir search index is of another draft or shape: its sync
     /// engine rebuilds one of an earlier draft, and leaves any other.
     IndexVersion,
+    /// The zone the pimdir search index reads floating times in is not an
+    /// IANA zone.
+    IndexZoneUnknown,
     /// The SQLite cardamum links lacks what the pimdir search index needs
     /// (FTS5, 3.43 or later).
     IndexFts5Missing,
@@ -132,34 +165,58 @@ pub enum ErrorCode {
     /// The pimdir search index could not answer an accepted query, an
     /// implementation fault.
     QueryUnanswerable,
+    /// The pimdir tag names no flag, or adds and removes one flag: nothing
+    /// was staged.
+    TagRefused,
 }
+
+/// The pimdir codes cardamum relays, by io-pimdir's spelling, which
+/// serialises each: Himalaya's set, so one store failure reads the same
+/// code in every program of the family.
+#[cfg(feature = "pimdir")]
+const PIMDIR_CODES: &[(&str, ErrorCode)] = &[
+    ("store-version", ErrorCode::StoreVersion),
+    ("store-uncreated", ErrorCode::StoreUncreated),
+    ("store-foreign", ErrorCode::StoreForeign),
+    ("store-corrupt", ErrorCode::StoreCorrupt),
+    ("store-not-current", ErrorCode::StoreNotCurrent),
+    ("store-hash-algo", ErrorCode::StoreHashAlgo),
+    ("sync-version", ErrorCode::SyncVersion),
+    ("store-busy", ErrorCode::StoreBusy),
+    ("store-owned", ErrorCode::StoreOwned),
+    ("store-staging", ErrorCode::StoreStaging),
+    ("store-in-flight", ErrorCode::StoreInFlight),
+    ("store-exposed", ErrorCode::StoreExposed),
+    ("store-reset", ErrorCode::StoreReset),
+    ("lock-replaced", ErrorCode::LockReplaced),
+    ("item-duplicate", ErrorCode::ItemDuplicate),
+    ("flag-invalid", ErrorCode::FlagInvalid),
+    ("action-malformed", ErrorCode::ActionMalformed),
+    ("conflict-unread", ErrorCode::ConflictUnread),
+    ("unsupported", ErrorCode::Unsupported),
+    ("no-performer", ErrorCode::NoPerformer),
+    ("ambiguous-performer", ErrorCode::AmbiguousPerformer),
+    ("index-missing", ErrorCode::IndexMissing),
+    ("index-outdated", ErrorCode::IndexOutdated),
+    ("index-version", ErrorCode::IndexVersion),
+    ("index-zone-unknown", ErrorCode::IndexZoneUnknown),
+    ("index-fts5-missing", ErrorCode::IndexFts5Missing),
+    ("query-refused", ErrorCode::QueryRefused),
+    ("query-unanswerable", ErrorCode::QueryUnanswerable),
+    ("tag-refused", ErrorCode::TagRefused),
+];
 
 #[cfg(feature = "pimdir")]
 impl ErrorCode {
     /// The code of a pimdir failure, read from the one io-pimdir names
     /// for it ([`PimdirError::code`]), or none for a failure no caller
-    /// acts on (SQL, I/O, JSON) or no cardamum path raises.
+    /// acts on (SQL, I/O, JSON) or no program of the family relays.
     pub fn of_pimdir(err: &PimdirError) -> Option<Self> {
-        match err.code() {
-            "store-uncreated" => Some(Self::StoreUncreated),
-            "store-version" => Some(Self::StoreVersion),
-            "store-foreign" => Some(Self::StoreForeign),
-            "store-corrupt" => Some(Self::StoreCorrupt),
-            "store-hash-algo" => Some(Self::StoreHashAlgo),
-            "store-exposed" => Some(Self::StoreExposed),
-            "store-busy" => Some(Self::StoreBusy),
-            "lock-replaced" => Some(Self::LockReplaced),
-            "unsupported" => Some(Self::Unsupported),
-            "item-duplicate" => Some(Self::ItemDuplicate),
-            "action-malformed" => Some(Self::ActionMalformed),
-            "index-missing" => Some(Self::IndexMissing),
-            "index-outdated" => Some(Self::IndexOutdated),
-            "index-version" => Some(Self::IndexVersion),
-            "index-fts5-missing" => Some(Self::IndexFts5Missing),
-            "query-refused" => Some(Self::QueryRefused),
-            "query-unanswerable" => Some(Self::QueryUnanswerable),
-            _ => None,
-        }
+        let code = err.code();
+        PIMDIR_CODES
+            .iter()
+            .find(|(pimdir, _)| *pimdir == code)
+            .map(|(_, ours)| *ours)
     }
 }
 /// The code of `err`: the one a coded error in its chain carries, else
@@ -219,9 +276,32 @@ pub fn partial_when(errors: &[ItemError]) -> anyhow::Result<()> {
     }
 }
 
+/// Whether `version`, the one a card read reports, is the one `if_match`
+/// names, surrounding double quotes ignored.
+#[cfg(any(feature = "jmap", feature = "msgraph"))]
+pub fn version_matches(version: Option<&str>, if_match: &str) -> bool {
+    let unquote = |etag: &str| etag.trim_matches('"').to_owned();
+    version.map(unquote) == Some(unquote(if_match))
+}
+
+/// The refusal of a write `--if-match` guards, the card `card_id` having
+/// changed on `server` since it was read: `precondition-failed`.
+#[cfg(any(feature = "jmap", feature = "msgraph"))]
+pub fn card_changed(card_id: &str, server: &str) -> Error {
+    let message = format!("Card `{card_id}` changed on {server} since it was read");
+    pimalaya_cli::error::CodedError::new(ErrorCode::PreconditionFailed, message).into()
+}
+
 /// The failure of the card `card_id` the address book does not hold,
-/// `cause` what the server answered.
-#[cfg(any(feature = "carddav", feature = "gpeople", feature = "msgraph"))]
+/// `cause` what the backend answered: cardamum's sentence, the backend's
+/// text in `sources`, as calendula words an item not found.
+#[cfg(any(
+    feature = "carddav",
+    feature = "gpeople",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "vdir"
+))]
 pub fn card_not_found(card_id: &str, cause: Error) -> Error {
     with_code(cause, |_| Some(ErrorCode::CardNotFound))
         .context(format!("Card `{card_id}` not found"))
@@ -262,16 +342,24 @@ mod account_tests {
 mod tests {
     use io_pimdir::{
         capability::PimdirRefusal,
-        client::{PimdirDuplicate, PimdirError},
+        client::{PimdirDuplicate, PimdirError, PimdirNotCurrent},
         codec::PimdirActionError,
         search::query::PimdirQuery,
     };
 
     use super::*;
 
-    /// Every pimdir failure a cardamum path raises and a caller acts on
-    /// prints the very code io-pimdir names for it, so a script reads one
-    /// vocabulary whichever program met the store.
+    /// Every relayed code keeps io-pimdir's spelling.
+    #[test]
+    fn a_relayed_pimdir_code_keeps_io_pimdirs_spelling() {
+        for (pimdir, ours) in PIMDIR_CODES {
+            assert_eq!(serde_json::to_value(ours).unwrap(), *pimdir);
+        }
+    }
+
+    /// Every pimdir failure a caller acts on prints the very code io-pimdir
+    /// names for it, so a script reads one vocabulary whichever program met
+    /// the store, Himalaya's set included.
     #[test]
     fn a_pimdir_failure_prints_the_code_io_pimdir_names() {
         let failures = [
@@ -314,6 +402,22 @@ mod tests {
             },
             PimdirError::Fts5 { version: "3.40.0" },
             PimdirError::Query(PimdirQuery::parse("frm:alice").unwrap_err()),
+            PimdirError::NotCurrent(PimdirNotCurrent::Version { found: 0 }),
+            PimdirError::SyncVersion {
+                found: "sync-draft-08".into(),
+            },
+            PimdirError::Owned("pimdir.lock".into()),
+            PimdirError::Staging("objects.lock".into()),
+            PimdirError::InFlight("pimdir.db".into()),
+            PimdirError::Flag(" ".into()),
+            PimdirError::NoPerformer {
+                capability: "calendar-reply".into(),
+            },
+            PimdirError::Ambiguous {
+                capability: "calendar-reply".into(),
+                candidates: vec!["a".into(), "b".into()],
+            },
+            PimdirError::IndexZone("Mars/Olympus".into()),
         ];
 
         for err in failures {

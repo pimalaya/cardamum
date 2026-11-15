@@ -88,7 +88,12 @@ mod pimdir;
 mod repl;
 #[cfg(all(
     test,
-    any(feature = "carddav", feature = "gpeople", feature = "msgraph")
+    any(
+        feature = "carddav",
+        feature = "gpeople",
+        feature = "jmap",
+        feature = "msgraph"
+    )
 ))]
 mod script;
 mod session;

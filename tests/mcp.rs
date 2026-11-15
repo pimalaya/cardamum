@@ -202,10 +202,27 @@ fn a_value_the_grammar_refuses_is_a_usage_failure() {
     let text = result["content"][0]["text"].as_str().unwrap();
     let failure: Value = serde_json::from_str(text).unwrap();
     assert_eq!(failure["code"], "usage-invalid", "{failure}");
+    let error = failure["error"].as_str().unwrap();
     assert!(
-        failure["error"].as_str().unwrap().contains("--page-size"),
+        error.starts_with("Invalid value `-1` for `page-size`: "),
         "{failure}"
     );
+}
+
+/// A call missing a required argument names it as the tool's input does,
+/// never clap's usage text.
+#[test]
+fn a_missing_argument_is_named_as_the_tool_takes_it() {
+    let (home, config) = vdir();
+    let read = call(1, "card_read", json!({"addressbook": "personal"}));
+    let answers = serve(&home, &config, &[], &[read]);
+
+    let result = &answers[1]["result"];
+    assert_eq!(result["isError"], true, "{result}");
+    let text = result["content"][0]["text"].as_str().unwrap();
+    let failure: Value = serde_json::from_str(text).unwrap();
+    assert_eq!(failure["code"], "usage-invalid", "{failure}");
+    assert_eq!(failure["error"], "Missing argument `card-id`", "{failure}");
 }
 
 /// A listing naming a card it could not read keeps its result beside

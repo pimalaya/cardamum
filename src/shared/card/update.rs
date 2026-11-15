@@ -27,8 +27,9 @@ use crate::shared::{
 /// the backend first, and the version it answered guards the write on a
 /// backend taking a guard.
 ///
-/// JSON output: `{"id", "keptProperties"}`, the second listing what the
-/// update dropped and the server kept anyway.
+/// JSON output: `{"id", "keptProperties", "queued"}`, the second listing
+/// what the update dropped and the server kept anyway, the third whether a
+/// sync engine applies it later.
 #[derive(Debug, Parser)]
 pub struct CardUpdateCommand {
     /// Addressbook holding the card.
@@ -85,8 +86,8 @@ impl CardUpdateCommand {
             }
         };
 
-        // NOTE: a backend taking no version guard (jmap, msgraph) still
-        // reports a version on a read, which it would refuse as a guard.
+        // NOTE: a backend taking no version guard would refuse, as one, a
+        // version its read reports.
         let etag = etag.filter(|_| client.serves(Capability::CardUpdateIfMatch));
         let if_match = self.if_match.or(etag);
         let seeded = self.fields.apply(&base)?;
@@ -166,9 +167,7 @@ pub struct CardUpdatedOutput {
     /// Names of the vCard properties the update dropped and the server
     /// kept anyway, empty on a backend that can clear everything.
     pub kept_properties: Vec<String>,
-    /// Whether the write was queued for a sync rather than made, which
-    /// only the wording tells.
-    #[serde(skip)]
+    /// Whether a sync engine applies the write later rather than now.
     pub queued: bool,
 }
 
@@ -270,7 +269,10 @@ mod tests {
         CardUpdateCommand::parse_from(args)
             .execute(&mut out, &mut client)
             .unwrap();
-        assert_eq!(out.0, json!({"id": "AAMk", "keptProperties": []}));
+        assert_eq!(
+            out.0,
+            json!({"id": "AAMk", "keptProperties": [], "queued": false})
+        );
 
         let requests = requests.lock().unwrap();
         let requests: Vec<String> = requests

@@ -6,8 +6,10 @@
 //!
 //! JMAP AddressBooks are the addressbooks; ContactCards are
 //! account-level with m:n memberships, so each listing queries the
-//! requested AddressBook. Card updates carry no If-Match equivalent
-//! server-side (last-write-wins), so passing one bails.
+//! requested AddressBook. A ContactCard write takes no If-Match
+//! equivalent (last-write-wins), so `--if-match` is compared with the hash
+//! of the card read just before the write: the update reads the card as
+//! its patch base anyway, the delete reads it for the guard alone.
 
 use std::collections::BTreeMap;
 
@@ -29,7 +31,6 @@ use io_jmap::{
         },
     },
 };
-use pimalaya_cli::error::CodedError;
 use pimalaya_config::secret::SecretResolver;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
@@ -200,10 +201,8 @@ impl JmapBackend {
         let out = self.inner.contact_card_get(opts)?;
 
         let card = out.cards.into_iter().next().ok_or_else(|| {
-            CodedError::new(
-                ErrorCode::CardNotFound,
-                format!("JMAP ContactCard `{card_id}` not found"),
-            )
+            let cause = anyhow!("JMAP ContactCard/get answered the id as `notFound`");
+            error::card_not_found(card_id, cause)
         })?;
 
         project::to_card(addressbook_id, card).map_err(Error::msg)
@@ -245,7 +244,8 @@ impl JmapBackend {
     /// The current server card serves as patch base, so the patch
     /// shrinks to the changed properties, plus nulls for the removed
     /// ones. JMAP has no If-Match guard (updates are last-write-wins),
-    /// so passing one bails instead of pretending to honor it.
+    /// so `if_match` is compared with the base's hash, a write landing
+    /// between that read and the set not caught.
     pub fn update_card(
         &mut self,
         addressbook_id: &str,
@@ -253,12 +253,15 @@ impl JmapBackend {
         contents: Vec<u8>,
         if_match: Option<&str>,
     ) -> Result<CardUpdateOutcome> {
-        if if_match.is_some() {
-            bail!("JMAP does not support If-Match guarded updates");
-        }
-
         let vcard = into_vcard_text(contents)?;
         let base = self.get_card(addressbook_id, card_id)?;
+
+        if let Some(expected) = if_match
+            && !error::version_matches(base.etag.as_deref(), expected)
+        {
+            return Err(error::card_changed(card_id, SERVER));
+        }
+
         let base_vcard = into_vcard_text(base.contents)?;
 
         let patch = project::to_patch(&vcard, Some(&base_vcard)).map_err(Error::msg)?;
@@ -272,22 +275,31 @@ impl JmapBackend {
         let out = self.inner.contact_card_set(args)?;
 
         if let Some(err) = out.not_updated.into_values().next() {
-            return Err(card_write_error("update", &err, &unmapped));
+            let refusal = card_write_error("update", &err, &unmapped);
+            return Err(card_refusal(card_id, &err, refusal));
         }
 
         Ok(CardUpdateOutcome::default())
     }
 
     /// Destroys the ContactCard `card_id`.
+    ///
+    /// An `if_match` is compared with the hash of the card, read first, as
+    /// an update compares it.
     pub fn delete_card(
         &mut self,
-        _addressbook_id: &str,
+        addressbook_id: &str,
         card_id: &str,
         if_match: Option<&str>,
     ) -> Result<()> {
-        if if_match.is_some() {
-            bail!("JMAP does not support If-Match guarded deletes");
+        if let Some(expected) = if_match {
+            let current = self.get_card(addressbook_id, card_id)?;
+
+            if !error::version_matches(current.etag.as_deref(), expected) {
+                return Err(error::card_changed(card_id, SERVER));
+            }
         }
+
         let args = JmapContactCardSetArgs {
             destroy: Some(vec![card_id.to_string()]),
             ..Default::default()
@@ -295,12 +307,25 @@ impl JmapBackend {
         let out = self.inner.contact_card_set(args)?;
 
         if let Some(err) = out.not_destroyed.into_values().next() {
-            return Err(set_error("JMAP ContactCard destroy rejected", &err));
+            let refusal = set_error("JMAP ContactCard destroy rejected", &err);
+            return Err(card_refusal(card_id, &err, refusal));
         }
 
         Ok(())
     }
 }
+
+/// The refusal of a write on the card `card_id`, worded `refusal`: a
+/// `notFound` is a card not found, the server's answer in `sources`.
+fn card_refusal(card_id: &str, err: &JmapContactCardSetItemError, refusal: Error) -> Error {
+    match err.code() {
+        Some(ErrorCode::CardNotFound) => error::card_not_found(card_id, refusal),
+        _ => refusal,
+    }
+}
+
+/// The server a refused guard names.
+const SERVER: &str = "the JMAP server";
 
 /// Renders a [`JmapAuthConfig`] as the `Authorization` header value.
 ///
@@ -427,6 +452,99 @@ mod tests {
 
     use super::jmap_http_auth;
     use crate::config::JmapAuthConfig;
+
+    /// The backend over a JMAP server answering each request with the next
+    /// of `bodies`, and the requests it receives.
+    fn scripted(bodies: &[&str]) -> (super::JmapBackend, crate::script::Requests) {
+        use io_jmap::{client::JmapClientStd, rfc8620::session::JmapSession};
+
+        let session: JmapSession = serde_json::from_value(serde_json::json!({
+            "username": "", "accounts": {}, "capabilities": {},
+            "primaryAccounts": {"urn:ietf:params:jmap:contacts": "a1"},
+            "apiUrl": "https://jmap.example.org/api/", "downloadUrl": "",
+            "uploadUrl": "", "eventSourceUrl": "", "state": "",
+        }))
+        .unwrap();
+        let responses = bodies
+            .iter()
+            .map(|body| crate::script::response(200, "application/json", body));
+        let (script, requests) = crate::script::Script::new(responses);
+        let auth = SecretString::from("Bearer token");
+        let inner = JmapClientStd::from_parts(script, auth, session);
+
+        (super::JmapBackend { inner }, requests)
+    }
+
+    /// A `ContactCard/get` answering the card `c1`.
+    const GET: &str = r#"{"methodResponses": [["ContactCard/get", {
+        "accountId": "a1", "state": "s1", "notFound": [],
+        "list": [{"id": "c1", "addressBookIds": {"book": true},
+                  "@type": "Card", "name": {"full": "Ada"}}]
+    }, "c0"]], "sessionState": "s"}"#;
+
+    /// A `ContactCard/set` answering every write accepted.
+    const SET: &str = r#"{"methodResponses": [["ContactCard/set", {
+        "accountId": "a1", "oldState": "s1", "newState": "s2",
+        "updated": {"c1": null}, "destroyed": ["c1"]
+    }, "c0"]], "sessionState": "s"}"#;
+
+    const CARD: &[u8] = b"BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ada Byron\r\nEND:VCARD\r\n";
+
+    /// A write `--if-match` guards is compared with the hash of the card
+    /// read before it, which an update reads as its patch base anyway: a
+    /// stale one is refused `precondition-failed` before the set, the one
+    /// a read reports lets it through.
+    #[test]
+    fn a_write_is_guarded_by_the_hash_of_the_card_it_reads() {
+        use pimalaya_cli::error::code_of;
+
+        use crate::error::ErrorCode;
+
+        let (mut backend, _) = scripted(&[GET]);
+        let etag = backend.get_card("book", "c1").unwrap().etag.unwrap();
+
+        let stale = Some(ErrorCode::PreconditionFailed);
+        let (mut backend, requests) = scripted(&[GET]);
+        let err = backend
+            .update_card("book", "c1", CARD.to_vec(), Some("0"))
+            .unwrap_err();
+        assert_eq!(code_of(&err), stale, "{err:#}");
+        assert_eq!(requests.lock().unwrap().len(), 1);
+
+        let (mut backend, requests) = scripted(&[GET, SET]);
+        backend
+            .update_card("book", "c1", CARD.to_vec(), Some(&etag))
+            .unwrap();
+        assert_eq!(requests.lock().unwrap().len(), 2);
+
+        let (mut backend, requests) = scripted(&[GET]);
+        let err = backend.delete_card("book", "c1", Some("0")).unwrap_err();
+        assert_eq!(code_of(&err), stale, "{err:#}");
+        assert_eq!(requests.lock().unwrap().len(), 1);
+
+        let (mut backend, requests) = scripted(&[GET, SET]);
+        backend.delete_card("book", "c1", Some(&etag)).unwrap();
+        assert_eq!(requests.lock().unwrap().len(), 2);
+    }
+
+    /// A card the server does not hold reads as cardamum words a card not
+    /// found, the server's answer in `sources`.
+    #[test]
+    fn a_missing_card_reads_as_a_card_not_found() {
+        use pimalaya_cli::error::code_of;
+
+        use crate::error::ErrorCode;
+
+        let missing = r#"{"methodResponses": [["ContactCard/get", {
+            "accountId": "a1", "state": "s1", "list": [], "notFound": ["c9"]
+        }, "c0"]], "sessionState": "s"}"#;
+        let (mut backend, _) = scripted(&[missing]);
+        let err = backend.get_card("book", "c9").unwrap_err();
+
+        assert_eq!(code_of(&err), Some(ErrorCode::CardNotFound));
+        assert_eq!(err.to_string(), "Card `c9` not found");
+        assert!(err.chain().nth(1).is_some(), "{err:#}");
+    }
 
     #[test]
     fn basic_auth_is_standard_padded_base64() {

@@ -33,7 +33,9 @@ use crate::shared::{
 /// reports is the one the card is staged under: the other commands take
 /// the card once the sync applies it and it lists.
 ///
-/// JSON output: `{"id"}`, the identifier the backend assigned.
+/// JSON output: `{"id", "queued"}`, the identifier the backend assigned,
+/// or the one a queued card is staged under, and whether a sync engine
+/// creates it later.
 #[derive(Debug, Parser)]
 pub struct CardCreateCommand {
     /// Addressbook the card is appended to.
@@ -136,9 +138,7 @@ pub struct CardCreatedOutput {
     /// card is staged under, which no other command takes until a sync
     /// applies it.
     pub id: String,
-    /// Whether the write was queued for a sync rather than made, which
-    /// only the wording tells.
-    #[serde(skip)]
+    /// Whether a sync engine applies the write later rather than now.
     pub queued: bool,
 }
 

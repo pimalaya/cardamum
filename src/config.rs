@@ -65,6 +65,7 @@ use pimalaya_stream::{
     feature = "gpeople"
 ))]
 use secrecy::SecretString;
+use serde::Deserialize;
 #[cfg(not(all(
     feature = "carddav",
     feature = "jmap",
@@ -74,7 +75,6 @@ use secrecy::SecretString;
     feature = "pimdir"
 )))]
 use serde::de::IgnoredAny;
-use serde::{Deserialize, Deserializer};
 #[cfg(any(feature = "carddav", feature = "jmap"))]
 use url::Url;
 
@@ -533,78 +533,49 @@ pub struct CardListConfig {
     pub table: Option<CardListTableRemoved>,
 }
 
-/// The error of a table this release removed, naming it and the migration
-/// notes.
-fn removed<E: serde::de::Error>(table: &str, why: &str) -> E {
-    E::custom(format!(
-        "The `{table}` table is removed, {why}: delete it, see MIGRATION.md"
-    ))
-}
+pimalaya_config::removed_key! {
+    /// The `table` table, at the root or in an account, which no
+    /// configuration holds any more.
+    pub TableRemoved: Table {
+        name: "table",
+        why: "the output being plain text with no border",
+        instead: "delete it",
+    }
 
-/// The `table` table, at the root or in an account, which no
-/// configuration holds any more.
-#[derive(Clone, Debug)]
-pub enum TableRemoved {}
+    /// The top-level `account` table, which no configuration holds any
+    /// more.
+    pub AccountTableRemoved: Table {
+        name: "account",
+        why: "`account list` printing no colour",
+        instead: "delete it",
+    }
 
-impl<'de> Deserialize<'de> for TableRemoved {
-    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
-        Err(removed(
-            "table",
-            "the output being plain text with no border",
-        ))
+    /// The `addressbook.list` table, which no configuration holds any more.
+    pub AddressbookListRemoved: Table {
+        name: "addressbook.list",
+        why: "`addressbook list` printing no colour",
+        instead: "delete it",
+    }
+
+    /// The `card.list.table` table, which no configuration holds any more.
+    pub CardListTableRemoved: Table {
+        name: "card.list.table",
+        why: "`card list` printing no colour",
+        instead: "delete it",
     }
 }
-
-/// The top-level `account` table, which no configuration holds any more.
-#[derive(Clone, Debug)]
-pub enum AccountTableRemoved {}
-
-impl<'de> Deserialize<'de> for AccountTableRemoved {
-    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
-        Err(removed("account", "`account list` printing no colour"))
-    }
-}
-
-/// The `addressbook.list` table, which no configuration holds any more.
-#[derive(Clone, Debug)]
-pub enum AddressbookListRemoved {}
-
-impl<'de> Deserialize<'de> for AddressbookListRemoved {
-    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
-        Err(removed(
-            "addressbook.list",
-            "`addressbook list` printing no colour",
-        ))
-    }
-}
-
-/// The `card.list.table` table, which no configuration holds any more.
-#[derive(Clone, Debug)]
-pub enum CardListTableRemoved {}
-
-impl<'de> Deserialize<'de> for CardListTableRemoved {
-    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
-        Err(removed("card.list.table", "`card list` printing no colour"))
-    }
-}
-
-/// The `carddav.discover` key, which no configuration holds any more:
-/// cardamum resolves no domain.
-#[cfg(feature = "carddav")]
-#[derive(Clone, Debug)]
-pub enum CarddavDiscoverRemoved {}
 
 #[cfg(feature = "carddav")]
-impl<'de> Deserialize<'de> for CarddavDiscoverRemoved {
-    fn deserialize<D: Deserializer<'de>>(_: D) -> Result<Self, D::Error> {
-        Err(serde::de::Error::custom(
-            "The `carddav.discover` key is removed, cardamum resolving no \
-             domain: name the server in `carddav.server` instead \
-             (Fastmail's `https://carddav.fastmail.com/dav/`), or on Google \
-             the address book home in `carddav.home` \
-             (`https://www.googleapis.com/carddav/v1/principals/<email>/lists`), \
-             see MIGRATION.md",
-        ))
+pimalaya_config::removed_key! {
+    /// The `carddav.discover` key, which no configuration holds any more:
+    /// cardamum resolves no domain.
+    pub CarddavDiscoverRemoved: Key {
+        name: "carddav.discover",
+        why: "cardamum resolving no domain",
+        instead: "name the server in `carddav.server` instead (Fastmail's \
+                  `https://carddav.fastmail.com/dav/`), or on Google the \
+                  address book home in `carddav.home` \
+                  (`https://www.googleapis.com/carddav/v1/principals/<email>/lists`)",
     }
 }
 
@@ -1009,33 +980,43 @@ mod tests {
         assert!(err.contains("unknown field `page-sise`"), "{err}");
     }
 
-    /// The tables v0.3 read and this release removed are refused by name,
-    /// pointing at the migration notes, at the root and in an account.
+    /// The tables v0.3 read and this release removed are refused by name in
+    /// the family sentence, pointing at the migration notes, at the root and
+    /// in an account.
     #[test]
     fn a_removed_table_is_refused_by_name() {
         let tables = [
-            ("table", "table.preset = \"x\"\n"),
             (
-                "addressbook.list",
-                "addressbook.list.table.id-color = \"red\"\n",
+                "table.preset = \"x\"\n",
+                "The `table` table is removed, the output being plain text \
+                 with no border: delete it, see MIGRATION.md",
             ),
-            ("card.list.table", "card.list.table.fn-color = \"red\"\n"),
+            (
+                "addressbook.list.table.id-color = \"red\"\n",
+                "The `addressbook.list` table is removed, `addressbook list` \
+                 printing no colour: delete it, see MIGRATION.md",
+            ),
+            (
+                "card.list.table.fn-color = \"red\"\n",
+                "The `card.list.table` table is removed, `card list` printing \
+                 no colour: delete it, see MIGRATION.md",
+            ),
         ];
 
-        for (table, line) in tables {
+        for (line, sentence) in tables {
             let root = format!("{line}[accounts.example]\n");
             let account = format!("[accounts.example]\n{line}");
 
             for toml in [root, account] {
                 let err = refusal(&toml);
-                assert!(err.contains(&format!("`{table}` table")), "{err}");
-                assert!(err.contains("MIGRATION.md"), "{err}");
+                assert!(err.contains(sentence), "{err}");
             }
         }
 
         let err = refusal("account.list.table.name-color = \"red\"\n[accounts.example]\n");
-        assert!(err.contains("`account` table"), "{err}");
-        assert!(err.contains("MIGRATION.md"), "{err}");
+        let sentence = "The `account` table is removed, `account list` printing \
+                        no colour: delete it, see MIGRATION.md";
+        assert!(err.contains(sentence), "{err}");
     }
 
     /// A build leaving a backend out still loads a file configuring it, a

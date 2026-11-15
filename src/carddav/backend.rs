@@ -348,8 +348,8 @@ mod tests {
     }
 
     /// A refusal is coded from its status and the precondition its body
-    /// names: a quota, a rate, or the account's rights, never a card the
-    /// server would not take.
+    /// names: a quota, a rate, the account's rights or a `UID` the address
+    /// book holds, never a card the server would not take.
     #[test]
     fn a_carddav_refusal_carries_its_code() {
         let privileges =
@@ -366,8 +366,26 @@ mod tests {
         assert_eq!(create_code(403, quota), Some(ErrorCode::QuotaExceeded));
         assert_eq!(create_code(507, ""), Some(ErrorCode::QuotaExceeded));
         assert_eq!(create_code(429, ""), Some(ErrorCode::RateLimited));
-        assert_eq!(create_code(403, uid), None);
+        assert_eq!(create_code(403, uid), Some(ErrorCode::ItemDuplicate));
+        assert_eq!(create_code(409, uid), Some(ErrorCode::ItemDuplicate));
         assert_eq!(create_code(500, ""), None);
+    }
+
+    /// A write `--if-match` guards, refused 412 by a server holding another
+    /// version, is `precondition-failed`, on an update as on a delete.
+    #[test]
+    fn a_stale_version_is_a_precondition_failed() {
+        let err = answering(412, "")
+            .update_card("book", "c1.vcf", CARD.to_vec(), Some("\"1\""))
+            .unwrap_err();
+        let code = Some(ErrorCode::PreconditionFailed);
+        assert_eq!(error::code(&err), code, "{err:#}");
+        assert_eq!(code_of(&with_code(err, error::code)), code);
+
+        let err = answering(412, "")
+            .delete_card("book", "c1.vcf", Some("\"1\""))
+            .unwrap_err();
+        assert_eq!(error::code(&err), code, "{err:#}");
     }
 
     /// A vCard the server refuses keeps the server's answer as the cause

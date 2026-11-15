@@ -42,9 +42,15 @@ pub struct CardFields {
 }
 
 impl CardFields {
-    /// Projects the first card of `contents`; one that does not parse
-    /// projects to nothing rather than failing the listing.
+    /// Projects the first card of `contents`; one that does not parse, or
+    /// is not UTF-8, projects to nothing rather than failing the listing.
     pub fn project(contents: &[u8]) -> Self {
+        // NOTE: the parser reads bytes that are not UTF-8 lossily, and a
+        // field never carries a lossy decode.
+        if std::str::from_utf8(contents).is_err() {
+            return Self::default();
+        }
+
         let Ok(cst) = VcardCst::parse(contents) else {
             return Self::default();
         };

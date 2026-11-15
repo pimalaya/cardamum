@@ -132,6 +132,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
 ### Text output
 
 - **Every list is plain text**, with no border, no colour and no truncation: an uppercase header then one item per line, columns two spaces apart, an empty cell as `-`, the free-text column last; or, for a list of wide items (the CardDAV and JMAP addressbooks, Graph folders and contacts, vdir collections, `pimdir search` hits), each item the way `git log` prints a commit. A single item prints as `Label:  value` lines. The list frame, the `Error:` lines and the `account capability` output are pimalaya-cli's, the same in Himalaya.
+- **`account list` prints one line per account with no header row**, the default account marked `default`, the backends this build leaves out after the others; a script reads `cardamum --json account list`.
 - **`card list` prints one line per card**, `id  email  phone  name`, with no header row, under `Account:`, `Addressbook:`, `Page:` and `Next page:`. `addressbook list` leaves the description to `--json`.
 
   ```text
@@ -178,7 +179,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   {"code":"card-not-found","error":"…","sources":["…"],"backtrace":null}
   ```
 
-  The codes a caller acts on: `account-missing`, `account-default-missing`, `account-default-several`, `backend-not-built`, `card-not-found`, `addressbook-not-found`, `card-unreadable`, `permission-denied`, `quota-exceeded`, `rate-limited`, `capability-missing`, `usage-invalid`, `stdin-taken`, `body-pending`, `precondition-failed`, and on pimdir the store, write and search codes io-pimdir names (`store-version`, `store-busy`, `item-duplicate`, `index-version`, `query-refused`…). `cardamum json-schema` describes the failure object as `cardamum-error`.
+  The codes a caller acts on: `account-missing`, `account-default-missing`, `account-default-several`, `backend-not-built`, `card-not-found`, `addressbook-not-found`, `addressbook-default-missing`, `card-unreadable`, `permission-denied`, `quota-exceeded`, `rate-limited`, `capability-missing`, `usage-invalid`, `stdin-taken`, `body-pending`, `precondition-failed`, and on pimdir the store, write and search codes io-pimdir names (`store-version`, `store-busy`, `item-duplicate`, `index-version`, `query-refused`…). `cardamum json-schema` describes the failure object as `cardamum-error`.
 - **Every write prints a receipt** instead of `{"message": …}`; the text form keeps its sentence.
 
   ```sh
@@ -188,7 +189,21 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   cardamum --json card delete c1.vcf | jq -r '.id'
   ```
 
-  `addressbook update|delete` and `card delete` print `{id, queued}`, `queued` true when the write waits for a sync (pimdir); `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-group members` `{id, added, removed}` and `card build -o` `{path, size}`.
+  `addressbook update|delete` and `card delete` print `{id, queued}`, `card create` `{id, queued}`, `card update` `{id, keptProperties, queued}` and `addressbook create` `{id, name, queued}`, `queued` true when the write waits for a sync (pimdir), false otherwise; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-group members` `{id, added, removed}` and `card build -o` `{path, size}`.
+- **A queued write says so in its JSON.** v0.3's `card create` printed `{"id": …}` and `card update` `{"id": …, "keptProperties": […]}`; both now add `queued`, and `addressbook create` adds `name` and `queued`. Read `queued` rather than the wording to tell a pimdir write waiting for a sync:
+
+  ```sh
+  # next release: {"id":"urn:uuid:…","queued":true}
+  cardamum --json card create -k book card.vcf | jq -r 'if .queued then "queued" else .id end'
+  ```
+- **`card read` prints its `card list` row plus the vCard.** The keys `card list` prints join (`addressbookId`, `fnValue`, `email`, `tel`), and `encoding` comes beside `contents`: `utf-8` when `contents` is the vCard text, `base64` when its bytes are not UTF-8 and `contents` holds their base64; v0.3 failed on such a card. `card build` carries its card the same way:
+
+  ```sh
+  # v0.3
+  cardamum --json card read -k book c1.vcf | jq -r '.contents'
+  # next release
+  cardamum --json card read -k book c1.vcf | jq -r 'if .encoding == "base64" then .contents | @base64d else .contents end'
+  ```
 - **The raw `request` commands wrap the response**: `gpeople request`, `jmap request` and `msgraph request` print `{"response": …}`, `null` when the server sent no body, where they printed the response itself.
 
   ```sh

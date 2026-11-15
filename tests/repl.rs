@@ -3,7 +3,8 @@
 //! The built binary's `repl` over a vdir account: lines run as commands
 //! over one account until `quit`, `--json` switches one line, and what
 //! cannot run inside a session (a session, the composer, stdin) is
-//! refused by name while the session goes on.
+//! refused by name while the session goes on, and a version line prints
+//! the binary's version.
 
 #![cfg(feature = "vdir")]
 
@@ -82,6 +83,7 @@ fn a_line_runs_over_the_account_and_json_switches_one_line() {
 fn what_cannot_run_in_a_session_is_refused_and_the_session_goes_on() {
     let lines = session(
         "--json repl\n\
+         --json mcp --allow-write\n\
          --json card create -i -k personal\n\
          --json card create -k personal -\n\
          --json addressbook list\n",
@@ -91,13 +93,27 @@ fn what_cannot_run_in_a_session_is_refused_and_the_session_goes_on() {
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
 
-    assert!(
-        json[0]["error"]
-            .as_str()
-            .unwrap()
-            .contains("inside a session")
-    );
-    assert!(json[1]["error"].as_str().unwrap().contains("composer (-i)"));
-    assert_eq!(json[2]["code"], "stdin-taken");
-    assert_eq!(json[3]["addressbooks"][0]["id"], "personal");
+    for nested in &json[..2] {
+        assert_eq!(nested["code"], "usage-invalid", "{nested}");
+        assert_eq!(nested["error"], "Cannot start a session inside a session");
+    }
+    assert!(json[2]["error"].as_str().unwrap().contains("composer (-i)"));
+    assert_eq!(json[3]["code"], "stdin-taken");
+    assert_eq!(json[4]["addressbooks"][0]["id"], "personal");
+}
+
+/// A version line prints what the command line prints, after a command
+/// as alone.
+#[test]
+fn a_version_line_prints_the_binary_version() {
+    let version = env!("CARGO_PKG_VERSION");
+    let lines = session("-V\ncard list --version\n--json addressbook list\n");
+
+    assert_eq!(lines[0], format!("cardamum {version}"), "{lines:?}");
+    // NOTE: clap names the subcommand, as the command line does.
+    let long = format!(" v{version} ");
+    assert!(lines[1].starts_with("cardamum-card-list v"), "{lines:?}");
+    assert!(lines[1].contains(&long), "{lines:?}");
+    let json: Value = serde_json::from_str(lines.last().unwrap()).unwrap();
+    assert_eq!(json["addressbooks"][0]["id"], "personal", "{lines:?}");
 }

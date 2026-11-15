@@ -46,11 +46,11 @@ pub fn registry() -> JsonSchemaRegistry {
     );
     insert!(
         "cardamum-account-list",
-        crate::account::list::AccountListOutput
+        pimalaya_cli::account::AccountListOutput
     );
     insert!(
         "cardamum-account-check",
-        crate::account::check::AccountCheckOutput
+        pimalaya_cli::account::AccountCheckOutput<ErrorCode>
     );
     insert!(
         "cardamum-addressbook-list",
@@ -71,7 +71,7 @@ pub fn registry() -> JsonSchemaRegistry {
     // NOTE: a build prints the card, or under `-o` the file written.
     insert!(
         "cardamum-card-build",
-        OneOf<crate::shared::card::build::CardBuildOutput, crate::shared::card::build::SavedOutput>
+        OneOf<crate::shared::card::build::CardBuildOutput, pimalaya_cli::output::SavedOutput>
     );
     insert!(
         "cardamum-card-create",

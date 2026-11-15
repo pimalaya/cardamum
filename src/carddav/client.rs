@@ -272,9 +272,18 @@ fn refused(err: &WebdavClientStdError) -> Option<(u16, &str)> {
 /// `quota-exceeded`; a 429 `rate-limited`; a 403 `permission-denied`
 /// when its body names `need-privileges` (RFC 3744 §7.1.1) or no
 /// precondition at all. Any other 403 names a precondition the written
-/// card failed (RFC 6352 §6.3.2), no matter of rights.
+/// card failed (RFC 6352 §6.3.2), no matter of rights. A 412, the version
+/// `--if-match` named no longer the card's, is `precondition-failed`; a
+/// `no-uid-conflict` (RFC 6352 §6.3.2.1) `item-duplicate`, as calendula
+/// codes a CalDAV one.
 pub(crate) fn refusal_code(cause: &(dyn std::error::Error + 'static)) -> Option<ErrorCode> {
-    let (status, body) = refused(cause.downcast_ref::<WebdavClientStdError>()?)?;
+    let err = cause.downcast_ref::<WebdavClientStdError>()?;
+
+    if err.is_duplicate_uid() {
+        return Some(ErrorCode::ItemDuplicate);
+    }
+
+    let (status, body) = refused(err)?;
     status_code(status, body)
 }
 
@@ -293,6 +302,7 @@ fn status_code(status: u16, body: &str) -> Option<ErrorCode> {
         403 if body.contains("need-privileges") || !names_precondition(body) => {
             Some(ErrorCode::PermissionDenied)
         }
+        412 => Some(ErrorCode::PreconditionFailed),
         _ => None,
     }
 }

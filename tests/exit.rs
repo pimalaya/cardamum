@@ -58,6 +58,31 @@ fn a_refused_command_line_without_json_is_clap_rendering_on_stderr() {
     assert!(stderr.starts_with("error: unexpected argument"), "{stderr}");
 }
 
+/// A card command given no `-k` over an account setting no
+/// `addressbook.default` fails coded, the error naming the flag and the
+/// key, as calendula refuses a missing default calendar.
+#[test]
+fn a_missing_default_addressbook_is_coded() {
+    let home = TempDir::new().unwrap();
+    let config = home.path().join("config.toml");
+    let toml = format!(
+        "[accounts.a]\ndefault = true\nvdir.home-dir = {:?}\n",
+        home.path().display().to_string(),
+    );
+    fs::write(&config, toml).unwrap();
+
+    let args = ["--json", "-c", config.to_str().unwrap(), "card", "list"];
+    let output = run(home.path(), &args);
+    let stdout = text(&output.stdout);
+
+    assert_eq!(output.status.code(), Some(1), "{stdout}");
+    let json: Value = serde_json::from_str(&stdout).unwrap();
+    let error = json["error"].as_str().unwrap();
+    assert_eq!(json["code"], "addressbook-default-missing", "{json}");
+    assert!(error.contains("`-k <ADDRESSBOOK-ID>`"), "{error}");
+    assert!(error.contains("`addressbook.default`"), "{error}");
+}
+
 #[test]
 fn a_failed_account_check_prints_its_report_and_exits_3() {
     let home = TempDir::new().unwrap();

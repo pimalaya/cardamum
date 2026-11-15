@@ -6,11 +6,15 @@
 //! The backends of one account resolve their credentials through the
 //! same secret resolver, so a command two of them name is spawned once.
 
-use std::{fmt, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use clap::Parser;
-use pimalaya_cli::{error::PartialOutcome, fields::Fields, printer::Printer, sanitize};
+use pimalaya_cli::{
+    account::{AccountCheckOutput, BackendCheck},
+    error::{PartialOutcome, with_code},
+    printer::Printer,
+};
 #[cfg(any(
     feature = "carddav",
     feature = "jmap",
@@ -19,13 +23,11 @@ use pimalaya_cli::{error::PartialOutcome, fields::Fields, printer::Printer, sani
 ))]
 use pimalaya_config::secret::SecretResolver;
 use pimalaya_config::toml::TomlConfig;
-use schemars::JsonSchema;
-use serde::Serialize;
 
 use crate::{
     backend::{Backend, NAMES, is_built, not_built},
     config::Config,
-    error::ErrorCode,
+    error::{self, ErrorCode},
 };
 
 /// Validate the account configuration.
@@ -86,7 +88,7 @@ impl AccountCheckCommand {
         {
             report
                 .backends
-                .push(BackendCheck::from("vdir", connect_vdir(vdir_config)));
+                .push(backend_check("vdir", connect_vdir(vdir_config)));
         }
 
         #[cfg(feature = "pimdir")]
@@ -95,14 +97,14 @@ impl AccountCheckCommand {
         {
             report
                 .backends
-                .push(BackendCheck::from("pimdir", connect_pimdir(pimdir_config)));
+                .push(backend_check("pimdir", connect_pimdir(pimdir_config)));
         }
 
         #[cfg(feature = "carddav")]
         if backend.allows_carddav()
             && let Some(carddav_config) = &account_config.carddav
         {
-            report.backends.push(BackendCheck::from(
+            report.backends.push(backend_check(
                 "carddav",
                 connect_carddav(carddav_config, &mut resolver),
             ));
@@ -112,7 +114,7 @@ impl AccountCheckCommand {
         if backend.allows_jmap()
             && let Some(jmap_config) = &account_config.jmap
         {
-            report.backends.push(BackendCheck::from(
+            report.backends.push(backend_check(
                 "jmap",
                 connect_jmap(jmap_config, &mut resolver),
             ));
@@ -122,7 +124,7 @@ impl AccountCheckCommand {
         if backend.allows_msgraph()
             && let Some(msgraph_config) = &account_config.msgraph
         {
-            report.backends.push(BackendCheck::from(
+            report.backends.push(backend_check(
                 "msgraph",
                 connect_msgraph(msgraph_config, &mut resolver),
             ));
@@ -132,7 +134,7 @@ impl AccountCheckCommand {
         if backend.allows_gpeople()
             && let Some(gpeople_config) = &account_config.gpeople
         {
-            report.backends.push(BackendCheck::from(
+            report.backends.push(backend_check(
                 "gpeople",
                 connect_gpeople(gpeople_config, &mut resolver),
             ));
@@ -143,7 +145,7 @@ impl AccountCheckCommand {
         if backend == Backend::Auto {
             let names = account_config.backends().into_iter();
             for name in names.filter(|name| !is_built(name)) {
-                let check = BackendCheck::from(name, Err(not_built(name)));
+                let check = backend_check(name, Err(not_built(name)));
                 report.backends.push(check);
             }
             report
@@ -266,64 +268,10 @@ fn connect_gpeople(
     Ok(())
 }
 
-/// Result of a check: one outcome per configured backend.
-#[derive(Clone, Debug, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct AccountCheckOutput {
-    /// The account that was checked.
-    pub account: String,
-    /// One outcome per backend the account configures.
-    pub backends: Vec<BackendCheck>,
-}
-
-/// Outcome of checking a single backend.
-#[derive(Clone, Debug, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct BackendCheck {
-    /// The backend that was reached.
-    pub backend: &'static str,
-    /// Whether it answered.
-    pub ok: bool,
-    /// The stable code of the failure, `null` when it answered or the
-    /// failure carries none.
-    pub code: Option<ErrorCode>,
-    /// Why it did not, `null` when it did.
-    pub error: Option<String>,
-}
-
-impl BackendCheck {
-    fn from(backend: &'static str, result: Result<()>) -> Self {
-        match result {
-            Ok(()) => Self {
-                backend,
-                ok: true,
-                code: None,
-                error: None,
-            },
-            Err(err) => Self {
-                backend,
-                ok: false,
-                code: crate::error::code(&err),
-                error: Some(format!("{err:#}")),
-            },
-        }
-    }
-}
-
-impl fmt::Display for AccountCheckOutput {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut fields = Fields::default();
-        fields.push("Account", &self.account);
-
-        for check in &self.backends {
-            match &check.error {
-                None => fields.push(check.backend, "OK"),
-                Some(err) => fields.push(check.backend, format!("FAIL ({})", sanitize::text(err))),
-            }
-        }
-
-        write!(f, "{fields}")
-    }
+/// The row of `backend` in the report, coded as the failure object of any
+/// other command would be, a code read off a typed error included.
+fn backend_check(backend: &'static str, result: Result<()>) -> BackendCheck<ErrorCode> {
+    BackendCheck::new(backend, result.map_err(|err| with_code(err, error::code)))
 }
 
 #[cfg(all(test, feature = "pimdir"))]
@@ -405,12 +353,12 @@ mod tests {
 
         // NOTE: the report carries the code too, as the failure object
         // of any other command would.
-        let check = BackendCheck::from("pimdir", connect_pimdir(&config));
+        let check = backend_check("pimdir", connect_pimdir(&config));
         let check = serde_json::to_value(check).unwrap();
         assert_eq!(check["code"], "store-busy", "{check}");
 
         drop(collector);
-        let check = BackendCheck::from("pimdir", connect_pimdir(&config));
+        let check = backend_check("pimdir", connect_pimdir(&config));
         let check = serde_json::to_value(check).unwrap();
         assert_eq!(check.get("code"), Some(&serde_json::Value::Null), "{check}");
 
@@ -518,7 +466,7 @@ mod carddav_tests {
     use secrecy::SecretString;
     use serde_json::{Value, json};
 
-    use super::{BackendCheck, connect_carddav};
+    use super::{backend_check, connect_carddav};
     use crate::config::{CarddavAuthConfig, CarddavConfig};
 
     /// A scripted server answering every request with `status` and no
@@ -600,7 +548,7 @@ mod carddav_tests {
     /// The `account check` row of `config`, as JSON.
     fn check(config: &CarddavConfig) -> Value {
         let result = connect_carddav(config, &mut SecretResolver::new());
-        serde_json::to_value(BackendCheck::from("carddav", result)).unwrap()
+        serde_json::to_value(backend_check("carddav", result)).unwrap()
     }
 
     /// A `home` block sends nothing while connecting, so the check sends

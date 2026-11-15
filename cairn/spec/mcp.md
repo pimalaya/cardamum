@@ -21,4 +21,9 @@ A reading tool SHALL be `readOnlyHint`, an update or a delete `destructiveHint`,
 A tool whose command ends with a partial outcome (a listing whose `errors` is not empty, an `account check` with a failed backend) SHALL return its result as `structuredContent` beside `isError: true`, so an agent reads the items and their `errors` together.
 
 ### Requirement: A call the grammar refuses is a usage failure
-A tool call whose arguments the tool's input schema admits but its command's grammar refuses (a `page-size` of `-1`) SHALL answer a result with `isError`, its failure object coded `usage-invalid` (`pimalaya_cli::error::usage_error`), the server going on.
+A tool call whose arguments the tool's input schema admits but its command's grammar refuses SHALL answer a result with `isError`, its failure object coded `usage-invalid` and worded by the tool's grammar (`pimalaya_cli::mcp::grammar::Grammar::usage_error`), which names each argument as the tool's input does, never clap's usage text: a missing argument as ``Missing argument `card-id` ``, a refused value as ``Invalid value `-1` for `page-size`: <reason>``. The server SHALL go on.
+
+#### Scenario: A card read missing its id
+- GIVEN a server over a vdir account
+- WHEN `card_read` is called with `addressbook` alone
+- THEN the result is an error whose failure object is coded `usage-invalid` and reads ``Missing argument `card-id` ``

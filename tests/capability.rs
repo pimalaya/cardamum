@@ -142,7 +142,7 @@ fn a_unified_leaf_help_names_the_backends_serving_it() {
 
     assert!(help.contains("Backends:"), "{help}");
     assert!(
-        help.contains("card.remove.if-match: partial on carddav;"),
+        help.contains("card.remove.if-match: partial on carddav, jmap, msgraph;"),
         "{help}"
     );
 }

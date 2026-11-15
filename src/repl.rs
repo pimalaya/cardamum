@@ -7,9 +7,12 @@
 //! pimalaya-cli's [`Repl`] runs the loop: each line split as a shell splits
 //! it, parsed with the one-shot grammar plus `--json` and run over the
 //! [`Session`] kept here, every answer on stdout, the session flags refused
-//! by name. It claims stdin, so a command that would read its own input
-//! there is refused (`pimalaya_cli::session::check_stdin`), and so is the
-//! composer, whose editor would fight the session for the terminal.
+//! by name, a nested `repl` or `mcp` line refused coded `usage-invalid`
+//! before it reaches this crate, and a `--version` line answered with the
+//! version [`Command`] carries. It claims stdin, so a command that would
+//! read its own input there is refused
+//! (`pimalaya_cli::session::check_stdin`), and so is the composer, whose
+//! editor would fight the session for the terminal.
 
 use anyhow::{Result, anyhow};
 use clap::Parser;
@@ -48,9 +51,6 @@ impl ReplCommand {
         repl.fixed.extend(["-b", "--backend"]);
 
         repl.run::<Command, ErrorCode>(|printer, cmd| match cmd {
-            Command::Repl(_) | Command::Mcp(_) => {
-                Err(anyhow!("Cannot start a session inside a session"))
-            }
             Command::Card(CardCommand::Build(cmd)) if cmd.composer.interactive => Err(composer()),
             Command::Card(CardCommand::Create(cmd)) if cmd.composer.interactive => Err(composer()),
             Command::Card(CardCommand::Update(cmd)) if cmd.composer.interactive => Err(composer()),

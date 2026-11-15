@@ -49,13 +49,18 @@ impl Account {
 
     /// Resolves the addressbook id a command operates on.
     ///
-    /// The flag wins, then the `addressbook.default` config, otherwise
-    /// this bails. An empty id bails too, coded `addressbook-not-found` as
-    /// it names none: a backend builds a path from it, where an empty
-    /// segment addresses the parent collection.
+    /// The flag wins, then the `addressbook.default` config. With neither,
+    /// this fails coded `addressbook-default-missing`, naming the flag and
+    /// the key, as calendula refuses a missing default calendar. An empty
+    /// id fails coded `addressbook-not-found` as it names none: a backend
+    /// builds a path from it, where an empty segment addresses the parent
+    /// collection.
     pub fn addressbook_id(&self, flag: Option<String>) -> Result<String> {
         let Some(id) = flag.or_else(|| self.addressbook_default.clone()) else {
-            bail!("Missing addressbook id; pass -k/--addressbook or set addressbook.default")
+            let message = "No default addressbook found, name one with \
+                           `-k <ADDRESSBOOK-ID>` or set `addressbook.default`";
+            let code = ErrorCode::AddressbookDefaultMissing;
+            return Err(CodedError::new(code, message).into());
         };
 
         if id.trim().is_empty() {

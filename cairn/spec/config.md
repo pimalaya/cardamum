@@ -69,7 +69,7 @@ A bare `cardamum` SHALL print the help when a configuration exists, a broken one
 Resolving the default account SHALL fail, naming them sorted, when several accounts are marked `default = true` once the configuration is loaded, layers and `-c` files merged. An account named with `-a` SHALL still resolve.
 
 ### Requirement: No colour is configured
-The configuration SHALL hold no colour and no table shape. The tables v0.3 read for them SHALL be refused by name, the error pointing at MIGRATION.md: `table` at the root and in an account, the top-level `account`, and `addressbook.list` and `card.list.table` at the root and in an account.
+The configuration SHALL hold no colour and no table shape. The tables v0.3 read for them SHALL be refused by name in the family's sentence (pimalaya-config's `removed_key!`), which points at MIGRATION.md: `table` at the root and in an account, the top-level `account`, and `addressbook.list` and `card.list.table` at the root and in an account, as in ``The `table` table is removed, the output being plain text with no border: delete it, see MIGRATION.md``.
 
 #### Scenario: A v0.3 table preset
 - GIVEN a configuration holding `table.preset`
@@ -77,7 +77,7 @@ The configuration SHALL hold no colour and no table shape. The tables v0.3 read 
 - THEN it fails naming the `table` table as removed and MIGRATION.md
 
 ### Requirement: CardDAV resolves no domain
-`carddav.discover` SHALL be refused by name, the error naming `carddav.server` as its replacement (Fastmail's `https://carddav.fastmail.com/dav/`), `carddav.home` on Google, and MIGRATION.md. A build without `carddav` loads the block unread.
+`carddav.discover` SHALL be refused by name in the family's sentence (pimalaya-config's `removed_key!`), ``The `carddav.discover` key is removed, cardamum resolving no domain: <instead>, see MIGRATION.md``, the instead naming `carddav.server` as its replacement (Fastmail's `https://carddav.fastmail.com/dav/`) and `carddav.home` on Google. A build without `carddav` loads the block unread.
 
 #### Scenario: A v0.3 discover route
 - GIVEN an account holding `carddav.discover = "fastmail.com"`

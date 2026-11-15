@@ -85,7 +85,11 @@ pub struct Cli {
 
 /// The top-level commands: the unified API, one family per protocol,
 /// then the meta commands.
+///
+/// The version it carries is what a `-V` or `--version` line of a session
+/// prints, as the command line does.
 #[derive(Debug, Subcommand)]
+#[command(version, long_version = long_version!())]
 pub enum Command {
     #[command(subcommand, alias = "addressbooks", visible_alias = "abook")]
     Addressbook(AddressbookCommand),

@@ -7,7 +7,12 @@
 use std::io;
 
 use anyhow::{Error, Result, bail};
-use io_vdir::{client::VdirClient, collection::VdirCollection, item::VdirItemKind, path::VdirPath};
+use io_vdir::{
+    client::{VdirClient, VdirClientError},
+    collection::VdirCollection,
+    item::VdirItemKind,
+    path::VdirPath,
+};
 use pimalaya_cli::error::CodedError;
 
 use crate::{
@@ -18,7 +23,7 @@ use crate::{
         card::{Card, CardUpdateOutcome},
         client::{CardWindow, first_page, window},
     },
-    vdir::client::{collection_dir, is_dir_name},
+    vdir::client::{collection_dir, is_dir_name, missing_code},
 };
 
 /// Vdir backend of the unified-API client, rooted at the home directory.
@@ -154,7 +159,10 @@ impl VdirBackend {
     /// Fetches `card_id` from `addressbook_id`.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
         let path = self.addressbook_path(addressbook_id)?;
-        let item = self.inner.get_item(path, card_id)?;
+        let item = self
+            .inner
+            .get_item(path, card_id)
+            .map_err(|err| card_error(card_id, err))?;
 
         Ok(Card {
             id: card_id.to_string(),
@@ -190,7 +198,9 @@ impl VdirBackend {
         }
 
         let path = self.addressbook_path(addressbook_id)?;
-        self.inner.locate_item(path.clone(), card_id)?;
+        self.inner
+            .locate_item(path.clone(), card_id)
+            .map_err(|err| card_error(card_id, err))?;
 
         self.inner.store_item(
             path,
@@ -212,7 +222,9 @@ impl VdirBackend {
             bail!("The vdir backend has no ETag, so it cannot honour If-Match");
         }
         let path = self.addressbook_path(addressbook_id)?;
-        self.inner.delete_item(path, card_id)?;
+        self.inner
+            .delete_item(path, card_id)
+            .map_err(|err| card_error(card_id, err))?;
         Ok(())
     }
 
@@ -226,6 +238,15 @@ impl VdirBackend {
     fn addressbook_path(&self, addressbook_id: &str) -> Result<VdirPath> {
         collection_dir(self.inner.root(), addressbook_id)
             .ok_or_else(|| addressbook_not_found(addressbook_id))
+    }
+}
+
+/// The failure of a request on the card `card_id`, `card-not-found` when
+/// the address book holds no such card, io-vdir's text in `sources`.
+fn card_error(card_id: &str, err: VdirClientError) -> Error {
+    match missing_code(&err) {
+        Some(ErrorCode::CardNotFound) => error::card_not_found(card_id, err.into()),
+        _ => err.into(),
     }
 }
 

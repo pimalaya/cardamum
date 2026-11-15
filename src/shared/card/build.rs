@@ -12,7 +12,11 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use pimalaya_cli::{clap::parsers::path_parser, printer::Printer};
+use pimalaya_cli::{
+    clap::parsers::path_parser,
+    output::{Bytes, SavedOutput},
+    printer::Printer,
+};
 use pimalaya_config::command::CommandConfig;
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -25,6 +29,7 @@ use crate::{
         card::{
             composer::CardComposer,
             fields::CardFieldsArgs,
+            read::{CardContents, CardEncoding},
             vcard::{CardVersionArg, blank_card, ensure_valid, read_source},
         },
     },
@@ -37,8 +42,9 @@ use crate::{
 /// backend, which is how a card is judged before it is sent. No account
 /// is resolved unless `-i` needs the configured composer.
 ///
-/// JSON output: `{"contents"}`, the raw vCard as text, or `{"path", "size"}`
-/// with `-o`.
+/// JSON output: `{"contents", "encoding"}`, the raw vCard as text
+/// (`encoding` `utf-8`), or its bytes in base64 when they are not UTF-8
+/// (`encoding` `base64`); or `{"path", "size"}` with `-o`.
 #[derive(Debug, Parser)]
 pub struct CardBuildCommand {
     /// The composer the card is refined in before it is printed.
@@ -140,11 +146,22 @@ fn card_composer(
 }
 
 /// Hands the card over: to the file `-o` names, or to the printer.
+///
+/// A card that is not UTF-8 goes out as its bytes in text, which a pipe
+/// takes on as they are, and in base64 under `--json`.
 fn emit(printer: &mut impl Printer, output: Option<&Path>, card: &[u8]) -> Result<()> {
     let Some(path) = output else {
-        return printer.out(CardBuildOutput {
-            contents: String::from_utf8(card.to_vec())?,
-        });
+        let contents = CardContents::new(card.to_vec());
+
+        if contents.encoding == CardEncoding::Base64 && !printer.is_json() {
+            let mime = String::from("text/vcard");
+            return printer.out_bytes(Bytes {
+                data: contents.bytes,
+                mime,
+            });
+        }
+
+        return printer.out(CardBuildOutput { contents });
     };
 
     fs::write(path, card).with_context(|| format!("Cannot write vCard {path:?}"))?;
@@ -155,32 +172,17 @@ fn emit(printer: &mut impl Printer, output: Option<&Path>, card: &[u8]) -> Resul
     })
 }
 
-/// What a build written to the file `-o` names prints.
-#[derive(Clone, Debug, Serialize, JsonSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct SavedOutput {
-    /// The file written.
-    pub path: String,
-    /// How many bytes were written.
-    pub size: usize,
-}
-
-impl fmt::Display for SavedOutput {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Card successfully written to {}", self.path)
-    }
-}
-
 /// The vCard the command built.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CardBuildOutput {
-    /// The raw vCard, as text.
-    pub contents: String,
+    /// The raw vCard.
+    #[serde(flatten)]
+    pub contents: CardContents,
 }
 
 impl fmt::Display for CardBuildOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.contents)
+        write!(f, "{}", String::from_utf8_lossy(&self.contents.bytes))
     }
 }

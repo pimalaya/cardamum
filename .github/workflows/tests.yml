@@ -83,3 +83,6 @@ jobs:
           done
       - name: Test a build with one backend
         run: nix develop -c cargo test --locked --no-default-features --features rustls-ring,vdir
+      # Without vdir, auto meets a backend left out ahead of the built one.
+      - name: Test a build without the first backend of auto
+        run: nix develop -c cargo test --locked --no-default-features --features rustls-ring,carddav --test account

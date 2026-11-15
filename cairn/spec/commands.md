@@ -53,6 +53,18 @@ A protocol-specific command SHALL take the ids it operates on as positional argu
 ### Requirement: A command prints what the server returned
 A command SHALL render only the fields the server's response actually carries, and SHALL report success in words when the response carries nothing to show, rather than printing empty field slots. This matters most on the write path, where a JMAP `set` response echoes only the properties the server itself decided, and where a REST delete answers 204 with no body at all: text output SHALL then print nothing. `--json` still emits the raw native payload.
 
+A protocol view SHALL print the fields an item holds, no fewer and no empty one: `carddav propfind` an address book's name, description, colour, CTag and sync token, `vdir list` a collection's name, description and colour beside its path, a property the item lacks printing no line; `msgraph contacts` a contact's name, then every email and every phone it holds, the mobile, business and home ones, each kind on one line.
+
+#### Scenario: An address book with a description and no name
+- GIVEN a CardDAV address book whose PROPFIND carries a description and a CTag and no display name nor colour
+- WHEN `cardamum carddav propfind` runs
+- THEN its record prints `Description:` and `CTag:` lines and no `Name:` nor `Color:` line
+
+#### Scenario: A contact with a business phone alone
+- GIVEN a Graph contact whose `businessPhones` holds one number and which has no mobile phone nor email
+- WHEN `cardamum msgraph contacts get` prints it
+- THEN it prints that number on a `Phone:` line and no `Email:` line
+
 ### Requirement: An incremental-sync command can resume
 A protocol-specific command exposing its backend's incremental sync SHALL accept the resume token that sync hands back, in whatever shape the protocol uses (a Graph `@odata.deltaLink` URL, a People sync token, a JMAP or DAV state string). A command that documents a resume SHALL provide the flag for it.
 
@@ -86,6 +98,14 @@ A queued creation SHALL get no placeholder id (`q<id>`, `0`, `""`): `card add` r
 ### Requirement: A displayed count is the server's
 A text output SHALL NOT render an absent value as a default that reads as fact. A count the API returns only on request SHALL be requested, or left blank.
 
+### Requirement: An address book says whether it is the default
+`addressbook list` SHALL print `default` on each address book, `true` on the one the backend states a card goes to when none is named: JMAP's `isDefault` (RFC 9610 §2), the Graph default Contacts folder (`contacts`), People's myContacts, the pimdir store's role (STORAGE §14); `false` on the others, and on every CardDAV and vdir address book, which state none. It SHALL NOT read `addressbook.default`, which stays the configuration's.
+
+#### Scenario: The default JMAP address book
+- GIVEN a JMAP account whose `AddressBook/get` answers `RBk` with `isDefault: true`
+- WHEN `cardamum --json addressbook list` runs
+- THEN `RBk` carries `"default":true`, as `jmap address-book get` shows `isDefault`
+
 ### Requirement: A command resolves its addressbook before acting
 A unified command SHALL resolve the addressbook it was given before reading or writing through it, and SHALL fail naming it when it does not exist. Listing an unknown addressbook SHALL NOT read as empty, and writing into one SHALL NOT create it.
 
@@ -96,7 +116,7 @@ A rejected protocol write SHALL surface as prose: the server's own error type an
 All output, data and errors alike, SHALL go to stdout through the printer, distinguished by the exit code; `--json` switches every command to JSON. stderr carries logs and interactive prompts only, so redirecting stdout is always safe.
 
 ### Requirement: Exit statuses
-The binary SHALL exit 0 on success, 1 with the failure object printed, 2 on a command line the grammar refuses (an unknown flag or command, a missing argument, a bad value), and 3 on a partial outcome, a command that printed its result without fully succeeding (`pimalaya_cli::error::PartialOutcome`): `account check` with a failed backend, and a listing or a CardDAV `report query` or `report multiget` whose `errors` is not empty. The binary SHALL parse its command line through `pimalaya_cli::clap::parse`: help and version print as clap prints them; a refused command line with a `--json` word before any `--` SHALL print on stdout the failure object coded `usage-invalid`, its `error` clap's message without the `error: ` prefix nor styles, and without `--json` clap's rendering on stderr.
+The binary SHALL exit 0 on success, 1 with the failure object printed, 2 on a command line the grammar refuses (an unknown flag or command, a missing argument, a bad value), and 3 on a partial outcome, a command that printed its result without fully succeeding (`pimalaya_cli::error::PartialOutcome`): `account check` with a failed backend, and a listing, `pimdir search` or a CardDAV `report query` or `report multiget` whose `errors` is not empty. The binary SHALL parse its command line through `pimalaya_cli::clap::parse`: help and version print as clap prints them; a refused command line with a `--json` word before any `--` SHALL print on stdout the failure object coded `usage-invalid`, its `error` clap's message without the `error: ` prefix nor styles, and without `--json` clap's rendering on stderr.
 
 #### Scenario: A refused command line under JSON
 - GIVEN any configuration, or none
@@ -217,13 +237,14 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `backend-not-built` | the backend the account resolves to is configured but left out of the build; the error names the cargo feature (see backends.md, "A backend left out of the build is named") |
 | `stdin-taken` | a command inside a session (`repl`, `mcp`) would read its input off stdin, which carries the session's commands |
 | `capability-missing` | the backend the account resolves to does not serve a capability the command reaches; nothing was read or written |
-| `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete`, worded by cardamum ("A not-found failure is cardamum's sentence"); an `errors` entry of `carddav report multiget` |
+| `card-not-found` | the card a command names is not in the address book: the failure of `card read`, `card update` or `card delete`, worded by cardamum ("A not-found failure is cardamum's sentence"); an `errors` entry of `carddav report multiget`; a protocol command naming one card (`carddav get` and `delete`, `msgraph contacts get`, `update` and `delete`, `gpeople connections get`, `update` and `delete`), the server's message kept |
 | `addressbook-not-found` | the address book a command names does not exist; nothing was read or written |
 | `addressbook-default-missing` | a command needing an address book got no `-k` and the account sets no `addressbook.default`; nothing was read or written |
 | `permission-denied` | the server refused the request to the account (see "A server's refusal carries its code") |
 | `quota-exceeded` | the write would exceed the account's quota |
 | `rate-limited` | the server throttled the request; cardamum retries nothing |
 | `card-unreadable` | the backend answered for a card cardamum could not read: its listing, `report query` or `report multiget` row came without its data (CardDAV), its file could not be read (vdir), its body did not parse as a vCard or is not UTF-8, it did not project (JMAP), its body could not be read or is gone from the blob tree (pimdir); an `errors` entry |
+| `card-invalid` | the server refused the card written as no vCard it takes (CardDAV, "A server's refusal carries its code"); nothing was written, and the card is what to fix, not the account's rights |
 | `body-pending` | a listed card's body is not local yet (pimdir); a sync brings it |
 | `precondition-failed` | a write's `--if-match` names a version the card no longer has: pimdir's check, a CardDAV server answering 412, or the Graph `changeKey` or JMAP digest read before the write |
 | `store-uncreated` | the pimdir root holds no store; its sync engine creates it |
@@ -278,6 +299,13 @@ A card command given no `-k/--addressbook`, and `addressbook update` given no ad
 ### Requirement: A card projects its common fields
 `card list` rows and the `card read` output SHALL carry the card's common fields, read through vcard-rs's decoded model rather than off raw lines: `uid`, `fullName`, `givenName` and `familyName` (the `N` components, space-joined), `emails` and `phones` (every `EMAIL` and `TEL` in document order, a `tel:` URI as its number), `organization` and `organizationUnits` (the `ORG` components), `title` and `note`. A card that does not parse, or whose bytes are not UTF-8, SHALL project nothing rather than fail the listing, never a lossy decode. The projection is read-only: the vCard stays the record.
 
+The `fnValue`, `email` and `tel` keys, and the name, email and phone columns of the `card list` text, SHALL be the first `FN`, `EMAIL` and `TEL` values as written, escapes kept and a `tel:` URI whole, read off the card's lines once unfolded (RFC 6350 §3.2), a property matched by its whole name, case-insensitive, whatever its group and its parameters (§3.3), its value starting at the first colon outside a quoted parameter value.
+
+#### Scenario: A derived name and a folded address
+- GIVEN a card holding `FN;DERIVED=TRUE:Jane Doe` and an `EMAIL;TYPE=home:jane@examp` line folded before `le.org`
+- WHEN `cardamum --json card list` lists it
+- THEN its `fnValue` is `Jane Doe` and its `email` `jane@example.org`, the text naming her
+
 ### Requirement: A card read prints its listing row and its vCard
 `card read` SHALL print the row `card list` prints for the card, every key with the same value (`id`, `addressbookId`, `etag`, `fnValue`, `email`, `tel` and the common fields), `etag` `null` where the backend versions no card, plus what only a read carries, the raw vCard, as pimalaya-cli's output.md says a read prints ("Collections are named and present").
 
@@ -294,9 +322,20 @@ The vCard SHALL travel as `contents`, a string: the text when its bytes are vali
 - THEN it exits 0 and prints `"contents"` holding its bytes in base64 and `"encoding":"base64"`, its common fields `null`
 
 ### Requirement: pimdir searches cards through the store's index
-`cardamum pimdir search <query>...`, gated on the `pimdir` feature, SHALL answer the pimdir SEARCH query language (search-draft-11 §8) from the store's search index, scoped to the account's cards: the query is read as its conjuncts plus `kind:contact`, `account:<account>` when the store groups the account under a name, and `collection:<id>` when `-k/--addressbook` names an address book. The scope is added beside the query, never around it, so a group that is itself a conjunct of the query keeps narrowing the answer and its coverage as its terms do bare (SEARCH §8.2). Without `-k` it SHALL search every address book of the account, `addressbook.default` not applied, and a `-k` naming no address book of the account SHALL fail naming those it holds rather than answer nothing. The words of the query are joined by spaces into one query. Cardamum SHALL open the index read-only (io-pimdir `PimdirIndex::open_query`) and SHALL NOT create, rebuild nor refresh it: the store's owner, its sync engine, does. The answer SHALL be the store as of the owner's last refresh: a queued write is not listed nor folded in.
+`cardamum pimdir search <query>...`, gated on the `pimdir` feature, SHALL answer the pimdir SEARCH query language (search-draft-11 §8) from the store's search index, scoped to the account's cards: the query is read as its conjuncts plus `kind:contact`, `account:<account>` when the store groups the account under a name, and `collection:<id>` when `-k/--addressbook` names an address book. The scope is added beside the query, never around it, so a group that is itself a conjunct of the query keeps narrowing the answer and its coverage as its terms do bare (SEARCH §8.2). Without `-k` it SHALL search every address book of the account, `addressbook.default` not applied, and a `-k` naming no address book of the account SHALL fail naming those it holds rather than answer nothing. The words of the query are joined by spaces into one query. An option of `pimdir search` or `pimdir count` SHALL be read wherever it stands, before the query or after it, `--json` included; a query word starting with `-`, a negated term, SHALL pass after `--` alone, a word starting with `-` before it being refused as an unknown option or read as the option it spells, as calendula and Himalaya read theirs. Cardamum SHALL open the index read-only (io-pimdir `PimdirIndex::open_query`) and SHALL NOT create, rebuild nor refresh it: the store's owner, its sync engine, does. The answer SHALL be the store as of the owner's last refresh: a queued write is not listed nor folded in.
 
-Each hit SHALL carry the keys `card list` prints for a card (its `id` the public `seq`, which `card read` takes), its `addressbookId`, what a text term matched (`body`, `summary`, or `null` when only field terms did) and a `snippet`. `--sort name|relevance` orders the hits, `name` by default, and `--page` and `--page-size` page them. Under `--json` the page carries `hits`, `more` (whether hits follow it) and `coverage`.
+Each hit SHALL carry the keys `card list` prints for a card (its `id` the public `seq`, which `card read` takes), its `addressbookId`, what a text term matched (`body`, `summary`, or `null` when only field terms did) and a `snippet`. `--sort name|relevance` orders the hits, `name` by default. The search SHALL page as `card list` does, and as Himalaya's `pimdir search`: `--page` and `--page-size` page the hits, and `nextPage`, the next page number as a string, `null` on the last page, SHALL be taken back through `--page-token` (pimalaya-cli `PageTokenArg`), which wins over `--page`, a token that is no integer from 1 failing ``Invalid page token <token>``. A hit the store cannot read (its item, or its body that cannot be read, is gone from the blob tree or reads as no vCard) SHALL be an `errors` entry alone, as "A listing names the items it could not read" says, its id the hit's, coded as its failure is or `card-unreadable`, the other hits listed, and a non-empty `errors` SHALL make the command exit 3. Under `--json` the page carries `hits`, `nextPage`, `coverage` and `errors`. The text SHALL be pimalaya-cli's `Listing`: `Account:` and the backend, `Addressbook:` when `-k` names one, `Query:`, `Page:`, `Next page:` and `Incomplete:`, then one line per hit, its id, its address book, what matched when a hit of the page says, its email, phone and name, then the `Error:` lines.
+
+#### Scenario: An option after the query
+- GIVEN a pimdir account
+- WHEN `cardamum pimdir search alice --page-size 3 --json` runs
+- THEN it searches `alice`, three hits a page, and prints JSON
+- AND `cardamum pimdir search -k book -- alice -bob` searches `alice -bob` in `book`, while `cardamum pimdir search alice -zoe` is refused, exit 2
+
+#### Scenario: A page and a hit the store cannot read
+- GIVEN an indexed pimdir address book of five cards, the body of one gone from the blob tree
+- WHEN `cardamum --json pimdir search -s 2 kind:contact` runs
+- THEN it prints `"nextPage":"2"`, and the page holding that card lists the others and names it in `errors`, coded `card-unreadable`, exit 3; `--page-token 2` prints the second page
 
 #### Scenario: A word of a note
 - GIVEN an indexed pimdir address book holding a card whose `NOTE` says `allergic to peanuts`
@@ -317,7 +356,7 @@ Each hit SHALL carry the keys `card list` prints for a card (its `id` the public
 `cardamum pimdir count <query>...` SHALL answer how many cards the scoped query matches, with its coverage, under the same scope as `pimdir search`.
 
 ### Requirement: A pimdir card search says what it did not cover
-The output of `pimdir search` and `pimdir count` SHALL carry the coverage of the answer (SEARCH §8.2): `bodiless`, the cards in scope whose body is not local, matched on their summary alone, `missing`, those whose body the index could not read, and `unparseable`, those whose body no parser accepted, the three counted only when a term of the query reads card bodies (free text, `has:phone`, `has:address`, `has:birthday`, `has:photo`, `category:`), a query of summary terms alone counting none and being whole over an address book listed and not fetched; `unindexed`, those whose last change the index has not folded in; `behind`, how many changes the store drew above the index, store-wide; `filling`, whether a first round is still listing an address book in scope; and `complete`, io-pimdir's own verdict (`PimdirSearchCoverage::is_complete`, the lag included), true only when none of these holds. Whether a body out of sight counts is io-pimdir's to say (`PimdirSearchLocal::reads`, `PimdirSearchReads::counts_bodiless`), never a rule restated here, so each count at rest agrees with `complete`. The keys are flat and in camelCase, cardamum's own shape over the per-kind counts of SEARCH §8.2, every query being scoped to cards. The plain output SHALL print one line under its table naming what did not hold, and nothing when the answer is complete.
+The output of `pimdir search` and `pimdir count` SHALL carry the coverage of the answer (SEARCH §8.2): `bodiless`, the cards in scope whose body is not local, matched on their summary alone, `missing`, those whose body the index could not read, and `unparseable`, those whose body no parser accepted, the three counted only when a term of the query reads card bodies (free text, `has:phone`, `has:address`, `has:birthday`, `has:photo`, `category:`), a query of summary terms alone counting none and being whole over an address book listed and not fetched; `unindexed`, those whose last change the index has not folded in; `behind`, how many changes the store drew above the index, store-wide; `filling`, whether a first round is still listing an address book in scope; and `complete`, io-pimdir's own verdict (`PimdirSearchCoverage::is_complete`, the lag included), true only when none of these holds. Whether a body out of sight counts is io-pimdir's to say (`PimdirSearchLocal::reads`, `PimdirSearchReads::counts_bodiless`), never a rule restated here, so each count at rest agrees with `complete`. The keys are flat and in camelCase, cardamum's own shape over the per-kind counts of SEARCH §8.2, every query being scoped to cards. The plain output SHALL name what did not hold, `Incomplete: <what>`, as a field above the hits of `pimdir search` and as a line under the count of `pimdir count`, and nothing when the answer is complete.
 
 #### Scenario: A card whose body is not local
 - GIVEN an indexed pimdir address book holding a card listed and not fetched
@@ -338,7 +377,12 @@ The output of `pimdir search` and `pimdir count` SHALL carry the coverage of the
 A store with no search index SHALL fail both commands with the code `index-missing`, an index another version built with `index-outdated`, one of another draft or shape with `index-version`, and a SQLite lacking FTS5 with `index-fts5-missing`, each saying the store's sync engine builds or rebuilds the index and none advising to delete anything. A query the language refuses SHALL fail with `query-refused`: in plain output the SEARCH §8.4 fault drawn over the query, under `--json` the §8.4 code, span and expectations in `error`. An accepted query the index cannot answer SHALL fail with `query-unanswerable`.
 
 ### Requirement: Text output is plain text
-A text output SHALL be plain text: no border, no colour, nothing sized to or truncated for the terminal, and it SHALL end with a newline. A list of short rows prints as aligned columns, a list of wide items as records, a single item as `Label:  value` fields (pimalaya-cli `Columns`, `Records`, `Fields`).
+A text output SHALL be plain text: no border, no colour, nothing sized to or truncated for the terminal, and it SHALL end with a newline: the `card read` view of a card whose last line lacks one, and the pretty JSON of the `jmap`, `msgraph` and `gpeople` `request` commands, included. A list of short rows prints as aligned columns, a list of wide items as records, a single item as `Label:  value` fields (pimalaya-cli `Columns`, `Records`, `Fields`).
+
+#### Scenario: A card read through a REPORT
+- GIVEN a pimdir card whose body ends `END:VCARD` with no line break, as a CardDAV `REPORT` stored it
+- WHEN `cardamum card read` prints it
+- THEN the text ends `END:VCARD` and one newline, while `--json` keeps the bytes
 
 ### Requirement: Help is plain text
 `--help` and `-h` SHALL print without colour, each paragraph on one line, never wrapped to the terminal width.

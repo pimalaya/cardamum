@@ -7,7 +7,10 @@ use anyhow::{Result, bail};
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
-use crate::{carddav::client::CarddavClient, shared::receipt::IdReceipt};
+use crate::{
+    carddav::client::{CarddavClient, card_refusal},
+    shared::receipt::IdReceipt,
+};
 
 /// DELETE a card, or a whole addressbook collection.
 ///
@@ -32,7 +35,9 @@ impl CarddavDeleteCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
         let receipt = match self.card_id {
             Some(card_id) => {
-                client.delete_card(&self.addressbook_id, &card_id, self.if_match.as_deref())?;
+                client
+                    .delete_card(&self.addressbook_id, &card_id, self.if_match.as_deref())
+                    .map_err(card_refusal)?;
                 IdReceipt {
                     id: card_id,
                     done: "Card deleted",

@@ -5,13 +5,13 @@
 
 use std::fmt;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
 use io_pimdir::client::search::{PimdirSearchClock, PimdirSearchOptions, PimdirSearchSort};
 use pimalaya_cli::{
-    fields::Fields,
+    clap::args::PageTokenArg,
+    listing::{Listing, ListingPage},
     printer::Printer,
-    records::{Record, Records},
     sanitize,
 };
 use schemars::JsonSchema;
@@ -19,6 +19,8 @@ use serde::Serialize;
 
 use crate::{
     account::context::Account,
+    backend::Backend,
+    error::{ItemError, partial_when},
     pimdir::{
         backend::PimdirBackend,
         index::{PimdirCardCoverage, PimdirCardHit, parse_query},
@@ -30,20 +32,26 @@ use crate::{
 /// The query is pimdir SEARCH.md §8: words and "phrases" (a trailing `*`
 /// for a prefix), `field:value` terms (`email:`, `has:phone`,
 /// `has:address`, `has:birthday`, `has:photo`, `category:`, `collection:`
-/// and the others), `and`, `or`, `not` or a leading `-`, and parentheses.
-/// Free text reaches a card's names, organization, notes and numbers. It
-/// is read over the account's cards, every address book of it unless
-/// `-k` names one.
+/// and the others), `and`, `or`, `not` or a leading `-` (its word after
+/// `--`), and parentheses. Free text reaches a card's names,
+/// organization, notes and numbers. It is read over the account's cards,
+/// every address book of it unless `-k` names one.
 ///
 /// The answer comes from the store's search index, which the sync engine
 /// builds and refreshes after each run: a card is found once it is synced
-/// and indexed, and a queued write shows in no answer. A line under the
-/// list says what the answer could not see: cards whose body is not
-/// local, the index lagging the store.
+/// and indexed, and a queued write shows in no answer. An `Incomplete:`
+/// line above the list says what the answer could not see: cards whose
+/// body is not local, the index lagging the store.
+///
+/// A page ends with the number of the next one, which `--page-token`
+/// takes; the last page has none. A card the store cannot read is an
+/// item error, the others listed.
 ///
 /// JSON output: `{"hits": [{...card list row, "matched", "snippet"}],
-/// "more", "coverage": {"complete", "bodiless", "missing", "unparseable",
-/// "unindexed", "behind", "filling"}}`.
+/// "nextPage", "coverage": {"complete", "bodiless", "missing",
+/// "unparseable", "unindexed", "behind", "filling"}, "errors": [{"id",
+/// "code", "error", "sources"}]}`, the command exiting 3 when `errors` is
+/// not empty.
 #[derive(Debug, Parser)]
 pub struct PimdirSearchCommand {
     /// Address book to search, every one of the account's when omitted.
@@ -58,23 +66,39 @@ pub struct PimdirSearchCommand {
     /// to 25.
     #[arg(short = 's', long, value_name = "N")]
     pub page_size: Option<usize>,
+    #[command(flatten)]
+    pub page_token: PageTokenArg,
     /// The order of the cards.
     #[arg(long, value_enum, default_value_t)]
     pub sort: PimdirSearchSortArg,
     /// The query, its words joined by spaces.
+    ///
+    /// An option is read wherever it stands, before the query or after
+    /// it. A word starting with `-`, a negated term, goes after `--`, the
+    /// options before it: `pimdir search -s 5 -- alice -bob`.
     #[arg(value_name = "QUERY", required = true)]
-    #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
     pub query: Vec<String>,
 }
 
 impl PimdirSearchCommand {
+    /// Searches the index and prints one page of cards.
     pub fn execute(
         self,
         printer: &mut impl Printer,
+        name: &str,
         account: &Account,
         backend: &PimdirBackend,
     ) -> Result<()> {
+        let words = self.query.join(" ");
         let query = parse_query(&self.query, printer.is_json())?;
+        let page = match &self.page_token.token {
+            Some(token) => token
+                .parse()
+                .ok()
+                .filter(|page: &usize| *page > 0)
+                .with_context(|| format!("Invalid page token {token}"))?,
+            None => self.page.max(1),
+        };
         let limit = self
             .page_size
             .unwrap_or(account.cards_list_page_size() as usize)
@@ -82,16 +106,27 @@ impl PimdirSearchCommand {
         let options = PimdirSearchOptions {
             sort: self.sort.into(),
             limit,
-            offset: self.page.saturating_sub(1).saturating_mul(limit),
+            offset: page.saturating_sub(1).saturating_mul(limit),
             clock: PimdirSearchClock::default(),
         };
-        let page = backend.search_cards(query, self.addressbook.as_deref(), &options)?;
+        let found = backend.search_cards(query, self.addressbook.as_deref(), &options)?;
 
-        printer.out(PimdirSearchOutput {
-            hits: page.hits,
-            more: page.more,
-            coverage: page.coverage,
-        })
+        let output = PimdirSearchOutput {
+            place: PimdirSearchPlace {
+                account: name.to_string(),
+                addressbook: self.addressbook,
+                query: words,
+                page: page as u64,
+                size: limit as u64,
+            },
+            hits: found.hits,
+            next_page: found.more.then(|| (page + 1).to_string()),
+            coverage: found.coverage,
+            errors: found.errors,
+        };
+
+        printer.out(&output)?;
+        partial_when(&output.errors)
     }
 }
 
@@ -118,54 +153,184 @@ impl From<PimdirSearchSortArg> for PimdirSearchSort {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PimdirSearchOutput {
+    /// Where the page stands.
+    #[serde(skip)]
+    pub place: PimdirSearchPlace,
     /// The cards of this page.
     pub hits: Vec<PimdirCardHit>,
-    /// Whether cards follow this page.
-    pub more: bool,
+    /// The number of the next page, `null` once the answer is complete,
+    /// given back through `--page-token`.
+    pub next_page: Option<String>,
     /// What the answer could not see.
     pub coverage: PimdirCardCoverage,
+    /// The error of each card the store could not read, in the order met,
+    /// left out of `hits`.
+    pub errors: Vec<ItemError>,
 }
 
 impl fmt::Display for PimdirSearchOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut records = Records::default();
+        let place = &self.place;
+        let backend = Backend::Pimdir.to_string();
+        let mut listing = Listing::new(&place.account, Some(&backend));
 
+        if let Some(addressbook) = &place.addressbook {
+            listing.head("Addressbook", addressbook);
+        }
+
+        listing.head("Query", &place.query);
+
+        let page = ListingPage::Numbered {
+            page: place.page,
+            size: place.size,
+        };
+        let next = self.next_page.as_deref();
+        listing.page(page, self.hits.len(), ["card", "cards"], next);
+        self.coverage.note(&mut listing);
+
+        let matched = self.hits.iter().any(|hit| hit.matched.is_some());
+
+        // NOTE: a name is free text, so it reads last, as in `card list`.
         for hit in &self.hits {
             let card = &hit.card;
-            let text = |value: &Option<String>| match value {
+            let cell = |value: &Option<String>| match value {
                 Some(value) => sanitize::text(value).into_owned(),
                 None => String::new(),
             };
 
-            let mut fields = Fields::default();
-            fields.push("Name", text(&card.fn_value));
-            fields.push("Email", text(&card.email));
-            fields.push("Phone", text(&card.tel));
-            fields.push("Addressbook", sanitize::text(&card.addressbook_id));
+            let mut line = vec![
+                sanitize::text(&card.id).into_owned(),
+                sanitize::text(&card.addressbook_id).into_owned(),
+            ];
 
-            if let Some(matched) = hit.matched {
-                fields.push("Matched", matched);
+            if matched {
+                let matched = hit.matched.map(|matched| matched.to_string());
+                line.push(matched.unwrap_or_default());
             }
 
-            let snippet = hit.snippet.as_deref().unwrap_or_default();
-            let snippet = snippet.split_whitespace().collect::<Vec<_>>().join(" ");
-
-            records.push(Record {
-                title: sanitize::text(&card.id).into_owned(),
-                state: Vec::new(),
-                fields,
-                body: sanitize::text(&snippet).into_owned(),
-            });
+            line.extend([cell(&card.email), cell(&card.tel), cell(&card.fn_value)]);
+            listing.items.push(line);
         }
 
-        write!(f, "{records}")?;
-
-        let coverage = self.coverage.to_string();
-
-        if !records.items.is_empty() && !coverage.is_empty() {
-            writeln!(f)?;
+        for error in &self.errors {
+            listing.errors.push(error);
         }
 
-        f.write_str(&coverage)
+        write!(f, "{listing}")
+    }
+}
+
+/// Where a page of `pimdir search` stands: the account, the address book,
+/// the query and the page.
+#[derive(Clone, Debug, Default)]
+pub struct PimdirSearchPlace {
+    /// The name of the account searched.
+    pub account: String,
+    /// The address book `-k` narrowed the search to.
+    pub addressbook: Option<String>,
+    /// The query, its words joined by spaces.
+    pub query: String,
+    /// The page listed, from 1.
+    pub page: u64,
+    /// The size of a page.
+    pub size: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        error::{ErrorCode, ItemError},
+        pimdir::{
+            index::{PimdirCardCoverage, PimdirCardHit, PimdirCardMatched},
+            search::{PimdirSearchOutput, PimdirSearchPlace},
+        },
+        shared::card::{Card, list::CardRow},
+    };
+
+    /// One hit, on the last page of an incomplete answer.
+    fn output() -> PimdirSearchOutput {
+        let card = Card {
+            id: String::from("7"),
+            addressbook_id: String::from("book"),
+            etag: None,
+            contents: b"BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Alice Martin\r\n\
+                EMAIL:alice@example.org\r\nEND:VCARD\r\n"
+                .to_vec(),
+        };
+
+        PimdirSearchOutput {
+            place: PimdirSearchPlace {
+                account: String::from("work"),
+                addressbook: None,
+                query: String::from("peanuts"),
+                page: 1,
+                size: 25,
+            },
+            hits: vec![PimdirCardHit {
+                card: CardRow::from(card),
+                matched: Some(PimdirCardMatched::Body),
+                snippet: Some(String::from("Allergic to peanuts")),
+            }],
+            next_page: None,
+            coverage: PimdirCardCoverage {
+                bodiless: 1,
+                ..Default::default()
+            },
+            errors: Vec::new(),
+        }
+    }
+
+    /// A hit prints on one line, its address book and what matched before
+    /// its email, phone and name, under the account, the query, the page
+    /// and what the answer could not see.
+    #[test]
+    fn a_hit_prints_on_one_line() {
+        let expected = "\
+Account:     work (pimdir)
+Query:       peanuts
+Page:        1, card 1, the last
+Incomplete:  1 card(s) have no local body and matched on their summary alone
+
+7  book  body  alice@example.org  -  Alice Martin
+";
+        assert_eq!(output().to_string(), expected);
+    }
+
+    /// A page pages as every listing does: `nextPage`, which `--page-token`
+    /// takes, `--page` in text, and no `more`; a card the store could not
+    /// read is an `errors` entry, printed after the hits.
+    #[test]
+    fn a_page_names_the_next_and_its_errors() {
+        let mut output = output();
+        output.place.addressbook = Some(String::from("book"));
+        output.coverage.complete = true;
+        output.next_page = Some(String::from("2"));
+        output.errors = vec![ItemError {
+            id: Some(String::from("9")),
+            code: Some(ErrorCode::CardUnreadable),
+            error: String::from("Body blob missing from the store"),
+            sources: Vec::new(),
+        }];
+
+        let json = serde_json::to_value(&output).unwrap();
+        let mut keys: Vec<&str> = json.as_object().unwrap().keys().map(|k| &**k).collect();
+        keys.sort();
+        assert_eq!(keys, ["coverage", "errors", "hits", "nextPage"]);
+        assert_eq!(json["nextPage"], "2");
+        assert_eq!(json["errors"][0]["id"], "9");
+        assert_eq!(json["errors"][0]["code"], "card-unreadable");
+
+        let expected = "\
+Account:      work (pimdir)
+Addressbook:  book
+Query:        peanuts
+Page:         1, card 1
+Next page:    --page 2
+
+7  book  body  alice@example.org  -  Alice Martin
+
+Error:  9  card-unreadable  Body blob missing from the store
+";
+        assert_eq!(output.to_string(), expected);
     }
 }

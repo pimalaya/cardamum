@@ -174,6 +174,11 @@ impl JmapBackend {
     ///
     /// A card that does not convert to a vCard is left out, an entry naming
     /// it instead, on the first page only: the query reads every card.
+    ///
+    /// A query that fails or finds nothing is checked against the address
+    /// books, one `AddressBook/get`, so an unknown one fails
+    /// `addressbook-not-found` naming it rather than reading as empty or as
+    /// the server's refusal of the filter.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
@@ -187,9 +192,36 @@ impl JmapBackend {
             }),
             ..Default::default()
         };
-        let out = self.inner.contact_card_query(opts)?;
 
-        Ok(project_cards(addressbook_id, out.cards, skip, take))
+        let cards = match self.inner.contact_card_query(opts) {
+            Ok(out) if !out.cards.is_empty() => out.cards,
+            queried => match (self.holds_addressbook(addressbook_id)?, queried) {
+                (true, queried) => queried?.cards,
+                (false, Ok(_)) => {
+                    let cause = anyhow!("JMAP AddressBook/get answered the id as `notFound`");
+                    return Err(error::addressbook_not_found(addressbook_id, cause));
+                }
+                (false, Err(err)) => {
+                    return Err(error::addressbook_not_found(addressbook_id, err.into()));
+                }
+            },
+        };
+
+        Ok(project_cards(addressbook_id, cards, skip, take))
+    }
+
+    /// Whether the account holds the AddressBook `id`.
+    fn holds_addressbook(&mut self, id: &str) -> Result<bool> {
+        let opts = JmapAddressBookGetOptions {
+            ids: Some(vec![id.to_string()]),
+            ..Default::default()
+        };
+        let out = self.inner.address_book_get(opts)?;
+
+        Ok(out
+            .address_books
+            .iter()
+            .any(|book| book.id.as_deref() == Some(id)))
     }
 
     /// Reads the ContactCard `card_id`, converted to a vCard document.
@@ -394,7 +426,7 @@ fn into_addressbook(book: JmapAddressBook) -> Addressbook {
         id,
         description: book.description,
         color: None,
-        default: false,
+        default: book.is_default,
     }
 }
 
@@ -544,6 +576,75 @@ mod tests {
         assert_eq!(code_of(&err), Some(ErrorCode::CardNotFound));
         assert_eq!(err.to_string(), "Card `c9` not found");
         assert!(err.chain().nth(1).is_some(), "{err:#}");
+    }
+
+    /// An `AddressBook/get` answering `ids` as found, the others not.
+    fn books(found: &[&str], not_found: &[&str]) -> String {
+        let list: Vec<_> = found
+            .iter()
+            .map(|id| serde_json::json!({"id": id, "name": id}))
+            .collect();
+        let args = serde_json::json!({
+            "accountId": "a1", "state": "s1", "list": list, "notFound": not_found,
+        });
+        serde_json::json!({"methodResponses": [["AddressBook/get", args, "c0"]], "sessionState": "s"})
+            .to_string()
+    }
+
+    /// A listing of an address book the account does not hold fails
+    /// `addressbook-not-found` naming it, whether the server refuses the
+    /// filter or answers nothing; an empty one it holds lists empty.
+    #[test]
+    fn an_unknown_address_book_is_not_found() {
+        use pimalaya_cli::error::code_of;
+
+        use crate::error::ErrorCode;
+
+        let refused = r#"{"methodResponses": [["error", {
+            "type": "invalidArguments", "arguments": ["filter/inAddressBook"]
+        }, "c0"]], "sessionState": "s"}"#;
+        let empty = r#"{"methodResponses": [
+            ["ContactCard/query", {"accountId": "a1", "queryState": "q", "ids": [],
+                "position": 0, "canCalculateChanges": false}, "c0"],
+            ["ContactCard/get", {"accountId": "a1", "state": "s1", "list": [],
+                "notFound": []}, "c1"]
+        ], "sessionState": "s"}"#;
+        let unknown = books(&[], &["nope"]);
+        let missing = Some(ErrorCode::AddressbookNotFound);
+
+        for query in [refused, empty] {
+            let (mut backend, requests) = scripted(&[query, &unknown]);
+            let err = backend.list_cards("nope", 0, None).unwrap_err();
+
+            assert_eq!(code_of(&err), missing, "{err:#}");
+            assert_eq!(err.to_string(), "Addressbook `nope` not found");
+            assert!(err.chain().nth(1).is_some(), "{err:#}");
+            assert_eq!(requests.lock().unwrap().len(), 2);
+        }
+
+        let (mut backend, _) = scripted(&[empty, &books(&["RBk"], &[])]);
+        let listed = backend.list_cards("RBk", 0, None).unwrap();
+        assert!(listed.cards.is_empty() && listed.errors.is_empty());
+
+        let (mut backend, _) = scripted(&[refused, &books(&["RBk"], &[])]);
+        let err = backend.list_cards("RBk", 0, None).unwrap_err();
+        assert_eq!(code_of::<ErrorCode>(&err), None, "{err:#}");
+    }
+
+    /// The address book the server states is the default says so.
+    #[test]
+    fn the_default_address_book_is_the_one_the_server_states() {
+        let get = r#"{"methodResponses": [["AddressBook/get", {
+            "accountId": "a1", "state": "s1", "notFound": [], "list": [
+                {"id": "RBk", "name": "Personal", "isDefault": true},
+                {"id": "B2", "name": "Work", "isDefault": false}
+            ]
+        }, "c0"]], "sessionState": "s"}"#;
+        let (mut backend, _) = scripted(&[get]);
+        let books = backend.list_addressbooks().unwrap();
+
+        let defaults: Vec<_> = books.iter().map(|book| (&*book.id, book.default)).collect();
+        assert_eq!(defaults, [("RBk", true), ("B2", false)]);
     }
 
     #[test]

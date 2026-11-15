@@ -24,19 +24,22 @@ use io_pimdir::{
     },
     summary::{PimdirSummary, contact::PimdirContactSummary},
 };
-use pimalaya_cli::error::CodedError;
+use pimalaya_cli::{error::CodedError, listing::Listing};
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
-    error::ErrorCode,
+    error::{self, ErrorCode, ItemError},
     pimdir::{backend::PimdirBackend, client::refusal},
-    shared::card::list::CardRow,
+    shared::{card::list::CardRow, client::unreadable},
 };
 
 impl PimdirBackend {
     /// One page of the cards `query` matches in the account, or in the
     /// address book `addressbook` alone, ordered and paged by `options`.
+    ///
+    /// A hit the store cannot read is an entry alone, coded as its failure
+    /// is or `card-unreadable`, the other hits listed.
     pub fn search_cards(
         &self,
         query: PimdirQuery,
@@ -50,14 +53,22 @@ impl PimdirBackend {
             .map_err(|err| refusal(err, "Search the pimdir index"))?;
 
         let mut hits = Vec::with_capacity(answer.hits.len());
+        let mut errors = Vec::new();
+
         for hit in answer.hits {
-            hits.push(self.card_hit(&index, hit, addressbook)?);
+            let id = hit.seq.to_string();
+
+            match self.card_hit(&index, hit, addressbook) {
+                Ok(hit) => hits.push(hit),
+                Err(err) => errors.push(error::unreadable_card(Some(&id), err)),
+            }
         }
 
         Ok(PimdirCardPage {
             hits,
             more: answer.more,
             coverage: PimdirCardCoverage::from(&answer.coverage),
+            errors,
         })
     }
 
@@ -122,7 +133,9 @@ impl PimdirBackend {
 
     /// A hit as `card list` lists a card: read through the index's own
     /// reader, the queue not folded in, from the address book asked or
-    /// else the first holding it.
+    /// else the first holding it. A card the store cannot read, whose body
+    /// is gone from its blob tree or reads as no vCard fails, the error not
+    /// naming it, as `card list` makes it an entry.
     fn card_hit(
         &self,
         index: &PimdirIndex,
@@ -134,13 +147,13 @@ impl PimdirBackend {
             .iter()
             .find(|placement| Some(placement.collection.as_str()) == addressbook);
         let Some(placement) = asked.or(hit.placements.first()) else {
-            bail!("Card `{}` has no address book in the search index", hit.seq);
+            bail!("The search index holds the card in no address book");
         };
 
         let item = index
             .reader()
             .get_item(&placement.collection, hit.seq)
-            .map_err(|err| refusal(err, format!("Read card `{}`", hit.seq)))?;
+            .map_err(|err| refusal(err, "Cannot read the card from the store"))?;
         // NOTE: a card dropped since the index read it keeps the index's title.
         let item = match item {
             Some(item) => item,
@@ -158,7 +171,11 @@ impl PimdirBackend {
                 retention: None,
             },
         };
-        let card = self.card_from_item(&placement.collection, item)?;
+        let (card, err) = self.listed_card(&placement.collection, item);
+
+        if let Some(err) = err.or_else(|| unreadable(&card.contents)) {
+            return Err(err);
+        }
 
         Ok(PimdirCardHit {
             card: CardRow::from(card),
@@ -239,6 +256,9 @@ pub struct PimdirCardPage {
     pub more: bool,
     /// What the answer could not see.
     pub coverage: PimdirCardCoverage,
+    /// The error of each hit the store could not read, in the order met,
+    /// left out of `hits`.
+    pub errors: Vec<ItemError>,
 }
 
 /// A card the index matched.
@@ -344,12 +364,11 @@ impl From<&PimdirSearchCoverage> for PimdirCardCoverage {
     }
 }
 
-/// The line under a list or a count, naming what the answer could not see;
-/// nothing when it is complete.
-impl fmt::Display for PimdirCardCoverage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl PimdirCardCoverage {
+    /// What the answer could not see, in words; `None` when it is complete.
+    pub fn summary(&self) -> Option<String> {
         if self.complete {
-            return Ok(());
+            return None;
         }
 
         let mut parts = Vec::new();
@@ -395,7 +414,26 @@ impl fmt::Display for PimdirCardCoverage {
             ));
         }
 
-        writeln!(f, "Incomplete: {}", parts.join("; "))
+        Some(parts.join("; "))
+    }
+
+    /// Adds the `Incomplete:` field above the hits of `listing`, when the
+    /// answer is not whole.
+    pub fn note(&self, listing: &mut Listing) {
+        if let Some(summary) = self.summary() {
+            listing.header.push(("Incomplete", summary));
+        }
+    }
+}
+
+/// The line under a count, naming what the answer could not see; nothing
+/// when it is complete.
+impl fmt::Display for PimdirCardCoverage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.summary() {
+            Some(summary) => writeln!(f, "Incomplete: {summary}"),
+            None => Ok(()),
+        }
     }
 }
 
@@ -832,6 +870,44 @@ mod tests {
             .unwrap();
         assert_eq!(last.hits.len(), 1);
         assert!(!last.more);
+    }
+
+    /// A hit whose body is gone from the blob tree, which previewed as if it
+    /// were there, is an entry alone, coded `card-unreadable` and not naming
+    /// the card, the other hits listed.
+    #[test]
+    fn a_hit_the_store_cannot_read_is_an_entry() {
+        let (_dir, backend) = indexed_store();
+        let bob = page(&backend, "durand", None).hits[0].card.id.clone();
+        let reader = &backend.inner.reader;
+        let item = reader.get_item(BOOK, bob.parse().unwrap()).unwrap();
+        let hash = item.unwrap().object.unwrap();
+        std::fs::remove_file(reader.blobs().path(&hash).unwrap()).unwrap();
+
+        let found = page(&backend, "kind:contact", None);
+        let names: Vec<_> = found
+            .hits
+            .iter()
+            .map(|hit| hit.card.fn_value.as_deref().unwrap_or_default())
+            .collect();
+        assert_eq!(
+            names,
+            ["Alice Martin", "Carol Roux", "Dave Petit", "Erin Quill"]
+        );
+
+        let entries: Vec<_> = found
+            .errors
+            .iter()
+            .map(|entry| (entry.id.as_deref(), entry.code, entry.error.as_str()))
+            .collect();
+        assert_eq!(
+            entries,
+            [(
+                Some(bob.as_str()),
+                Some(ErrorCode::CardUnreadable),
+                "Body blob missing from the store"
+            )]
+        );
     }
 
     #[test]

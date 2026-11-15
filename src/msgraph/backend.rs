@@ -62,14 +62,15 @@ impl MsgraphBackend {
     }
 
     /// Lists the contact folders as addressbooks, the default Contacts
-    /// folder first under the [`CONTACTS_FOLDER`] sentinel id.
+    /// folder first under the [`CONTACTS_FOLDER`] sentinel id, marked
+    /// `default`: the folder Graph creates a contact in when none is named.
     pub fn list_addressbooks(&mut self) -> Result<Vec<Addressbook>> {
         let mut books = vec![Addressbook {
             id: CONTACTS_FOLDER.to_string(),
             name: "Contacts".to_string(),
             description: None,
             color: None,
-            default: false,
+            default: true,
         }];
 
         let mut page = self
@@ -144,7 +145,9 @@ impl MsgraphBackend {
             display_name: name,
             ..Default::default()
         };
-        self.inner.contact_folder_update(id, &folder)?;
+        self.inner
+            .contact_folder_update(id, &folder)
+            .map_err(|err| folder_error(id, err))?;
 
         Ok(())
     }
@@ -156,7 +159,9 @@ impl MsgraphBackend {
             bail!("The default Contacts folder cannot be deleted");
         }
 
-        self.inner.contact_folder_delete(id)?;
+        self.inner
+            .contact_folder_delete(id)
+            .map_err(|err| folder_error(id, err))?;
         Ok(())
     }
 
@@ -176,7 +181,8 @@ impl MsgraphBackend {
 
         let mut current = self
             .inner
-            .contacts_list(folder(addressbook_id), &params)?
+            .contacts_list(folder(addressbook_id), &params)
+            .map_err(|err| folder_error(addressbook_id, err))?
             .response;
 
         let mut cards = Vec::new();
@@ -216,7 +222,8 @@ impl MsgraphBackend {
 
         let created = self
             .inner
-            .contact_create(folder(addressbook_id), &contact)?
+            .contact_create(folder(addressbook_id), &contact)
+            .map_err(|err| folder_error(addressbook_id, err))?
             .response;
 
         Ok(created.id)
@@ -319,6 +326,16 @@ fn into_vcard_text(contents: Vec<u8>) -> Result<String> {
 fn card_error(card_id: &str, err: MsgraphClientStdError) -> Error {
     match is_missing(&err) {
         true => error::card_not_found(card_id, err.into()),
+        false => err.into(),
+    }
+}
+
+/// The failure of a request on the contact folder `id`,
+/// `addressbook-not-found` naming it when Graph holds no such folder or
+/// the id cannot name one, Graph's answer in `sources`.
+fn folder_error(id: &str, err: MsgraphClientStdError) -> Error {
+    match is_missing(&err) {
+        true => error::addressbook_not_found(id, err.into()),
         false => err.into(),
     }
 }
@@ -462,5 +479,44 @@ mod tests {
             .get_card(CONTACTS_FOLDER, "AAMk")
             .unwrap_err();
         assert_eq!(code_of(&err), missing, "{err:#}");
+    }
+
+    /// A folder Graph does not hold, or an id that cannot name one, fails
+    /// `addressbook-not-found` naming it, Graph's answer in `sources`, on a
+    /// listing, a card added to it and a folder write.
+    #[test]
+    fn an_unknown_folder_is_not_found() {
+        let missing = Some(ErrorCode::AddressbookNotFound);
+
+        let err = refusing(400, "ErrorInvalidIdMalformed")
+            .list_cards("nope", 0, None)
+            .unwrap_err();
+        assert_eq!(code_of(&err), missing, "{err:#}");
+        assert_eq!(err.to_string(), "Addressbook `nope` not found");
+        assert!(format!("{err:#}").contains("Refused"), "{err:#}");
+
+        let card = b"BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ada\r\nEND:VCARD\r\n".to_vec();
+        let err = refusing(404, "ErrorItemNotFound")
+            .create_card("AAMkF", card)
+            .unwrap_err();
+        assert_eq!(code_of(&err), missing, "{err:#}");
+
+        let err = refusing(404, "ErrorItemNotFound")
+            .delete_addressbook("AAMkF")
+            .unwrap_err();
+        assert_eq!(code_of(&err), missing, "{err:#}");
+    }
+
+    /// The default Contacts folder, where Graph adds a contact naming no
+    /// folder, is the default address book; the other folders are not.
+    #[test]
+    fn the_contacts_folder_is_the_default() {
+        let folders = r#"{"value":[{"id":"AAMkF","displayName":"Friends"}]}"#;
+        let folders = script::response(200, "application/json", folders);
+        let (mut backend, _) = scripted(vec![folders]);
+        let books = backend.list_addressbooks().unwrap();
+
+        let defaults: Vec<_> = books.iter().map(|book| (&*book.id, book.default)).collect();
+        assert_eq!(defaults, [(CONTACTS_FOLDER, true), ("AAMkF", false)]);
     }
 }

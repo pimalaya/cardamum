@@ -126,11 +126,21 @@ impl fmt::Display for CarddavPropfindAddressbooksOutput {
         let mut records = Records::default();
 
         for book in &self.rows {
+            // NOTE: a property the server did not send prints no line.
             let mut fields = Fields::default();
-            fields.push("Name", text(&book.display_name));
-            fields.push("Color", text(&book.color));
-            fields.push("CTag", text(&book.ctag));
-            fields.push("Sync token", text(&book.sync_token));
+            let props = [
+                ("Name", &book.display_name),
+                ("Description", &book.description),
+                ("Color", &book.color),
+                ("CTag", &book.ctag),
+                ("Sync token", &book.sync_token),
+            ];
+
+            for (label, value) in props {
+                if let Some(value) = value {
+                    fields.push(label, sanitize::text(value));
+                }
+            }
 
             records.push(Record {
                 title: sanitize::text(&book.id).into_owned(),
@@ -206,5 +216,54 @@ fn text(value: &Option<String>) -> String {
     match value {
         Some(value) => sanitize::text(value).into_owned(),
         None => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn book(id: &str) -> AddressbookRow {
+        AddressbookRow {
+            id: id.to_string(),
+            display_name: None,
+            description: None,
+            color: None,
+            ctag: None,
+            sync_token: None,
+        }
+    }
+
+    /// A book prints the properties the server sent, its description
+    /// included, and no empty line for one it did not send.
+    #[test]
+    fn a_book_prints_the_properties_it_has() {
+        let output = CarddavPropfindAddressbooksOutput {
+            rows: vec![
+                AddressbookRow {
+                    description: Some(String::from("Default addressbook")),
+                    ctag: Some(String::from("1774329965-9277")),
+                    ..book("Default")
+                },
+                AddressbookRow {
+                    display_name: Some(String::from("Personal")),
+                    color: Some(String::from("#0000FF")),
+                    sync_token: Some(String::from("data:,1")),
+                    ..book("card")
+                },
+            ],
+        };
+
+        let expected = "\
+Default
+Description:  Default addressbook
+CTag:         1774329965-9277
+
+card
+Name:        Personal
+Color:       #0000FF
+Sync token:  data:,1
+";
+        assert_eq!(output.to_string(), expected);
     }
 }

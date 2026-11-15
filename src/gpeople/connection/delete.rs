@@ -6,7 +6,10 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
-use crate::{gpeople::client::GpeopleClient, shared::receipt::IdReceipt};
+use crate::{
+    gpeople::client::{GpeopleClient, person_refusal},
+    shared::receipt::IdReceipt,
+};
 
 /// Delete a contact by id (People `people.deleteContact`).
 ///
@@ -21,7 +24,9 @@ pub struct GpeopleConnectionDeleteCommand {
 impl GpeopleConnectionDeleteCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: GpeopleClient) -> Result<()> {
         let resource_name = format!("people/{}", self.person_id);
-        client.contact_delete(&resource_name)?;
+        client
+            .contact_delete(&resource_name)
+            .map_err(person_refusal)?;
 
         printer.out(IdReceipt {
             id: self.person_id,

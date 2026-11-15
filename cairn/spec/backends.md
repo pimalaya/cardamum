@@ -43,7 +43,7 @@ A backend SHALL report a card it could not read as an `errors` entry and SHALL n
 - every backend: a card whose body does not parse as a vCard, or is not UTF-8, SHALL be a `card-unreadable` entry naming the card, no row listed for it;
 - vdir: a card file that cannot be read SHALL be a `card-unreadable` entry naming the card, its error in `sources`; a card removed while it lists SHALL be left out with no entry;
 - JMAP: a card that does not project SHALL be a `card-unreadable` entry, its id when it has one;
-- pimdir: a body that cannot be read, or that the item names but its blob tree no longer holds (``Body blob missing from the store``), SHALL be a `card-unreadable` entry, no row listed for it, though its summary reads, as calendula names such an item `item-unreadable`; a body not fetched yet SHALL be no entry, the card listed with its preview. `pimdir search`, which has no `errors` yet, previews a card whose blob is missing, with a warning;
+- pimdir: a body that cannot be read, or that the item names but its blob tree no longer holds (``Body blob missing from the store``), SHALL be a `card-unreadable` entry, no row listed for it, though its summary reads, as calendula names such an item `item-unreadable`; a body not fetched yet SHALL be no entry, the card listed with its preview. `pimdir search` SHALL name a hit the same way, an item the store cannot read and a body that reads as no vCard included, its id the hit's;
 - CardDAV: a row the server answered without the card's data (a row refused whole, a refused `address-data` property, or none sent) SHALL be an entry naming the card, coded `permission-denied` when the row or a refused property carries a 403, else `card-unreadable`, each refused property and its status in `sources`; the entries print on the first page only, as the whole address book is read before the page is cut;
 - CardDAV, Graph, People: a page or an answer that fails SHALL fail the listing whole.
 
@@ -54,6 +54,14 @@ The People backend SHALL read the contact group a card command names (`contactGr
 - GIVEN a Google account holding no contact group `nope`
 - WHEN `cardamum --json card add -k nope c.vcf` runs, or `cardamum --json card list -k nope`
 - THEN each exits 1 coded `addressbook-not-found` after one `GET contactGroups/nope`, and no `createContact` is sent
+
+### Requirement: A network backend names an unknown address book
+A unified command naming an address book a CardDAV server, JMAP or Microsoft Graph does not hold SHALL fail coded `addressbook-not-found`, ``Addressbook `<id>` not found``, the server's answer in `sources` ("A command resolves its addressbook before acting" in commands), never with the server's bare refusal: on CardDAV a 404 or a 410 of the collection, on `card list`, `addressbook update` and `addressbook delete`; on Graph a 404 or a 400 `ErrorInvalidIdMalformed` of the folder, on `card list`, `card add`, `addressbook update` and `addressbook delete`; on JMAP a `card list` whose `ContactCard/query` fails or finds nothing SHALL ask `AddressBook/get` for the id, one request on that path alone, an id the account does not hold failing so with the query's refusal in `sources`, an empty listing of one it holds staying empty and a refusal over one it holds staying the refusal. A server answering an unknown collection otherwise (iCloud's 400 `invalid collection ID URI`) keeps its refusal.
+
+#### Scenario: An unknown address book on JMAP
+- GIVEN a JMAP account answering a `ContactCard/query` filtered on `nope` with `invalidArguments` and holding no such address book
+- WHEN `cardamum --json card list -k nope` runs
+- THEN it exits 1 coded `addressbook-not-found`, ``Addressbook `nope` not found``, the `invalidArguments` refusal in `sources`, after the query and one `AddressBook/get`
 
 ### Requirement: Local storage backends
 vdir and pimdir SHALL adapt io-vdir and io-pimdir. vdir stores each addressbook as an immediate subdirectory of `vdir.home-dir` and each card as a `.vcf` file inside it, byte-faithfully. pimdir is an offline cache a sync engine populates through io-pimdir, which holds both the store and the engine, and follows the cache requirements below.
@@ -143,15 +151,21 @@ A failure a server refused SHALL carry a code of the vocabulary Himalaya shares,
 
 | Code | When |
 |---|---|
-| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition, or `need-privileges` (RFC 3744 §7.1.1); a CardDAV listing, `report query` or `report multiget` row, or its refused `address-data`, answered 403; a JMAP `forbidden` |
+| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition nor the vCard, or `need-privileges` (RFC 3744 §7.1.1); a CardDAV listing, `report query` or `report multiget` row, or its refused `address-data`, answered 403; a JMAP `forbidden` |
 | `quota-exceeded` | an HTTP 507; a CardDAV body naming `quota-not-exceeded` (RFC 4331 §6); Graph's `ErrorQuotaExceeded`; a JMAP `overQuota` |
 | `rate-limited` | an HTTP 429, or a People 403 naming a rate limit or a quota, or a JMAP `rateLimit`; cardamum retries nothing, so the first one met |
-| `card-not-found` | a card request answered 404 or 410 (CardDAV, People), a `carddav report multiget` row included, 404 or 400 `ErrorInvalidIdMalformed` (Graph), `notFound` (JMAP ContactCard); a vdir card file or a pimdir card that does not exist, or a pimdir card id that is no number |
-| `addressbook-not-found` | an address book named that does not exist (vdir, pimdir); a JMAP AddressBook `notFound` |
+| `card-not-found` | a card request answered 404 or 410 (CardDAV, People), a `carddav report multiget` row included, 404 or 400 `ErrorInvalidIdMalformed` (Graph), `notFound` (JMAP ContactCard); a vdir card file or a pimdir card that does not exist, or a pimdir card id that is no number; on the protocol commands naming one card as on the unified ones, the server's message kept there |
+| `addressbook-not-found` | an address book named that does not exist (vdir, pimdir); a JMAP AddressBook `notFound`; a CardDAV collection answered 404 or 410, a Graph folder 404 or a malformed folder id, a People group 404, an id JMAP's `AddressBook/get` does not hold ("A network backend names an unknown address book") |
+| `card-invalid` | a CardDAV write answered 400 or 403 whose body names the `valid-address-data` or `supported-address-data` precondition (RFC 6352 §6.3.2.1) or the vCard itself (`VCARD parse error`), the predicate cardamum's hint reads, so the two never disagree |
 | `precondition-failed` | a CardDAV write answered 412, the `If-Match` it sent naming a version the card no longer has |
 | `item-duplicate` | a CardDAV write refused for the address book's `no-uid-conflict` precondition (RFC 6352 §6.3.2.1), as calendula codes the CalDAV one |
 
-A refusal none of these name SHALL carry no code, its reason kept in `sources`. A CardDAV 403 naming another precondition (`valid-address-data`, `no-uid-conflict`) is a card the server would not take, no matter of rights, and SHALL carry none; a refused `valid-address-data` keeps the server's answer as the cause of cardamum's hint.
+A refusal none of these name SHALL carry no code, its reason kept in `sources`. A CardDAV 403 naming another precondition is a card the server would not take, no matter of rights, and SHALL NOT read `permission-denied`: `no-uid-conflict` is `item-duplicate`, `valid-address-data` `card-invalid`, keeping the server's answer as the cause of cardamum's hint, and any other carries none.
+
+#### Scenario: A vCard the server refuses
+- GIVEN a CardDAV server answering a `PUT` 403 with the plain body `VCARD parse error`
+- WHEN `cardamum --json card add -k card c.vcf` runs
+- THEN it exits 1 coded `card-invalid`, its error the hint naming `UID` and `N`, the server's answer in `sources`
 
 #### Scenario: A read-only address book
 - GIVEN a Graph contact folder the account may read but not write

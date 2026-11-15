@@ -10,7 +10,7 @@ use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::carddav::client::CarddavClient;
+use crate::carddav::client::{CarddavClient, card_refusal};
 
 /// GET a card: its raw vCard bytes plus the server ETag.
 ///
@@ -27,7 +27,9 @@ pub struct CarddavGetCommand {
 
 impl CarddavGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: CarddavClient) -> Result<()> {
-        let body = client.read_card(&self.addressbook_id, &self.card_id)?;
+        let body = client
+            .read_card(&self.addressbook_id, &self.card_id)
+            .map_err(card_refusal)?;
 
         let card = CarddavGetOutput {
             id: self.card_id,

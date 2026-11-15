@@ -30,7 +30,7 @@ impl fmt::Display for RawJsonOutput {
         }
 
         let pretty = serde_json::to_string_pretty(&self.response).map_err(|_| fmt::Error)?;
-        write!(f, "{pretty}")
+        writeln!(f, "{pretty}")
     }
 }
 
@@ -54,7 +54,7 @@ mod tests {
                 response: json!({"id": "x"})
             }
             .to_string(),
-            "{\n  \"id\": \"x\"\n}"
+            "{\n  \"id\": \"x\"\n}\n"
         );
     }
 }

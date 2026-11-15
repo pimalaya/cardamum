@@ -9,6 +9,7 @@ use anyhow::{Result, anyhow};
 use io_msgraph::v1::client::{
     MsgraphClientStd, MsgraphClientStdConnectOptions, MsgraphClientStdError,
 };
+use pimalaya_cli::error::with_code;
 use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 
@@ -76,6 +77,16 @@ pub(crate) fn refusal_code(cause: &(dyn std::error::Error + 'static)) -> Option<
     }
 }
 
+/// The failure of a request naming one contact, coded `card-not-found`
+/// when Graph holds no such contact, its message Graph's: the specific
+/// commands code it as the unified ones do.
+pub(crate) fn contact_refusal(err: MsgraphClientStdError) -> anyhow::Error {
+    match is_missing(&err) {
+        true => with_code(err.into(), |_| Some(ErrorCode::CardNotFound)),
+        false => err.into(),
+    }
+}
+
 /// Whether a contact request found no contact: a 404, or the 400 Graph
 /// answers an id that cannot name one (`ErrorInvalidIdMalformed`).
 pub(crate) fn is_missing(err: &MsgraphClientStdError) -> bool {
@@ -86,4 +97,64 @@ pub(crate) fn is_missing(err: &MsgraphClientStdError) -> bool {
     send.api().is_some_and(|err| {
         err.status == 404 || (err.status == 400 && err.code == "ErrorInvalidIdMalformed")
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use io_msgraph::v1::client::MsgraphClientStd;
+    use pimalaya_cli::printer::CapturePrinter;
+    use serde_json::json;
+
+    use crate::{
+        error::{self, ErrorCode},
+        msgraph::{
+            client::MsgraphClient,
+            contacts::{delete::MsgraphContactDeleteCommand, get::MsgraphContactGetCommand},
+        },
+        script::{self, Script},
+    };
+
+    /// The client over a Graph server answering `status` with an error
+    /// envelope of `code`.
+    fn refusing(status: u16, code: &str) -> MsgraphClient {
+        let body = json!({"error": {"code": code, "message": "Refused"}}).to_string();
+        let (script, _) = Script::new([script::response(status, "application/json", &body)]);
+        let inner = MsgraphClientStd::new(script, "token", Default::default());
+        MsgraphClient { inner }
+    }
+
+    /// A specific command naming a contact Graph does not hold carries
+    /// `card-not-found`, as `card read` does, Graph's message kept; another
+    /// refusal keeps its own code.
+    #[test]
+    fn a_specific_command_on_a_missing_contact_is_coded() {
+        let printer = &mut CapturePrinter::default();
+        let id = String::from("AAMk");
+        let missing = Some(ErrorCode::CardNotFound);
+
+        let get = MsgraphContactGetCommand {
+            contact_id: id.clone(),
+        };
+        let err = get
+            .execute(printer, refusing(404, "ErrorItemNotFound"))
+            .unwrap_err();
+        assert_eq!(error::code(&err), missing, "{err:#}");
+        assert!(format!("{err:#}").contains("Refused"), "{err:#}");
+
+        let delete = |status, code| {
+            let delete = MsgraphContactDeleteCommand {
+                contact_id: id.clone(),
+            };
+            let err = delete
+                .execute(&mut CapturePrinter::default(), refusing(status, code))
+                .unwrap_err();
+            error::code(&err)
+        };
+        assert_eq!(delete(404, "ErrorItemNotFound"), missing);
+        assert_eq!(delete(400, "ErrorInvalidIdMalformed"), missing);
+        assert_eq!(
+            delete(403, "ErrorAccessDenied"),
+            Some(ErrorCode::PermissionDenied)
+        );
+    }
 }

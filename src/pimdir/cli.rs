@@ -51,7 +51,7 @@ impl PimdirCommand {
         match self {
             Self::Status(cmd) => cmd.execute(printer, backend),
             Self::Queue(cmd) => cmd.execute(printer, name, &backend),
-            Self::Search(cmd) => cmd.execute(printer, account, &backend),
+            Self::Search(cmd) => cmd.execute(printer, name, account, &backend),
             Self::Count(cmd) => cmd.execute(printer, &backend),
         }
     }

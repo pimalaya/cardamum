@@ -79,10 +79,20 @@ impl fmt::Display for VdirCollectionListOutput {
         let mut records = Records::default();
 
         for collection in &self.rows {
-            let name = collection.display_name.as_deref().unwrap_or_default();
-
+            // NOTE: a metadata file the collection lacks prints no line.
             let mut fields = Fields::default();
-            fields.push("Name", sanitize::text(name));
+            let metadata = [
+                ("Name", &collection.display_name),
+                ("Description", &collection.description),
+                ("Color", &collection.color),
+            ];
+
+            for (label, value) in metadata {
+                if let Some(value) = value {
+                    fields.push(label, sanitize::text(value));
+                }
+            }
+
             fields.push("Path", sanitize::text(&collection.path));
 
             records.push(Record {
@@ -94,5 +104,46 @@ impl fmt::Display for VdirCollectionListOutput {
         }
 
         write!(f, "{records}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A collection prints the metadata it holds, description and colour
+    /// as its JSON does, and no empty line for a file it lacks.
+    #[test]
+    fn a_collection_prints_the_metadata_it_holds() {
+        let output = VdirCollectionListOutput {
+            rows: vec![
+                CollectionRow {
+                    id: String::from("friends"),
+                    display_name: Some(String::from("Friends")),
+                    description: Some(String::from("vdir made")),
+                    color: Some(String::from("#ABCDEF")),
+                    path: String::from("/home/vdir/friends"),
+                },
+                CollectionRow {
+                    id: String::from("bare"),
+                    display_name: None,
+                    description: None,
+                    color: None,
+                    path: String::from("/home/vdir/bare"),
+                },
+            ],
+        };
+
+        let expected = "\
+friends
+Name:         Friends
+Description:  vdir made
+Color:        #ABCDEF
+Path:         /home/vdir/friends
+
+bare
+Path:  /home/vdir/bare
+";
+        assert_eq!(output.to_string(), expected);
     }
 }

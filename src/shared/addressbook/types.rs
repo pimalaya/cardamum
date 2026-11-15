@@ -23,8 +23,9 @@ pub struct Addressbook {
     #[serde(default)]
     pub color: Option<String>,
     /// Whether new cards go here when no address book is named, as the
-    /// server states it (the pimdir backend reads it from the store,
-    /// STORAGE §14); `false` where the backend does not say.
+    /// server states it: JMAP `isDefault`, the Graph default Contacts
+    /// folder, People's myContacts, the store's role on pimdir (STORAGE
+    /// §14); `false` where the backend does not say (CardDAV, vdir).
     #[serde(default)]
     pub default: bool,
 }

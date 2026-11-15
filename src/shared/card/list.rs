@@ -197,10 +197,12 @@ impl fmt::Display for CardListOutput {
     }
 }
 
-/// Pulls the first `FN`, `EMAIL` and `TEL` value out of the raw bytes.
+/// Pulls the first `FN`, `EMAIL` and `TEL` value out of the raw bytes,
+/// as written: escapes kept, a `tel:` URI whole.
 ///
-/// A scan rather than a parse: the listing renders three columns, which
-/// does not justify parsing every vCard in the page.
+/// The lines are unfolded first (RFC 6350 §3.2), and a property is read
+/// whatever its group and parameters (§3.3), so `FN;DERIVED=TRUE:Jane`
+/// names Jane and a folded `EMAIL` reads whole.
 fn vcard_preview(bytes: &[u8]) -> (Option<String>, Option<String>, Option<String>) {
     let text = match std::str::from_utf8(bytes) {
         Ok(s) => s,
@@ -214,36 +216,67 @@ fn vcard_preview(bytes: &[u8]) -> (Option<String>, Option<String>, Option<String
     // NOTE: the three reads are independent. Chained, a line that failed
     // the EMAIL read never reached the TEL one, so a card writing its TEL
     // above its EMAIL listed with an empty TEL column.
-    for line in text.lines() {
-        let line = line.trim();
+    for line in unfold(text) {
+        let Some((name, value)) = property(&line) else {
+            continue;
+        };
+        let value = value.trim();
 
-        if fn_value.is_none() && line.starts_with("FN:") {
-            fn_value = Some(line[3..].to_string());
-        }
-        if email.is_none()
-            && let Some(rest) = pick_property(line, "EMAIL")
-        {
-            email = Some(rest);
-        }
-        if tel.is_none()
-            && let Some(rest) = pick_property(line, "TEL")
-        {
-            tel = Some(rest);
+        let slot = match name {
+            name if name.eq_ignore_ascii_case("FN") => &mut fn_value,
+            name if name.eq_ignore_ascii_case("EMAIL") => &mut email,
+            name if name.eq_ignore_ascii_case("TEL") => &mut tel,
+            _ => continue,
+        };
+
+        if slot.is_none() {
+            *slot = Some(value.to_string());
         }
     }
 
     (fn_value, email, tel)
 }
 
-/// Returns the value of a property line, skipping over its parameters.
-fn pick_property(line: &str, key: &str) -> Option<String> {
-    if !line.starts_with(key) {
-        return None;
+/// The content lines of `text`, each folded continuation (a line break
+/// followed by one space or tab) joined back onto the line it continues.
+fn unfold(text: &str) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+
+    for line in text.split('\n') {
+        let line = line.strip_suffix('\r').unwrap_or(line);
+
+        match line.strip_prefix([' ', '\t']) {
+            Some(rest) if !lines.is_empty() => {
+                if let Some(last) = lines.last_mut() {
+                    last.push_str(rest);
+                }
+            }
+            _ => lines.push(line.to_string()),
+        }
     }
 
-    let after_key = &line[key.len()..];
-    let colon = after_key.find(':')?;
-    Some(after_key[colon + 1..].to_string())
+    lines
+}
+
+/// The name and the value of a content line, `[group "."] name *(";"
+/// param) ":" value`: the value starts at the first colon outside a
+/// quoted parameter value.
+fn property(line: &str) -> Option<(&str, &str)> {
+    let mut quoted = false;
+    let colon = line.char_indices().find_map(|(i, c)| match c {
+        '"' => {
+            quoted = !quoted;
+            None
+        }
+        ':' if !quoted => Some(i),
+        _ => None,
+    })?;
+
+    let head = &line[..colon];
+    let name = head.split(';').next()?;
+    let name = name.rsplit('.').next()?.trim();
+
+    Some((name, &line[colon + 1..]))
 }
 
 #[cfg(all(test, feature = "vdir"))]
@@ -363,6 +396,28 @@ Next page:    --page 2
 Error:  bad  card-unreadable  Cannot parse the card body as a vCard
 ";
         assert_eq!(output.to_string(), expected);
+    }
+
+    /// The preview reads a property whatever its group and parameters, and
+    /// a folded line whole (RFC 6350 §3.2, §3.3): Fastmail writes
+    /// `FN;DERIVED=TRUE` on every name it derives, and folds a line its
+    /// `PROP-ID` makes longer than 75 octets.
+    #[test]
+    fn the_preview_reads_parameters_groups_and_folds() {
+        let row = card(
+            "c1",
+            "BEGIN:VCARD\r\nVERSION:4.0\r\nFN;DERIVED=TRUE:Jane Marie Doe\r\n\
+             EMAIL;PROP-ID=e1;TYPE=home:alan@examp\r\n le.org\r\n\
+             item1.TEL;TYPE=\"cell,voice\";X-NOTE=\"a:b\":+33 6 00\r\n\t00\r\n\
+             END:VCARD\r\n",
+        );
+        assert_eq!(row.fn_value.as_deref(), Some("Jane Marie Doe"));
+        assert_eq!(row.email.as_deref(), Some("alan@example.org"));
+        assert_eq!(row.tel.as_deref(), Some("+33 6 0000"));
+
+        let row = card("c2", "BEGIN:VCARD\nfn:Bob\nTELEX:1\nTEL:2\nEND:VCARD\n");
+        assert_eq!(row.fn_value.as_deref(), Some("Bob"));
+        assert_eq!(row.tel.as_deref(), Some("2"));
     }
 
     /// The text-only context stays out of the JSON, the cursor and the

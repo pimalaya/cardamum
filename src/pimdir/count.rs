@@ -29,8 +29,11 @@ pub struct PimdirCountCommand {
     #[arg(short = 'k', long = "addressbook", value_name = "ADDRESSBOOK-ID")]
     pub addressbook: Option<String>,
     /// The query, its words joined by spaces.
+    ///
+    /// An option is read wherever it stands, before the query or after
+    /// it. A word starting with `-`, a negated term, goes after `--`, the
+    /// options before it: `pimdir count -k work -- alice -bob`.
     #[arg(value_name = "QUERY", required = true)]
-    #[arg(allow_hyphen_values = true, trailing_var_arg = true)]
     pub query: Vec<String>,
 }
 

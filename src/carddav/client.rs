@@ -29,6 +29,7 @@ use io_webdav::{
     },
     rfc6578::sync_collection::WebdavSyncCollectionError,
 };
+use pimalaya_cli::error::with_code;
 use pimalaya_config::secret::SecretResolver;
 use pimalaya_stream::{
     proxy::Proxy,
@@ -271,11 +272,12 @@ fn refused(err: &WebdavClientStdError) -> Option<(u16, &str)> {
 /// A 507, or a body naming `quota-not-exceeded` (RFC 4331 §6), is
 /// `quota-exceeded`; a 429 `rate-limited`; a 403 `permission-denied`
 /// when its body names `need-privileges` (RFC 3744 §7.1.1) or no
-/// precondition at all. Any other 403 names a precondition the written
-/// card failed (RFC 6352 §6.3.2), no matter of rights. A 412, the version
-/// `--if-match` named no longer the card's, is `precondition-failed`; a
-/// `no-uid-conflict` (RFC 6352 §6.3.2.1) `item-duplicate`, as calendula
-/// codes a CalDAV one.
+/// precondition at all. A 400 or a 403 refusing the vCard written
+/// ([`rejects_card`]) is `card-invalid`; any other 403 names a precondition
+/// the written card failed (RFC 6352 §6.3.2), no matter of rights. A 412,
+/// the version `--if-match` named no longer the card's, is
+/// `precondition-failed`; a `no-uid-conflict` (RFC 6352 §6.3.2.1)
+/// `item-duplicate`, as calendula codes a CalDAV one.
 pub(crate) fn refusal_code(cause: &(dyn std::error::Error + 'static)) -> Option<ErrorCode> {
     let err = cause.downcast_ref::<WebdavClientStdError>()?;
 
@@ -299,18 +301,39 @@ fn status_code(status: u16, body: &str) -> Option<ErrorCode> {
         _ if body.contains("quota-not-exceeded") => Some(ErrorCode::QuotaExceeded),
         507 => Some(ErrorCode::QuotaExceeded),
         429 => Some(ErrorCode::RateLimited),
-        403 if body.contains("need-privileges") || !names_precondition(body) => {
-            Some(ErrorCode::PermissionDenied)
-        }
+        403 if body.contains("need-privileges") => Some(ErrorCode::PermissionDenied),
+        _ if rejects_card(status, body) => Some(ErrorCode::CardInvalid),
+        403 if !names_precondition(body) => Some(ErrorCode::PermissionDenied),
         412 => Some(ErrorCode::PreconditionFailed),
         _ => None,
     }
+}
+
+/// Whether a refusal of `status` answered with `body` refuses the vCard
+/// written rather than the request: a 400 or a 403 whose body names the
+/// `valid-address-data` or `supported-address-data` precondition (RFC
+/// 6352 §6.3.2.1), or the vCard itself (a `VCARD parse error`).
+pub(crate) fn rejects_card(status: u16, body: &str) -> bool {
+    let body = body.to_ascii_lowercase();
+    let names_card = ["valid-address-data", "supported-address-data", "vcard"];
+
+    matches!(status, 400 | 403) && names_card.iter().any(|name| body.contains(name))
 }
 
 /// Whether a refusal's body is a `DAV:error` element, which names the
 /// precondition the request failed (RFC 4918 §16).
 fn names_precondition(body: &str) -> bool {
     body.contains(":error") || body.contains("<error")
+}
+
+/// The failure of a request naming one card, coded `card-not-found` when
+/// the server holds no such card, its message the server's: the specific
+/// commands code it as the unified ones do.
+pub(crate) fn card_refusal(err: WebdavClientStdError) -> anyhow::Error {
+    match is_missing(&err) {
+        true => with_code(err.into(), |_| Some(ErrorCode::CardNotFound)),
+        false => err.into(),
+    }
 }
 
 /// Whether a card request found no card: 404, or 410 for one gone.

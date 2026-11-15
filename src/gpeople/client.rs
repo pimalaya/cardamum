@@ -10,6 +10,7 @@ use io_gpeople::v1::{
     client::{GpeopleClientStd, GpeopleClientStdConnectOptions, GpeopleClientStdError},
     send::{GpeopleApiError, GpeopleSendError},
 };
+use pimalaya_cli::error::with_code;
 use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 
@@ -64,6 +65,16 @@ pub(crate) fn refusal_code(cause: &(dyn std::error::Error + 'static)) -> Option<
     match cause.downcast_ref::<GpeopleClientStdError>()? {
         GpeopleClientStdError::Send(GpeopleSendError::Api(err)) => google_code(err),
         _ => None,
+    }
+}
+
+/// The failure of a request naming one person, coded `card-not-found`
+/// when People holds no such person, its message People's: the specific
+/// commands code it as the unified ones do.
+pub(crate) fn person_refusal(err: GpeopleClientStdError) -> anyhow::Error {
+    match is_missing(&err) {
+        true => with_code(err.into(), |_| Some(ErrorCode::CardNotFound)),
+        false => err.into(),
     }
 }
 
@@ -130,4 +141,52 @@ fn squeeze(text: &str) -> String {
         .filter(char::is_ascii_alphanumeric)
         .map(|c| c.to_ascii_lowercase())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use io_gpeople::v1::client::GpeopleClientStd;
+    use pimalaya_cli::printer::CapturePrinter;
+    use serde_json::json;
+
+    use crate::{
+        error::{self, ErrorCode},
+        gpeople::{
+            client::GpeopleClient,
+            connection::{
+                delete::GpeopleConnectionDeleteCommand, get::GpeopleConnectionGetCommand,
+            },
+        },
+        script::{self, Script},
+    };
+
+    /// The client over a People server answering `status` with `message`.
+    fn refusing(status: u16, message: &str) -> GpeopleClient {
+        let body = json!({"error": {"code": status, "message": message}}).to_string();
+        let (script, _) = Script::new([script::response(status, "application/json", &body)]);
+        let inner = GpeopleClientStd::new(script, "token");
+        GpeopleClient { inner }
+    }
+
+    /// A specific command naming a person People does not hold carries
+    /// `card-not-found`, as `card read` does, People's message kept.
+    #[test]
+    fn a_specific_command_on_a_missing_person_is_coded() {
+        let printer = &mut CapturePrinter::default();
+        let missing = Some(ErrorCode::CardNotFound);
+        let found = "Requested entity was not found.";
+
+        let get = GpeopleConnectionGetCommand {
+            person_id: String::from("c9"),
+        };
+        let err = get.execute(printer, refusing(404, found)).unwrap_err();
+        assert_eq!(error::code(&err), missing, "{err:#}");
+        assert!(format!("{err:#}").contains(found), "{err:#}");
+
+        let delete = GpeopleConnectionDeleteCommand {
+            person_id: String::from("c9"),
+        };
+        let err = delete.execute(printer, refusing(404, found)).unwrap_err();
+        assert_eq!(error::code(&err), missing, "{err:#}");
+    }
 }

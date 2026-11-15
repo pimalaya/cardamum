@@ -79,7 +79,12 @@ impl fmt::Display for CardReadOutput {
             write!(f, "{c}")?;
         }
 
-        Ok(())
+        // NOTE: a text output ends with a newline, a card whose last line
+        // lacks one included (a CardDAV REPORT body loses it).
+        match contents.ends_with('\n') {
+            true => Ok(()),
+            false => writeln!(f),
+        }
     }
 }
 
@@ -167,6 +172,17 @@ mod tests {
         let json = serde_json::to_value(&output).unwrap();
         assert_eq!(json["contents"], contents);
         assert_eq!(json["encoding"], "utf-8", "{json}");
+    }
+
+    /// The text ends with a newline, a card whose last line lacks one
+    /// included, never doubling the one a card ends with.
+    #[test]
+    fn the_text_view_ends_with_a_newline() {
+        let unterminated = output(b"BEGIN:VCARD\r\nFN:Ada\r\nEND:VCARD");
+        assert_eq!(unterminated.to_string(), "BEGIN:VCARD\nFN:Ada\nEND:VCARD\n");
+
+        let terminated = output(b"BEGIN:VCARD\r\nFN:Ada\r\nEND:VCARD\r\n");
+        assert_eq!(terminated.to_string(), "BEGIN:VCARD\nFN:Ada\nEND:VCARD\n");
     }
 
     /// A read prints the row its listing prints, the same keys with the

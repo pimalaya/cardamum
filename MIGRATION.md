@@ -131,7 +131,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
 
 ### Text output
 
-- **Every list is plain text**, with no border, no colour and no truncation: an uppercase header then one item per line, columns two spaces apart, an empty cell as `-`, the free-text column last; or, for a list of wide items (the CardDAV and JMAP addressbooks, Graph folders and contacts, vdir collections, `pimdir search` hits), each item the way `git log` prints a commit. A single item prints as `Label:  value` lines. The list frame, the `Error:` lines and the `account capability` output are pimalaya-cli's, the same in Himalaya.
+- **Every list is plain text**, with no border, no colour and no truncation: an uppercase header then one item per line, columns two spaces apart, an empty cell as `-`, the free-text column last; or, for a list of wide items (the CardDAV and JMAP addressbooks, Graph folders and contacts, vdir collections), each item the way `git log` prints a commit, a field the item does not hold printing no line. A single item prints as `Label:  value` lines. The list frame, the `Error:` lines and the `account capability` output are pimalaya-cli's, the same in Himalaya.
 - **`account list` prints one line per account with no header row**, the default account marked `default`, the backends this build leaves out after the others; a script reads `cardamum --json account list`.
 - **`card list` prints one line per card**, `id  email  phone  name`, with no header row, under `Account:`, `Addressbook:`, `Page:` and `Next page:`. `addressbook list` leaves the description to `--json`.
 
@@ -179,7 +179,7 @@ Cardamum follows the family exit contract (pimalaya-cli): 0 on success, 1 with t
   {"code":"card-not-found","error":"…","sources":["…"],"backtrace":null}
   ```
 
-  The codes a caller acts on: `account-missing`, `account-default-missing`, `account-default-several`, `backend-not-built`, `card-not-found`, `addressbook-not-found`, `addressbook-default-missing`, `card-unreadable`, `permission-denied`, `quota-exceeded`, `rate-limited`, `capability-missing`, `usage-invalid`, `stdin-taken`, `body-pending`, `precondition-failed`, and on pimdir the store, write and search codes io-pimdir names (`store-version`, `store-busy`, `item-duplicate`, `index-version`, `query-refused`…). `cardamum json-schema` describes the failure object as `cardamum-error`.
+  The codes a caller acts on: `account-missing`, `account-default-missing`, `account-default-several`, `backend-not-built`, `card-not-found`, `addressbook-not-found`, `addressbook-default-missing`, `card-unreadable`, `card-invalid`, `permission-denied`, `quota-exceeded`, `rate-limited`, `capability-missing`, `usage-invalid`, `stdin-taken`, `body-pending`, `precondition-failed`, and on pimdir the store, write and search codes io-pimdir names (`store-version`, `store-busy`, `item-duplicate`, `index-version`, `query-refused`…). `cardamum json-schema` describes the failure object as `cardamum-error`.
 - **Every write prints a receipt** instead of `{"message": …}`; the text form keeps its sentence.
 
   ```sh
@@ -297,7 +297,13 @@ The release moves onto the family line every Pimalaya CLI shares: pimalaya-cli, 
 
 - `cardamum pimdir status` reports the store behind the account: its address books, how many of their cards are downloaded, how many creations are queued, and the parked writes.
 - `cardamum pimdir queue list`, `show` and `cancel`, as in Himalaya, list the cards queued for creation, which no listing shows before a sync applies them, and the parked rows (`row` and `kind` under `--json`), say where one row stands, and retract one, taking the store owner's role for that one write.
-- `cardamum pimdir search` and `cardamum pimdir count` answer from the store's search index, with the coverage of the answer: under `--json`, `coverage` carries `complete`, `bodiless`, `missing`, `unparseable`, `unindexed`, `behind` and `filling`, the three counts of bodies out of sight standing at 0 under a query none of whose terms reads a card's body.
+- `cardamum pimdir search` and `cardamum pimdir count` answer from the store's search index, with the coverage of the answer: under `--json`, `coverage` carries `complete`, `bodiless`, `missing`, `unparseable`, `unindexed`, `behind` and `filling`, the three counts of bodies out of sight standing at 0 under a query none of whose terms reads a card's body. `pimdir search` pages as `card list` does, `nextPage` taken back by `--page-token`, and lists a card the store cannot read in `errors`, exiting 3. Their options are read wherever they stand, after the query too, so a query word starting with `-`, a negated term, goes after `--`, or reads as `not`:
+
+  ```sh
+  cardamum --json pimdir search alice --page-size 5
+  cardamum pimdir search -k work -- alice -bob
+  cardamum pimdir search alice not bob
+  ```
 - `cardamum repl` runs commands over one account in a session, the unified client connecting once; it refuses the composer (`-i`) and stdin input (`stdin-taken`).
 - `cardamum mcp` serves the unified API to an AI agent over the Model Context Protocol, the writes only with `--allow-write`.
 - `cardamum account capability` lists, for each capability of the unified API, the backend serving it, its level and what the level leaves out: `{account, capabilities: [{name, backend, level, detail}]}` under `--json`, pimalaya-cli's shape, shared with Himalaya.

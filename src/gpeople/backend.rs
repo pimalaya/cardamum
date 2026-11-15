@@ -25,13 +25,12 @@ use io_gpeople::v1::{
     },
 };
 use log::warn;
-use pimalaya_cli::error::with_code;
 use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
 
 use crate::{
     config::{GpeopleConfig, ProxyConfig},
-    error::{self, ErrorCode},
+    error,
     gpeople::client::is_missing,
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
@@ -65,8 +64,8 @@ impl GpeopleBackend {
 
     /// Lists the account's contact groups as addressbooks.
     ///
-    /// The myContacts system group comes first, as Contacts, then the
-    /// user's own groups.
+    /// The myContacts system group comes first, as Contacts, marked
+    /// `default`, then the user's own groups.
     pub fn list_addressbooks(&mut self) -> Result<Vec<Addressbook>> {
         let mut books = Vec::new();
         let mut page_token: Option<String> = None;
@@ -90,7 +89,8 @@ impl GpeopleBackend {
 
                 // NOTE: of the system groups, only myContacts is a
                 // container: starred, blocked and the legacy ones are
-                // not addressbooks.
+                // not addressbooks. It is the default one, every person
+                // People holds being in it.
                 if id == MY_CONTACTS_GROUP {
                     books.insert(
                         0,
@@ -99,7 +99,7 @@ impl GpeopleBackend {
                             name: "Contacts".to_string(),
                             description: None,
                             color: None,
-                            default: false,
+                            default: true,
                         },
                     );
                 } else if group.group_type == Some(GpeopleContactGroupType::UserContactGroup) {
@@ -459,8 +459,7 @@ fn card_error(card_id: &str, err: GpeopleClientStdError) -> Error {
 /// sentence, People's answer in `sources`.
 fn group_error(id: &str, err: GpeopleClientStdError) -> Error {
     match is_missing(&err) {
-        true => with_code(err.into(), |_| Some(ErrorCode::AddressbookNotFound))
-            .context(format!("Addressbook `{id}` not found")),
+        true => error::addressbook_not_found(id, err.into()),
         false => err.into(),
     }
 }
@@ -670,6 +669,27 @@ mod tests {
         let code = Some(ErrorCode::AddressbookNotFound);
         assert_eq!(code_of(&err), code, "{err:#}");
         assert_eq!(err.to_string(), "Addressbook `g9` not found");
+    }
+
+    /// myContacts, which holds every person People does, is the default
+    /// address book; a group the user made is not.
+    #[test]
+    fn my_contacts_is_the_default() {
+        let groups = json!({"contactGroups": [
+            {"resourceName": "contactGroups/starred", "groupType": "SYSTEM_CONTACT_GROUP"},
+            {"resourceName": "contactGroups/myContacts", "groupType": "SYSTEM_CONTACT_GROUP"},
+            {"resourceName": "contactGroups/g1", "groupType": "USER_CONTACT_GROUP",
+             "name": "Work"},
+        ]});
+        let answer = script::response(200, "application/json", &groups.to_string());
+        let (script, _) = Script::new([answer]);
+        let mut backend = GpeopleBackend {
+            inner: GpeopleClientStd::new(script, "token"),
+        };
+        let books = backend.list_addressbooks().unwrap();
+
+        let defaults: Vec<_> = books.iter().map(|book| (&*book.id, book.default)).collect();
+        assert_eq!(defaults, [(MY_CONTACTS_GROUP, true), ("g1", false)]);
     }
 
     /// People's answer to a request on something it does not hold.

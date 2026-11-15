@@ -75,6 +75,11 @@ pub enum ErrorCode {
     AddressbookDefaultMissing,
     /// The backend answered for a card cardamum could not read.
     CardUnreadable,
+    /// The server refused the card written as no vCard it takes (a
+    /// CardDAV `valid-address-data` or `supported-address-data`
+    /// precondition, or a refusal naming the vCard): nothing was written,
+    /// and the caller fixes the card rather than its rights.
+    CardInvalid,
     /// The card is listed but its body is not local yet: a sync will
     /// bring it, so the caller waits rather than reports a loss.
     BodyPending,
@@ -305,6 +310,20 @@ pub fn card_changed(card_id: &str, server: &str) -> Error {
 pub fn card_not_found(card_id: &str, cause: Error) -> Error {
     with_code(cause, |_| Some(ErrorCode::CardNotFound))
         .context(format!("Card `{card_id}` not found"))
+}
+
+/// The failure of the address book `id` the backend does not hold, `cause`
+/// what it answered: cardamum's sentence naming it, the backend's text in
+/// `sources`.
+#[cfg(any(
+    feature = "carddav",
+    feature = "gpeople",
+    feature = "jmap",
+    feature = "msgraph"
+))]
+pub fn addressbook_not_found(id: &str, cause: Error) -> Error {
+    with_code(cause, |_| Some(ErrorCode::AddressbookNotFound))
+        .context(format!("Addressbook `{id}` not found"))
 }
 
 #[cfg(test)]

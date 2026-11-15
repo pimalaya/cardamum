@@ -637,39 +637,23 @@ impl PimdirBackend {
         }
     }
 
-    /// Builds a shared [`Card`] from a stored item.
-    ///
-    /// The real body when it is local, else a preview projected from the
-    /// stored summary, which keeps a listing useful on a partly synced
-    /// store. The preview is never the record: [`get_card`](Self::get_card)
-    /// refuses an unhydrated card outright.
-    ///
-    /// A body its blob tree no longer holds previews too, with a warning,
-    /// a search hit having no `errors` to name it in.
-    pub(crate) fn card_from_item(&self, addressbook_id: &str, item: PimdirItem) -> Result<Card> {
-        match self.listed_card(addressbook_id, item) {
-            (card, None) => Ok(card),
-            (card, Some(err)) if err.is::<BodyMissing>() => {
-                warn!(
-                    "body blob missing for card `{}` in `{addressbook_id}`, \
-                     previewing its summary instead",
-                    card.id
-                );
-                Ok(card)
-            }
-            (_, Some(err)) => Err(err),
-        }
-    }
-
     /// Builds a shared [`Card`] from a stored item as a listing shows it,
-    /// beside the error its body could not be read with.
+    /// beside the error its body could not be read with: the real body when
+    /// it is local, else a preview projected from the stored summary, which
+    /// keeps a listing useful on a partly synced store. The preview is never
+    /// the record: [`get_card`](Self::get_card) refuses an unhydrated card
+    /// outright.
     ///
     /// A body that cannot be read, or that its blob tree no longer holds
     /// though the item names one, gives the preview an unhydrated card
     /// lists as, the error left to the caller: a listing keeps the card's
     /// place in the page and prints it in `errors` alone, as calendula
     /// names such an item. A body not fetched yet is no error.
-    fn listed_card(&self, addressbook_id: &str, item: PimdirItem) -> (Card, Option<Error>) {
+    pub(crate) fn listed_card(
+        &self,
+        addressbook_id: &str,
+        item: PimdirItem,
+    ) -> (Card, Option<Error>) {
         let (stored, err) = match &item.object {
             Some(hash) => match self.inner.reader.blobs().get(hash) {
                 Ok(Some(stored)) => (Some(stored), None),
@@ -1235,7 +1219,10 @@ mod tests {
 
         let cards = all
             .into_iter()
-            .map(|item| backend.card_from_item("book", item))
+            .map(|item| match backend.listed_card("book", item) {
+                (card, None) => Ok(card),
+                (_, Some(err)) => Err(err),
+            })
             .collect::<Result<Vec<_>>>()?;
 
         Ok(crate::shared::client::window(cards, skip, take))
@@ -1379,8 +1366,8 @@ mod tests {
 
     /// A body the item names but its blob tree no longer holds is an entry
     /// on the page holding its card, coded `card-unreadable` as calendula
-    /// codes it `item-unreadable`, its error not repeating the id; a
-    /// search hit still previews it, having no `errors`.
+    /// codes it `item-unreadable`, its error not repeating the id, the card
+    /// keeping its preview for the paging.
     #[test]
     fn a_missing_body_is_an_entry_alone() {
         use crate::error::ErrorCode;
@@ -1413,7 +1400,8 @@ mod tests {
         assert_eq!(page.errors.len(), 1, "{:?}", page.errors);
 
         let item = backend.item("book", &id).unwrap();
-        let card = backend.card_from_item("book", item).unwrap();
+        let (card, err) = backend.listed_card("book", item);
+        assert!(err.is_some_and(|err| err.is::<BodyMissing>()));
         let preview = String::from_utf8(card.contents).unwrap();
         assert!(preview.contains("FN:Jane Doe\r\n"), "{preview}");
     }

@@ -6,7 +6,10 @@ use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::printer::Printer;
 
-use crate::msgraph::{client::MsgraphClient, contacts::render::MsgraphContactOutput};
+use crate::msgraph::{
+    client::{MsgraphClient, contact_refusal},
+    contacts::render::MsgraphContactOutput,
+};
 
 /// GET a contact by id.
 ///
@@ -20,7 +23,10 @@ pub struct MsgraphContactGetCommand {
 
 impl MsgraphContactGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
-        let contact = client.contact_get(&self.contact_id, None)?.response;
+        let contact = client
+            .contact_get(&self.contact_id, None)
+            .map_err(contact_refusal)?
+            .response;
         printer.out(MsgraphContactOutput(contact))
     }
 }

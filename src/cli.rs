@@ -259,3 +259,54 @@ impl Command {
         }
     }
 }
+
+#[cfg(all(test, feature = "pimdir"))]
+mod tests {
+    use clap::Parser;
+
+    use crate::{
+        cli::{Cli, Command},
+        pimdir::cli::PimdirCommand::{Count, Search},
+    };
+
+    fn parse(args: &[&str]) -> clap::error::Result<Cli> {
+        Cli::try_parse_from([&["cardamum"][..], args].concat())
+    }
+
+    /// An option after a `pimdir search` or `pimdir count` query is read
+    /// as the option, never as a query word, `--json` included; a word
+    /// starting with `-` passes after `--`, and is refused before it.
+    #[test]
+    fn an_option_after_a_query_is_an_option() {
+        let cli = parse(&["pimdir", "search", "alice", "--page-size", "3"]).unwrap();
+        let cli = [
+            cli,
+            parse(&["pimdir", "search", "alice", "-s", "3", "--json"]).unwrap(),
+        ];
+        for (i, cli) in cli.into_iter().enumerate() {
+            assert_eq!(cli.json.enabled, i == 1);
+            let Some(Command::Pimdir(Search(search))) = cli.cmd else {
+                panic!("not a search");
+            };
+            assert_eq!(search.query, ["alice"]);
+            assert_eq!(search.page_size, Some(3));
+        }
+
+        let cli = parse(&["pimdir", "count", "alice", "-k", "book"]).unwrap();
+        let Some(Command::Pimdir(Count(count))) = cli.cmd else {
+            panic!("not a count");
+        };
+        assert_eq!(count.query, ["alice"]);
+        assert_eq!(count.addressbook.as_deref(), Some("book"));
+
+        let cli = parse(&["pimdir", "search", "-s", "5", "--", "alice", "-zoe"]).unwrap();
+        let Some(Command::Pimdir(Search(search))) = cli.cmd else {
+            panic!("not a search");
+        };
+        assert_eq!(search.query, ["alice", "-zoe"]);
+        assert_eq!(search.page_size, Some(5));
+
+        assert!(parse(&["pimdir", "search", "alice", "-zoe"]).is_err());
+        assert!(parse(&["pimdir", "count", "alice", "-zoe"]).is_err());
+    }
+}

@@ -348,6 +348,47 @@ mod usage_tests {
         }
     }
 
+    /// The Graph listings show `--top` long-only, as Himalaya's do, and
+    /// still read the former `-s` as `--top`.
+    #[cfg(feature = "msgraph")]
+    #[test]
+    fn the_graph_top_is_long_only() {
+        let listings = [
+            ["msgraph", "contacts", "list"],
+            ["msgraph", "contact-folders", "list"],
+            ["msgraph", "contact-folders", "child-folders"],
+        ];
+
+        let mut cli = Cli::command();
+        cli.build();
+
+        for [group, resource, leaf] in listings {
+            let mut cmd = cli
+                .find_subcommand(group)
+                .and_then(|group| group.find_subcommand(resource))
+                .and_then(|resource| resource.find_subcommand(leaf))
+                .unwrap()
+                .clone();
+            let help = cmd.render_long_help().to_string();
+            assert!(help.contains("--top <N>"), "{leaf}: {help}");
+            assert!(!help.contains("-s,"), "{leaf}: {help}");
+
+            let mut args = vec!["cardamum", group, resource, leaf, "-s", "5"];
+            if leaf == "child-folders" {
+                args.push("folder");
+            }
+
+            let matches = cli.clone().try_get_matches_from(args).unwrap();
+            let top = matches
+                .subcommand_matches(group)
+                .and_then(|matches| matches.subcommand_matches(resource))
+                .and_then(|matches| matches.subcommand_matches(leaf))
+                .and_then(|matches| matches.get_one::<u32>("top"))
+                .copied();
+            assert_eq!(top, Some(5), "{leaf}");
+        }
+    }
+
     /// `-b` reads as Himalaya's, and a value it does not know is refused
     /// with the possible ones, every backend an account may name.
     #[test]

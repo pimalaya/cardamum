@@ -47,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Changed `msgraph contacts list`, `msgraph contact-folders list` and `msgraph contact-folders child-folders` to show `--top` long-only, as Himalaya's Graph listings: `-s` stays accepted as a hidden alias.
 - **Breaking:** renamed `card create` to `card add`, as Himalaya's `message add`, its `json-schema` key becoming `cardamum-card-add`; `card create` and `card new` stay hidden aliases, and the MCP tool is `card_add`.
 - Changed `addressbook delete` and `addressbook update` to take the address book as a positional, as Himalaya's `mailbox delete <MAILBOX>`: `-k/--addressbook` stays a hidden alias, both together refused as `usage-invalid`, and the MCP tools keep their `addressbook` property.
 - **Breaking:** changed the `gpeople` resource commands to the plural nouns of the People API, `connections`, `contact-groups` and `other-contacts`, as Himalaya's `gmail` names its resources, their `json-schema` keys following the plural paths; the singular names stay hidden aliases.

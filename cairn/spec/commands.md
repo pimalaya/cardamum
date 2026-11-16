@@ -23,12 +23,17 @@ A protocol-specific command set SHALL match the remote protocol's own structure 
 pimdir is a store rather than a protocol: its `pimdir` family covers `status`, what a reader can tell of the store behind the account, `queue list`, `queue show` and `queue cancel`, the writes cardamum queued, and `search` and `count`, the store's search index queried in the pimdir SEARCH language. The other operator commands (retrying a parked action, the retained items) ship as the separate `pimdir` binary in io-pimdir.
 
 ### Requirement: A former command name stays hidden
-A command renamed SHALL keep its former name as an alias hidden from the help, the manual and the completions, so a script keeps working, and the alias SHALL have no schema of its own, its schema being its command's: `card create` for `card add` ("A card is added"), `carddav create` for `carddav mkcol` (`cardamum-carddav-mkcol`), the singular `gpeople` nouns for the plural ones ("Specific commands mirror their protocol"), as calendula keeps `caldav create` for `caldav mkcalendar`. A short name SHALL stay accepted the same way, hidden, where calendula shows none for the counterpart: `rm` for `addressbook delete` and `card delete`, `new` for `card add`, `folders` for `msgraph contact-folders`.
+A command renamed SHALL keep its former name as an alias hidden from the help, the manual and the completions, so a script keeps working, and the alias SHALL have no schema of its own, its schema being its command's: `card create` for `card add` ("A card is added"), `carddav create` for `carddav mkcol` (`cardamum-carddav-mkcol`), the singular `gpeople` nouns for the plural ones ("Specific commands mirror their protocol"), as calendula keeps `caldav create` for `caldav mkcalendar`. A short name SHALL stay accepted the same way, hidden, where calendula shows none for the counterpart: `rm` for `addressbook delete` and `card delete`, `new` for `card add`, `folders` for `msgraph contact-folders`. A short letter dropped from an option SHALL stay accepted the same way, hidden: `-s` for `--top` on `msgraph contacts list`, `msgraph contact-folders list` and `msgraph contact-folders child-folders`, whose help shows `--top <N>` alone, as Himalaya's Graph listings take it.
 
 #### Scenario: The former name of mkcol
 - GIVEN a CardDAV account
 - WHEN `cardamum --json carddav create book -n Book` runs
 - THEN it runs `carddav mkcol book -n Book` and prints `{"id":"book"}`, and `cardamum carddav --help` lists `mkcol` with no `create`
+
+#### Scenario: The former short letter of --top
+- GIVEN a Microsoft Graph account
+- WHEN `cardamum msgraph contacts list -s 5` runs
+- THEN it runs `msgraph contacts list --top 5`, and `cardamum msgraph contacts list --help` lists `--top <N>` with no `-s`
 
 ### Requirement: carddav propfind lists the home set or one address book
 `carddav propfind` with no address book SHALL list the address book collections under the home set with a Depth 1 PROPFIND, `{"addressbooks": [{id, displayName, description, color, ctag, syncToken}]}`; with one, the cards it holds by id and entity tag, no body, through an `addressbook-query` REPORT asking `getetag` alone (RFC 6352 §8.6), as io-webdav enumerates a collection and as calendula's `caldav propfind` does, `{"cards": [{id, etag}], "truncated"}`, `truncated` when a 507 row cut the listing. Its help SHALL name the request each form sends.

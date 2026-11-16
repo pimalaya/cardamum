@@ -21,7 +21,12 @@ use crate::msgraph::{client::MsgraphClient, contact_folders::render::MsgraphCont
 #[derive(Debug, Parser)]
 pub struct MsgraphContactFolderListCommand {
     /// Maximum number of folders in the page (`$top`).
-    #[arg(short = 's', long, value_name = "N", conflicts_with = "page_token")]
+    #[arg(
+        long,
+        short_alias = 's',
+        value_name = "N",
+        conflicts_with = "page_token"
+    )]
     pub top: Option<u32>,
     #[command(flatten)]
     pub page_token: PageTokenArg,

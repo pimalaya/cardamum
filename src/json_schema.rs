@@ -322,8 +322,8 @@ pub fn registry() -> JsonSchemaRegistry {
             crate::vdir::item::get::VdirItemGetOutput
         );
         insert!(
-            "cardamum-vdir-item-create",
-            crate::vdir::item::create::VdirItemCreateOutput
+            "cardamum-vdir-item-add",
+            crate::vdir::item::add::VdirItemAddOutput
         );
         for key in [
             "cardamum-vdir-create",

@@ -389,6 +389,45 @@ mod usage_tests {
         }
     }
 
+    /// `vdir item add` creates an item, as the family spells it; the
+    /// former `create` still parses to the same command, hidden from the
+    /// help, where `new` stays listed.
+    #[cfg(feature = "vdir")]
+    #[test]
+    fn the_vdir_item_is_added() {
+        use crate::{
+            cli::Command,
+            vdir::{cli::VdirCommand, item::cli::VdirItemCommand},
+        };
+
+        for verb in ["add", "create", "new"] {
+            let args = ["cardamum", "vdir", "item", verb, "book", "card.vcf"];
+            let cli = Cli::try_parse_from(args).unwrap();
+            let Some(Command::Vdir(VdirCommand::Item(VdirItemCommand::Add(add)))) = cli.cmd else {
+                panic!("{verb} is no vdir item add");
+            };
+            assert_eq!(add.collection, "book", "{verb}");
+        }
+
+        let mut cli = Cli::command();
+        cli.build();
+        let mut item = cli
+            .find_subcommand("vdir")
+            .and_then(|vdir| vdir.find_subcommand("item"))
+            .unwrap()
+            .clone();
+        let help = item.render_long_help().to_string();
+        let add = help.lines().find(|line| line.starts_with("  add "));
+        assert!(
+            add.is_some_and(|line| line.ends_with("[alias: new]")),
+            "{help}"
+        );
+        assert!(
+            !help.lines().any(|line| line.starts_with("  create ")),
+            "{help}"
+        );
+    }
+
     /// `-b` reads as Himalaya's, and a value it does not know is refused
     /// with the possible ones, every backend an account may name.
     #[test]

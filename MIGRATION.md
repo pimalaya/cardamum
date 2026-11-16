@@ -314,6 +314,14 @@ The commands take the names Himalaya and Calendula give them. Every v0.3 spellin
   # v0.4
   cardamum card add -k personal ada.vcf
   ```
+- **`vdir item create` is `vdir item add`**, as the family names the creation of an item; `vdir item create` still works, hidden from the help, and `vdir item new` stays listed. `cardamum json-schema` names its schema `cardamum-vdir-item-add`, where v0.3 wrote `cardamum-vdir-item-create`.
+
+  ```sh
+  # v0.3
+  cardamum vdir item create personal ada.vcf
+  # v0.4
+  cardamum vdir item add personal ada.vcf
+  ```
 - **The `gpeople` resources are plural**, as the People API and Himalaya's `gmail` name them: `gpeople connections`, `gpeople contact-groups`, `gpeople other-contacts`. The singular names, and the `people`, `contacts`, `group`, `groups` and `other` aliases, still work. `cardamum json-schema` names their schemas by the plural path (`cardamum-gpeople-connections-list`).
 - **A JMAP card's `etag` is a BLAKE3 digest of its JSON**, 64 hex digits, the same from one build to the next, where v0.3 printed a 16-digit hash that changed with the Rust release a build used. An `etag` stored from v0.3 no longer matches: read the card again before passing it to `--if-match`.
 

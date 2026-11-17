@@ -23,7 +23,10 @@ use pimalaya_cli::{
 use pimalaya_config::toml::{ConfigMissingError, TomlConfig};
 
 #[cfg(feature = "carddav")]
-use crate::carddav::{cli::CarddavCommand, client::build_carddav_client};
+use crate::carddav::{
+    cli::CarddavCommand,
+    client::{build_carddav_client, unauthenticated},
+};
 #[cfg(feature = "gpeople")]
 use crate::gpeople::{cli::GpeopleCommand, client::build_gpeople_client};
 #[cfg(feature = "jmap")]
@@ -202,8 +205,11 @@ impl Command {
             Self::Carddav(cmd) => {
                 let (_, name, account_config) = resolve_account(config_paths, account_name)?;
                 cmd.check()?;
-                let client = build_carddav_client(name, account_config)?;
-                cmd.execute(printer, client)
+                let carddav = account_config.carddav.as_ref();
+                let auth = carddav.map(|c| c.auth.clone()).unwrap_or_default();
+                build_carddav_client(name, account_config)
+                    .and_then(|client| cmd.execute(printer, client))
+                    .map_err(|err| unauthenticated(err, &auth))
             }
             #[cfg(feature = "jmap")]
             Self::Jmap(cmd) => {

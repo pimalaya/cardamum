@@ -272,6 +272,19 @@ impl AddressbookClient {
         }
     }
 
+    /// `err` as the backend's configuration explains it: a CardDAV 401
+    /// to a block with no `auth` says the block configures none.
+    pub fn explain(&self, err: Error) -> Error {
+        match &self.config {
+            #[cfg(feature = "carddav")]
+            BackendConfig::Carddav(config) => {
+                crate::carddav::client::unauthenticated(err, &config.auth)
+            }
+            #[allow(unreachable_patterns)]
+            _ => err,
+        }
+    }
+
     /// Drops the connection, so the next call opens a fresh one.
     ///
     /// Called before a composer runs: an editor session lasts minutes,

@@ -47,6 +47,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Changed `carddav.auth` to be optional: a block naming none sends no `Authorization` header, as `auth = "none"` does, for a server that asks for no credential (Radicale with `auth = none`, a server behind a VPN or an authenticating reverse proxy), where it failed "missing field `auth`". A server answering such a block 401 fails with "CardDAV server answered 401: it asks for credentials, and the account configures no `auth`", still uncoded, as carillon reads its DAV blocks.
 - Changed `msgraph contacts list`, `msgraph contact-folders list` and `msgraph contact-folders child-folders` to show `--top` long-only, as Himalaya's Graph listings: `-s` stays accepted as a hidden alias.
 - **Breaking:** renamed `card create` to `card add`, as Himalaya's `message add`, its `json-schema` key becoming `cardamum-card-add`; `card create` and `card new` stay hidden aliases, and the MCP tool is `card_add`.
 - **Breaking:** renamed `vdir item create` to `vdir item add`, as the family names the creation of an item (pimalaya-cli), its `json-schema` key becoming `cardamum-vdir-item-add`; `vdir item create` stays a hidden alias and `vdir item new` a visible one. No MCP tool reaches `vdir`.
@@ -153,6 +154,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed `carddav.server = "https://<non-ASCII host>/..."` being read as the host `https`, the URL prefixed with `https://` once it failed to parse: a CardDAV `server` or `home`, or a JMAP `server`, whose host is not ASCII is refused with "Host `bücher.de` is not ASCII: write it in its Punycode form (xn--...)", naming the host, where `home` and the JMAP `server` failed "invalid international domain name".
 - Fixed `card add -k <group>` on Google People leaving a contact in myContacts when the group does not exist: it created the contact, then failed adding the membership with a bare 404, so a retry made a second one. Every card command on People now reads the group it names first, and an unknown one fails `addressbook-not-found` before anything is written; a membership refused after the create says the card stays in Contacts.
 - Fixed `card list -k <group>` on Google People listing an unknown group as empty with exit 0: it fails `addressbook-not-found`, as vdir and pimdir do. `card read`, `update` and `delete`, which ignored the group, check it too, and `addressbook update` and `delete` code a group People does not hold the same way.
 - Fixed `card read` printing a card's control characters as is, which could drive the terminal: the text view replaces them, CRLF read as LF, and `--json` keeps the bytes.

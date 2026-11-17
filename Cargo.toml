@@ -67,5 +67,5 @@ secrecy = { version = "0.10", default-features = false }
 serde = { version = "1", default-features = false, features = ["derive", "std"] }
 serde_json = { version = "1", default-features = false, features = ["std"] }
 simd-cpu = { version = "0.1", default-features = false, features = ["std"] }
-url = { version = "2.5", default-features = false, features = ["serde"] }
+url = { version = "2.5", default-features = false }
 vcard-rs = { version = "0.6", default-features = false, features = ["parser"] }

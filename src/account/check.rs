@@ -205,20 +205,23 @@ fn connect_pimdir(pimdir_config: &crate::config::PimdirConfig) -> Result<()> {
 ///
 /// A `home` block skips that walk, so the check sends the home one
 /// `PROPFIND` of depth 0 instead, which a refused credential fails.
+/// A 401 to a block with no `auth` says the block configures none.
 #[cfg(feature = "carddav")]
 fn connect_carddav(
     carddav_config: &crate::config::CarddavConfig,
     resolver: &mut SecretResolver,
 ) -> Result<()> {
-    use crate::carddav::client::{open_carddav_client, propfind_home};
+    use crate::carddav::client::{open_carddav_client, propfind_home, unauthenticated};
 
-    let mut client = open_carddav_client(carddav_config.clone(), resolver)?;
+    let auth = &carddav_config.auth;
+    let mut client = open_carddav_client(carddav_config.clone(), resolver)
+        .map_err(|err| unauthenticated(err, auth))?;
 
     // NOTE: the `home` route connects without a request, so nothing it did
     // proves the credential. The other commands need no such request, their
     // own first one being authenticated.
     if carddav_config.home.is_some() {
-        propfind_home(&mut client)?;
+        propfind_home(&mut client).map_err(|err| unauthenticated(err.into(), auth))?;
     }
 
     Ok(())
@@ -574,6 +577,32 @@ mod carddav_tests {
             assert_eq!(server["ok"], false, "{server}");
             assert_eq!(home["code"], server["code"], "{home} {server}");
             assert_eq!(home["error"], server["error"], "{home} {server}");
+            assert!(!message.contains("no `auth`"), "{home}");
+        }
+    }
+
+    /// A 401 to a block with no `auth` says the account configures none,
+    /// still uncoded, on the `home` route as on the `server` one.
+    #[test]
+    fn a_401_without_auth_names_the_missing_auth() {
+        let url = refusing("401 Unauthorized");
+        let anonymous = |mut config: CarddavConfig| {
+            config.auth = CarddavAuthConfig::None;
+            check(&config)
+        };
+
+        for row in [
+            anonymous(config(None, Some(&url))),
+            anonymous(config(Some(url.clone()), None)),
+        ] {
+            assert_eq!(row["ok"], false, "{row}");
+            assert_eq!(row["code"], Value::Null, "{row}");
+            let message = row["error"].as_str().unwrap_or_default();
+            assert!(
+                message.contains("answered 401: it asks for credentials")
+                    && message.contains("the account configures no `auth`"),
+                "{row}"
+            );
         }
     }
 }

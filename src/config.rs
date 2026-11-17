@@ -75,8 +75,10 @@ use serde::Deserialize;
     feature = "pimdir"
 )))]
 use serde::de::IgnoredAny;
+#[cfg(feature = "carddav")]
+use serde::{Deserializer, de::Error as _};
 #[cfg(any(feature = "carddav", feature = "jmap"))]
-use url::Url;
+use url::{ParseError, Url};
 
 /// The whole configuration file: the options shared by every account,
 /// then the accounts themselves, refusing a key it does not know.
@@ -328,7 +330,9 @@ pub struct CarddavConfig {
     /// necessarily the context root.
     pub server: Option<String>,
     /// Pre-resolved addressbook home set URL, where the client lists
-    /// addressbooks, skipping every discovery step.
+    /// addressbooks, skipping every discovery step. Its host is ASCII,
+    /// an internationalised one written in Punycode.
+    #[serde(default, deserialize_with = "ascii_url")]
     pub home: Option<Url>,
     /// TLS configuration.
     #[serde(default)]
@@ -340,7 +344,8 @@ pub struct CarddavConfig {
     /// and then to the `all_proxy`/`https_proxy` environment variables.
     #[serde(default)]
     pub proxy: Option<ProxyConfig>,
-    /// Authentication configuration.
+    /// Authentication configuration, absent sending no credential.
+    #[serde(default)]
     pub auth: CarddavAuthConfig,
     /// Refused: cardamum resolves no domain, `server` naming the server.
     #[serde(default)]
@@ -350,10 +355,12 @@ pub struct CarddavConfig {
 
 /// CardDAV authentication configuration.
 #[cfg(feature = "carddav")]
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub enum CarddavAuthConfig {
-    /// No credentials, for a server that asks for none.
+    /// No credentials, for a server that asks for none: no `auth` at all
+    /// reads as this.
+    #[default]
     None,
     /// HTTP Basic authentication, per RFC 7617.
     Basic {
@@ -767,9 +774,9 @@ impl TlsConfig {
 #[cfg(feature = "jmap")]
 pub fn parse_server(server: &str, default_scheme: &str, allowed: &[&str]) -> Result<Url> {
     let url = if server.contains("://") {
-        Url::parse(server)?
+        parse_url(server)?
     } else {
-        Url::parse(&format!("{default_scheme}://{server}"))?
+        parse_url(&format!("{default_scheme}://{server}"))?
     };
 
     let scheme = url.scheme();
@@ -779,6 +786,43 @@ pub fn parse_server(server: &str, default_scheme: &str, allowed: &[&str]) -> Res
     }
 
     Ok(url)
+}
+
+/// Parses `input` into a URL, a host that is not ASCII refused with the
+/// way out: its Punycode form, url linking no Unicode IDNA back end.
+#[cfg(any(feature = "carddav", feature = "jmap"))]
+pub fn parse_url(input: &str) -> Result<Url> {
+    match Url::parse(input) {
+        Err(ParseError::IdnaError) => bail!(
+            "Host `{}` is not ASCII: write it in its Punycode form (xn--...)",
+            host_of(input)
+        ),
+        result => Ok(result?),
+    }
+}
+
+/// Deserializes an optional URL through [`parse_url`].
+#[cfg(feature = "carddav")]
+fn ascii_url<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<Url>, D::Error> {
+    let input = String::deserialize(deserializer)?;
+    let url = parse_url(&input).map_err(D::Error::custom)?;
+    Ok(Some(url))
+}
+
+/// The host `input` names, as written: what follows the scheme, short of
+/// the path, the user info and the port.
+#[cfg(any(feature = "carddav", feature = "jmap"))]
+fn host_of(input: &str) -> &str {
+    let rest = input.split_once("://").map_or(input, |(_, rest)| rest);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+
+    match host.rsplit_once(':') {
+        Some((name, port)) if port.bytes().all(|b| b.is_ascii_digit()) => name,
+        _ => host,
+    }
 }
 
 #[cfg(test)]
@@ -843,6 +887,48 @@ mod tests {
             toml::from_str("server = \"dav.example.org\"\nauth.bearer.token.raw = \"token\"")
                 .unwrap();
         assert!(matches!(bearer.auth, CarddavAuthConfig::Bearer { .. }));
+    }
+
+    /// A block with no `auth` loads, sending no credential, as
+    /// `auth = "none"` does.
+    #[cfg(feature = "carddav")]
+    #[test]
+    fn a_carddav_block_without_auth_loads() {
+        use super::{CarddavAuthConfig, CarddavConfig};
+
+        let config: CarddavConfig = toml::from_str("server = \"dav.example.org\"").unwrap();
+        assert!(matches!(config.auth, CarddavAuthConfig::None));
+
+        let config: super::Config =
+            toml::from_str("[accounts.a]\ncarddav.home = \"http://localhost:5232/a/\"").unwrap();
+        let carddav = config.accounts["a"].carddav.as_ref().unwrap();
+        assert!(matches!(carddav.auth, CarddavAuthConfig::None));
+    }
+
+    /// A CardDAV `server` or `home` whose host is not ASCII is refused,
+    /// the message naming the host and its Punycode form as the way out.
+    #[cfg(feature = "carddav")]
+    #[test]
+    fn a_non_ascii_dav_host_names_its_punycode_form() {
+        use crate::carddav::client::parse_carddav_server;
+
+        let hint = "Host `b\u{fc}cher.example` is not ASCII: write it in its Punycode form";
+
+        for server in [
+            "https://b\u{fc}cher.example/dav/",
+            "b\u{fc}cher.example",
+            "b\u{fc}cher.example:8443",
+        ] {
+            let err = parse_carddav_server(server).unwrap_err().to_string();
+            assert!(err.contains(hint), "{server}: {err}");
+        }
+
+        let home = "home = \"https://alice@b\u{fc}cher.example:8443/dav/\"";
+        let err = toml::from_str::<super::CarddavConfig>(home).unwrap_err();
+        assert!(err.to_string().contains(hint), "{err}");
+
+        let url = parse_carddav_server("https://xn--bcher-kva.example/dav/").unwrap();
+        assert_eq!(url.host_str(), Some("xn--bcher-kva.example"));
     }
 
     #[cfg(all(feature = "carddav", feature = "jmap"))]
@@ -955,7 +1041,9 @@ mod tests {
 
         let schemes = ["http", "https", "jmap", "jmaps"];
         assert!(parse_server("https://b\u{fc}cher.example/jmap", "https", &schemes).is_err());
-        assert!(parse_server("b\u{fc}cher.example", "https", &schemes).is_err());
+        let err = parse_server("b\u{fc}cher.example", "https", &schemes).unwrap_err();
+        let hint = "Host `b\u{fc}cher.example` is not ASCII: write it in its Punycode form";
+        assert!(err.to_string().contains(hint), "{err}");
 
         let url = parse_server("https://xn--bcher-kva.example/jmap", "https", &schemes).unwrap();
         assert_eq!(url.host_str(), Some("xn--bcher-kva.example"));

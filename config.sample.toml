@@ -31,7 +31,7 @@ card.list.page-size = 25		# cards per page, absent -s, 0 listing every card
 # CardDAV without credentials
 #
 #carddav.server = "http://localhost:5232"	# a local server such as Radicale
-#carddav.auth = "none"				# no Authorization header
+#carddav.auth = "none"				# no Authorization header, as no auth key at all
 
 # Google CardDAV
 #

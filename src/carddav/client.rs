@@ -37,10 +37,10 @@ use pimalaya_stream::{
     tls::Tls,
 };
 use secrecy::ExposeSecret;
-use url::Url;
+use url::{ParseError, Url};
 
 use crate::{
-    config::{AccountConfig, CarddavAuthConfig, CarddavConfig, ProxyConfig},
+    config::{AccountConfig, CarddavAuthConfig, CarddavConfig, ProxyConfig, parse_url},
     error::{self, ErrorCode},
 };
 
@@ -210,11 +210,13 @@ fn run_well_known(
 /// Accepts a full URL, a bare domain, or `domain:port`; anything
 /// without an explicit `http` or `https` scheme defaults to `https://`,
 /// since `url` would otherwise read the leading label of `domain:port`
-/// as the scheme.
+/// as the scheme. A host that is not ASCII is refused, naming its
+/// Punycode form ([`parse_url`]).
 pub fn parse_carddav_server(server: &str) -> Result<Url> {
     let url = match Url::parse(server) {
         Ok(url) if matches!(url.scheme(), "http" | "https") => url,
-        _ => Url::parse(&format!("https://{server}"))?,
+        Err(ParseError::IdnaError) => parse_url(server)?,
+        _ => parse_url(&format!("https://{server}"))?,
     };
 
     Ok(url)
@@ -252,6 +254,26 @@ pub(crate) fn refused(err: &WebdavClientStdError) -> Option<(u16, &str)> {
         }) => Some((*status, body)),
         _ => None,
     }
+}
+
+/// `err` under a message saying the account configures no `auth`, when
+/// the server answered a request 401 (RFC 9110 §15.5.2) and `auth` sent
+/// no credential; any other failure is `err` unchanged, its code kept.
+pub fn unauthenticated(err: anyhow::Error, auth: &CarddavAuthConfig) -> anyhow::Error {
+    let asked = |cause: &(dyn std::error::Error + 'static)| {
+        cause
+            .downcast_ref::<WebdavClientStdError>()
+            .and_then(refused)
+            .is_some_and(|(status, _)| status == 401)
+    };
+
+    if !matches!(auth, CarddavAuthConfig::None) || !err.chain().any(asked) {
+        return err;
+    }
+
+    err.context(
+        "CardDAV server answered 401: it asks for credentials, and the account configures no `auth`",
+    )
 }
 
 /// The code of a CardDAV refusal in an error chain, as neverest reads

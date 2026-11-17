@@ -21,7 +21,12 @@ Every dependency, build and dev ones included, SHALL take `default-features = fa
 `cargo deny check` SHALL pass its advisories, bans, licences and sources checks over the release targets deny.toml lists, the licences allowed being the ones the tree carries.
 
 ### Requirement: Hosts are ASCII
-A server or proxy URL with a special scheme (`http`, `https`) SHALL be refused when its host is not ASCII, its Punycode form working: IDNA goes through `idna_adapter` 1.0.0, without the ICU4X crates.
+A server or proxy URL with a special scheme (`http`, `https`) SHALL be refused when its host is not ASCII, its Punycode form working: IDNA goes through `idna_adapter` 1.0.0, without the ICU4X crates. A CardDAV `server` or `home` and a JMAP `server` SHALL be refused naming the host and the way out, "Host `bücher.de` is not ASCII: write it in its Punycode form (xn--...)": `home` when the configuration loads, `server` when the account connects. A CardDAV `server` failing to parse that way SHALL never be prefixed with `https://`, which would read `https` as its host.
+
+#### Scenario: An internationalised CardDAV server
+- GIVEN an account holding `carddav.server = "https://bücher.example/dav/"`
+- WHEN a command reaches CardDAV
+- THEN it fails naming `bücher.example` as not ASCII and its Punycode form as the way out, sending nothing
 
 ### Requirement: Feature-gated backends
 Every backend SHALL sit behind its own cargo feature (`carddav`, `jmap`, `msgraph`, `gpeople`, `vdir`, `pimdir`), so a build ships only the protocols it needs. A protocol command and its backend adapter compile only when its feature is on; the unified command tree compiles in every build.

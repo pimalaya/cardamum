@@ -60,7 +60,19 @@ An account's `vdir` block SHALL name the vdir home, the directory holding one ad
 - THEN the vdir home is the Contacts directory of the user's home
 
 ### Requirement: A DAV server may ask for no credentials
-`CarddavAuthConfig` SHALL carry a credential-less variant alongside Basic and Bearer, spelled `auth = "none"`, which emits no `Authorization` header.
+`CarddavAuthConfig` SHALL carry a credential-less variant alongside Basic and Bearer, spelled `auth = "none"`, which emits no `Authorization` header. `carddav.auth` SHALL be optional, a block naming none reading as `auth = "none"`: a server asking for no credential (Radicale with `auth = none`, a server behind a VPN or an authenticating reverse proxy) needs no key for it, as carillon reads its DAV blocks.
+
+A server answering a request 401 to a block sending no credential SHALL fail with a message saying so, "CardDAV server answered 401: it asks for credentials, and the account configures no `auth`", above io-webdav's `WebDAV server returned HTTP 401`, on every command reaching CardDAV (the unified ones, the `carddav` namespace and `account check`), its code unchanged (`null`). A block naming a credential the server refuses fails as before, without the sentence.
+
+#### Scenario: A block with no auth
+- GIVEN an account whose `[carddav]` block names `server` and no `auth`
+- WHEN the configuration is loaded
+- THEN it loads, and every request goes without an `Authorization` header
+
+#### Scenario: A server asking for credentials a block does not give
+- GIVEN an account whose `[carddav]` block names no `auth`, its server answering 401
+- WHEN `cardamum --json account check` runs
+- THEN the `carddav` row is `ok: false`, `code` `null`, its `error` saying the server asks for credentials and the account configures no `auth`
 
 ### Requirement: The composer is a command, not a library
 `card.composer` SHALL name a command, at the top level and per account, rather than cardamum linking one editor in. What crosses the boundary is a path to a file holding vCard bytes, so the value can be tCard today and a graphical editor tomorrow, and cardamum learns no projection, no TOML and no editor.

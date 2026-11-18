@@ -96,10 +96,7 @@ mod tests {
             (&["create", "bare"][..], "bare", "bare"),
         ] {
             let cmd = VdirCollectionCreateCommand::try_parse_from(argv).unwrap();
-            let client = VdirClient::new(VdirConfig {
-                root: root.clone(),
-                home_dir: None,
-            });
+            let client = VdirClient::new(VdirConfig { root: root.clone() });
             let mut printer = CapturePrinter::default();
             cmd.execute(&mut printer, client).unwrap();
 

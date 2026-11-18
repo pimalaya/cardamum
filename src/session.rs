@@ -87,7 +87,6 @@ mod tests {
         let account = AccountConfig {
             vdir: Some(VdirConfig {
                 root: String::from("/nonexistent"),
-                home_dir: None,
             }),
             ..Default::default()
         };

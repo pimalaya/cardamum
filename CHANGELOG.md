@@ -35,7 +35,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `mcp`, a Model Context Protocol server exposing the unified API as tools, the writes listed under `--allow-write` only.
 - Added the `--json` error code `stdin-taken`, for a command reading stdin inside a session.
 - Added `code` to each backend of `account check --json`, the stable code of its failure (`store-busy`, `store-uncreated`...), `null` when it passed or the failure carries none.
-- Added MIGRATION.md, the changes to act on coming from 0.3.
 - Added an `errors` list to `addressbook list` and `card list`, under `--json` and in text: one item error `{id, code, error, sources}` per card the listing could not read, `[]` when there is none, described under `json-schema` as `cardamum-item-error`.
 
   A card whose body is no vCard or not UTF-8 is an entry, as are a vdir file that cannot be read, a JMAP card that does not project, a pimdir body that cannot be read and a CardDAV row the server answered without the card's data, each left out of `cards`; a CardDAV listing the server truncated adds an entry with a `null` id. The text output prints each as an `Error:` line at its end, and the MCP `card_list` and `addressbook_list` tools return them beside `isError: true`.
@@ -64,9 +63,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   Without `-c`, every canonical path that exists is loaded, each deep-merged on top of the ones before.
 - **Breaking:** changed every text output to plain text: no border, no colour, nothing sized to the terminal.
 
-  `card list` prints one line per card, the account, the addressbook, the page and the next one above. `-s 0` lists every card. `table.preset`, `table.arrangement` and every `*-color` key are gone, their tables refused by name.
-- **Breaking:** changed the configuration to refuse a key it does not know at the top level and in an account, where it ignored it, as every backend and option table already did. The tables v0.3 read for tables and colours (`table`, the top-level `account`, `addressbook.list`, `card.list.table`) are refused by name, the error pointing at MIGRATION.md. The block of a backend the build leaves out still loads unread.
-- **Breaking:** renamed `vdir.home-dir` to `vdir.root`, as `pimdir.root` names a store, its `~` and environment variables expanded as before; `vdir.home-dir` is refused by name (``The `vdir.home-dir` key is removed, …: rename it `vdir.root`, the path unchanged, see MIGRATION.md``). Calendula renames its key the same way.
+  `card list` prints one line per card, the account, the addressbook, the page and the next one above. `-s 0` lists every card. `table.preset`, `table.arrangement` and every `*-color` key are gone, their tables refused as unknown keys.
+- **Breaking:** changed the configuration to refuse a key it does not know at the top level and in an account, where it ignored it, as every backend and option table already did. The tables v0.3 read for tables and colours (`table`, the top-level `account`, `addressbook.list`, `card.list.table`) are refused as unknown keys. The block of a backend the build leaves out still loads unread.
+- **Breaking:** renamed `vdir.home-dir` to `vdir.root`, as `pimdir.root` names a store, its `~` and environment variables expanded as before; `vdir.home-dir` is refused as an unknown key. Calendula renames its key the same way.
 - **Breaking:** changed `addressbook list` and `card list` to exit 3 once they printed their result when a card could not be read (`errors` not empty), and the vdir and JMAP listings to list the other cards where one card failed the whole listing.
 - **Breaking:** changed `carddav report query` and `carddav report multiget` to print an `errors` list beside `cards` and `truncated`, one entry per card the server answered without its data, coded as `card list` codes a CardDAV row, an id `report multiget` named that the server does not hold `card-not-found`, and to exit 3 when it is not empty, where they dropped those cards and exited 0. A truncated result stays `truncated` alone.
 - Changed a card or an address book not found to fail with `card-not-found` or `addressbook-not-found`, where the failure carried no code.
@@ -93,7 +92,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed the `-b/--backend` help to read as Himalaya's and list its values, `auto` then every backend an account may name, and a value outside them to be refused with the list, where it read `Invalid backend <value>`.
 - Changed a `repl` or `mcp` line inside a session to fail coded `usage-invalid`, refused by pimalaya-cli, where it carried no code.
 - Changed an MCP tool call missing an argument or giving a value the grammar refuses to name the argument as the tool takes it (``Missing argument `card-id` ``, ``Invalid value `-1` for `page-size`: …``), where it printed clap's usage text.
-- Changed the refusal of a removed table or key to pimalaya-config's sentence, ``The `table` table is removed, …: delete it, see MIGRATION.md``, its shape unchanged.
 - Bumped pimalaya-cli to 0.6.0: `Next page:` prints after the listing, one blank line below the items and above the `Error:` lines, as `Next page: --page 2`, and a listing's header values sit two spaces past its longest label (`Account:  work`).
 - Bumped io-gpeople to 0.8.1: an update of a contact still carrying its stash no longer reports as dropped the properties the stash keeps.
 - Bumped io-msgraph to 0.9.2.
@@ -150,7 +148,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - **Breaking:** removed the `configure` command and its `wizard` alias, with the `wizard` cargo feature.
 
   A bare `cardamum` prints the help, and a command meeting no configuration fails naming the path it looked at and the documented sample.
-- **Breaking:** removed the `discover` route of the `[carddav]` block, which resolved a bare domain on every run through PACC and RFC 6764 SRV and TXT records. Name the server in `carddav.server` (a bare host still goes through its `.well-known/carddav`), or the address book home in `carddav.home`, as Google needs. A configuration holding `carddav.discover` is refused by name, the error pointing at MIGRATION.md.
+- **Breaking:** removed the `discover` route of the `[carddav]` block, which resolved a bare domain on every run through PACC and RFC 6764 SRV and TXT records. Name the server in `carddav.server` (a bare host still goes through its `.well-known/carddav`), or the address book home in `carddav.home`, as Google needs. A configuration holding `carddav.discover` is refused as an unknown key.
 - Removed the io-pim-discovery dependency, and with it the DNS stack only it pulled (domain, octseq, psl, resolv-conf, ipconfig).
 
 ### Fixed

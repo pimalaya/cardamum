@@ -101,7 +101,6 @@ mod tests {
         let get = |id: &str| {
             let config = VdirConfig {
                 root: root.path().display().to_string(),
-                home_dir: None,
             };
             let cmd = VdirItemGetCommand {
                 collection: String::from("book"),

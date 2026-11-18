@@ -544,7 +544,6 @@ mod carddav_tests {
             auth: CarddavAuthConfig::Bearer {
                 token: Secret::Raw(SecretString::from("made-up")),
             },
-            discover: None,
         }
     }
 

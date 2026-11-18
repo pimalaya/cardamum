@@ -47,12 +47,12 @@ A resolver SHALL live no longer than the account it is assembled for. It holds p
 A configuration field naming a filesystem path SHALL expand `~` and environment variables as the value is deserialized, never at a call site, so a path written home-relative resolves against the real home rather than the current directory and no reader of the field can forget. An optional path SHALL carry `serde(default)` alongside its deserializer, an absent key never reaching it.
 
 ### Requirement: The vdir home is `vdir.root`
-An account's `vdir` block SHALL name the vdir home, the directory holding one address book per immediate subdirectory, in `root`, its `~` and environment variables expanded as it is read ("Path fields are shell-expanded"), as `pimdir.root` names a store. `vdir.home-dir`, the key v0.3 read, SHALL be refused by name in the family's sentence (pimalaya-config's `removed_key!`), alone or beside `root`: ``The `vdir.home-dir` key is removed, the vdir home being named `root` as a store root is: rename it `vdir.root`, the path unchanged, see MIGRATION.md``. A build without `vdir` loads the block unread.
+An account's `vdir` block SHALL name the vdir home, the directory holding one address book per immediate subdirectory, in `root`, its `~` and environment variables expanded as it is read ("Path fields are shell-expanded"), as `pimdir.root` names a store. `vdir.home-dir`, the key v0.3 read, SHALL be refused as any unknown key is (serde's `unknown field`), with no sentence of its own. A build without `vdir` loads the block unread.
 
 #### Scenario: A v0.3 vdir home
 - GIVEN an account holding `vdir.home-dir = "~/Contacts"`
 - WHEN `cardamum --json addressbook list` runs
-- THEN it exits 1, the sentence naming the `vdir.home-dir` key as removed, `vdir.root` and MIGRATION.md in `sources`
+- THEN it exits 1, ``unknown field `home-dir` `` in `sources`
 
 #### Scenario: The same home under `root`
 - GIVEN an account holding `vdir.root = "~/Contacts"`
@@ -94,20 +94,20 @@ A bare `cardamum` SHALL print the help when a configuration exists, a broken one
 Resolving the default account SHALL fail, naming them sorted, when several accounts are marked `default = true` once the configuration is loaded, layers and `-c` files merged. An account named with `-a` SHALL still resolve.
 
 ### Requirement: No colour is configured
-The configuration SHALL hold no colour and no table shape. The tables v0.3 read for them SHALL be refused by name in the family's sentence (pimalaya-config's `removed_key!`), which points at MIGRATION.md: `table` at the root and in an account, the top-level `account`, and `addressbook.list` and `card.list.table` at the root and in an account, as in ``The `table` table is removed, the output being plain text with no border: delete it, see MIGRATION.md``.
+The configuration SHALL hold no colour and no table shape. The tables v0.3 read for them (`table` at the root and in an account, the top-level `account`, `addressbook.list` and `card.list.table`) SHALL be refused as any unknown key is (serde's `unknown field`), with no sentence of their own.
 
 #### Scenario: A v0.3 table preset
 - GIVEN a configuration holding `table.preset`
 - WHEN it is loaded
-- THEN it fails naming the `table` table as removed and MIGRATION.md
+- THEN it fails with ``unknown field `table` ``
 
 ### Requirement: CardDAV resolves no domain
-`carddav.discover` SHALL be refused by name in the family's sentence (pimalaya-config's `removed_key!`), ``The `carddav.discover` key is removed, cardamum resolving no domain: <instead>, see MIGRATION.md``, the instead naming `carddav.server` as its replacement (Fastmail's `https://carddav.fastmail.com/dav/`) and `carddav.home` on Google. A build without `carddav` loads the block unread.
+`carddav.discover`, the key v0.3 read, SHALL be refused as any unknown key is (serde's `unknown field`); `carddav.server` names the server (Fastmail's `https://carddav.fastmail.com/dav/`) and `carddav.home` the address book home on Google. A build without `carddav` loads the block unread.
 
 #### Scenario: A v0.3 discover route
 - GIVEN an account holding `carddav.discover = "fastmail.com"`
 - WHEN a command loads the configuration
-- THEN it fails naming the `carddav.discover` key as removed, `carddav.server`, `carddav.home` and MIGRATION.md
+- THEN it fails with ``unknown field `discover` ``
 
 ### Requirement: A CardDAV account names its ALPN identifiers
 `carddav.alpn` SHALL list the ALPN protocol identifiers offered during the TLS handshake, `["http/1.1"]` by default, as `jmap`, `msgraph` and `gpeople` do.

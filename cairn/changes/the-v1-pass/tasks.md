@@ -15,5 +15,5 @@ change: the-v1-pass
 - [ ] TWN-3: `no-performer` (after TRI-3 lands in src/pimdir)
 - [ ] CAR-5: address book honoured on JMAP, Graph, People
 - [ ] io-pimdir 0.16 bump
-- [ ] v1: drop `removed_key!` and MIGRATION.md
+- [x] v1: `removed_key!` gone (src/config.rs), a removed key refused by serde as unknown; MIGRATION.md removed; CHANGELOG and cairn/spec/config.md follow
 - [ ] Fold the delta and carddav-query-filter's into cairn/spec, log, CHANGELOG, archive both changes

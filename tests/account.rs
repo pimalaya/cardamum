@@ -1,7 +1,7 @@
 //! # Account and backend resolution
 //!
 //! The built binary's failure object for an account it cannot take, for
-//! a removed key, and for a backend the build leaves out: its block
+//! an unknown key, and for a backend the build leaves out: its block
 //! loads, so one file serves every build, but a command reaching it fails
 //! coded `backend-not-built`, naming the cargo feature. The second half
 //! runs on a reduced build, such as `cargo test --no-default-features
@@ -86,11 +86,11 @@ fn several_accounts_marked_default_are_coded_account_default_several() {
     assert_eq!(json["code"], "account-default-several", "{json}");
 }
 
-/// A CardDAV block still naming the removed `discover` route is refused
-/// by name, the error naming its replacements and the migration notes.
+/// A CardDAV block still naming the removed `discover` route is refused as
+/// an unknown key, as serde refuses any other.
 #[cfg(feature = "carddav")]
 #[test]
-fn a_carddav_discover_key_is_refused_by_name() {
+fn a_carddav_discover_key_is_an_unknown_key() {
     let home = TempDir::new().unwrap();
     let toml = "[accounts.a]\ndefault = true\n\
                 carddav.discover = \"fastmail.com\"\n\
@@ -99,21 +99,14 @@ fn a_carddav_discover_key_is_refused_by_name() {
     let output = run(home.path(), toml, &["account", "capability"]);
     let json = printed(&output, 1);
     let error = json["sources"][0].as_str().unwrap();
-    assert!(
-        error.contains("`carddav.discover` key is removed"),
-        "{error}"
-    );
-    assert!(error.contains("`carddav.server`"), "{error}");
-    assert!(error.contains("`carddav.home`"), "{error}");
-    assert!(error.contains("MIGRATION.md"), "{error}");
+    assert!(error.contains("unknown field `discover`"), "{error}");
 }
 
-/// A vdir block naming its home `home-dir`, as v0.3 did, is refused by name,
-/// the error naming `vdir.root` and the migration notes; the same path under
-/// `root` lists the home.
+/// A vdir block naming its home `home-dir`, as v0.3 did, is refused as an
+/// unknown key; the same path under `root` lists the home.
 #[cfg(feature = "vdir")]
 #[test]
-fn a_vdir_home_dir_key_is_refused_by_name_and_root_is_read() {
+fn a_vdir_home_dir_key_is_unknown_and_root_is_read() {
     let home = TempDir::new().unwrap();
     let contacts = home.path().join("contacts");
     fs::create_dir_all(contacts.join("family")).unwrap();
@@ -122,10 +115,7 @@ fn a_vdir_home_dir_key_is_refused_by_name_and_root_is_read() {
     let output = run(home.path(), &toml, &["addressbook", "list"]);
     let json = printed(&output, 1);
     let error = json["sources"][0].as_str().unwrap();
-    let sentence = "The `vdir.home-dir` key is removed, the vdir home being named \
-                    `root` as a store root is: rename it `vdir.root`, the path \
-                    unchanged, see MIGRATION.md";
-    assert!(error.contains(sentence), "{error}");
+    assert!(error.contains("unknown field `home-dir`"), "{error}");
 
     let toml = format!("[accounts.a]\ndefault = true\nvdir.root = {contacts:?}\n");
     let output = run(home.path(), &toml, &["addressbook", "list"]);

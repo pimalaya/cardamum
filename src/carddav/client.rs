@@ -97,7 +97,6 @@ pub fn build_carddav_client(
 /// and addressbook-home-set from the given context root.
 pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver) -> Result<Inner> {
     let CarddavConfig {
-        discover: _,
         server,
         home,
         tls,

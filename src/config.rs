@@ -93,14 +93,6 @@ pub struct Config {
     pub card: CardConfig,
     /// The accounts, keyed by their `[accounts.<name>]` table name.
     pub accounts: HashMap<String, AccountConfig>,
-    /// Refused: the output is plain text, drawn in no table.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub table: Option<TableRemoved>,
-    /// Refused: `account list` prints plain text, in no colour.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub account: Option<AccountTableRemoved>,
 }
 
 impl TomlConfig for Config {
@@ -232,10 +224,6 @@ pub struct AccountConfig {
     /// The Google People account this account talks to.
     #[cfg(feature = "gpeople")]
     pub gpeople: Option<GpeopleConfig>,
-    /// Refused: the output is plain text, drawn in no table.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub table: Option<TableRemoved>,
     /// The account proxy, unread by a build with no network backend.
     #[cfg(not(any(
         feature = "carddav",
@@ -290,10 +278,6 @@ pub struct VdirConfig {
     /// is read, as `pimdir.root`.
     #[serde(deserialize_with = "shell_expanded_string")]
     pub root: String,
-    /// Refused: the home is `root`, as a pimdir store's.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub home_dir: Option<VdirHomeDirRemoved>,
 }
 
 /// pimdir configuration.
@@ -347,10 +331,6 @@ pub struct CarddavConfig {
     /// Authentication configuration, absent sending no credential.
     #[serde(default)]
     pub auth: CarddavAuthConfig,
-    /// Refused: cardamum resolves no domain, `server` naming the server.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub discover: Option<CarddavDiscoverRemoved>,
 }
 
 /// CardDAV authentication configuration.
@@ -511,10 +491,6 @@ pub struct AddressbookConfig {
     /// Addressbook id the `card` commands take when their
     /// `-k/--addressbook` flag is omitted.
     pub default: Option<String>,
-    /// Refused: `addressbook list` prints plain text, in no colour.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub list: Option<AddressbookListRemoved>,
 }
 
 /// Card-level options.
@@ -541,67 +517,6 @@ pub struct CardListConfig {
     /// The flag wins when passed, then this value, then the hard
     /// fallback of 25.
     pub page_size: Option<u32>,
-    /// Refused: `card list` prints plain text, in no colour.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub table: Option<CardListTableRemoved>,
-}
-
-pimalaya_config::removed_key! {
-    /// The `table` table, at the root or in an account, which no
-    /// configuration holds any more.
-    pub TableRemoved: Table {
-        name: "table",
-        why: "the output being plain text with no border",
-        instead: "delete it",
-    }
-
-    /// The top-level `account` table, which no configuration holds any
-    /// more.
-    pub AccountTableRemoved: Table {
-        name: "account",
-        why: "`account list` printing no colour",
-        instead: "delete it",
-    }
-
-    /// The `addressbook.list` table, which no configuration holds any more.
-    pub AddressbookListRemoved: Table {
-        name: "addressbook.list",
-        why: "`addressbook list` printing no colour",
-        instead: "delete it",
-    }
-
-    /// The `card.list.table` table, which no configuration holds any more.
-    pub CardListTableRemoved: Table {
-        name: "card.list.table",
-        why: "`card list` printing no colour",
-        instead: "delete it",
-    }
-}
-
-#[cfg(feature = "carddav")]
-pimalaya_config::removed_key! {
-    /// The `carddav.discover` key, which no configuration holds any more:
-    /// cardamum resolves no domain.
-    pub CarddavDiscoverRemoved: Key {
-        name: "carddav.discover",
-        why: "cardamum resolving no domain",
-        instead: "name the server in `carddav.server` instead (Fastmail's \
-                  `https://carddav.fastmail.com/dav/`), or on Google the \
-                  address book home in `carddav.home` \
-                  (`https://www.googleapis.com/carddav/v1/principals/<email>/lists`)",
-    }
-}
-
-#[cfg(feature = "vdir")]
-pimalaya_config::removed_key! {
-    /// The `vdir.home-dir` key, which no configuration holds any more: the
-    /// vdir home is `vdir.root`.
-    pub VdirHomeDirRemoved: Key {
-        name: "vdir.home-dir",
-        why: "the vdir home being named `root` as a store root is",
-        instead: "rename it `vdir.root`, the path unchanged",
-    }
 }
 
 /// Proxy configuration.
@@ -1101,61 +1016,49 @@ mod tests {
         }
     }
 
-    /// `vdir.home-dir`, the vdir home v0.3 read, is refused by name in the
-    /// family sentence, alone or beside `vdir.root`.
-    #[cfg(feature = "vdir")]
+    /// A key v0.3 read and v1 removed is an unknown key, refused by serde
+    /// as any other, with no sentence of its own: `vdir.home-dir`,
+    /// `carddav.discover` and the output tables.
     #[test]
-    fn a_vdir_home_dir_is_refused_by_name() {
-        let sentence = "The `vdir.home-dir` key is removed, the vdir home being \
-                        named `root` as a store root is: rename it `vdir.root`, \
-                        the path unchanged, see MIGRATION.md";
-
-        for vdir in [
-            "vdir.home-dir = \"~/Contacts\"\n",
-            "vdir.root = \"~/Contacts\"\nvdir.home-dir = \"~/Contacts\"\n",
-        ] {
-            let err = refusal(&format!("[accounts.example]\n{vdir}"));
-            assert!(err.contains(sentence), "{err}");
-        }
-    }
-
-    /// The tables v0.3 read and this release removed are refused by name in
-    /// the family sentence, pointing at the migration notes, at the root and
-    /// in an account.
-    #[test]
-    fn a_removed_table_is_refused_by_name() {
-        let tables = [
+    fn a_removed_key_is_an_unknown_key() {
+        let mut keys = vec![
+            ("table.preset = \"x\"\n[accounts.example]\n", "table"),
             (
-                "table.preset = \"x\"\n",
-                "The `table` table is removed, the output being plain text \
-                 with no border: delete it, see MIGRATION.md",
+                "account.list.table.name-color = \"red\"\n[accounts.example]\n",
+                "account",
             ),
             (
-                "addressbook.list.table.id-color = \"red\"\n",
-                "The `addressbook.list` table is removed, `addressbook list` \
-                 printing no colour: delete it, see MIGRATION.md",
+                "[accounts.example]\naddressbook.list.table.id-color = \"red\"\n",
+                "list",
             ),
             (
-                "card.list.table.fn-color = \"red\"\n",
-                "The `card.list.table` table is removed, `card list` printing \
-                 no colour: delete it, see MIGRATION.md",
+                "[accounts.example]\ncard.list.table.fn-color = \"red\"\n",
+                "table",
             ),
         ];
 
-        for (line, sentence) in tables {
-            let root = format!("{line}[accounts.example]\n");
-            let account = format!("[accounts.example]\n{line}");
-
-            for toml in [root, account] {
-                let err = refusal(&toml);
-                assert!(err.contains(sentence), "{err}");
-            }
+        if cfg!(feature = "vdir") {
+            keys.push((
+                "[accounts.example]\nvdir.home-dir = \"~/Contacts\"\n",
+                "home-dir",
+            ));
         }
 
-        let err = refusal("account.list.table.name-color = \"red\"\n[accounts.example]\n");
-        let sentence = "The `account` table is removed, `account list` printing \
-                        no colour: delete it, see MIGRATION.md";
-        assert!(err.contains(sentence), "{err}");
+        if cfg!(feature = "carddav") {
+            keys.push((
+                "[accounts.example]\ncarddav.discover = \"fastmail.com\"\n",
+                "discover",
+            ));
+        }
+
+        for (toml, key) in keys {
+            let err = refusal(toml);
+            assert!(
+                err.contains(&format!("unknown field `{key}`")),
+                "{toml}: {err}"
+            );
+            assert!(!err.contains("MIGRATION"), "{err}");
+        }
     }
 
     /// A build leaving a backend out still loads a file configuring it, a

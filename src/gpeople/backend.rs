@@ -8,7 +8,9 @@
 //! Contact groups are the addressbooks: the myContacts system group, the
 //! one every contact belongs to, comes first as Contacts, then the
 //! user's own groups. Memberships are m:n labels, so one card can appear
-//! under several books and each listing is narrowed to its group.
+//! under several books and each listing is narrowed to its group. A read,
+//! an update or a delete checks the person's memberships the same way, so
+//! it acts only on a contact the named group holds.
 
 use anyhow::{Context, Error, Result, bail};
 use io_gpeople::v1::{
@@ -18,7 +20,7 @@ use io_gpeople::v1::{
             GpeopleContactGroup, GpeopleContactGroupType, list::GpeopleContactGroupsListParams,
         },
         people::{
-            GpeoplePerson,
+            GpeoplePerson, GpeoplePersonField,
             connections::list::GpeopleConnectionsListParams,
             vcard::{GPEOPLE_PERSON_VCARD_FIELDS, GpeoplePersonVcard},
         },
@@ -278,6 +280,7 @@ impl GpeopleBackend {
             .map_err(|err| card_error(addressbook_id, card_id, err))?
             .response;
 
+        held(addressbook_id, card_id, &person)?;
         Ok(into_card(addressbook_id, person))
     }
 
@@ -363,6 +366,7 @@ impl GpeopleBackend {
             .person_get(&resource_name, GPEOPLE_PERSON_VCARD_FIELDS, &[])
             .map_err(|err| card_error(addressbook_id, card_id, err))?
             .response;
+        held(addressbook_id, card_id, &current)?;
 
         let base = current.to_vcard();
         let base_person = GpeoplePerson::from_vcard(&base)?.person;
@@ -395,6 +399,10 @@ impl GpeopleBackend {
     }
 
     /// Deletes the contact `card_id`.
+    ///
+    /// Out of myContacts, the person's memberships are read first, so one
+    /// the group `addressbook_id` does not hold is a card not found there,
+    /// nothing deleted.
     pub fn delete_card(
         &mut self,
         addressbook_id: &str,
@@ -405,11 +413,33 @@ impl GpeopleBackend {
             bail!("Google People cannot gate a delete on an ETag");
         }
         self.resolve_group(addressbook_id)?;
+        let resource_name = format!("people/{card_id}");
+
+        if addressbook_id != MY_CONTACTS_GROUP {
+            let person = self
+                .inner
+                .person_get(&resource_name, &[GpeoplePersonField::Memberships], &[])
+                .map_err(|err| card_error(addressbook_id, card_id, err))?
+                .response;
+            held(addressbook_id, card_id, &person)?;
+        }
+
         self.inner
-            .contact_delete(&format!("people/{card_id}"))
+            .contact_delete(&resource_name)
             .map_err(|err| card_error(addressbook_id, card_id, err))?;
         Ok(())
     }
+}
+
+/// Fails `card-not-found` unless the group `addressbook_id` holds the
+/// person `card_id`, which myContacts does of every contact.
+fn held(addressbook_id: &str, card_id: &str, person: &GpeoplePerson) -> Result<()> {
+    if addressbook_id == MY_CONTACTS_GROUP || in_group(person, addressbook_id) {
+        return Ok(());
+    }
+
+    let cause = anyhow::anyhow!("Google person is not a member of the contact group");
+    Err(error::card_not_found(addressbook_id, card_id, cause))
 }
 
 /// Whether the person is a member of the contact group `id`.
@@ -824,6 +854,68 @@ mod tests {
             "{error}"
         );
         assert!(error.contains("addressbook `g1`"), "{error}");
+    }
+
+    /// A person People holds outside the named group is a card not found
+    /// there: a read does not print it under that group, an update and a
+    /// delete send no write.
+    #[test]
+    fn a_contact_of_another_group_is_not_found() {
+        let group = json!({"resourceName": "contactGroups/g1", "etag": "e1", "name": "Work"});
+        let person = json!({
+            "resourceName": "people/c1",
+            "etag": "%EgUBAi43PRoEAQIFByIM",
+            "names": [{"displayName": "Jane Doe", "unstructuredName": "Jane Doe"}],
+            "memberships": [
+                {"contactGroupMembership": {
+                    "contactGroupId": "myContacts",
+                    "contactGroupResourceName": "contactGroups/myContacts",
+                }},
+                {"contactGroupMembership": {
+                    "contactGroupId": "g2",
+                    "contactGroupResourceName": "contactGroups/g2",
+                }},
+            ],
+        });
+        let calls: [(&str, Call); 3] = [
+            ("read", |b| b.get_card("g1", "c1").map(drop)),
+            ("update", |b| {
+                let other = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:John Doe\r\nEND:VCARD\r\n";
+                b.update_card("g1", "c1", other.into(), None).map(drop)
+            }),
+            ("delete", |b| b.delete_card("g1", "c1", None)),
+        ];
+
+        for (name, call) in calls {
+            let empty = json!({});
+            let (script, requests) =
+                Script::new([response(&group), response(&person), response(&empty)]);
+            let mut backend = GpeopleBackend {
+                inner: GpeopleClientStd::new(script, "token"),
+            };
+
+            let err = call(&mut backend).unwrap_err();
+            let code = Some(ErrorCode::CardNotFound);
+            assert_eq!(code_of(&err), code, "{name}: {err:#}");
+            assert_eq!(
+                err.to_string(),
+                "Card `c1` not found in address book `g1`",
+                "{name}"
+            );
+
+            let lines = lines(&requests);
+            assert!(
+                lines.iter().all(|line| line.starts_with("GET ")),
+                "{name}: {lines:?}"
+            );
+        }
+
+        let (script, _) = Script::new([response(&group), response(&person)]);
+        let mut backend = GpeopleBackend {
+            inner: GpeopleClientStd::new(script, "token"),
+        };
+        let card = backend.get_card("g2", "c1").unwrap();
+        assert_eq!(card.addressbook_id, "g2");
     }
 
     /// myContacts is every account's: a listing of it reads no group.

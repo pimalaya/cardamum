@@ -13,7 +13,7 @@ change: the-v1-pass
 - [x] CAR-4 with TWN-4: the `.well-known` redirect followed over https only, a `server` naming a scheme read as written (src/carddav/client.rs)
 - [x] CAR-11: `carddav delete <ADDRESSBOOK> <CARD-ID>` (id required), `carddav rmcol <ADDRESSBOOK>`; `carddav put --if-none-match` takes `*` alone, the one value io-webdav sends (src/carddav/delete.rs, rmcol.rs, put.rs)
 - [x] TWN-3: the refusal coded `no-performer`, as calendula (src/pimdir/backend.rs `writable`, cairn/spec/backends.md)
-- [ ] CAR-5: address book honoured on JMAP, Graph, People
+- [x] CAR-5: card read, update, delete act only on a card the named address book holds on JMAP (`addressBookIds`), Graph (`parentFolderId`) and People (memberships); a delete reads first (src/{jmap,msgraph,gpeople}/backend.rs). Graph default-folder resolution to check by hand on the Microsoft test account
 - [x] io-pimdir 0.16.0: `pimdir search` pages by its cursor token, `--page` walks it (src/pimdir/search.rs, index.rs); PIM-1 (hostile VTIMEZONE abort) gone with it
 - [x] v1: `removed_key!` gone (src/config.rs), a removed key refused by serde as unknown; MIGRATION.md removed; CHANGELOG and cairn/spec/config.md follow
 - [ ] Fold the delta and carddav-query-filter's into cairn/spec, log, CHANGELOG, archive both changes

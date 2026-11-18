@@ -63,6 +63,14 @@ A unified command naming an address book a CardDAV server, JMAP or Microsoft Gra
 - WHEN `cardamum --json card list -k nope` runs
 - THEN it exits 1 coded `addressbook-not-found`, ``Addressbook `nope` not found``, the `invalidArguments` refusal in `sources`, after the query and one `AddressBook/get`
 
+### Requirement: A card verb acts only in the address book it names
+`card read`, `card update` and `card delete` on JMAP, Microsoft Graph and Google People SHALL act only on a card the address book `-k` names holds, a card held elsewhere failing coded `card-not-found` with nothing written or deleted, though each server reads a card by id whatever its address book. JMAP SHALL check the card's `addressBookIds`, Graph its `parentFolderId` (the default Contacts folder resolved as the parent of the folders `GET /me/contactFolders` lists, every contact being in it when it lists none), People its contact group memberships (myContacts holding every contact). A delete SHALL read the card first, at one request more where no `--if-match` asked for that read.
+
+#### Scenario: A card of another address book
+- GIVEN a Graph account whose contact `AAMk` is filed in the folder `B`
+- WHEN `cardamum --json card delete -k A AAMk` runs
+- THEN it exits 1 coded `card-not-found`, one `GET` sent and no `DELETE`
+
 ### Requirement: Local storage backends
 vdir and pimdir SHALL adapt io-vdir and io-pimdir. vdir stores each addressbook as an immediate subdirectory of `vdir.root` and each card as a `.vcf` file inside it, byte-faithfully. pimdir is an offline cache a sync engine populates through io-pimdir, which holds both the store and the engine, and follows the cache requirements below.
 

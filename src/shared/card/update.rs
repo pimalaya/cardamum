@@ -244,7 +244,8 @@ mod tests {
     fn a_graph_update_without_if_match_sends_one_plain_patch() {
         let contact = r#"{"id":"AAMk","changeKey":"k1","displayName":"Ada"}"#;
         let answer = || script::response(200, "application/json", contact);
-        let (script, requests) = Script::new([answer(), answer(), answer()]);
+        let folders = || script::response(200, "application/json", r#"{"value":[]}"#);
+        let (script, requests) = Script::new([answer(), folders(), answer(), folders(), answer()]);
 
         let account = AccountConfig {
             msgraph: Some(toml::from_str(r#"auth.token.raw = "token""#).unwrap()),

@@ -10,13 +10,15 @@
 //! the [`CONTACTS_FOLDER`] sentinel id. Graph takes no If-Match on a
 //! contact write (last-write-wins), so `--if-match` is compared with the
 //! `changeKey` read just before the write: the update reads the contact as
-//! its delta base anyway, the delete reads it for the guard alone.
+//! its delta base anyway, the delete reads it first. Each read checks the
+//! contact's folder, so a read, an update or a delete acts only on a
+//! contact the named folder holds.
 
 use anyhow::{Error, Result, bail};
 use io_msgraph::v1::{
     client::{MsgraphClientStd, MsgraphClientStdConnectOptions, MsgraphClientStdError},
     rest::users::{
-        contact_folders::MsgraphContactFolder,
+        contact_folders::{MsgraphContactFolder, list::MsgraphContactFoldersListParams},
         contacts::{
             MsgraphContact, list::MsgraphContactsListParams, vcard::MSGRAPH_CONTACT_STASH_EXPAND,
         },
@@ -209,13 +211,58 @@ impl MsgraphBackend {
         Ok(window(cards, skip, take))
     }
 
-    /// Reads the contact `card_id`, projected onto a vCard document.
-    pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
+    /// Reads the contact `card_id`, `$expand`ing `expand` when given,
+    /// failing `card-not-found` unless the folder `addressbook_id` holds it.
+    ///
+    /// Graph reads a contact by id whatever its folder, so its
+    /// `parentFolderId` is compared with the folder's id. The default
+    /// Contacts folder has no id under its sentinel: it is the parent of
+    /// the folders Graph lists, one of which is read, and holds every
+    /// contact when there is none.
+    fn held_contact(
+        &mut self,
+        addressbook_id: &str,
+        card_id: &str,
+        expand: Option<&str>,
+    ) -> Result<MsgraphContact> {
         let contact = self
             .inner
-            .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))
+            .contact_get(card_id, expand)
             .map_err(|err| card_error(addressbook_id, card_id, err))?
             .response;
+        let parent = contact.parent_folder_id.as_deref();
+
+        let held = match folder(addressbook_id) {
+            Some(id) => parent == Some(id),
+            None => {
+                let params = MsgraphContactFoldersListParams {
+                    top: Some(1),
+                    select: Some("parentFolderId"),
+                    ..Default::default()
+                };
+                let folders = self.inner.contact_folders_list(&params)?.response;
+
+                match folders.value.first() {
+                    Some(folder) => {
+                        parent.is_some() && parent == folder.parent_folder_id.as_deref()
+                    }
+                    None => true,
+                }
+            }
+        };
+
+        if !held {
+            let cause = anyhow::anyhow!("Graph files the contact in another folder");
+            return Err(error::card_not_found(addressbook_id, card_id, cause));
+        }
+
+        Ok(contact)
+    }
+
+    /// Reads the contact `card_id`, projected onto a vCard document.
+    pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
+        let contact =
+            self.held_contact(addressbook_id, card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))?;
         Ok(into_card(addressbook_id, contact))
     }
 
@@ -251,11 +298,8 @@ impl MsgraphBackend {
     ) -> Result<CardUpdateOutcome> {
         let vcard = into_vcard_text(contents)?;
 
-        let base = self
-            .inner
-            .contact_get(card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))
-            .map_err(|err| card_error(addressbook_id, card_id, err))?
-            .response;
+        let base =
+            self.held_contact(addressbook_id, card_id, Some(MSGRAPH_CONTACT_STASH_EXPAND))?;
 
         if let Some(expected) = if_match
             && !error::version_matches(base.change_key.as_deref(), expected)
@@ -275,24 +319,22 @@ impl MsgraphBackend {
 
     /// Deletes the contact `card_id`.
     ///
-    /// An `if_match` is compared with the contact's `changeKey`, read
-    /// first, as an update compares it.
+    /// The contact is read first, so one the folder `addressbook_id` does
+    /// not hold is a card not found there, nothing deleted, and an
+    /// `if_match` is compared with its `changeKey`, as an update compares
+    /// it.
     pub fn delete_card(
         &mut self,
         addressbook_id: &str,
         card_id: &str,
         if_match: Option<&str>,
     ) -> Result<()> {
-        if let Some(expected) = if_match {
-            let current = self
-                .inner
-                .contact_get(card_id, None)
-                .map_err(|err| card_error(addressbook_id, card_id, err))?
-                .response;
+        let current = self.held_contact(addressbook_id, card_id, None)?;
 
-            if !error::version_matches(current.change_key.as_deref(), expected) {
-                return Err(error::card_changed(card_id, SERVER));
-            }
+        if let Some(expected) = if_match
+            && !error::version_matches(current.change_key.as_deref(), expected)
+        {
+            return Err(error::card_changed(card_id, SERVER));
         }
 
         self.inner
@@ -423,12 +465,6 @@ mod tests {
         (MsgraphBackend { inner }, requests)
     }
 
-    /// The contact `AAMk` at the version `k1`.
-    fn contact() -> Vec<u8> {
-        let body = r#"{"id":"AAMk","changeKey":"k1","displayName":"Ada"}"#;
-        script::response(200, "application/json", body)
-    }
-
     /// The methods of the requests a server received, in order.
     fn methods(requests: &script::Requests) -> Vec<String> {
         let requests = requests.lock().unwrap();
@@ -441,6 +477,9 @@ mod tests {
             .collect()
     }
 
+    /// The user folder the guard tests address, holding the contact `AAMk`.
+    const FOLDER: &str = "AAMkF";
+
     const CARD: &[u8] = b"BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Ada Byron\r\nEND:VCARD\r\n";
 
     /// An update `--if-match` guards is compared with the `changeKey` of
@@ -449,30 +488,27 @@ mod tests {
     /// through, quoted or not, no request added.
     #[test]
     fn an_update_is_guarded_by_the_change_key_it_reads() {
-        let (mut backend, requests) = scripted(vec![contact()]);
+        let (mut backend, requests) = scripted(vec![contact_in(FOLDER)]);
         let err = backend
-            .update_card(CONTACTS_FOLDER, "AAMk", CARD.to_vec(), Some("k0"))
+            .update_card(FOLDER, "AAMk", CARD.to_vec(), Some("k0"))
             .unwrap_err();
         assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));
         assert_eq!(methods(&requests), ["GET"]);
 
         let patched = script::response(200, "application/json", "{}");
-        let (mut backend, requests) = scripted(vec![contact(), patched]);
+        let (mut backend, requests) = scripted(vec![contact_in(FOLDER), patched]);
         backend
-            .update_card(CONTACTS_FOLDER, "AAMk", CARD.to_vec(), Some("\"k1\""))
+            .update_card(FOLDER, "AAMk", CARD.to_vec(), Some("\"k1\""))
             .unwrap();
         assert_eq!(methods(&requests), ["GET", "PATCH"]);
     }
 
-    /// A delete `--if-match` guards reads the contact first, refusing a
-    /// stale `changeKey` before the `DELETE`; without one it sends the
-    /// `DELETE` alone.
+    /// A delete reads the contact first, refusing a stale `changeKey` an
+    /// `--if-match` names before the `DELETE`.
     #[test]
     fn a_delete_is_guarded_by_the_change_key_it_reads_first() {
-        let (mut backend, requests) = scripted(vec![contact()]);
-        let err = backend
-            .delete_card(CONTACTS_FOLDER, "AAMk", Some("k0"))
-            .unwrap_err();
+        let (mut backend, requests) = scripted(vec![contact_in(FOLDER)]);
+        let err = backend.delete_card(FOLDER, "AAMk", Some("k0")).unwrap_err();
         assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));
         assert!(
             err.to_string().contains("changed on Microsoft Graph"),
@@ -481,15 +517,70 @@ mod tests {
         assert_eq!(methods(&requests), ["GET"]);
 
         let deleted = script::response(204, "application/json", "");
-        let (mut backend, requests) = scripted(vec![contact(), deleted.clone()]);
-        backend
-            .delete_card(CONTACTS_FOLDER, "AAMk", Some("k1"))
-            .unwrap();
+        let (mut backend, requests) = scripted(vec![contact_in(FOLDER), deleted.clone()]);
+        backend.delete_card(FOLDER, "AAMk", Some("k1")).unwrap();
         assert_eq!(methods(&requests), ["GET", "DELETE"]);
 
-        let (mut backend, requests) = scripted(vec![deleted]);
-        backend.delete_card(CONTACTS_FOLDER, "AAMk", None).unwrap();
-        assert_eq!(methods(&requests), ["DELETE"]);
+        let (mut backend, requests) = scripted(vec![contact_in(FOLDER), deleted]);
+        backend.delete_card(FOLDER, "AAMk", None).unwrap();
+        assert_eq!(methods(&requests), ["GET", "DELETE"]);
+    }
+
+    /// The contact `AAMk` filed in the folder `parent`.
+    fn contact_in(parent: &str) -> Vec<u8> {
+        let body = format!(
+            r#"{{"id":"AAMk","changeKey":"k1","displayName":"Ada","parentFolderId":"{parent}"}}"#
+        );
+        script::response(200, "application/json", &body)
+    }
+
+    /// A contact Graph holds outside the named folder is a card not found
+    /// there, whether that folder is a user folder or the default Contacts
+    /// one: a read does not print it under that folder, an update and a
+    /// delete send no `PATCH` nor `DELETE`.
+    #[test]
+    fn a_contact_of_another_folder_is_not_found() {
+        let missing = Some(ErrorCode::CardNotFound);
+        let folders = r#"{"value":[{"id":"AAMkF","parentFolderId":"AAMkC"}]}"#;
+        let folders = script::response(200, "application/json", folders);
+        let done = script::response(204, "application/json", "");
+
+        for (book, parent) in [("AAMkF", "AAMkG"), (CONTACTS_FOLDER, "AAMkF")] {
+            let answers = || vec![contact_in(parent), folders.clone(), done.clone()];
+
+            let (mut backend, _) = scripted(answers());
+            let err = backend.get_card(book, "AAMk").unwrap_err();
+            assert_eq!(code_of(&err), missing, "{book}: {err:#}");
+            assert_eq!(
+                err.to_string(),
+                format!("Card `AAMk` not found in address book `{book}`")
+            );
+
+            let (mut backend, requests) = scripted(answers());
+            let err = backend
+                .update_card(book, "AAMk", CARD.to_vec(), None)
+                .unwrap_err();
+            assert_eq!(code_of(&err), missing, "{book}: {err:#}");
+            assert!(!methods(&requests).contains(&"PATCH".to_owned()), "{book}");
+
+            let (mut backend, requests) = scripted(answers());
+            let err = backend.delete_card(book, "AAMk", None).unwrap_err();
+            assert_eq!(code_of(&err), missing, "{book}: {err:#}");
+            assert!(!methods(&requests).contains(&"DELETE".to_owned()), "{book}");
+        }
+
+        let (mut backend, requests) = scripted(vec![contact_in("AAMkC"), folders.clone()]);
+        let card = backend.get_card(CONTACTS_FOLDER, "AAMk").unwrap();
+        assert_eq!(card.addressbook_id, CONTACTS_FOLDER);
+        assert_eq!(methods(&requests), ["GET", "GET"]);
+
+        let none = script::response(200, "application/json", r#"{"value":[]}"#);
+        let (mut backend, _) = scripted(vec![contact_in("AAMkC"), none]);
+        backend.get_card(CONTACTS_FOLDER, "AAMk").unwrap();
+
+        let (mut backend, requests) = scripted(vec![contact_in("AAMkF")]);
+        backend.get_card("AAMkF", "AAMk").unwrap();
+        assert_eq!(methods(&requests), ["GET"]);
     }
 
     /// A contact Graph does not hold, or an id that cannot name one, is a

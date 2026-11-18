@@ -9,7 +9,9 @@
 //! requested AddressBook. A ContactCard write takes no If-Match
 //! equivalent (last-write-wins), so `--if-match` is compared with the hash
 //! of the card read just before the write: the update reads the card as
-//! its patch base anyway, the delete reads it for the guard alone.
+//! its patch base anyway, the delete reads it first. Each read checks the
+//! card's `addressBookIds`, so a read, an update or a delete acts only on a
+//! card the named AddressBook holds.
 
 use std::collections::BTreeMap;
 
@@ -225,10 +227,26 @@ impl JmapBackend {
     }
 
     /// Reads the ContactCard `card_id`, converted to a vCard document.
+    ///
+    /// A card the AddressBook `addressbook_id` does not hold, per its
+    /// `addressBookIds`, is a card not found there.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
+        let card = self.held_card(addressbook_id, card_id, None)?;
+        project::to_card(addressbook_id, card).map_err(Error::msg)
+    }
+
+    /// Reads the ContactCard `card_id`, its `properties` alone when given,
+    /// failing `card-not-found` unless the AddressBook `addressbook_id`
+    /// holds it per its `addressBookIds`.
+    fn held_card(
+        &mut self,
+        addressbook_id: &str,
+        card_id: &str,
+        properties: Option<Vec<String>>,
+    ) -> Result<JmapContactCard> {
         let opts = JmapContactCardGetOptions {
             ids: Some(vec![card_id.to_string()]),
-            ..Default::default()
+            properties,
         };
         let out = self.inner.contact_card_get(opts)?;
 
@@ -237,7 +255,12 @@ impl JmapBackend {
             error::card_not_found(addressbook_id, card_id, cause)
         })?;
 
-        project::to_card(addressbook_id, card).map_err(Error::msg)
+        if card.address_book_ids.get(addressbook_id) != Some(&true) {
+            let cause = anyhow!("JMAP ContactCard is not in the AddressBook");
+            return Err(error::card_not_found(addressbook_id, card_id, cause));
+        }
+
+        Ok(card)
     }
 
     /// Creates the vCard as a ContactCard, returning the id the server minted.
@@ -316,19 +339,27 @@ impl JmapBackend {
 
     /// Destroys the ContactCard `card_id`.
     ///
-    /// An `if_match` is compared with the hash of the card, read first, as
-    /// an update compares it.
+    /// The card is read first, its `addressBookIds` alone without an
+    /// `if_match`, so one the AddressBook `addressbook_id` does not hold is
+    /// a card not found there, nothing destroyed. An `if_match` reads it
+    /// whole, compared with its hash as an update compares it.
     pub fn delete_card(
         &mut self,
         addressbook_id: &str,
         card_id: &str,
         if_match: Option<&str>,
     ) -> Result<()> {
-        if let Some(expected) = if_match {
-            let current = self.get_card(addressbook_id, card_id)?;
+        match if_match {
+            Some(expected) => {
+                let current = self.get_card(addressbook_id, card_id)?;
 
-            if !error::version_matches(current.etag.as_deref(), expected) {
-                return Err(error::card_changed(card_id, SERVER));
+                if !error::version_matches(current.etag.as_deref(), expected) {
+                    return Err(error::card_changed(card_id, SERVER));
+                }
+            }
+            None => {
+                let properties = vec!["addressBookIds".to_string()];
+                self.held_card(addressbook_id, card_id, Some(properties))?;
             }
         }
 
@@ -584,6 +615,38 @@ mod tests {
             "Card `c9` not found in address book `book`"
         );
         assert!(err.chain().nth(1).is_some(), "{err:#}");
+    }
+
+    /// A card the server holds outside the named address book is a card
+    /// not found there: a read does not print it under that book, an
+    /// update and a delete send no `ContactCard/set`.
+    #[test]
+    fn a_card_of_another_address_book_is_not_found() {
+        use pimalaya_cli::error::code_of;
+
+        use crate::error::ErrorCode;
+
+        let missing = Some(ErrorCode::CardNotFound);
+
+        let (mut backend, _) = scripted(&[GET]);
+        let err = backend.get_card("other", "c1").unwrap_err();
+        assert_eq!(code_of(&err), missing, "{err:#}");
+        assert_eq!(
+            err.to_string(),
+            "Card `c1` not found in address book `other`"
+        );
+
+        let (mut backend, requests) = scripted(&[GET, SET]);
+        let err = backend
+            .update_card("other", "c1", CARD.to_vec(), None)
+            .unwrap_err();
+        assert_eq!(code_of(&err), missing, "{err:#}");
+        assert_eq!(requests.lock().unwrap().len(), 1);
+
+        let (mut backend, requests) = scripted(&[GET, SET]);
+        let err = backend.delete_card("other", "c1", None).unwrap_err();
+        assert_eq!(code_of(&err), missing, "{err:#}");
+        assert_eq!(requests.lock().unwrap().len(), 1);
     }
 
     /// An `AddressBook/get` answering `ids` as found, the others not.

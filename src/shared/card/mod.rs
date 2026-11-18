@@ -13,6 +13,8 @@ pub mod fields;
 pub mod list;
 pub mod project;
 pub mod read;
+#[cfg(any(feature = "vdir", feature = "pimdir"))]
+pub mod search;
 pub mod update;
 pub mod vcard;
 

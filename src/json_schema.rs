@@ -84,6 +84,11 @@ pub fn registry() -> JsonSchemaRegistry {
         "cardamum-card-read",
         crate::shared::card::read::CardReadOutput
     );
+    #[cfg(any(feature = "vdir", feature = "pimdir"))]
+    insert!(
+        "cardamum-card-search",
+        crate::shared::card::search::CardSearchOutput
+    );
     // NOTE: a build prints the card, or under `-o` the file written.
     insert!(
         "cardamum-card-build",

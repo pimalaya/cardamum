@@ -24,8 +24,8 @@ carddav = ["dep:io-webdav"]
 jmap = ["dep:io-jmap", "dep:blake3", "vcard-rs/jscontact"]
 msgraph = ["dep:io-msgraph", "io-msgraph/vcard"]
 gpeople = ["dep:io-gpeople", "io-gpeople/vcard"]
-vdir = ["dep:io-vdir"]
-pimdir = ["dep:io-pimdir", "dep:ariadne", "io-pimdir/search"]
+vdir = ["dep:io-vdir", "dep:io-pimdir", "dep:ariadne", "io-pimdir/search"]
+pimdir = ["dep:io-pimdir", "dep:ariadne", "io-pimdir/client", "io-pimdir/search"]
 vendored = ["pimalaya-stream/vendored", "io-webdav?/vendored", "io-jmap?/vendored", "io-msgraph?/vendored", "io-gpeople?/vendored", "io-pimdir?/vendored"]
 
 [profile.release]
@@ -35,11 +35,11 @@ strip = "symbols"
 panic = "abort"
 
 [build-dependencies]
-pimalaya-cli = { version = "0.6.0", default-features = false, features = ["build"] }
+pimalaya-cli = { version = "0.6.1", default-features = false, features = ["build"] }
 
 [dev-dependencies]
 io-oauth = { version = "0.7", default-features = false, features = ["client", "jwt-bearer", "rustls-ring"] }
-pimalaya-config = { version = "0.5.2", default-features = false, features = ["sample"] }
+pimalaya-config = { version = "0.6.0", default-features = false, features = ["sample"] }
 tempfile = { version = "3", default-features = false }
 toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
 
@@ -52,15 +52,15 @@ clap = { version = "4.4", default-features = false, features = ["derive", "error
 getrandom = { version = "0.4", default-features = false }
 idna_adapter = { version = "=1.0.0", default-features = false }
 io-http = { version = "0.8", default-features = false }
-io-jmap = { version = "0.10", default-features = false, features = ["client"], optional = true }
+io-jmap = { version = "0.10.1", default-features = false, features = ["client"], optional = true }
 io-msgraph = { version = "0.9.2", default-features = false, features = ["client"], optional = true }
 io-gpeople = { version = "0.8.1", default-features = false, features = ["client"], optional = true }
-io-pimdir = { version = "0.16.0", default-features = false, features = ["client"], optional = true }
+io-pimdir = { version = "0.17.0", default-features = false, optional = true }
 io-vdir = { version = "0.3", default-features = false, features = ["client", "serde"], optional = true }
 io-webdav = { version = "0.11.0", default-features = false, features = ["client"], optional = true }
 log = { version = "0.4", default-features = false }
-pimalaya-cli = { version = "0.6.0", default-features = false, features = ["mcp", "prompt", "repl", "terminal"] }
-pimalaya-config = { version = "0.5.2", default-features = false, features = ["toml", "secret"] }
+pimalaya-cli = { version = "0.6.1", default-features = false, features = ["mcp", "prompt", "repl", "terminal"] }
+pimalaya-config = { version = "0.6.0", default-features = false, features = ["toml", "secret"] }
 pimalaya-stream = { version = "0.4", default-features = false, features = ["std"] }
 schemars = { version = "1", default-features = false, features = ["derive", "std"] }
 secrecy = { version = "0.10", default-features = false }

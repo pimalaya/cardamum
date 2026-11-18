@@ -6,7 +6,6 @@
 use std::fmt;
 
 use anyhow::{Result, bail};
-use ariadne::{Config, Label, Report, ReportKind, Source};
 use io_pimdir::{
     client::{
         reader::PimdirItem,
@@ -17,19 +16,16 @@ use io_pimdir::{
     },
     search::{
         coverage::{PimdirSearchCoverage, PimdirSearchTemporal},
-        query::{
-            PimdirQuery, PimdirQueryError, PimdirQueryErrorCode, PimdirQueryKind,
-            PimdirQueryPredicate, PimdirQueryTerm,
-        },
+        query::{PimdirQuery, PimdirQueryKind, PimdirQueryPredicate, PimdirQueryTerm},
     },
     summary::{PimdirSummary, contact::PimdirContactSummary},
 };
-use pimalaya_cli::{error::CodedError, listing::Listing};
+use pimalaya_cli::listing::Listing;
 use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
-    error::{self, ErrorCode, ItemError},
+    error::{self, ItemError},
     pimdir::{backend::PimdirBackend, client::refusal},
     shared::{card::list::CardRow, client::unreadable},
 };
@@ -184,69 +180,6 @@ impl PimdirBackend {
             snippet: hit.snippet,
         })
     }
-}
-
-/// Parses the words of a query, joined by spaces, as the pimdir SEARCH
-/// query language (§8.3).
-///
-/// A query the language refuses (§8.4) is the error `query-refused`: in
-/// plain output the fault is drawn over the query, in JSON its message
-/// names the §8.4 code, the span in Unicode scalar values and what would
-/// have been valid there.
-pub fn parse_query(words: &[String], json: bool) -> Result<PimdirQuery> {
-    let query = words.join(" ");
-
-    PimdirQuery::parse(&query).map_err(|err| {
-        let message = if json {
-            refusal_line(&err)
-        } else {
-            refusal_report(&query, &err)
-        };
-        CodedError::new(ErrorCode::QueryRefused, message).into()
-    })
-}
-
-/// A refusal as one line: its code, span and message, then what was
-/// expected.
-fn refusal_line(err: &PimdirQueryError) -> String {
-    let mut line = format!(
-        "Query refused, {} at {}..{}: {}",
-        err.code.as_str(),
-        err.start,
-        err.end,
-        err.message
-    );
-
-    if !err.expected.is_empty() {
-        line.push_str(&format!("; expected {}", err.expected.join(", ")));
-    }
-
-    line
-}
-
-/// A refusal drawn over the query with ariadne, without colour like every
-/// text output.
-fn refusal_report(query: &str, err: &PimdirQueryError) -> String {
-    let name = "query";
-    let config = Config::default().with_color(false);
-    // NOTE: an empty span past the end is drawn on the last character.
-    let end = err.end.max(err.start + 1);
-    let mut report = Report::build(ReportKind::Error, (name, err.start..end))
-        .with_config(config)
-        .with_code(err.code.as_str())
-        .with_message("Query refused")
-        .with_label(Label::new((name, err.start..end)).with_message(&err.message));
-
-    if !err.expected.is_empty() {
-        report = report.with_note(format!("expected {}", err.expected.join(", ")));
-    }
-    if err.code == PimdirQueryErrorCode::UnknownField {
-        report = report.with_help(format!("fields: {}", err.fields.join(", ")));
-    }
-
-    let mut buf = Vec::new();
-    let _ = report.finish().write((name, Source::from(query)), &mut buf);
-    String::from_utf8_lossy(&buf).into_owned()
 }
 
 /// One page of hits.
@@ -456,7 +389,9 @@ mod tests {
     use pimalaya_cli::error::code_of;
     use tempfile::TempDir;
 
-    use crate::{config::PimdirConfig, pimdir::index::*};
+    use crate::{
+        config::PimdirConfig, error::ErrorCode, pimdir::index::*, shared::query::parse_query,
+    };
 
     const BOOK: &str = "book";
     const TEAM: &str = "team";
@@ -923,6 +858,73 @@ mod tests {
         let past = run(&["--page", "9"]);
         assert!(names(&past).is_empty());
         assert!(past["nextPage"].is_null());
+    }
+
+    /// The matcher `card search` reads every other backend's cards with
+    /// answers the hits the index answers over the same bodies, in the
+    /// same order: the unified search is one answer on every backend.
+    #[test]
+    fn the_matcher_answers_the_hits_of_the_index() {
+        use io_pimdir::search::{card::PimdirCard, fold};
+
+        let (_dir, backend) = indexed_store();
+        let bodies = [
+            card(
+                "carol",
+                "Carol Roux",
+                "EMAIL:carol@example.org\r\nNOTE:Planning the offsite\r\n",
+            ),
+            card(
+                "alice",
+                "Alice Martin",
+                "EMAIL:alice@example.org\r\nTEL:06 12 34 56 78\r\n\
+                 CATEGORIES:friends\r\nNOTE:Allergic to peanuts\r\n",
+            ),
+            card(
+                "bob",
+                "Bob Durand",
+                "EMAIL:bob@corp.example\r\nORG:Corp\r\n",
+            ),
+            card(
+                "dave",
+                "Dave Petit",
+                "EMAIL:dave@example.org\r\nNOTE:Hosting the offsite\r\n",
+            ),
+        ];
+        let cards: Vec<PimdirCard> = bodies.iter().map(|body| PimdirCard::read(body)).collect();
+
+        for text in [
+            "offsite",
+            "email:example.org",
+            "has:phone",
+            "category:friends",
+            "alice or bob",
+            "kind:contact -offsite",
+            "durand",
+            "peanut*",
+            "corp",
+        ] {
+            let matched = query(text).match_cards(&cards).unwrap();
+            let mut hits: Vec<String> = bodies
+                .iter()
+                .zip(matched)
+                .filter(|(_, matched)| *matched)
+                .map(|(body, _)| {
+                    CardRow::from(crate::shared::card::Card {
+                        id: String::new(),
+                        addressbook_id: String::new(),
+                        etag: None,
+                        contents: body.clone(),
+                    })
+                })
+                .map(|row| row.fields.full_name.unwrap_or_default())
+                .collect();
+            hits.sort_by_key(|name| fold::value(name));
+
+            let mut indexed = names(&backend, text, None);
+            indexed.retain(|name| name != "Erin Quill");
+            assert_eq!(hits, indexed, "{text}");
+        }
     }
 
     #[test]

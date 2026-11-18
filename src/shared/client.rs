@@ -610,6 +610,25 @@ impl AddressbookClient {
         }
     }
 
+    /// One page of the cards `search` matches: the index answers on
+    /// pimdir, and every other backend has every card of the scope
+    /// matched by cardamum.
+    #[cfg(any(feature = "vdir", feature = "pimdir"))]
+    pub fn search_cards(
+        &mut self,
+        search: &crate::shared::card::search::CardSearch,
+    ) -> Result<crate::shared::card::search::CardSearchPage> {
+        use crate::shared::card::search;
+
+        #[cfg(feature = "pimdir")]
+        #[allow(irrefutable_let_patterns)]
+        if let BackendClient::Pimdir(client) = self.open()? {
+            return search::pimdir_page(client, search);
+        }
+
+        search::matched_page(self, search)
+    }
+
     /// Fetches the card `card_id` from `addressbook_id`.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
         self.check_ids(addressbook_id, Some(card_id))?;

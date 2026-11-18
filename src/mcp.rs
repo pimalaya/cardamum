@@ -70,6 +70,8 @@ const TOOLS: &[McpTool] = &[
     McpTool::write("addressbook", "delete", true),
     McpTool::read("card", "list"),
     McpTool::read("card", "read"),
+    #[cfg(any(feature = "vdir", feature = "pimdir"))]
+    McpTool::read("card", "search"),
     McpTool::write("card", "add", false),
     McpTool::write("card", "update", true),
     McpTool::write("card", "delete", true),
@@ -294,7 +296,8 @@ mod tests {
                 "account_capability",
                 "addressbook_list",
                 "card_list",
-                "card_read"
+                "card_read",
+                "card_search"
             ]
         );
 

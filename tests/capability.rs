@@ -107,7 +107,7 @@ fn the_capabilities_print_one_line_each_under_the_account() {
 
     assert!(text.starts_with("Account:  example\n\n"), "{text}");
     assert!(
-        text.contains("\ncard.add                 vdir  full  -\n"),
+        text.contains("\ncard.add                 vdir  full     -\n"),
         "{text}"
     );
 }

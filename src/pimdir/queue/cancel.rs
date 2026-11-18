@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::{Result, bail};
 use clap::Parser;
-use io_pimdir::client::producer::PimdirActionStatus;
+use io_pimdir::{client::producer::PimdirActionStatus, codec::PimdirActionHandle};
 use pimalaya_cli::{error::CodedError, printer::Printer, prompt, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -20,7 +20,9 @@ use crate::{
     pimdir::backend::{PimdirBackend, uncancellable},
 };
 
-/// Cancel one queued or parked action, by the row id `queue list` prints.
+/// Cancel one queued or parked action, by the row id `queue list` prints,
+/// or by a row handle naming its store (`<store-id>.<incarnation>.<id>`),
+/// refused under `store-reset` when the store is another one.
 ///
 /// This is the only way back for a queued creation: a staged update is
 /// undone by updating again, where a card that does not exist yet cannot
@@ -39,9 +41,10 @@ use crate::{
 /// JSON output: `{"row", "kind", "unconfirmed"}`.
 #[derive(Debug, Parser)]
 pub struct PimdirQueueCancelCommand {
-    /// Row id of the queued action, as `pimdir queue list` prints it.
+    /// Row id of the queued action, as `pimdir queue list` prints it, or
+    /// its handle.
     #[arg(value_name = "ROW")]
-    pub id: i64,
+    pub id: PimdirActionHandle,
     /// Do not ask for confirmation.
     #[arg(long, short)]
     pub yes: bool,
@@ -50,12 +53,12 @@ pub struct PimdirQueueCancelCommand {
 impl PimdirQueueCancelCommand {
     /// Retracts the queued action the row id names.
     pub fn execute(self, printer: &mut impl Printer, backend: &PimdirBackend) -> Result<()> {
-        let (named, unconfirmed) = match backend.queue_row(self.id)? {
+        let (named, unconfirmed) = match backend.queue_row(&self.id)? {
             PimdirActionStatus::Pending { kind, .. } | PimdirActionStatus::Parked { kind, .. } => {
                 (kind, false)
             }
             PimdirActionStatus::Unconfirmed { kind, .. } => (kind, true),
-            status => return Err(uncancellable(self.id, &status)),
+            status => return Err(uncancellable(&self.id, &status)),
         };
         let question = match unconfirmed {
             true => format!(
@@ -82,9 +85,9 @@ impl PimdirQueueCancelCommand {
             bail!("Cancellation aborted");
         }
 
-        let kind = backend.cancel_queued(self.id)?;
+        let kind = backend.cancel_queued(&self.id)?;
         printer.out(PimdirQueueCancelOutput {
-            id: self.id,
+            id: self.id.id,
             kind,
             unconfirmed,
         })

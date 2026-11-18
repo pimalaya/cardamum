@@ -27,6 +27,7 @@ const READS: &[&str] = &[
     "addressbook_list",
     "card_list",
     "card_read",
+    "card_search",
 ];
 
 /// A home holding a vdir addressbook `personal` with one card, and the
@@ -265,12 +266,14 @@ fn a_call_answers_the_payload_its_output_schema_describes() {
             list(1),
             call(2, "addressbook_list", json!({})),
             call(3, "card_list", json!({"addressbook": "personal"})),
+            call(4, "card_search", json!({"query": ["ada"]})),
         ],
     );
 
     for (answer, name, key) in [
         (&answers[1], "addressbook_list", "addressbooks"),
         (&answers[2], "card_list", "cards"),
+        (&answers[3], "card_search", "cards"),
     ] {
         let result = &answer["result"];
         assert_ne!(result["isError"], true, "{answer}");

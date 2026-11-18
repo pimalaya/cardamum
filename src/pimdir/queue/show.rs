@@ -6,7 +6,10 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use io_pimdir::client::producer::{PimdirActionStatus, PimdirReceiptRefusal};
+use io_pimdir::{
+    client::producer::{PimdirActionStatus, PimdirReceiptRefusal},
+    codec::PimdirActionHandle,
+};
 use pimalaya_cli::{printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
@@ -14,7 +17,9 @@ use serde::Serialize;
 use crate::pimdir::backend::PimdirBackend;
 
 /// Show where one queue row stands, by the row id `pimdir queue list`
-/// printed.
+/// printed, or by a row handle naming its store
+/// (`<store-id>.<incarnation>.<id>`), which reads `reset` when the store
+/// is another one.
 ///
 /// A row is `pending` until the sync engine applies it, `parked` when the
 /// engine gave up on it (with why), `unconfirmed` when the engine sent its
@@ -34,16 +39,16 @@ use crate::pimdir::backend::PimdirBackend;
 /// "reason", "refusedAt"}]}`.
 #[derive(Debug, Parser)]
 pub struct PimdirQueueShowCommand {
-    /// The queue row id.
+    /// The queue row id, or its handle.
     #[arg(value_name = "ROW")]
-    pub id: i64,
+    pub id: PimdirActionHandle,
 }
 
 impl PimdirQueueShowCommand {
     /// Looks the row up in the account's queue and receipts.
     pub fn execute(self, printer: &mut impl Printer, backend: &PimdirBackend) -> Result<()> {
-        let status = backend.queue_row(self.id)?;
-        printer.out(PimdirQueueShowOutput::new(self.id, status))
+        let status = backend.queue_row(&self.id)?;
+        printer.out(PimdirQueueShowOutput::new(self.id.id, status))
     }
 }
 

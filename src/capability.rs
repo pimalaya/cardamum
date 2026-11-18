@@ -45,6 +45,10 @@ pub enum Capability {
     CardList,
     /// Reading a card.
     CardRead,
+    /// Searching the cards with the pimdir query language.
+    CardSearch,
+    /// Ordering the hits of a search by relevance.
+    CardSearchRelevance,
     /// Adding a card to an addressbook.
     CardAdd,
     /// Replacing a card.
@@ -59,7 +63,7 @@ pub enum Capability {
 
 impl Capability {
     /// Every capability, in the order the listings print them.
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 16] = [
         C::AddressbookList,
         C::AddressbookCreate,
         C::AddressbookCreateId,
@@ -69,6 +73,8 @@ impl Capability {
         C::AddressbookColor,
         C::CardList,
         C::CardRead,
+        C::CardSearch,
+        C::CardSearchRelevance,
         C::CardAdd,
         C::CardUpdate,
         C::CardRemove,
@@ -88,6 +94,8 @@ impl Capability {
             Self::AddressbookColor => "addressbook.color",
             Self::CardList => "card.list",
             Self::CardRead => "card.read",
+            Self::CardSearch => "card.search",
+            Self::CardSearchRelevance => "card.search.relevance",
             Self::CardAdd => "card.add",
             Self::CardUpdate => "card.update",
             Self::CardRemove => "card.remove",
@@ -204,6 +212,7 @@ const LEAVES: &[(&str, &str, &[Capability])] = &[
     ("addressbook", "delete", &[C::AddressbookDelete]),
     ("card", "list", &[C::CardList]),
     ("card", "read", &[C::CardRead]),
+    ("card", "search", &[C::CardSearch, C::CardSearchRelevance]),
     ("card", "add", &[C::CardAdd]),
     ("card", "update", &[C::CardUpdate, C::CardUpdateIfMatch]),
     ("card", "delete", &[C::CardRemove, C::CardRemoveIfMatch]),
@@ -285,6 +294,17 @@ const PIMDIR_QUEUED: &str = "queued for the next sync, and refused when a source
 const MINTED_ID: &str = "the server mints the id of an addressbook, so `--id` is refused";
 
 /// Why a backend without versions takes no `--if-match`.
+/// Why a backend with a server serves no card search yet.
+const NO_SEARCH: &str = "not served yet: a search would list every card of the address books \
+     in scope, which is to be measured first";
+
+/// What a search matched over the cards themselves leaves out.
+const SEARCH_MATCHED: &str = "every card of the address books in scope matched by cardamum, the \
+     terms only a pimdir store answers refused";
+
+/// Why only an index orders by relevance.
+const NO_RELEVANCE: &str = "relevance is the pimdir index's own ranking";
+
 const NO_VERSION: &str = "the backend exposes no version to compare, so `--if-match` is refused";
 
 /// What a Graph version compared in a request of its own leaves open.
@@ -312,6 +332,8 @@ const CARDDAV: &[Row] = &[
     (C::AddressbookColor, Full),
     (C::CardList, Full),
     (C::CardRead, Full),
+    (C::CardSearch, Not(NO_SEARCH)),
+    (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
     (C::CardRemove, Full),
@@ -336,6 +358,8 @@ const JMAP: &[Row] = &[
     ),
     (C::CardList, Full),
     (C::CardRead, Full),
+    (C::CardSearch, Not(NO_SEARCH)),
+    (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
     (C::CardRemove, Full),
@@ -366,6 +390,8 @@ const MSGRAPH: &[Row] = &[
     ),
     (C::CardList, Full),
     (C::CardRead, Full),
+    (C::CardSearch, Not(NO_SEARCH)),
+    (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
     (C::CardRemove, Full),
@@ -396,6 +422,8 @@ const GPEOPLE: &[Row] = &[
     ),
     (C::CardList, Full),
     (C::CardRead, Full),
+    (C::CardSearch, Not(NO_SEARCH)),
+    (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
     (C::CardRemove, Full),
@@ -417,6 +445,8 @@ const VDIR: &[Row] = &[
     (C::AddressbookColor, Full),
     (C::CardList, Full),
     (C::CardRead, Full),
+    (C::CardSearch, Partial(SEARCH_MATCHED)),
+    (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
     (C::CardRemove, Full),
@@ -435,6 +465,8 @@ const PIMDIR: &[Row] = &[
     (C::AddressbookColor, Not(PIMDIR_COLLECTION)),
     (C::CardList, Full),
     (C::CardRead, Full),
+    (C::CardSearch, Full),
+    (C::CardSearchRelevance, Full),
     (C::CardAdd, Partial(PIMDIR_QUEUED)),
     (C::CardUpdate, Partial(PIMDIR_QUEUED)),
     (C::CardRemove, Partial(PIMDIR_QUEUED)),

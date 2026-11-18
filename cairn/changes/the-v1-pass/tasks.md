@@ -17,10 +17,10 @@ change: the-v1-pass
 - [x] v1: `removed_key!` gone (src/config.rs), a removed key refused by serde as unknown; MIGRATION.md removed; CHANGELOG and cairn/spec/config.md follow
 - [x] carddav-query-filter folded and archived (f098bb3)
 - [x] The landed lines folded into cairn/spec, CHANGELOG, log 2026-11-18-the-v1-pass
-- [ ] CAR-14: private composer draft through pimalaya-cli `file::private_options`, once released
+- [x] CAR-14: the composer file created through pimalaya-cli 0.6.1 `file::private_options`, 0600 and new (src/shared/card/composer.rs `seed_file`, test `the_seed_file_is_private_and_new`)
 - [x] COH-5: a protocol refusal and a partial write are a result, exit 3 (owner ruling 2026-11-18), the `request` commands included; himalaya's shape first
 - [x] Single-resource protocol reads print raw (owner ruling 2026-11-18)
-- [ ] io-pimdir next release: `PimdirFormatRefusal` text (C1), `enqueue_user_body` (C2), `PimdirActionHandle` queue rows (C4)
+- [x] io-pimdir 0.17.0 (draft-14): C1, the version refusal is `PimdirFormatRefusal` naming cardamum (src/pimdir/client.rs `refusal`); C2, card writes stay on `enqueue_with_body`, which now strips `X-PIMDIR-` (no card instruction is the user's to ask, so no `enqueue_user_body`; test `a_written_card_is_queued_without_its_pimdir_instructions`); C4, `pimdir queue show` and `cancel` take a `PimdirActionHandle`, another store's read `reset` and refused `store-reset` (src/pimdir/backend.rs `queue_row`, `cancel_queued`, `uncancellable`; test `a_row_handle_is_followed_in_its_own_store_alone`). Left of C4: no receipt prints a handle, the unified `card add`, `update` and `delete` carrying no pimdir row, and a reader exposing no store identity for `queue list`
 - [ ] Live check on the Microsoft test account: Graph default-folder resolution of CAR-5
 - [x] CAL-14 twin: a configured `pimdir.account` the store lacks is refused, naming its accounts (src/pimdir/client.rs `resolve_account`)
 - [x] The `.well-known` probe runs on an `https` origin alone, as calendula 1de8676 (src/carddav/client.rs; src/account/check.rs test)

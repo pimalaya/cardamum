@@ -25,7 +25,7 @@ use io_pimdir::{
         producer::PimdirActionStatus,
         reader::{PimdirCollection, PimdirItem},
     },
-    codec::{PimdirAction, action_from_payload},
+    codec::{PimdirAction, PimdirActionHandle, action_from_payload},
     object::PimdirHash,
     placement::PimdirFlags,
     summary::{PimdirSummary, contact},
@@ -320,12 +320,13 @@ impl PimdirBackend {
     /// address books reads as unknown, as another account's row reads in
     /// Himalaya. A row applied on a collection gone since names none, so
     /// no account can be told from it, and it reads as applied.
-    pub fn queue_row(&self, id: i64) -> Result<PimdirActionStatus> {
+    pub fn queue_row(&self, row: impl Into<PimdirActionHandle>) -> Result<PimdirActionStatus> {
+        let row = row.into();
         let status = self
             .inner
             .reader
-            .action_status(id)
-            .map_err(|err| refusal(err, format!("Read queue row {id}")))?;
+            .action_status(&row)
+            .map_err(|err| refusal(err, format!("Read queue row {row}")))?;
 
         let collection = match &status {
             PimdirActionStatus::Pending { collection, .. }
@@ -361,16 +362,17 @@ impl PimdirBackend {
     /// opened as it stands, never created nor migrated, and a sync in
     /// flight owning it is refused at once rather than waited out: the
     /// action may have been applied by the time the message is read.
-    pub fn cancel_queued(&self, id: i64) -> Result<String> {
-        let kind = match self.queue_row(id)? {
+    pub fn cancel_queued(&self, row: impl Into<PimdirActionHandle>) -> Result<String> {
+        let row = row.into();
+        let kind = match self.queue_row(&row)? {
             PimdirActionStatus::Pending { kind, .. }
             | PimdirActionStatus::Parked { kind, .. }
             | PimdirActionStatus::Unconfirmed { kind, .. } => kind,
-            status => return Err(uncancellable(id, &status)),
+            status => return Err(uncancellable(&row, &status)),
         };
 
         let root = &self.inner.root;
-        let context = format!("Cancel queued action {id}");
+        let context = format!("Cancel queued action {row}");
 
         let mut owner = PimdirStore::open_current(root).map_err(|err| match err {
             PimdirError::Owned(_) => {
@@ -385,11 +387,11 @@ impl PimdirBackend {
         })?;
 
         let dropped = owner
-            .drop_action(id)
+            .drop_action(&row)
             .map_err(|err| refusal(err, context.clone()))?;
 
         if !dropped {
-            return Err(row_not_found(id));
+            return Err(row_not_found(&row));
         }
 
         Ok(kind)
@@ -852,21 +854,29 @@ impl PimdirBackend {
 /// card no longer has starts, a prefix callers may match on.
 pub const PRECONDITION_FAILED: &str = "Precondition failed";
 
-/// Why queue row `id`, standing at `status`, cannot be cancelled: applied
-/// already, or not a row of the account's queue, under `row-not-found`. A
-/// bare row id states no store, so io-pimdir follows it unchecked and
-/// never answers a reset for it; one would read as not found.
-pub fn uncancellable(id: i64, status: &PimdirActionStatus) -> Error {
+/// Why queue row `row`, standing at `status`, cannot be cancelled: applied
+/// already, queued in another store than this one under `store-reset`, or
+/// not a row of the account's queue under `row-not-found`. A bare row id
+/// states no store, so io-pimdir follows it unchecked and never answers a
+/// reset for it.
+pub fn uncancellable(row: &PimdirActionHandle, status: &PimdirActionStatus) -> Error {
     match status {
-        PimdirActionStatus::Applied { .. } => anyhow!("Row {id} was applied already"),
-        _ => row_not_found(id),
+        PimdirActionStatus::Applied { .. } => anyhow!("Row {row} was applied already"),
+        PimdirActionStatus::Reset => {
+            let message = format!(
+                "Row {row} was queued in another store: a copy restored since, where \
+                 its id may name another row"
+            );
+            CodedError::new(ErrorCode::StoreReset, message).into()
+        }
+        _ => row_not_found(row),
     }
 }
 
 /// The refusal of a queue row the account's queue does not hold.
-fn row_not_found(id: i64) -> Error {
+fn row_not_found(row: &PimdirActionHandle) -> Error {
     let message = format!(
-        "No queued action with row {id} in this account's queue; it may have been synced already"
+        "No queued action with row {row} in this account's queue; it may have been synced already"
     );
     CodedError::new(ErrorCode::RowNotFound, message).into()
 }
@@ -1170,6 +1180,24 @@ mod tests {
             CardFields::project(&read.contents).title.as_deref(),
             Some("Director")
         );
+    }
+
+    /// A card written with an `X-PIMDIR-` property, an instruction to a
+    /// performer nobody asked for here, is queued without it (pimdir
+    /// STORAGE §18), the rest of its body kept.
+    #[test]
+    fn a_written_card_is_queued_without_its_pimdir_instructions() {
+        let (dir, mut backend) = store();
+        let card = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:c1\r\nFN:Jane Doe\r\n\
+            X-PIMDIR-ONLINE-MEETING:yes\r\nEND:VCARD\r\n";
+
+        backend.create_card("book", card.to_vec()).unwrap();
+        drain(&dir);
+
+        let cards = backend.list_cards("book", 0, None).unwrap().cards;
+        let body = String::from_utf8(cards[0].contents.clone()).unwrap();
+        assert!(!body.contains("X-PIMDIR-"), "{body}");
+        assert!(body.contains("FN:Jane Doe"), "{body}");
     }
 
     const JANE: &[u8] = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:c1\r\n\
@@ -2245,10 +2273,10 @@ mod tests {
     }
 
     /// A store of another format version, here a draft-11 one an earlier
-    /// neverest wrote, carries `store-version` and asks for a reinstall through
-    /// neverest, the queue drained first, never for its removal.
+    /// sync engine wrote, carries `store-version` in io-pimdir's one wording,
+    /// cardamum named: drained by its engine, then set aside, never removed.
     #[test]
-    fn a_store_of_another_version_asks_for_a_reinstall() {
+    fn a_store_of_an_earlier_version_is_drained_then_set_aside() {
         use pimalaya_cli::error::code_of;
 
         let (dir, backend) = store();
@@ -2266,11 +2294,33 @@ mod tests {
         let message = format!("{err:#}");
         assert!(message.contains("storage-draft-11"), "{message}");
         assert!(message.contains(FORMAT_VERSION), "{message}");
-        assert!(message.contains("move the store aside"), "{message}");
+        assert!(message.contains("earlier sync engine"), "{message}");
+        assert!(message.contains("cardamum reads"), "{message}");
         assert!(message.contains("until nothing is queued"), "{message}");
-        assert!(message.contains("neverest init"), "{message}");
+        assert!(message.contains("move its directory aside"), "{message}");
         assert!(!message.contains("delete"), "{message}");
-        assert!(!message.contains("sync a new one"), "{message}");
+    }
+
+    /// A store a later sync engine wrote asks for a later cardamum.
+    #[test]
+    fn a_store_of_a_later_version_asks_for_a_later_cardamum() {
+        use pimalaya_cli::error::code_of;
+
+        let (dir, backend) = store();
+        drop(backend);
+        rewrite(dir.path(), FORMAT_VERSION, "storage-draft-99");
+
+        let err = match PimdirBackend::new(PimdirConfig {
+            root: dir.path().to_path_buf(),
+            account: None,
+        }) {
+            Ok(_) => panic!("a store of another version opened"),
+            Err(err) => err,
+        };
+        assert_eq!(code_of(&err), Some(ErrorCode::StoreVersion), "{err:#}");
+        let message = format!("{err:#}");
+        assert!(message.contains("later sync engine"), "{message}");
+        assert!(message.contains("upgrade cardamum"), "{message}");
     }
 
     /// A store another user can read is refused before anything opens,
@@ -2357,6 +2407,57 @@ mod tests {
 
         let err = backend.cancel_queued(row).unwrap_err().to_string();
         assert!(err.contains("No queued action with row"), "{err}");
+    }
+
+    /// A row handle naming this store follows its row as the bare id does;
+    /// one naming another store reads `reset` and is not cancelled, under
+    /// `store-reset`, the row left queued.
+    #[test]
+    fn a_row_handle_is_followed_in_its_own_store_alone() {
+        use io_pimdir::{
+            client::producer::PimdirActionStatus,
+            codec::{PimdirActionHandle, PimdirStoreIdentity},
+        };
+        use pimalaya_cli::error::code_of;
+
+        let (_dir, backend) = store();
+        let link_id = contact::derive(JANE).link_id;
+        let handle = backend
+            .inner
+            .producer()
+            .unwrap()
+            .enqueue_with_body("book", JANE, |hash| PimdirAction::Add {
+                link_id: Some(link_id),
+                flags: PimdirFlags::default(),
+                object: Some(hash),
+                supersedes: None,
+            })
+            .unwrap()
+            .handle;
+        assert!(handle.store.is_some(), "{handle:?}");
+
+        let parsed: PimdirActionHandle = handle.to_string().parse().unwrap();
+        let status = backend.queue_row(&parsed).unwrap();
+        assert!(
+            matches!(status, PimdirActionStatus::Pending { .. }),
+            "{status:?}"
+        );
+
+        let elsewhere = PimdirActionHandle {
+            id: handle.id,
+            store: Some(PimdirStoreIdentity {
+                store_id: String::from("0123456789abcdef0123456789abcdef"),
+                incarnation: 1,
+            }),
+        };
+        let status = backend.queue_row(&elsewhere).unwrap();
+        assert!(matches!(status, PimdirActionStatus::Reset), "{status:?}");
+        let err = backend.cancel_queued(&elsewhere).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::StoreReset), "{err:#}");
+        assert_eq!(pending(&backend), 1);
+
+        assert_eq!(backend.cancel_queued(&parsed).unwrap(), "add");
+        assert_eq!(pending(&backend), 0);
     }
 
     /// A row the sync applied reads `applied` with the card it created,

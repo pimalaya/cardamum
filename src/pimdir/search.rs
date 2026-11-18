@@ -7,8 +7,11 @@ use std::fmt;
 
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
-use io_pimdir::client::search::{
-    PimdirSearchClock, PimdirSearchCursor, PimdirSearchOptions, PimdirSearchSort,
+use io_pimdir::{
+    client::search::{
+        PimdirSearchClock, PimdirSearchCursor, PimdirSearchOptions, PimdirSearchSort,
+    },
+    search::query::PimdirQuery,
 };
 use pimalaya_cli::{
     clap::args::PageTokenArg,
@@ -25,8 +28,9 @@ use crate::{
     error::{ItemError, page_token_invalid, partial_when},
     pimdir::{
         backend::PimdirBackend,
-        index::{PimdirCardCoverage, PimdirCardHit, parse_query},
+        index::{PimdirCardCoverage, PimdirCardHit, PimdirCardPage},
     },
+    shared::query::parse_query,
 };
 
 /// Search the account's cards with the pimdir query language.
@@ -98,49 +102,11 @@ impl PimdirSearchCommand {
             .page_size
             .unwrap_or(account.cards_list_page_size() as usize)
             .max(1);
-        let mut options = PimdirSearchOptions {
-            sort: self.sort.into(),
-            limit,
-            after: None,
-            clock: PimdirSearchClock::default(),
-        };
+        let token = self.page_token.token.as_deref();
         let addressbook = self.addressbook.as_deref();
-        let mut past_end = None;
-
-        let page = match &self.page_token.token {
-            Some(token) => {
-                let cursor = PimdirSearchCursor::from_token(token)
-                    .ok_or_else(|| page_token_invalid(token))?;
-                options.after = Some(cursor);
-                None
-            }
-            None => {
-                let page = self.page.max(1);
-
-                for _ in 1..page {
-                    let skipped = backend.search_cards(query.clone(), addressbook, &options)?;
-
-                    match skipped.next.clone() {
-                        Some(next) => options.after = Some(next),
-                        None => {
-                            past_end = Some(skipped);
-                            break;
-                        }
-                    }
-                }
-
-                Some(page as u64)
-            }
-        };
-
-        let found = match past_end {
-            Some(mut last) => {
-                last.hits.clear();
-                last.errors.clear();
-                last
-            }
-            None => backend.search_cards(query, addressbook, &options)?,
-        };
+        let sort = self.sort.into();
+        let (found, page) =
+            search_page(backend, query, addressbook, sort, limit, self.page, token)?;
 
         let output = PimdirSearchOutput {
             place: PimdirSearchPlace {
@@ -159,6 +125,67 @@ impl PimdirSearchCommand {
         printer.out(&output)?;
         partial_when(&output.errors)
     }
+}
+
+/// The page of the cards `query` matches in the account, or in
+/// `addressbook` alone, `limit` of them a page: the one after the place
+/// `token` names, else the `page`th from 1, walked to through the cursor
+/// so a card arriving or leaving in between neither repeats nor hides
+/// another. A page past the end lists nothing. Answers the page number
+/// too, `None` for a page a token reached.
+pub fn search_page(
+    backend: &PimdirBackend,
+    query: PimdirQuery,
+    addressbook: Option<&str>,
+    sort: PimdirSearchSort,
+    limit: usize,
+    page: usize,
+    token: Option<&str>,
+) -> Result<(PimdirCardPage, Option<u64>)> {
+    let mut options = PimdirSearchOptions {
+        sort,
+        limit,
+        after: None,
+        clock: PimdirSearchClock::default(),
+    };
+    let mut past_end = None;
+
+    let page = match token {
+        Some(token) => {
+            let cursor =
+                PimdirSearchCursor::from_token(token).ok_or_else(|| page_token_invalid(token))?;
+            options.after = Some(cursor);
+            None
+        }
+        None => {
+            let page = page.max(1);
+
+            for _ in 1..page {
+                let skipped = backend.search_cards(query.clone(), addressbook, &options)?;
+
+                match skipped.next.clone() {
+                    Some(next) => options.after = Some(next),
+                    None => {
+                        past_end = Some(skipped);
+                        break;
+                    }
+                }
+            }
+
+            Some(page as u64)
+        }
+    };
+
+    let found = match past_end {
+        Some(mut last) => {
+            last.hits.clear();
+            last.errors.clear();
+            last
+        }
+        None => backend.search_cards(query, addressbook, &options)?,
+    };
+
+    Ok((found, page))
 }
 
 /// The order of a card search (pimdir SEARCH §8.2).

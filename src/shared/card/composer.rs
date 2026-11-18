@@ -12,13 +12,14 @@
 use std::{
     env::temp_dir,
     fs,
+    io::Write,
     path::{Path, PathBuf},
     process::{ExitStatus, Stdio},
 };
 
 use anyhow::{Context, Error, Result, anyhow, bail};
 use log::{debug, info};
-use pimalaya_cli::{printer::Printer, prompt, session};
+use pimalaya_cli::{file::private_options, printer::Printer, prompt, session};
 use pimalaya_config::command::{self, CommandConfig};
 
 use crate::shared::{card::vcard::check, uuid::uuid_v4};
@@ -61,7 +62,7 @@ impl CardComposer {
 
         let path = temp_dir().join(format!("cardamum-{}.vcf", uuid_v4()?));
         info!("seeding the composer with {} bytes in {path:?}", seed.len());
-        fs::write(&path, seed).with_context(|| format!("Cannot write vCard {path:?}"))?;
+        seed_file(&path, seed)?;
 
         let mut draft = CardDraft {
             path,
@@ -195,6 +196,20 @@ impl CardDraft {
     }
 }
 
+/// Writes `seed` to a new file at `path`, readable by its owner alone on
+/// Unix whatever the umask: the card is personal data, and the temporary
+/// directory is shared. A file or a symbolic link already at `path` is
+/// refused rather than written through.
+fn seed_file(path: &Path, seed: &[u8]) -> Result<()> {
+    let context = || format!("Cannot write vCard {path:?}");
+    let mut file = private_options()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .with_context(context)?;
+    file.write_all(seed).with_context(context)
+}
+
 /// Single-quotes a path for a shell command line.
 fn quote(path: &str) -> String {
     format!("'{}'", path.replace('\'', r"'\''"))
@@ -202,7 +217,29 @@ fn quote(path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::quote;
+    use super::{quote, seed_file};
+
+    /// The file a composer is handed is its owner's alone, and one planted
+    /// at its path, a symbolic link included, is not written through.
+    #[cfg(unix)]
+    #[test]
+    fn the_seed_file_is_private_and_new() {
+        use std::os::unix::fs::{PermissionsExt, symlink};
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("card.vcf");
+        seed_file(&path, b"BEGIN:VCARD\r\n").unwrap();
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+        assert_eq!(std::fs::read(&path).unwrap(), b"BEGIN:VCARD\r\n");
+
+        let target = dir.path().join("target");
+        std::fs::write(&target, b"kept").unwrap();
+        let link = dir.path().join("link.vcf");
+        symlink(&target, &link).unwrap();
+        assert!(seed_file(&link, b"seed").is_err());
+        assert_eq!(std::fs::read(&target).unwrap(), b"kept");
+    }
 
     #[test]
     fn a_quoted_path_survives_a_quote_of_its_own() {

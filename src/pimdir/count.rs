@@ -11,9 +11,9 @@ use pimalaya_cli::printer::Printer;
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::pimdir::{
-    backend::PimdirBackend,
-    index::{PimdirCardCoverage, parse_query},
+use crate::{
+    pimdir::{backend::PimdirBackend, index::PimdirCardCoverage},
+    shared::query::parse_query,
 };
 
 /// Count the account's cards a query matches.

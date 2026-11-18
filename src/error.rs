@@ -102,9 +102,9 @@ pub enum ErrorCode {
     /// it on its first run.
     StoreUncreated,
     /// The pimdir store is of another format version than the one this
-    /// cardamum reads, which a store opens under alone: one an earlier
-    /// neverest wrote is reinstalled, a later one asks for a cardamum
-    /// built on it.
+    /// cardamum reads, which a store opens under alone: one an earlier sync
+    /// engine wrote is drained by it, then set aside, a later one asks for
+    /// a later cardamum.
     StoreVersion,
     /// The pimdir root holds a database another program wrote, which no
     /// pimdir tool reads or writes.
@@ -179,6 +179,10 @@ pub enum ErrorCode {
     /// The pimdir search query is malformed or names an unknown field or
     /// value (pimdir SEARCH §8.4): nothing was searched.
     QueryRefused,
+    /// The search query holds a term only a pimdir store answers (a tag,
+    /// a flag, a change stamp), on a backend holding none: nothing was
+    /// searched.
+    QueryUnsupported,
     /// The pimdir search index could not answer an accepted query, an
     /// implementation fault.
     QueryUnanswerable,
@@ -237,9 +241,9 @@ const PIMDIR_CODES: &[(&str, ErrorCode)] = &[
     ("tag-refused", ErrorCode::TagRefused),
 ];
 
-/// The refusal of a pimdir page token the command did not print, under
+/// The refusal of a page token the command did not print, under
 /// `page-token-invalid`.
-#[cfg(feature = "pimdir")]
+#[cfg(any(feature = "vdir", feature = "pimdir"))]
 pub fn page_token_invalid(token: &str) -> Error {
     let message = format!("Invalid page token {token}");
     pimalaya_cli::error::CodedError::new(ErrorCode::PageTokenInvalid, message).into()

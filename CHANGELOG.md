@@ -8,6 +8,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added `card search <query>...`, searching the account's cards in the pimdir query language over every address book, or the one `-k` names: pimdir answers from the store's index, vdir matches every card of the scope with io-pimdir's matcher, so a query answers one hit set on both. A term only a pimdir store answers (`tag:`, `flag:`, `is:`...) is refused on vdir with the new `--json` error code `query-unsupported`, never dropped; `--sort relevance` is pimdir's alone. The capabilities `card.search` and `card.search.relevance`, and the MCP tool `card_search`, come with it; CardDAV, JMAP, Microsoft Graph and Google People do not serve it yet (#25).
+- Added row handles to `pimdir queue show` and `pimdir queue cancel`: a row may be named `<store-id>.<incarnation>.<id>`, a handle of another store (a copy restored since) reading `reset` and refused by `cancel` coded `store-reset`; a bare row id is taken as before.
+
 - Added the `--json` error codes `store-account-ambiguous`, `store-account-unknown`, `row-not-found`, `confirmation-required` and `page-token-invalid`, as Himalaya codes them: an unset `pimdir.account` on a store holding several accounts, a configured one the store does not hold, a `pimdir queue cancel` of a row the account's queue does not hold, one with no terminal and no `--yes`, and a `pimdir search` page token it did not print, each uncoded before.
 - Added `default` to every address book in `addressbook list --json` (pimdir draft-04): `true` on the one the server names the default, read on the pimdir backend from the role the sync engine recorded (`collections.role`), JMAP's `isDefault`, the default Contacts folder on Microsoft Graph and myContacts on Google People, `false` on CardDAV and vdir, which name none.
 - Added the common fields of a card to the `card list` and `card read` JSON: `uid`, `fullName`, `givenName`, `familyName`, every address in `emails` and number in `phones`, `organization`, `organizationUnits`, `title` and `note`, read through the decoded vCard.
@@ -49,6 +52,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING**: Changed the pimdir backend to io-pimdir 0.17.0, pimdir storage-draft-14: a store an earlier sync engine wrote is refused (`store-version`) and never migrated, its refusal now io-pimdir's one wording naming cardamum, which says to sync it with that engine until nothing is queued, then set it aside and sync a new store.
+- Changed a pimdir card write to drop every `X-PIMDIR-` property from the card before it is queued (pimdir STORAGE §18), so no instruction to a sync engine enters the queue unasked.
+- Changed the dependencies to pimalaya-cli 0.6.1, pimalaya-config 0.6.0 and io-jmap 0.10.1.
 - Changed `card list` on JMAP, Microsoft Graph and Google People to read the page it prints: JMAP asks its window (`position`, `limit`) in chunks the server takes, Graph sends `$skip` and `$top`, People stops once it holds the window, where each read the whole address book (100 requests for page 1 of 10,000 Graph contacts, now 1). On JMAP an unreadable card's entry prints on the page holding it.
 - Changed `card add -k <unknown>` on CardDAV and JMAP to fail coded `addressbook-not-found`, a stale People `etag` to be `precondition-failed`, and a JMAP method error inside a typed call (`forbidden` on `card list`) to carry its code, where each was uncoded.
 - **Breaking:** changed `msgraph contacts create` and `update` to send the JSON as written and print what Graph answered as sent, where they went through io-msgraph's contact model: a key the model lacks was dropped from the request while Graph answered 200.
@@ -173,6 +179,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed the file a composer edits being readable by other users under a permissive umask: it is created 0600 on Unix, and a file or a symbolic link planted at its path is refused rather than written through.
 - Fixed install.sh saving an HTTP error page as the archive, then failing to extract it: the download fails on an HTTP error (`curl -f`).
 - Fixed `--phone tel:+33...` writing `TEL;TYPE=tel:+33...`: a `tel:` or `mailto:` scheme is no type, the number or address written without it.
 - Fixed a field flag writing CRLF lines into an LF card.

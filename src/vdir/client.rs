@@ -130,7 +130,8 @@ pub fn build_vdir_client(name: String, mut account_config: AccountConfig) -> Res
 
 /// The code of a vdir failure in an error chain: an item io-vdir did not
 /// find in its collection is `card-not-found`, cardamum's items being
-/// cards.
+/// cards, and so is an id no item of a collection can have (`a/b`), as
+/// CardDAV and calendula code it.
 pub(crate) fn missing_code(cause: &(dyn std::error::Error + 'static)) -> Option<ErrorCode> {
     let locate = match cause.downcast_ref::<VdirClientError>()? {
         VdirClientError::VdirItemLocate(err)
@@ -142,7 +143,9 @@ pub(crate) fn missing_code(cause: &(dyn std::error::Error + 'static)) -> Option<
     };
 
     match locate {
-        VdirItemLocateError::NotFound(_) => Some(ErrorCode::CardNotFound),
+        VdirItemLocateError::NotFound(_) | VdirItemLocateError::InvalidId(_) => {
+            Some(ErrorCode::CardNotFound)
+        }
         _ => None,
     }
 }

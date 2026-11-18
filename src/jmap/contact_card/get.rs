@@ -25,7 +25,8 @@ impl JmapContactCardGetCommand {
 
         printer.out(JmapContactCardsOutput {
             cards: out.list,
-            state: out.state,
+            state: Some(out.state),
+            query_state: None,
         })
     }
 }

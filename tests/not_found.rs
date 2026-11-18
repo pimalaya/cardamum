@@ -57,6 +57,15 @@ fn a_vdir_card_read_of_an_unknown_id_is_a_card_not_found() {
     let toml = vdir(home.path());
 
     for verb in ["read", "delete"] {
+        let json = failure(&run(
+            home.path(),
+            &toml,
+            &["card", verb, "-k", "book", "a/b"],
+        ));
+        assert_eq!(json["code"], "card-not-found", "{verb} a/b: {json}");
+    }
+
+    for verb in ["read", "delete"] {
         let output = run(home.path(), &toml, &["card", verb, "-k", "book", "nope"]);
         let json = failure(&output);
         assert_eq!(json["code"], "card-not-found", "{json}");

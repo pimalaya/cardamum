@@ -15,7 +15,7 @@ use crate::jmap::{client::JmapClient, render::JmapContactCardsOutput};
 /// JMAP pages by position: pass the `nextPage` a page printed to
 /// `--page-token` for the next one, with the same other flags.
 ///
-/// JSON output: `{"list": [<raw JMAP ContactCard>...], "state",
+/// JSON output: `{"list": [<raw JMAP ContactCard>...], "queryState",
 /// "nextPage"}`, `nextPage` the position the next page starts at, `null`
 /// on the last page.
 #[derive(Debug, Parser)]
@@ -69,7 +69,8 @@ impl JmapContactCardQueryCommand {
                     .iter()
                     .map(serde_json::to_value)
                     .collect::<Result<_, _>>()?,
-                state: out.query_state,
+                state: None,
+                query_state: Some(out.query_state),
             },
             next_page: next_page.then(|| next.to_string()),
         })
@@ -160,6 +161,16 @@ mod tests {
 
         let request = String::from_utf8_lossy(&requests.lock().unwrap()[0]).into_owned();
         assert!(request.contains(r#""position":2"#), "{request}");
+    }
+
+    /// A query prints its `queryState` under that key, never under the
+    /// `state` a get prints and `contact-card changes` takes.
+    #[test]
+    fn a_query_prints_its_query_state() {
+        let (client, _) = answering(0, &["c1"], 1);
+        let json = query(&[], client);
+        assert_eq!(json["queryState"], "q1", "{json}");
+        assert!(json.get("state").is_none(), "{json}");
     }
 
     /// A page follows below the total, or, with none, after a full page;

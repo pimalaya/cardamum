@@ -49,6 +49,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **Breaking:** changed `jmap contact-card query` to print the query's state as `queryState`, where it printed it as `state`, the key `contact-card get` prints and `contact-card changes` takes.
+- **Breaking:** changed a field flag to refuse a source holding anything after its first card, a partial second card included, where it dropped it.
+- Changed an invalid vdir card id (`a/b`) to fail coded `card-not-found`, where it was uncoded.
 - Changed `pimdir.account`, when unset, to be derived from the accounts holding address books alone, as Himalaya derives it from those holding mail: a store one account syncs contacts into and another mail no longer asks for it.
 - **Breaking:** changed a server's refusal inside the `carddav`, `jmap`, `msgraph` and `gpeople` namespaces, the `request` commands included, to print as the command's result and exit 3, as Himalaya's protocol namespaces do: `{"refusal": {"status", "reason", "message", "code", "retryAfter"}}`, where it printed the failure object and exited 1. A command getting no answer (network, TLS, a body that does not parse) still fails, exit 1, and the unified commands keep the failure object.
 - **Breaking:** changed `jmap contact-card copy` to print `{ids, errors}`, the copies made and one item error per card the server refused, exit 3 when one was, where it failed on the first refusal saying nothing of the copies made.
@@ -167,6 +170,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed `--phone tel:+33...` writing `TEL;TYPE=tel:+33...`: a `tel:` or `mailto:` scheme is no type, the number or address written without it.
+- Fixed a field flag writing CRLF lines into an LF card.
 - Fixed a `pimdir.account` naming none of the store's accounts reading as an empty account: it fails naming the accounts the store holds, as Calendula does.
 - Fixed `card list` printing vCard 2.1 quoted-printable values undecoded (`Andr=C3=A9`), a foreign `CHARSET` now transcoded too.
 - Fixed a name flag of `card update` dropping the parameters of `N` (`SORT-AS`, `LANGUAGE`, `ALTID`) and writing a 2.1 quoted-printable family name back as literal text.

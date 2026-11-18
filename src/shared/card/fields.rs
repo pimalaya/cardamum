@@ -118,21 +118,18 @@ impl CardFieldsArgs {
     /// Every instance of a property a flag names is dropped and the flag's
     /// own is appended, so a flag sets that property rather than adding to
     /// it. Every other line keeps the card's own bytes, the properties no
-    /// flag covers included.
+    /// flag covers included. An appended line ends as the card's
+    /// `BEGIN` line does, so an LF card stays LF.
+    ///
+    /// A flag rewrites one card and the parser reads the first, so a
+    /// source holding anything but blank lines after it (a second card, a
+    /// partial one) is refused rather than cut to its first card.
     pub fn apply(&self, card: &[u8]) -> Result<Vec<u8>> {
         if self.is_empty() {
             return Ok(card.to_vec());
         }
 
-        // NOTE: a flag rewrites one card and the parser reads the first,
-        // so a file holding several would come back as its first card
-        // alone. Dropping the rest silently is the one outcome worth
-        // refusing outright.
-        if VcardCst::parse_many(card)
-            .filter(|card| card.is_ok())
-            .count()
-            > 1
-        {
+        if VcardCst::parse_many(card).count() > 1 {
             bail!("Cannot apply a field flag to a source holding several vCards");
         }
 
@@ -150,11 +147,18 @@ impl CardFieldsArgs {
 
         cst.props
             .retain(|line| !written.iter().any(|kind| names(line, *kind)));
+        let kept = cst.props.len();
         cst.props
             .extend(props.iter().map(|prop| prop.encode(escaper)));
 
         if self.names_any() {
             self.write_name(&mut cst, escaper);
+        }
+
+        if let Some(eol) = cst.begin.as_ref().map(|begin| begin.eol.get().to_owned()) {
+            for line in &mut cst.props[kept..] {
+                line.eol.set(eol.clone());
+            }
         }
 
         Ok(cst.to_bytes())
@@ -278,12 +282,12 @@ impl CardFieldsArgs {
         }
 
         for email in &self.email {
-            let (kind, address) = split_type(email);
+            let (kind, address) = split_type(email, "mailto");
             props.push(typed(VcardPropKind::Email, kind, text(address)));
         }
 
         for phone in &self.phone {
-            let (kind, number) = split_type(phone);
+            let (kind, number) = split_type(phone, "tel");
             props.push(typed(VcardPropKind::Tel, kind, text(number)));
         }
 
@@ -373,13 +377,23 @@ fn owned(values: &[String]) -> Vec<Cow<'static, str>> {
         .collect()
 }
 
-/// Splits an optional `TYPE` prefix off a flag value.
+/// Splits an optional `TYPE` prefix off a flag value, then the URI
+/// `scheme` (`tel`, `mailto`) the value may be written with.
 ///
-/// Neither an email address nor a phone number carries a colon, so the
-/// first one delimits a type when there is one.
-fn split_type(value: &str) -> (Option<&str>, &str) {
+/// Neither a bare email address nor a bare phone number carries a colon,
+/// so the first one delimits a type, unless what precedes it is the
+/// scheme: `tel:+33...` is a number, never the type `tel`. The scheme is
+/// dropped, the property holding the number or the address as a flag
+/// without it writes them.
+fn split_type<'a>(value: &'a str, scheme: &str) -> (Option<&'a str>, &'a str) {
+    let unscheme = |value: &'a str| match value.split_once(':') {
+        Some((prefix, rest)) if prefix.eq_ignore_ascii_case(scheme) => rest,
+        _ => value,
+    };
+
     match value.split_once(':') {
-        Some((r#type, rest)) => (Some(r#type), rest),
+        Some((prefix, _)) if prefix.eq_ignore_ascii_case(scheme) => (None, unscheme(value)),
+        Some((r#type, rest)) => (Some(r#type), unscheme(rest)),
         None => (None, value),
     }
 }
@@ -494,6 +508,42 @@ mod tests {
         let out = apply(CARD, &["--phone", "+1-555-0100"]);
 
         assert!(out.contains("TEL:+1-555-0100"));
+    }
+
+    #[test]
+    fn a_source_holding_more_than_one_card_is_refused() {
+        let wrap = Wrap::try_parse_from(["cardamum", "--title", "T"]).unwrap();
+        let partial = format!("{CARD}BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Cut\r\n");
+
+        for source in [format!("{CARD}{CARD}"), partial] {
+            assert!(wrap.fields.apply(source.as_bytes()).is_err(), "{source}");
+        }
+        assert!(wrap.fields.apply(format!("{CARD}\r\n").as_bytes()).is_ok());
+    }
+
+    #[test]
+    fn a_line_written_onto_an_lf_card_ends_with_lf() {
+        let card = "BEGIN:VCARD\nVERSION:4.0\nFN:Jane Doe\nEND:VCARD\n";
+        let out = apply(card, &["--title", "Chief", "--family-name", "Doe"]);
+
+        assert!(!out.contains('\r'), "{out:?}");
+        assert!(out.contains("TITLE:Chief\n"), "{out:?}");
+    }
+
+    #[test]
+    fn a_scheme_prefix_is_no_type() {
+        let out = apply(
+            CARD,
+            &[
+                "--phone",
+                "tel:+33123456789",
+                "--email",
+                "work:mailto:j@example.org",
+            ],
+        );
+
+        assert!(out.contains("\r\nTEL:+33123456789\r\n"), "{out}");
+        assert!(out.contains("EMAIL;TYPE=work:j@example.org\r\n"), "{out}");
     }
 
     #[test]

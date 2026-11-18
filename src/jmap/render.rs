@@ -97,15 +97,22 @@ impl fmt::Display for JmapAddressBookOutput {
 }
 
 /// A list of contact cards; `--json` emits the JMAP objects as the server
-/// sent them and the state token to feed to `changes`.
+/// sent them, beside the get's `state`, to feed to `contact-card changes`,
+/// or the query's `queryState`, to feed to a `queryChanges`.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapContactCardsOutput {
     /// The JMAP ContactCard objects, as the server sent them.
     #[serde(rename = "list")]
     pub cards: Vec<serde_json::Value>,
-    /// The state token to feed to `contact-card changes`.
-    pub state: String,
+    /// The state of the cards a get answered, to feed to `contact-card
+    /// changes`; none for a query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// The state of the query a query answered, which a `queryChanges`
+    /// takes and `contact-card changes` does not; none for a get.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub query_state: Option<String>,
 }
 
 impl fmt::Display for JmapContactCardsOutput {
@@ -127,7 +134,15 @@ impl fmt::Display for JmapContactCardsOutput {
             writeln!(f, "{columns}")?;
         }
 
-        writeln!(f, "state: {}", sanitize::text(&self.state))
+        if let Some(state) = &self.state {
+            writeln!(f, "state: {}", sanitize::text(state))?;
+        }
+
+        if let Some(state) = &self.query_state {
+            writeln!(f, "queryState: {}", sanitize::text(state))?;
+        }
+
+        Ok(())
     }
 }
 

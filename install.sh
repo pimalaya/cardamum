@@ -45,7 +45,7 @@ tmpdir=$(mktemp -d) || die "Cannot create temporary directory"
 trap "rm -rf $tmpdir" EXIT
 
 echo "Downloading latest $system release…"
-curl -sLo "$tmpdir/cardamum.tgz" \
+curl -fsSLo "$tmpdir/cardamum.tgz" \
      "$RELEASES_URL/latest/download/cardamum.$target.tgz"
 
 echo "Installing binary…"

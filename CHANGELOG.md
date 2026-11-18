@@ -171,6 +171,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed install.sh saving an HTTP error page as the archive, then failing to extract it: the download fails on an HTTP error (`curl -f`).
 - Fixed `--phone tel:+33...` writing `TEL;TYPE=tel:+33...`: a `tel:` or `mailto:` scheme is no type, the number or address written without it.
 - Fixed a field flag writing CRLF lines into an LF card.
 - Fixed a `pimdir.account` naming none of the store's accounts reading as an empty account: it fails naming the accounts the store holds, as Calendula does.

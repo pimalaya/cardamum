@@ -17,6 +17,7 @@ use crate::carddav::{
     proppatch::CarddavProppatchCommand,
     put::CarddavPutCommand,
     report::cli::CarddavReportCommand,
+    rmcol::CarddavRmcolCommand,
 };
 
 /// CardDAV-specific API.
@@ -33,6 +34,7 @@ pub enum CarddavCommand {
     Propfind(CarddavPropfindCommand),
     Proppatch(CarddavProppatchCommand),
     Mkcol(CarddavMkcolCommand),
+    Rmcol(CarddavRmcolCommand),
     #[command(subcommand)]
     Report(CarddavReportCommand),
     Get(CarddavGetCommand),
@@ -53,6 +55,7 @@ impl CarddavCommand {
                 .map_or(Ok(()), check_addressbook_id),
             Self::Proppatch(cmd) => check_addressbook_id(&cmd.id),
             Self::Mkcol(cmd) => check_addressbook_name(&cmd.id),
+            Self::Rmcol(cmd) => check_addressbook_id(&cmd.addressbook_id),
             Self::Report(cmd) => cmd.check(),
             Self::Get(cmd) => {
                 check_addressbook_id(&cmd.addressbook_id)?;
@@ -64,8 +67,7 @@ impl CarddavCommand {
             }
             Self::Delete(cmd) => {
                 check_addressbook_id(&cmd.addressbook_id)?;
-                let card_id = cmd.card_id.as_deref();
-                card_id.map_or(Ok(()), |id| check_card_id(&cmd.addressbook_id, id))
+                check_card_id(&cmd.addressbook_id, &cmd.card_id)
             }
         }
     }
@@ -76,6 +78,7 @@ impl CarddavCommand {
             Self::Propfind(cmd) => cmd.execute(printer, client),
             Self::Proppatch(cmd) => cmd.execute(printer, client),
             Self::Mkcol(cmd) => cmd.execute(printer, client),
+            Self::Rmcol(cmd) => cmd.execute(printer, client),
             Self::Report(cmd) => cmd.execute(printer, client),
             Self::Get(cmd) => cmd.execute(printer, client),
             Self::Put(cmd) => cmd.execute(printer, client),
@@ -111,5 +114,32 @@ mod tests {
         let aliases: Vec<&str> = mkcol.get_all_aliases().collect();
         assert_eq!(aliases, ["create"]);
         assert!(mkcol.get_visible_aliases().next().is_none());
+    }
+
+    /// `carddav delete` deletes one card, its id required, so an empty
+    /// shell variable never turns it into a collection delete; `rmcol`
+    /// deletes the collection. `--if-none-match` takes `*` alone.
+    #[test]
+    fn a_card_delete_requires_its_id_and_rmcol_deletes_the_collection() {
+        assert!(Cli::try_parse_from(["cardamum", "carddav", "delete", "book"]).is_err());
+        assert!(Cli::try_parse_from(["cardamum", "carddav", "delete", "book", ""]).is_ok());
+
+        let cli = Cli::try_parse_from(["cardamum", "carddav", "rmcol", "book"]).unwrap();
+        let Some(Command::Carddav(CarddavCommand::Rmcol(cmd))) = cli.cmd else {
+            panic!("not a rmcol");
+        };
+        assert_eq!(cmd.addressbook_id, "book");
+
+        let put = [
+            "cardamum",
+            "carddav",
+            "put",
+            "book",
+            "c1",
+            "-",
+            "--if-none-match",
+        ];
+        assert!(Cli::try_parse_from([&put[..], &["*"]].concat()).is_ok());
+        assert!(Cli::try_parse_from([&put[..], &["\"e1\""]].concat()).is_err());
     }
 }

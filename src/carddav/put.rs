@@ -36,8 +36,14 @@ pub struct CarddavPutCommand {
     /// Gate the replace on the resource being unchanged (If-Match).
     #[arg(long, value_name = "ETAG", conflicts_with = "if_none_match")]
     pub if_match: Option<String>,
-    /// Create-only PUT: fail if the resource already exists (pass `*`).
-    #[arg(long, value_name = "VALUE", conflicts_with = "if_match")]
+    /// Create-only PUT: fail if the resource already exists. `*` is the
+    /// one value a create takes (RFC 9110 section 13.1.2).
+    #[arg(
+        long,
+        value_name = "*",
+        value_parser = ["*"],
+        conflicts_with = "if_match"
+    )]
     pub if_none_match: Option<String>,
 }
 

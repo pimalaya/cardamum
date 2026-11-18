@@ -126,6 +126,7 @@ pub fn registry() -> JsonSchemaRegistry {
         );
         for key in [
             "cardamum-carddav-mkcol",
+            "cardamum-carddav-rmcol",
             "cardamum-carddav-proppatch",
             "cardamum-carddav-delete",
         ] {

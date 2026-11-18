@@ -11,7 +11,7 @@ change: the-v1-pass
 - [x] CAR-8: unified card verbs on vdir act on `.vcf` items only (src/vdir/backend.rs `locate_card`); a body opening no `BEGIN:VCARD` is `card-unreadable` (src/shared/client.rs `unreadable`)
 - [ ] CAR-14: private composer draft
 - [x] CAR-4 with TWN-4: the `.well-known` redirect followed over https only, a `server` naming a scheme read as written (src/carddav/client.rs)
-- [ ] CAR-11: `carddav delete` card id required, `carddav rmcol`, `--if-none-match` value
+- [x] CAR-11: `carddav delete <ADDRESSBOOK> <CARD-ID>` (id required), `carddav rmcol <ADDRESSBOOK>`; `carddav put --if-none-match` takes `*` alone, the one value io-webdav sends (src/carddav/delete.rs, rmcol.rs, put.rs)
 - [ ] TWN-3: `no-performer` (after TRI-3 lands in src/pimdir)
 - [ ] CAR-5: address book honoured on JMAP, Graph, People
 - [ ] io-pimdir 0.16 bump

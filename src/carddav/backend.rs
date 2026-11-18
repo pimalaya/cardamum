@@ -574,7 +574,7 @@ mod tests {
 
         let delete = CarddavDeleteCommand {
             addressbook_id: String::from("book"),
-            card_id: Some(String::from("c9.vcf")),
+            card_id: String::from("c9.vcf"),
             if_match: None,
         };
         let err = delete.execute(printer, client(410)).unwrap_err();

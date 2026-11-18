@@ -90,7 +90,7 @@ fn an_addressbook_id_out_of_the_home_is_not_found() {
                 "c1.vcf",
                 "BEGIN:VCARD\r\nEND:VCARD\r\n",
             ],
-            &["carddav", "delete", id],
+            &["carddav", "rmcol", id],
             &["carddav", "delete", id, "c1.vcf"],
             &["carddav", "report", "query", id],
             &["carddav", "report", "multiget", id, "c1.vcf"],

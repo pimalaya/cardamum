@@ -160,6 +160,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed a `pimdir.account` naming none of the store's accounts reading as an empty account: it fails naming the accounts the store holds, as Calendula does.
 - Fixed `card list` printing vCard 2.1 quoted-printable values undecoded (`Andr=C3=A9`), a foreign `CHARSET` now transcoded too.
 - Fixed a name flag of `card update` dropping the parameters of `N` (`SORT-AS`, `LANGUAGE`, `ALTID`) and writing a 2.1 quoted-printable family name back as literal text.
 - Fixed the card verbs on vdir reading an `.ics` item as a card, `card update` creating a `.vcf` beside it and `card delete` removing it: they answer `card-not-found`. A file opening no `BEGIN:VCARD` lists as a `card-unreadable` entry, no longer a row of nulls.

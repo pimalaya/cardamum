@@ -137,12 +137,10 @@ fn reinstall(found: Option<&str>) -> String {
 /// A store several accounts share is what `pimdir.account` answers, and
 /// leaving it unset there errors rather than guess: one CLI view is one
 /// account, and mixing their address books would write a card into one
-/// that belongs to another.
+/// that belongs to another. A configured account the store holds no
+/// collection of is refused, naming the ones it holds, rather than read
+/// as an empty account.
 fn resolve_account(reader: &PimdirReader, configured: Option<String>) -> Result<Option<String>> {
-    if configured.is_some() {
-        return Ok(configured);
-    }
-
     let mut accounts: Vec<Option<String>> = reader
         .list_collections()
         .map_err(|err| anyhow!("List pimdir collections: {err}"))?
@@ -152,17 +150,30 @@ fn resolve_account(reader: &PimdirReader, configured: Option<String>) -> Result<
     accounts.sort();
     accounts.dedup();
 
+    let names = |accounts: &[Option<String>]| {
+        accounts
+            .iter()
+            .map(|account| account.as_deref().unwrap_or("<ungrouped>"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+
+    if let Some(account) = &configured {
+        if !accounts.is_empty() && !accounts.contains(&configured) {
+            return Err(anyhow!(
+                "The pimdir store holds no account `{account}` ({}); fix `pimdir.account`",
+                names(&accounts),
+            ));
+        }
+
+        return Ok(configured);
+    }
+
     match accounts.as_slice() {
         [] | [_] => Ok(accounts.into_iter().next().flatten()),
-        _ => {
-            let names: Vec<&str> = accounts
-                .iter()
-                .map(|account| account.as_deref().unwrap_or("<ungrouped>"))
-                .collect();
-            Err(anyhow!(
-                "The pimdir store holds several accounts ({}); name one with `pimdir.account`",
-                names.join(", "),
-            ))
-        }
+        _ => Err(anyhow!(
+            "The pimdir store holds several accounts ({}); name one with `pimdir.account`",
+            names(&accounts),
+        )),
     }
 }

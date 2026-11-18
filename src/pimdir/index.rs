@@ -820,6 +820,30 @@ mod tests {
         assert_eq!(count, 0, "a mail is counted");
     }
 
+    /// A configured account the store holds none of is refused, naming
+    /// the ones it holds, rather than read as an empty account.
+    #[test]
+    fn a_configured_account_the_store_lacks_is_refused() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        for account in ["work", "home"] {
+            let book = format!("{account}/book");
+            synced(root, "carddav", Some(account), &book, "text/vcard");
+        }
+
+        let err = PimdirBackend::new(PimdirConfig {
+            root: root.to_path_buf(),
+            account: Some(String::from("nope")),
+        })
+        .err()
+        .unwrap()
+        .to_string();
+        assert_eq!(
+            err,
+            "The pimdir store holds no account `nope` (home, work); fix `pimdir.account`"
+        );
+    }
+
     #[test]
     fn a_search_reads_the_configured_account_alone() {
         let dir = tempfile::tempdir().unwrap();

@@ -22,3 +22,4 @@ change: the-v1-pass
 - [ ] Single-resource protocol reads print raw (owner ruling 2026-11-18)
 - [ ] io-pimdir next release: `PimdirFormatRefusal` text (C1), `enqueue_user_body` (C2), `PimdirActionHandle` queue rows (C4)
 - [ ] Live check on the Microsoft test account: Graph default-folder resolution of CAR-5
+- [x] CAL-14 twin: a configured `pimdir.account` the store lacks is refused, naming its accounts (src/pimdir/client.rs `resolve_account`)

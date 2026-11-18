@@ -29,6 +29,7 @@ use io_webdav::{
     },
     rfc6578::sync_collection::WebdavSyncCollectionError,
 };
+use log::warn;
 use pimalaya_cli::error::with_code;
 use pimalaya_config::secret::SecretResolver;
 use pimalaya_stream::{
@@ -37,7 +38,7 @@ use pimalaya_stream::{
     tls::Tls,
 };
 use secrecy::ExposeSecret;
-use url::{ParseError, Url};
+use url::Url;
 
 use crate::{
     config::{AccountConfig, CarddavAuthConfig, CarddavConfig, ProxyConfig, parse_url},
@@ -162,14 +163,28 @@ pub fn propfind_home(client: &mut Inner) -> Result<(), WebdavClientStdError> {
 /// Probes `.well-known/carddav` on a bare-origin `server` with a GET.
 ///
 /// Returns the context-root redirect target when the server publishes
-/// one. Silent: a failed probe or a response without a redirect leaves
-/// the origin as-is.
+/// one over `https`. Silent: a failed probe or a response without a
+/// redirect leaves the origin as-is.
+///
+/// The credential goes wherever the target points, so a redirect to any
+/// other scheme (`http`, which would send it in clear) is ignored with a
+/// warning, whoever serves the domain's web root.
 fn probe_carddav_context_root(server: &Url, tls: &Tls, proxy: &Proxy) -> Option<Url> {
     let host = server.host_str()?;
     let port = server.port_or_known_default()?;
     let request = Http11WellKnown::prepare_request(server.as_str(), "carddav").ok()?;
     let output = run_well_known(host, port, request, tls, proxy).ok()?;
-    output.redirect_url
+    https_only(output.redirect_url?)
+}
+
+/// `target` when its scheme is `https`, none otherwise.
+fn https_only(target: Url) -> Option<Url> {
+    if target.scheme() == "https" {
+        return Some(target);
+    }
+
+    warn!("ignore the .well-known/carddav redirect to {target}: it is not https");
+    None
 }
 
 /// Runs a prepared `.well-known` request over a fresh TLS stream.
@@ -207,17 +222,24 @@ fn run_well_known(
 
 /// Parses a `server` config string into a [`Url`].
 ///
-/// Accepts a full URL, a bare domain, or `domain:port`; anything
-/// without an explicit `http` or `https` scheme defaults to `https://`,
-/// since `url` would otherwise read the leading label of `domain:port`
-/// as the scheme. A host that is not ASCII is refused, naming its
-/// Punycode form ([`parse_url`]).
+/// Accepts a full `http` or `https` URL, a bare domain, or `domain:port`.
+/// A value naming no scheme (no `://`) is read as `https://` followed by
+/// it, since `url` would otherwise read the leading label of
+/// `domain:port` as the scheme. A value naming a scheme is read as
+/// written: one that does not parse, or names another scheme, is refused
+/// rather than prefixed, which would read `https://host:99999` as the
+/// host `https`. A host that is not ASCII is refused, naming its Punycode
+/// form ([`parse_url`]).
 pub fn parse_carddav_server(server: &str) -> Result<Url> {
-    let url = match Url::parse(server) {
-        Ok(url) if matches!(url.scheme(), "http" | "https") => url,
-        Err(ParseError::IdnaError) => parse_url(server)?,
-        _ => parse_url(&format!("https://{server}"))?,
-    };
+    if !server.contains("://") {
+        return parse_url(&format!("https://{server}"));
+    }
+
+    let url = parse_url(server)?;
+
+    if !matches!(url.scheme(), "http" | "https") {
+        bail!("Cannot read CardDAV server `{server}`: its scheme is not http nor https");
+    }
 
     Ok(url)
 }
@@ -390,8 +412,41 @@ mod tests {
     use io_webdav::{client::WebdavClientStd, rfc4918::WebdavAuth};
     use url::Url;
 
-    use super::propfind_home;
+    use super::{https_only, parse_carddav_server, propfind_home};
     use crate::script::{self, Script};
+
+    #[test]
+    fn a_server_naming_no_scheme_reads_as_https() {
+        for (server, url) in [
+            ("carddav.example.org", "https://carddav.example.org/"),
+            (
+                "carddav.example.org:8443",
+                "https://carddav.example.org:8443/",
+            ),
+            ("http://127.0.0.1:8080/dav/", "http://127.0.0.1:8080/dav/"),
+        ] {
+            assert_eq!(parse_carddav_server(server).unwrap().as_str(), url);
+        }
+    }
+
+    #[test]
+    fn a_server_naming_a_scheme_is_never_prefixed() {
+        for server in [
+            "https://carddav.example.org:99999",
+            "ftp://carddav.example.org",
+        ] {
+            assert!(parse_carddav_server(server).is_err(), "{server}");
+        }
+    }
+
+    #[test]
+    fn a_well_known_redirect_is_followed_over_https_only() {
+        let https = Url::parse("https://dav.example.org/dav/").unwrap();
+        let http = Url::parse("http://evil.example/dav/").unwrap();
+
+        assert_eq!(https_only(https.clone()), Some(https));
+        assert_eq!(https_only(http), None);
+    }
 
     /// The home set answering its `PROPFIND` as a collection.
     const MULTISTATUS: &str = r#"<?xml version="1.0"?>

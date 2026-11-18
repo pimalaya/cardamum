@@ -49,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Changed `pimdir.account`, when unset, to be derived from the accounts holding address books alone, as Himalaya derives it from those holding mail: a store one account syncs contacts into and another mail no longer asks for it.
 - **Breaking:** changed a server's refusal inside the `carddav`, `jmap`, `msgraph` and `gpeople` namespaces, the `request` commands included, to print as the command's result and exit 3, as Himalaya's protocol namespaces do: `{"refusal": {"status", "reason", "message", "code", "retryAfter"}}`, where it printed the failure object and exited 1. A command getting no answer (network, TLS, a body that does not parse) still fails, exit 1, and the unified commands keep the failure object.
 - **Breaking:** changed `jmap contact-card copy` to print `{ids, errors}`, the copies made and one item error per card the server refused, exit 3 when one was, where it failed on the first refusal saying nothing of the copies made.
 - **Breaking:** changed `msgraph contacts get`, `msgraph contact-folders get`, `msgraph profile get`, `gpeople connections get`, `gpeople contact-groups get`, `gpeople profile get`, `jmap address-book get` and `jmap contact-card get` to print each resource as the provider sent it, every property kept, where they printed it through io-msgraph's, io-gpeople's and io-jmap's types, which dropped the properties they do not model and added defaults the server never sent.

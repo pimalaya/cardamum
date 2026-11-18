@@ -907,7 +907,7 @@ fn check_version(
 /// part before any `;` parameter, is `text/vcard`, as io-pimdir reads it
 /// when it picks the summaries, or it is empty, a sync predating kinds
 /// having left it so.
-fn is_card_kind(kind: &str) -> bool {
+pub(crate) fn is_card_kind(kind: &str) -> bool {
     kind.is_empty() || kind.split(';').next().unwrap_or_default().trim() == CARD_KIND
 }
 

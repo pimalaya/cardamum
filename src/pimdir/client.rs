@@ -12,7 +12,7 @@ use io_pimdir::{
 };
 use pimalaya_cli::error::CodedError;
 
-use crate::{config::PimdirConfig, error::ErrorCode};
+use crate::{config::PimdirConfig, error::ErrorCode, pimdir::backend::is_card_kind};
 
 /// The process name each staged action records (pimdir STORAGE §15.1).
 ///
@@ -142,14 +142,21 @@ fn reinstall(found: Option<&str>) -> String {
 /// refused under `store-account-unknown`, naming the ones it holds,
 /// rather than read as an empty account.
 fn resolve_account(reader: &PimdirReader, configured: Option<String>) -> Result<Option<String>> {
-    let mut accounts: Vec<Option<String>> = reader
+    let collections = reader
         .list_collections()
-        .map_err(|err| anyhow!("List pimdir collections: {err}"))?
-        .into_iter()
-        .map(|collection| collection.account)
-        .collect();
-    accounts.sort();
-    accounts.dedup();
+        .map_err(|err| anyhow!("List pimdir collections: {err}"))?;
+
+    let accounts_of = |cards_only: bool| {
+        let mut accounts: Vec<Option<String>> = collections
+            .iter()
+            .filter(|collection| !cards_only || is_card_kind(&collection.kind))
+            .map(|collection| collection.account.clone())
+            .collect();
+        accounts.sort();
+        accounts.dedup();
+        accounts
+    };
+    let accounts = accounts_of(false);
 
     let names = |accounts: &[Option<String>]| {
         accounts
@@ -171,11 +178,14 @@ fn resolve_account(reader: &PimdirReader, configured: Option<String>) -> Result<
         return Ok(configured);
     }
 
+    let accounts = accounts_of(true);
+
     match accounts.as_slice() {
         [] | [_] => Ok(accounts.into_iter().next().flatten()),
         _ => {
             let message = format!(
-                "The pimdir store holds several accounts ({}); name one with `pimdir.account`",
+                "The pimdir store holds several accounts of contacts ({}); name one with \
+                 `pimdir.account`",
                 names(&accounts),
             );
             Err(CodedError::new(ErrorCode::StoreAccountAmbiguous, message).into())

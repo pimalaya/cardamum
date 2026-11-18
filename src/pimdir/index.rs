@@ -820,6 +820,19 @@ mod tests {
         assert_eq!(count, 0, "a mail is counted");
     }
 
+    /// With no `pimdir.account`, only the accounts holding an address book
+    /// count: an account syncing mail alone leaves the view unambiguous.
+    #[test]
+    fn an_account_holding_no_address_book_is_not_counted() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        synced(root, "carddav", Some("work"), "work/book", "text/vcard");
+        synced(root, "imap", Some("mail"), "mail/inbox", "message/rfc822");
+
+        let backend = backend(root, None);
+        assert_eq!(backend.inner.account.as_deref(), Some("work"));
+    }
+
     /// A configured account the store holds none of is refused, naming
     /// the ones it holds, rather than read as an empty account.
     #[test]

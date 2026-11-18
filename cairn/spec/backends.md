@@ -43,7 +43,7 @@ A backend SHALL report a card it could not read as an `errors` entry and SHALL n
 - every backend: a card whose body does not parse as a vCard, or is not UTF-8, SHALL be a `card-unreadable` entry naming the card, no row listed for it;
 - vdir: a card file that cannot be read SHALL be a `card-unreadable` entry naming the card, its error in `sources`; a card removed while it lists SHALL be left out with no entry;
 - JMAP: a card that does not project SHALL be a `card-unreadable` entry, its id when it has one;
-- pimdir: a body that cannot be read, or that the item names but its blob tree no longer holds (``Body blob missing from the store``), SHALL be a `card-unreadable` entry, no row listed for it, though its summary reads, as calendula names such an item `item-unreadable`; a body not fetched yet SHALL be no entry, the card listed with its preview. `pimdir search` SHALL name a hit the same way, an item the store cannot read and a body that reads as no vCard included, its id the hit's;
+- pimdir: a body that cannot be read SHALL be a `card-unreadable` entry, no row listed for it, though its summary reads; a body not local SHALL be no entry, the card listed with its preview, whether it was never fetched or the item names a body its blob tree no longer holds (the blob file gone, or failing its name), which is not hydrated and not an error (pimdir GUIDE §14), as Himalaya and calendula list such an item. `pimdir search` SHALL name a hit the same way, an item the store cannot read and a body that reads as no vCard included, its id the hit's;
 - CardDAV: a row the server answered without the card's data (a row refused whole, a refused `address-data` property, or none sent) SHALL be an entry naming the card, coded `permission-denied` when the row or a refused property carries a 403, else `card-unreadable`, each refused property and its status in `sources`; the entries print on the first page only, as the whole address book is read before the page is cut;
 - CardDAV, Graph, People: a page or an answer that fails SHALL fail the listing whole.
 
@@ -97,7 +97,13 @@ An id SHALL name an address book or name nothing: one store holds the collection
 An id naming no address book of the account SHALL be refused naming the ones it holds. Ids carry the sync engine's namespace and are not guessable, so an error asking for one that shows none leaves the user nothing to act on.
 
 ### Requirement: pimdir is a cache, not a server
-The pimdir backend SHALL treat the store as a possibly-partial cache. `get_card` on a card whose body is not local (`level < Full`, no stored object) SHALL report a clear "body not fetched" state, the cue to sync, rather than a data-loss error. The card still lists: `list_cards` SHALL project the stored contact summary (pimdir STORAGE Annex A) into a minimal preview vCard (`UID`, `FN`, `EMAIL`), the name escaped back into a content line, so a contact list reads correctly before a full sync, while `get_card` refuses outright so a preview can never be mistaken for the document of record.
+The pimdir backend SHALL treat the store as a possibly-partial cache. `get_card` on a card whose body is not local SHALL fail coded `body-pending`, ``Card `<id>` in `<addressbook>` is not downloaded yet (body not fetched); run a sync to hydrate it``, the cue to sync, rather than a data-loss error, exit 1, as Himalaya reads such a message: a card never fetched (`level < Full`, no stored object) and one whose blob file is gone or fails its name alike (pimdir GUIDE §14). The card still lists: `list_cards` SHALL project the stored contact summary (pimdir STORAGE Annex A) into a minimal preview vCard (`UID`, `FN`, `EMAIL`), the name escaped back into a content line, so a contact list reads correctly before a full sync, while `get_card` refuses outright so a preview can never be mistaken for the document of record.
+
+#### Scenario: A body gone from the blob tree
+- GIVEN a pimdir address book holding a synced card whose blob file was removed
+- WHEN `cardamum --json card list` runs
+- THEN it lists the card with its preview and `etag` `null`, `errors` empty, exit 0
+- AND `cardamum --json card read <id>` fails coded `body-pending`, exit 1
 
 ### Requirement: A pimdir card listing streams the store
 `list_cards` on pimdir SHALL walk the address book in keyset batches of the store's contacts order and hold one batch of rows and the page it returns, never the address book. The cards before the page SHALL be counted off their rows without reading a body, a body SHALL be read only for a card the page returns, and the walk SHALL stop once the page is full.

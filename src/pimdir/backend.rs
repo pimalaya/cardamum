@@ -513,14 +513,18 @@ impl PimdirBackend {
 
     /// Fetches `card_id` from `addressbook_id`, reading its blob.
     ///
-    /// A card not hydrated to `Full` has no local body, and fails with a
-    /// clear "body not fetched", the cue to sync rather than a data-loss
-    /// error.
+    /// A card with no local body fails `body-pending`, the cue to sync
+    /// rather than a data-loss error: one never fetched, and one whose blob
+    /// file is gone or fails its name, not hydrated (pimdir GUIDE §14).
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
         self.known_collection(addressbook_id)?;
 
         let item = self.item(addressbook_id, card_id)?;
-        let Some(hash) = item.object else {
+        let contents = match &item.object {
+            Some(hash) => self.inner.reader.blobs().get(hash)?,
+            None => None,
+        };
+        let (Some(hash), Some(contents)) = (item.object, contents) else {
             return Err(CodedError::new(
                 ErrorCode::BodyPending,
                 format!(
@@ -530,10 +534,6 @@ impl PimdirBackend {
             )
             .into());
         };
-        let contents =
-            self.inner.reader.blobs().get(&hash)?.ok_or_else(|| {
-                anyhow!("Body blob missing for `{card_id}` in `{addressbook_id}`")
-            })?;
 
         Ok(Card {
             id: card_id.to_string(),
@@ -704,11 +704,11 @@ impl PimdirBackend {
     /// the record: [`get_card`](Self::get_card) refuses an unhydrated card
     /// outright.
     ///
-    /// A body that cannot be read, or that its blob tree no longer holds
-    /// though the item names one, gives the preview an unhydrated card
+    /// A body that cannot be read gives the preview an unhydrated card
     /// lists as, the error left to the caller: a listing keeps the card's
-    /// place in the page and prints it in `errors` alone, as calendula
-    /// names such an item. A body not fetched yet is no error.
+    /// place in the page and prints it in `errors` alone. A body not
+    /// fetched yet is no error, nor one whose blob file is gone or fails
+    /// its name, not hydrated (pimdir GUIDE §14).
     pub(crate) fn listed_card(
         &self,
         addressbook_id: &str,
@@ -716,8 +716,7 @@ impl PimdirBackend {
     ) -> (Card, Option<Error>) {
         let (stored, err) = match &item.object {
             Some(hash) => match self.inner.reader.blobs().get(hash) {
-                Ok(Some(stored)) => (Some(stored), None),
-                Ok(None) => (None, Some(Error::new(BodyMissing))),
+                Ok(stored) => (stored, None),
                 Err(err) => {
                     let err = Error::from(err).context("Cannot read the card body");
                     (None, Some(err))
@@ -916,19 +915,6 @@ fn contact_full_name(summary: Option<PimdirSummary>) -> Option<String> {
         _ => None,
     }
 }
-
-/// A body an item names that its blob tree no longer holds, an
-/// inconsistent store.
-#[derive(Debug)]
-struct BodyMissing;
-
-impl std::fmt::Display for BodyMissing {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Body blob missing from the store")
-    }
-}
-
-impl std::error::Error for BodyMissing {}
 
 /// Renders a stored item's contact summary as the listing preview of a
 /// card.
@@ -1445,12 +1431,14 @@ mod tests {
         assert_eq!(page.errors[0].code, Some(ErrorCode::CardUnreadable));
     }
 
-    /// A body the item names but its blob tree no longer holds is an entry
-    /// on the page holding its card, coded `card-unreadable` as calendula
-    /// codes it `item-unreadable`, its error not repeating the id, the card
-    /// keeping its preview for the paging.
+    /// A body the item names but its blob tree no longer holds is not
+    /// hydrated and not an error (pimdir GUIDE §14): the card lists as an
+    /// unfetched one does, its preview and no version, and its read
+    /// answers `body-pending`, as Himalaya reads such a message.
     #[test]
-    fn a_missing_body_is_an_entry_alone() {
+    fn a_missing_body_lists_as_usual_and_reads_as_pending() {
+        use pimalaya_cli::error::code_of;
+
         use crate::error::ErrorCode;
 
         let (dir, mut backend) = store();
@@ -1468,23 +1456,26 @@ mod tests {
         std::fs::remove_file(blob.unwrap()).unwrap();
 
         let listed = backend.list_cards("book", 0, None).unwrap();
+        assert!(listed.errors.is_empty(), "{:?}", listed.errors);
         assert_eq!(listed.cards.len(), 1);
+        assert_eq!(listed.cards[0].id, id);
         assert_eq!(listed.cards[0].etag, None);
-        assert_eq!(listed.errors.len(), 1, "{:?}", listed.errors);
-        let entry = &listed.errors[0];
-        assert_eq!(entry.id.as_deref(), Some(id.as_str()));
-        assert_eq!(entry.code, Some(ErrorCode::CardUnreadable));
-        assert_eq!(entry.error, "Body blob missing from the store");
+        let preview = String::from_utf8(listed.cards[0].contents.clone()).unwrap();
+        assert!(preview.contains("FN:Jane Doe\r\n"), "{preview}");
 
         let page = client(&dir).list_cards("book", Some(1), Some(25)).unwrap();
-        assert!(page.cards.is_empty(), "{:?}", page.cards);
-        assert_eq!(page.errors.len(), 1, "{:?}", page.errors);
+        assert!(page.errors.is_empty(), "{:?}", page.errors);
+        assert_eq!(page.cards.len(), 1, "{:?}", page.cards);
 
-        let item = backend.item("book", &id).unwrap();
-        let (card, err) = backend.listed_card("book", item);
-        assert!(err.is_some_and(|err| err.is::<BodyMissing>()));
-        let preview = String::from_utf8(card.contents).unwrap();
-        assert!(preview.contains("FN:Jane Doe\r\n"), "{preview}");
+        let err = backend.get_card("book", &id).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::BodyPending), "{err:#}");
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "Card `{id}` in `book` is not downloaded yet (body not \
+                 fetched); run a sync to hydrate it"
+            )
+        );
     }
 
     /// A card in the address book `local`, which the device keeps and no
@@ -1547,11 +1538,9 @@ mod tests {
         let hash = backend.item("book", &id).unwrap().object.unwrap();
         std::fs::remove_file(backend.inner.reader.blobs().path(&hash).unwrap()).unwrap();
 
-        // NOTE: the body it names is gone, which the listing names as an
-        // unreadable card (see a_missing_body_is_an_entry_alone).
         let listed = backend.list_cards("book", 0, None).unwrap();
         assert_eq!(listed.cards[0].etag, None);
-        assert_eq!(listed.errors[0].code, Some(ErrorCode::CardUnreadable));
+        assert!(listed.errors.is_empty(), "{:?}", listed.errors);
 
         let err = backend.delete_card("book", &id, Some(&hash.0)).unwrap_err();
         assert_eq!(code_of(&err), Some(ErrorCode::PreconditionFailed));

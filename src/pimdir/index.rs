@@ -133,9 +133,10 @@ impl PimdirBackend {
 
     /// A hit as `card list` lists a card: read through the index's own
     /// reader, the queue not folded in, from the address book asked or
-    /// else the first holding it. A card the store cannot read, whose body
-    /// is gone from its blob tree or reads as no vCard fails, the error not
-    /// naming it, as `card list` makes it an entry.
+    /// else the first holding it. A card the store cannot read, or whose
+    /// body cannot be read or reads as no vCard, fails, the error not
+    /// naming it, as `card list` makes it an entry. A body gone from the
+    /// blob tree is not hydrated (pimdir GUIDE §14): the hit lists.
     fn card_hit(
         &self,
         index: &PimdirIndex,
@@ -876,11 +877,11 @@ mod tests {
         assert!(!last.more);
     }
 
-    /// A hit whose body is gone from the blob tree, which previewed as if it
-    /// were there, is an entry alone, coded `card-unreadable` and not naming
-    /// the card, the other hits listed.
+    /// A hit whose body is gone from the blob tree is not hydrated and not
+    /// an error (pimdir GUIDE §14): it lists as usual, its preview built
+    /// from the summary, and no entry names it.
     #[test]
-    fn a_hit_the_store_cannot_read_is_an_entry() {
+    fn a_hit_whose_body_is_gone_lists_as_usual() {
         let (_dir, backend) = indexed_store();
         let bob = page(&backend, "durand", None).hits[0].card.id.clone();
         let reader = &backend.inner.reader;
@@ -896,22 +897,17 @@ mod tests {
             .collect();
         assert_eq!(
             names,
-            ["Alice Martin", "Carol Roux", "Dave Petit", "Erin Quill"]
+            [
+                "Alice Martin",
+                "Bob Durand",
+                "Carol Roux",
+                "Dave Petit",
+                "Erin Quill"
+            ]
         );
-
-        let entries: Vec<_> = found
-            .errors
-            .iter()
-            .map(|entry| (entry.id.as_deref(), entry.code, entry.error.as_str()))
-            .collect();
-        assert_eq!(
-            entries,
-            [(
-                Some(bob.as_str()),
-                Some(ErrorCode::CardUnreadable),
-                "Body blob missing from the store"
-            )]
-        );
+        assert!(found.errors.is_empty(), "{:?}", found.errors);
+        let hit = found.hits.iter().find(|hit| hit.card.id == bob).unwrap();
+        assert_eq!(hit.card.etag, None);
     }
 
     #[test]

@@ -300,7 +300,7 @@ Incomplete:  1 card(s) have no local body and matched on their summary alone
         output.errors = vec![ItemError {
             id: Some(String::from("9")),
             code: Some(ErrorCode::CardUnreadable),
-            error: String::from("Body blob missing from the store"),
+            error: String::from("Cannot read the card body"),
             sources: Vec::new(),
         }];
 
@@ -322,7 +322,7 @@ Page:         1, card 1
 
 Next page: --page 2
 
-Error:  9  card-unreadable  Body blob missing from the store
+Error:  9  card-unreadable  Cannot read the card body
 ";
         assert_eq!(output.to_string(), expected);
     }

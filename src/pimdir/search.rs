@@ -7,7 +7,9 @@ use std::fmt;
 
 use anyhow::{Context, Result};
 use clap::{Parser, ValueEnum};
-use io_pimdir::client::search::{PimdirSearchClock, PimdirSearchOptions, PimdirSearchSort};
+use io_pimdir::client::search::{
+    PimdirSearchClock, PimdirSearchCursor, PimdirSearchOptions, PimdirSearchSort,
+};
 use pimalaya_cli::{
     clap::args::PageTokenArg,
     listing::{Listing, ListingPage},
@@ -43,8 +45,9 @@ use crate::{
 /// line above the list says what the answer could not see: cards whose
 /// body is not local, the index lagging the store.
 ///
-/// A page ends with the number of the next one, which `--page-token`
-/// takes; the last page has none. A card the store cannot read is an
+/// A page ends with the token of the place it stopped, which
+/// `--page-token` takes back, so a card arriving or leaving in between
+/// neither repeats nor hides another; the last page has none. A card the store cannot read is an
 /// item error, the others listed.
 ///
 /// JSON output: `{"hits": [{...card list row, "matched", "snippet"}],
@@ -91,36 +94,64 @@ impl PimdirSearchCommand {
     ) -> Result<()> {
         let words = self.query.join(" ");
         let query = parse_query(&self.query, printer.is_json())?;
-        let page = match &self.page_token.token {
-            Some(token) => token
-                .parse()
-                .ok()
-                .filter(|page: &usize| *page > 0)
-                .with_context(|| format!("Invalid page token {token}"))?,
-            None => self.page.max(1),
-        };
         let limit = self
             .page_size
             .unwrap_or(account.cards_list_page_size() as usize)
             .max(1);
-        let options = PimdirSearchOptions {
+        let mut options = PimdirSearchOptions {
             sort: self.sort.into(),
             limit,
-            offset: page.saturating_sub(1).saturating_mul(limit),
+            after: None,
             clock: PimdirSearchClock::default(),
         };
-        let found = backend.search_cards(query, self.addressbook.as_deref(), &options)?;
+        let addressbook = self.addressbook.as_deref();
+        let mut past_end = None;
+
+        let page = match &self.page_token.token {
+            Some(token) => {
+                let cursor = PimdirSearchCursor::from_token(token)
+                    .with_context(|| format!("Invalid page token {token}"))?;
+                options.after = Some(cursor);
+                None
+            }
+            None => {
+                let page = self.page.max(1);
+
+                for _ in 1..page {
+                    let skipped = backend.search_cards(query.clone(), addressbook, &options)?;
+
+                    match skipped.next.clone() {
+                        Some(next) => options.after = Some(next),
+                        None => {
+                            past_end = Some(skipped);
+                            break;
+                        }
+                    }
+                }
+
+                Some(page as u64)
+            }
+        };
+
+        let found = match past_end {
+            Some(mut last) => {
+                last.hits.clear();
+                last.errors.clear();
+                last
+            }
+            None => backend.search_cards(query, addressbook, &options)?,
+        };
 
         let output = PimdirSearchOutput {
             place: PimdirSearchPlace {
                 account: name.to_string(),
                 addressbook: self.addressbook,
                 query: words,
-                page: page as u64,
+                page,
                 size: limit as u64,
             },
             hits: found.hits,
-            next_page: found.more.then(|| (page + 1).to_string()),
+            next_page: found.next.as_ref().map(PimdirSearchCursor::token),
             coverage: found.coverage,
             errors: found.errors,
         };
@@ -180,11 +211,18 @@ impl fmt::Display for PimdirSearchOutput {
 
         listing.head("Query", &place.query);
 
-        let page = ListingPage::Numbered {
-            page: place.page,
-            size: place.size,
+        let page = match place.page {
+            Some(page) => ListingPage::Numbered {
+                page,
+                size: place.size,
+            },
+            None => ListingPage::Token,
         };
-        let next = self.next_page.as_deref();
+        let numbered_next = place.page.map(|page| (page + 1).to_string());
+        let next = match place.page {
+            Some(_) => self.next_page.as_ref().and(numbered_next.as_deref()),
+            None => self.next_page.as_deref(),
+        };
         listing.page(page, self.hits.len(), ["card", "cards"], next);
         self.coverage.note(&mut listing);
 
@@ -222,8 +260,9 @@ pub struct PimdirSearchPlace {
     pub addressbook: Option<String>,
     /// The query, its words joined by spaces.
     pub query: String,
-    /// The page listed, from 1.
-    pub page: u64,
+    /// The page listed by number, from 1; `None` for a page `--page-token`
+    /// reached.
+    pub page: Option<u64>,
     /// The size of a page.
     pub size: u64,
 }
@@ -255,7 +294,7 @@ mod tests {
                 account: String::from("work"),
                 addressbook: None,
                 query: String::from("peanuts"),
-                page: 1,
+                page: Some(1),
                 size: 25,
             },
             hits: vec![PimdirCardHit {

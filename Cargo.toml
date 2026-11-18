@@ -55,7 +55,7 @@ io-http = { version = "0.8", default-features = false }
 io-jmap = { version = "0.10", default-features = false, features = ["client"], optional = true }
 io-msgraph = { version = "0.9.2", default-features = false, features = ["client"], optional = true }
 io-gpeople = { version = "0.8.1", default-features = false, features = ["client"], optional = true }
-io-pimdir = { version = "0.14.1", default-features = false, features = ["client"], optional = true }
+io-pimdir = { version = "0.16.0", default-features = false, features = ["client"], optional = true }
 io-vdir = { version = "0.3", default-features = false, features = ["client", "serde"], optional = true }
 io-webdav = { version = "0.11.0", default-features = false, features = ["client"], optional = true }
 log = { version = "0.4", default-features = false }

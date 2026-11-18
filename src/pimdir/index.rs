@@ -11,8 +11,8 @@ use io_pimdir::{
     client::{
         reader::PimdirItem,
         search::{
-            PimdirIndex, PimdirSearchClock, PimdirSearchHit, PimdirSearchMatched,
-            PimdirSearchOptions,
+            PimdirIndex, PimdirSearchClock, PimdirSearchCursor, PimdirSearchHit,
+            PimdirSearchMatched, PimdirSearchOptions,
         },
     },
     search::{
@@ -66,7 +66,7 @@ impl PimdirBackend {
 
         Ok(PimdirCardPage {
             hits,
-            more: answer.more,
+            next: answer.next,
             coverage: PimdirCardCoverage::from(&answer.coverage),
             errors,
         })
@@ -253,8 +253,8 @@ fn refusal_report(query: &str, err: &PimdirQueryError) -> String {
 pub struct PimdirCardPage {
     /// The hits, in the order asked.
     pub hits: Vec<PimdirCardHit>,
-    /// Whether hits follow this page.
-    pub more: bool,
+    /// Where the next page starts, `None` on the last one.
+    pub next: Option<PimdirSearchCursor>,
     /// What the answer could not see.
     pub coverage: PimdirCardCoverage,
     /// The error of each hit the store could not read, in the order met,
@@ -844,13 +844,57 @@ mod tests {
         }
     }
 
+    /// `pimdir search` pages by io-pimdir's cursor: `nextPage` is its token,
+    /// which `--page-token` takes back, and `--page N` walks the cursor from
+    /// the first page, a page past the end listing nothing.
+    #[test]
+    fn the_search_command_pages_by_cursor() {
+        use clap::Parser;
+        use pimalaya_cli::printer::CapturePrinter;
+
+        use crate::{account::context::Account, pimdir::search::PimdirSearchCommand};
+
+        let (_dir, backend) = indexed_store();
+        let run = |args: &[&str]| {
+            let argv = [&["search", "-s", "2"], args, &["kind:contact"]].concat();
+            let cmd = PimdirSearchCommand::try_parse_from(argv).unwrap();
+            let mut printer = CapturePrinter::default();
+            cmd.execute(&mut printer, "a", &Account::default(), &backend)
+                .unwrap();
+            printer.into_single().unwrap()
+        };
+        let names = |page: &serde_json::Value| -> Vec<String> {
+            let hits = page["hits"].as_array().unwrap();
+            hits.iter()
+                .map(|hit| hit["fullName"].as_str().unwrap().to_owned())
+                .collect()
+        };
+
+        let first = run(&[]);
+        assert_eq!(names(&first), ["Alice Martin", "Bob Durand"]);
+        let token = first["nextPage"].as_str().unwrap();
+        assert_ne!(token, "2");
+
+        let second = run(&["--page-token", token]);
+        assert_eq!(names(&second), ["Carol Roux", "Dave Petit"]);
+        assert_eq!(names(&run(&["--page", "2"])), names(&second));
+
+        let last = run(&["--page", "3"]);
+        assert_eq!(names(&last), ["Erin Quill"]);
+        assert!(last["nextPage"].is_null());
+
+        let past = run(&["--page", "9"]);
+        assert!(names(&past).is_empty());
+        assert!(past["nextPage"].is_null());
+    }
+
     #[test]
     fn hits_come_in_name_order_and_pages() {
         let (_dir, backend) = indexed_store();
-        let options = |offset| PimdirSearchOptions {
+        let options = |after| PimdirSearchOptions {
             sort: io_pimdir::client::search::PimdirSearchSort::Name,
             limit: 2,
-            offset,
+            after,
             ..Default::default()
         };
 
@@ -865,16 +909,22 @@ mod tests {
             ]
         );
 
+        let first = backend
+            .search_cards(query("kind:contact"), None, &options(None))
+            .unwrap();
         let second = backend
-            .search_cards(query("kind:contact"), None, &options(2))
+            .search_cards(query("kind:contact"), None, &options(first.next))
             .unwrap();
         assert_eq!(second.hits.len(), 2);
-        assert!(second.more);
+        assert_eq!(
+            second.hits[0].card.fields.full_name.as_deref(),
+            Some("Carol Roux")
+        );
         let last = backend
-            .search_cards(query("kind:contact"), None, &options(4))
+            .search_cards(query("kind:contact"), None, &options(second.next))
             .unwrap();
         assert_eq!(last.hits.len(), 1);
-        assert!(!last.more);
+        assert!(last.next.is_none());
     }
 
     /// A hit whose body is gone from the blob tree is not hydrated and not

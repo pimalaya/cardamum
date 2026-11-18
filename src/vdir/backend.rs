@@ -6,7 +6,7 @@
 
 use std::io;
 
-use anyhow::{Error, Result, bail};
+use anyhow::{Error, Result, anyhow, bail};
 use io_vdir::{
     client::{VdirClient, VdirClientError},
     collection::VdirCollection,
@@ -169,6 +169,7 @@ impl VdirBackend {
     /// Fetches `card_id` from `addressbook_id`.
     pub fn get_card(&mut self, addressbook_id: &str, card_id: &str) -> Result<Card> {
         let path = self.addressbook_path(addressbook_id)?;
+        self.locate_card(&path, addressbook_id, card_id)?;
         let item = self
             .inner
             .get_item(path, card_id)
@@ -208,9 +209,7 @@ impl VdirBackend {
         }
 
         let path = self.addressbook_path(addressbook_id)?;
-        self.inner
-            .locate_item(path.clone(), card_id)
-            .map_err(|err| card_error(addressbook_id, card_id, err))?;
+        self.locate_card(&path, addressbook_id, card_id)?;
 
         self.inner.store_item(
             path,
@@ -232,9 +231,28 @@ impl VdirBackend {
             bail!("The vdir backend has no ETag, so it cannot honour If-Match");
         }
         let path = self.addressbook_path(addressbook_id)?;
+        self.locate_card(&path, addressbook_id, card_id)?;
         self.inner
             .delete_item(path, card_id)
             .map_err(|err| card_error(addressbook_id, card_id, err))?;
+        Ok(())
+    }
+
+    /// Locates `card_id` in the address book at `path`, refusing an item
+    /// that is no vCard as `card-not-found`: a vdir collection may hold
+    /// `.ics` items beside its cards, and a card verb never reads,
+    /// rewrites nor removes one.
+    fn locate_card(&self, path: &VdirPath, addressbook_id: &str, card_id: &str) -> Result<()> {
+        let (_, kind) = self
+            .inner
+            .locate_item(path.clone(), card_id)
+            .map_err(|err| card_error(addressbook_id, card_id, err))?;
+
+        if kind != VdirItemKind::Vcard {
+            let cause = anyhow!("The item `{card_id}` is no vCard");
+            return Err(error::card_not_found(addressbook_id, card_id, cause));
+        }
+
         Ok(())
     }
 

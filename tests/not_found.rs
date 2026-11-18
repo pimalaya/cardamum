@@ -83,6 +83,30 @@ fn a_vdir_card_list_of_an_unknown_address_book_is_an_address_book_not_found() {
     assert_eq!(json["code"], "addressbook-not-found", "{json}");
 }
 
+#[cfg(feature = "vdir")]
+#[test]
+fn a_vdir_card_verb_on_an_event_item_is_a_card_not_found() {
+    let home = TempDir::new().unwrap();
+    let toml = vdir(home.path());
+    let book = home.path().join("vdir").join("book");
+    let event = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n";
+    fs::write(book.join("ev1.ics"), event).unwrap();
+
+    let verbs: [&[&str]; 3] = [
+        &["card", "read", "-k", "book", "ev1"],
+        &["card", "update", "-k", "book", "ev1", "--title", "X"],
+        &["card", "delete", "-k", "book", "ev1"],
+    ];
+
+    for args in verbs {
+        let json = failure(&run(home.path(), &toml, args));
+        assert_eq!(json["code"], "card-not-found", "{args:?}: {json}");
+    }
+
+    assert_eq!(fs::read_to_string(book.join("ev1.ics")).unwrap(), event);
+    assert!(!book.join("ev1.vcf").exists());
+}
+
 /// An account over a pimdir store holding `book`, an address book the
 /// source `carddav` syncs, holding no card yet.
 #[cfg(feature = "pimdir")]

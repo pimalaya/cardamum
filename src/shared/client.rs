@@ -31,7 +31,7 @@
 )))]
 use std::convert::Infallible;
 
-use anyhow::{Error, Result, bail};
+use anyhow::{Error, Result, anyhow, bail};
 use log::debug;
 use pimalaya_config::secret::SecretResolver;
 use vcard::tree::cst::VcardCst;
@@ -787,15 +787,17 @@ pub fn first_page(errors: Vec<ItemError>, skip: usize) -> Vec<ItemError> {
     }
 }
 
-/// Why `contents` reads as no vCard: a body that is not UTF-8, or that
-/// does not parse; `None` for one that does.
+/// Why `contents` reads as no vCard: a body that is not UTF-8, that does
+/// not parse, or that opens no `BEGIN:VCARD` (the parser reads any
+/// `name: value` text as lines); `None` for one that does.
 pub fn unreadable(contents: &[u8]) -> Option<Error> {
     if let Err(err) = std::str::from_utf8(contents) {
         return Some(Error::new(err).context("Cannot read the card body as UTF-8"));
     }
 
     match VcardCst::parse(contents) {
-        Ok(_) => None,
+        Ok(cst) if cst.begin.is_some() => None,
+        Ok(_) => Some(anyhow!("No BEGIN:VCARD").context("Cannot parse the card body as a vCard")),
         Err(err) => Some(Error::new(err).context("Cannot parse the card body as a vCard")),
     }
 }
@@ -880,6 +882,12 @@ mod tests {
 
     use super::*;
     use crate::error::ErrorCode;
+
+    #[test]
+    fn a_body_opening_no_vcard_is_unreadable() {
+        assert!(unreadable(b"hello: world\n").is_some());
+        assert!(unreadable(b"BEGIN:VCARD\r\nVERSION:4.0\r\nFN:A\r\nEND:VCARD\r\n").is_none());
+    }
 
     fn card(id: &str, contents: &str) -> Card {
         Card {

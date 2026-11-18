@@ -8,7 +8,7 @@ change: the-v1-pass
 - [x] CAR-1: `vdir item move|copy` refuses a same-id target, `item-duplicate` (tests/duplicate.rs)
 - [x] CAR-2: the name flags edit the `N` line in place, parameters kept, a 2.1 quoted-printable value decoded first (src/shared/card/fields.rs)
 - [x] CAR-3: 2.1 quoted-printable and CHARSET decoded in the projection (src/shared/card/project.rs)
-- [ ] CAR-8: unified card verbs on `.vcf` only
+- [x] CAR-8: unified card verbs on vdir act on `.vcf` items only (src/vdir/backend.rs `locate_card`); a body opening no `BEGIN:VCARD` is `card-unreadable` (src/shared/client.rs `unreadable`)
 - [ ] CAR-14: private composer draft
 - [ ] CAR-4 with TWN-4: https-only redirect, strict `server` parse
 - [ ] CAR-11: `carddav delete` card id required, `carddav rmcol`, `--if-none-match` value

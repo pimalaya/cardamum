@@ -69,7 +69,29 @@ pub(crate) fn check_collection_absent(root: &VdirPath, id: &str) -> Result<()> {
     }
 }
 
-/// Whether `id` is one directory name: a single normal path component
+/// Refuses to move or copy the item `id` into `target` when `target`
+/// holds an item of that id already, coded `item-duplicate`: io-vdir
+/// replaces the target's file, and its card would be lost.
+pub(crate) fn check_item_absent(
+    client: &VdirClient,
+    target: &VdirPath,
+    target_name: &str,
+    id: &str,
+    verb: &str,
+) -> Result<()> {
+    match client.locate_item(target.clone(), id) {
+        Ok(_) => {
+            let message = format!(
+                "Cannot {verb} item `{id}` into `{target_name}`: it holds an item of that id already"
+            );
+            Err(CodedError::new(ErrorCode::ItemDuplicate, message).into())
+        }
+        Err(VdirClientError::VdirItemLocate(VdirItemLocateError::NotFound(_))) => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
+
+/// Whether `id` is one directory name:a single normal path component
 /// that is the whole of `id`, so neither empty, `.` nor `..`, and holding
 /// no separator, a trailing one included.
 pub(crate) fn is_dir_name(id: &str) -> bool {

@@ -17,7 +17,7 @@ use crate::{backend::Backend, pimdir::backend::PimdirBackend};
 ///
 /// A card added on pimdir waits in the store's queue until the sync engine
 /// applies it, and has no id until then, so `card list` cannot show it.
-/// This is where it shows: the row id to cancel it by, when it was queued,
+/// This is where it shows: the row handle to cancel it by, when it was queued,
 /// the link id `card add` reported and its full name.
 ///
 /// Staged updates and deletions need no such view, addressing cards that
@@ -28,7 +28,8 @@ use crate::{backend::Backend, pimdir::backend::PimdirBackend};
 ///
 /// JSON output: `{"cards": [<row>], "parked": [<row>]}`, each row the
 /// family's `{"row", "kind", "collection", "linkId", "itemId", "producer",
-/// "queuedAt", "attempts", "unconfirmed", "error"}` plus `fullName`.
+/// "queuedAt", "attempts", "unconfirmed", "error"}` plus `handle` and
+/// `fullName`.
 #[derive(Debug, Parser)]
 pub struct PimdirQueueListCommand {
     /// Address book to list, every one of the account's when omitted.
@@ -68,6 +69,10 @@ pub struct PimdirQueueRow {
     /// id until the sync engine applies the action.
     #[serde(rename = "row")]
     pub id: i64,
+    /// The row's handle, its id under the store's identity (pimdir STORAGE
+    /// §4.5), which `pimdir queue show` and `cancel` take and check, a
+    /// restored copy of the store refusing it rather than another row.
+    pub handle: String,
     /// The action kind as the store holds it (pimdir STORAGE §15.3):
     /// `add`, `update`, `remove`, ..., an intent or an application's own.
     pub kind: String,
@@ -122,7 +127,7 @@ impl fmt::Display for PimdirQueueListOutput {
 
         for queued in &self.cards {
             listing.items.push([
-                queued.id.to_string(),
+                sanitize::text(&queued.handle).into_owned(),
                 String::from("queued"),
                 sanitize::text(&queued.queued_at).into_owned(),
                 sanitize::text(&queued.kind).into_owned(),
@@ -133,7 +138,7 @@ impl fmt::Display for PimdirQueueListOutput {
 
         for parked in &self.parked {
             listing.items.push([
-                parked.id.to_string(),
+                sanitize::text(&parked.handle).into_owned(),
                 String::from(match parked.unconfirmed {
                     true => "unconfirmed",
                     false => "parked",
@@ -158,6 +163,8 @@ impl fmt::Display for PimdirQueueListOutput {
 mod tests {
     use super::*;
 
+    const STORE: &str = "e2646df031cd876334410c4df14ebd86";
+
     /// A pending and a parked row print one shape, the family's queue row
     /// with every key, `null` or not, and the text names the cancelling
     /// command.
@@ -168,6 +175,7 @@ mod tests {
             addressbook: None,
             cards: vec![PimdirQueueRow {
                 id: 3,
+                handle: format!("{STORE}.1.3"),
                 kind: String::from("add"),
                 collection: String::from("book"),
                 link_id: Some(String::from("urn:uuid:1")),
@@ -181,6 +189,7 @@ mod tests {
             }],
             parked: vec![PimdirQueueRow {
                 id: 4,
+                handle: format!("{STORE}.1.4"),
                 kind: String::from("update"),
                 collection: String::from("book"),
                 link_id: None,
@@ -199,14 +208,14 @@ mod tests {
             json,
             serde_json::json!({
                 "cards": [{
-                    "row": 3, "kind": "add", "collection": "book",
+                    "row": 3, "handle": format!("{STORE}.1.3"), "kind": "add", "collection": "book",
                     "linkId": "urn:uuid:1", "itemId": null,
                     "producer": "cardamum", "queuedAt": "2026-11-15T10:00:00.000Z",
                     "attempts": 0, "unconfirmed": false, "error": null,
                     "fullName": "Jane Doe",
                 }],
                 "parked": [{
-                    "row": 4, "kind": "update", "collection": "book",
+                    "row": 4, "handle": format!("{STORE}.1.4"), "kind": "update", "collection": "book",
                     "linkId": null, "itemId": "7",
                     "producer": "cardamum", "queuedAt": "2026-11-15T10:01:00.000Z",
                     "attempts": 1, "unconfirmed": false, "error": "conflict",
@@ -222,5 +231,12 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("Jane Doe"), "{text}");
+
+        let rows = |handle: &str, state: &str| {
+            text.lines()
+                .any(|line| line.split_whitespace().take(2).eq([handle, state]))
+        };
+        assert!(rows(&format!("{STORE}.1.3"), "queued"), "{text}");
+        assert!(rows(&format!("{STORE}.1.4"), "parked"), "{text}");
     }
 }

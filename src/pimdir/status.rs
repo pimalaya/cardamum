@@ -23,7 +23,7 @@ use crate::pimdir::backend::PimdirBackend;
 /// An address book whose cards list but do not read is waiting on a sync
 /// to hydrate them, and this is where to see that coming. A parked write
 /// never lands: an update made from a card a sync changed since, a create
-/// the server refused. It is shown by its queue row (ROW), the id
+/// the server refused. It is shown by its queue row handle (ROW), which
 /// `pimdir queue cancel` takes; `pimdir queue list` lists the queued
 /// creations themselves. A refused card was applied in the store, but a
 /// server refused for good the change it led to (a create into a folder
@@ -31,9 +31,9 @@ use crate::pimdir::backend::PimdirBackend;
 /// change, pushing it again only once the card is edited or removed.
 ///
 /// JSON output: `{"account", "accounts", "addressbooks": [{"id", "name",
-/// "total", "hydrated", "queued"}], "parked": [{"row", "addressbookId",
-/// "kind", "error"}], "refused": [{"addressbookId", "itemId", "source",
-/// "reason", "refusedAt"}]}`.
+/// "total", "hydrated", "queued"}], "parked": [{"row", "handle",
+/// "addressbookId", "kind", "error"}], "refused": [{"addressbookId",
+/// "itemId", "source", "reason", "refusedAt"}]}`.
 #[derive(Debug, Parser)]
 pub struct PimdirStatusCommand;
 
@@ -85,6 +85,9 @@ pub struct PimdirAddressbookStatus {
 pub struct PimdirParkedStatus {
     /// The queue row, which addresses the action rather than a card.
     pub row: i64,
+    /// The row's handle, its id under the store's identity (pimdir STORAGE
+    /// §4.5), which `pimdir queue show` and `cancel` take and check.
+    pub handle: String,
     /// The address book the action targets.
     pub addressbook_id: String,
     /// The action kind (`add`, `update`, `remove`…).
@@ -148,7 +151,7 @@ impl fmt::Display for PimdirStatusOutput {
 
             for parked in &self.parked {
                 columns.push([
-                    parked.row.to_string(),
+                    sanitize::text(&parked.handle).into_owned(),
                     sanitize::text(&parked.kind).into_owned(),
                     sanitize::text(&parked.addressbook_id).into_owned(),
                     sanitize::text(&parked.error).into_owned(),

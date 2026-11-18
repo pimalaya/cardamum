@@ -25,7 +25,7 @@ use io_pimdir::{
         producer::PimdirActionStatus,
         reader::{PimdirCollection, PimdirItem},
     },
-    codec::{PimdirAction, PimdirActionHandle, action_from_payload},
+    codec::{PimdirAction, PimdirActionHandle, PimdirStoreIdentity, action_from_payload},
     object::PimdirHash,
     placement::PimdirFlags,
     summary::{PimdirSummary, contact},
@@ -155,6 +155,7 @@ impl PimdirBackend {
 
         addressbooks.sort_by(|a, b| a.name.cmp(&b.name));
 
+        let identity = self.store_identity()?;
         let parked = self
             .inner
             .reader
@@ -167,6 +168,7 @@ impl PimdirBackend {
             })
             .map(|parked| PimdirParkedStatus {
                 row: parked.id,
+                handle: handle(&identity, parked.id),
                 addressbook_id: parked.collection,
                 kind: parked.action,
                 error: parked.error,
@@ -179,6 +181,21 @@ impl PimdirBackend {
             addressbooks,
             parked,
             refused,
+        })
+    }
+
+    /// The store's identity, its id and incarnation (pimdir STORAGE §4.5),
+    /// which a listed row's handle names.
+    pub fn store_identity(&self) -> Result<PimdirStoreIdentity> {
+        let cursor = self
+            .inner
+            .reader
+            .change_cursor()
+            .map_err(|err| refusal(err, "Read the pimdir store identity"))?;
+
+        Ok(PimdirStoreIdentity {
+            store_id: cursor.store_id,
+            incarnation: cursor.incarnation,
         })
     }
 
@@ -204,6 +221,7 @@ impl PimdirBackend {
     /// link id `card add` reported, and the full name of the body it pins
     /// when that body is local.
     pub fn queued_cards(&self, addressbook: Option<&str>) -> Result<Vec<PimdirQueueRow>> {
+        let identity = self.store_identity()?;
         let mut cards = Vec::new();
 
         for collection in self.queue_collections(addressbook)? {
@@ -219,6 +237,7 @@ impl PimdirBackend {
 
                 cards.push(PimdirQueueRow {
                     id: queued.id,
+                    handle: handle(&identity, queued.id),
                     kind,
                     collection: queued.collection,
                     link_id: target.link_id,
@@ -244,6 +263,7 @@ impl PimdirBackend {
     /// that does not decode, or an intent, names none.
     pub fn parked_rows(&self, addressbook: Option<&str>) -> Result<Vec<PimdirQueueRow>> {
         let collections = self.queue_collections(addressbook)?;
+        let identity = self.store_identity()?;
         let mut rows = Vec::new();
 
         for parked in self.inner.reader.parked_actions()? {
@@ -259,6 +279,7 @@ impl PimdirBackend {
             rows.push(PimdirQueueRow {
                 unconfirmed: parked.unconfirmed().is_some(),
                 id: parked.id,
+                handle: handle(&identity, parked.id),
                 kind: parked.action,
                 collection: parked.collection,
                 link_id: target.link_id,
@@ -871,6 +892,16 @@ pub fn uncancellable(row: &PimdirActionHandle, status: &PimdirActionStatus) -> E
         }
         _ => row_not_found(row),
     }
+}
+
+/// The handle of the row `id` of the store `identity`, as `pimdir queue
+/// show` and `cancel` take it.
+pub fn handle(identity: &PimdirStoreIdentity, id: i64) -> String {
+    PimdirActionHandle {
+        id,
+        store: Some(identity.clone()),
+    }
+    .to_string()
 }
 
 /// The refusal of a queue row the account's queue does not hold.
@@ -2066,8 +2097,10 @@ mod tests {
         );
 
         let text = status.to_string();
-        let row = parked.row.to_string();
-        let parked_line = [row.as_str(), "update", "work/book"];
+        let handle: PimdirActionHandle = parked.handle.parse().unwrap();
+        assert_eq!(handle.id, parked.row);
+        assert!(handle.store.is_some(), "{handle:?}");
+        let parked_line = [parked.handle.as_str(), "update", "work/book"];
         let mut lines = text.lines();
         let found = lines.any(|line| line.split_whitespace().take(3).eq(parked_line));
         assert!(found, "{text}");
@@ -2076,6 +2109,7 @@ mod tests {
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(json["parked"][0]["addressbookId"], "work/book");
         assert_eq!(json["parked"][0]["row"], parked.row);
+        assert_eq!(json["parked"][0]["handle"], parked.handle);
     }
 
     /// An update applied, then refused for good by the server it was
@@ -2568,6 +2602,7 @@ mod tests {
 
         let keys = [
             "row",
+            "handle",
             "kind",
             "collection",
             "linkId",
@@ -2603,5 +2638,15 @@ mod tests {
         assert_eq!(update["itemId"], id.as_str(), "{update}");
         assert!(update["error"].is_string(), "{update}");
         assert_eq!(update["fullName"], "Jane Roe", "{update}");
+
+        let handle: PimdirActionHandle = add["handle"].as_str().unwrap().parse().unwrap();
+        assert_eq!(add["row"], handle.id, "{add}");
+        assert_eq!(handle.store, Some(backend.store_identity().unwrap()));
+        assert!(matches!(
+            backend.queue_row(handle.clone()).unwrap(),
+            PimdirActionStatus::Pending { .. }
+        ));
+        backend.cancel_queued(handle).unwrap();
+        assert!(backend.queued_cards(None).unwrap().is_empty());
     }
 }

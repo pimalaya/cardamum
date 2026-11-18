@@ -14,7 +14,9 @@ use clap::Parser;
 use vcard::{
     param::VcardParam,
     prop::{VcardProp, VcardPropKind, VcardPropName},
-    tree::{codec::mode::VcardEscaper, cst::VcardCst, line::VcardLine},
+    tree::{
+        codec::mode::VcardEscaper, cst::VcardCst, line::VcardLine, value::cursor::VcardValueCursor,
+    },
     value::{
         VcardValue,
         datetime::VcardDateAndOrTime,
@@ -24,6 +26,8 @@ use vcard::{
         uri::VcardUri,
     },
 };
+
+use crate::shared::card::project::transcode;
 
 /// The vCard fields `card add` and `card update` set from flags.
 ///
@@ -134,7 +138,7 @@ impl CardFieldsArgs {
 
         let mut cst = VcardCst::parse(card).context("Parse vCard error")?;
         let escaper = VcardEscaper::for_version_str(&version(&cst));
-        let props = self.props(&cst);
+        let props = self.props();
 
         let written: Vec<VcardPropKind> = props
             .iter()
@@ -149,15 +153,101 @@ impl CardFieldsArgs {
         cst.props
             .extend(props.iter().map(|prop| prop.encode(escaper)));
 
+        if self.names_any() {
+            self.write_name(&mut cst, escaper);
+        }
+
         Ok(cst.to_bytes())
     }
 
-    /// The properties the flags name, in a stable order.
+    /// Writes the name flags onto the card's `N` line in place, or appends
+    /// one when it has none.
     ///
-    /// `N` is read back from `card` first, so setting one of its
-    /// components leaves the others as they were rather than clearing
-    /// them. Every component is a list, as RFC 6350 section 6.2.2 has it.
-    fn props(&self, card: &VcardCst) -> Vec<VcardProp<'static>> {
+    /// The line keeps its group and parameters (`SORT-AS`, `LANGUAGE`,
+    /// `ALTID`), and a component no flag names keeps its value. A vCard 2.1
+    /// value in `QUOTED-PRINTABLE` or a foreign `CHARSET` is decoded first
+    /// and written back as UTF-8 text: `ENCODING` goes, `CHARSET` becomes
+    /// `UTF-8`.
+    fn write_name(&self, cst: &mut VcardCst, escaper: VcardEscaper) {
+        let flags = [
+            &self.family_name,
+            &self.given_name,
+            &self.middle_name,
+            &self.name_prefix,
+            &self.name_suffix,
+        ];
+
+        let Some(line) = cst
+            .props
+            .iter_mut()
+            .find(|line| names(line, VcardPropKind::N))
+        else {
+            let given = |index: usize| owned(flags[index]);
+            let name = VcardN {
+                family: given(0),
+                given: given(1),
+                additional: given(2),
+                prefixes: given(3),
+                suffixes: given(4),
+            };
+            let prop = prop(VcardPropKind::N, VcardValue::N(name));
+            cst.props.push(prop.encode(escaper));
+            return;
+        };
+
+        let transcoded = transcode(line);
+        let mut components: Vec<Vec<String>> = match &transcoded {
+            Some(raw) => raw
+                .split(';')
+                .map(|component| component.split(',').map(str::to_owned).collect())
+                .collect(),
+            None => (0..flags.len())
+                .map(|index| {
+                    line.value
+                        .decode_component_list(index)
+                        .iter()
+                        .map(|value| value.to_string())
+                        .collect()
+                })
+                .collect(),
+        };
+        components.resize(flags.len().max(components.len()), Vec::new());
+
+        if transcoded.is_some() {
+            line.params.retain(|param| {
+                let name = param.name.get();
+                !(name.eq_ignore_ascii_case("ENCODING")
+                    || (param.values.is_empty() && name.eq_ignore_ascii_case("QUOTED-PRINTABLE")))
+            });
+
+            for param in &mut line.params {
+                if param.name.get().eq_ignore_ascii_case("CHARSET") {
+                    param.values.truncate(1);
+                    if let Some(value) = param.values.first_mut() {
+                        value.set("UTF-8");
+                    }
+                }
+            }
+        }
+
+        let mut cursor = VcardValueCursor { line };
+
+        for (index, component) in components.iter_mut().enumerate() {
+            let flag = flags.get(index).filter(|flag| !flag.is_empty());
+
+            if let Some(flag) = flag {
+                *component = flag.to_vec();
+            }
+
+            if flag.is_some() || transcoded.is_some() {
+                cursor.set_component(index, component);
+            }
+        }
+    }
+
+    /// The properties the flags name, in a stable order, `N` aside: the
+    /// name flags edit the card's own line (see [`Self::write_name`]).
+    fn props(&self) -> Vec<VcardProp<'static>> {
         let mut props = Vec::new();
 
         if let Some(uid) = &self.uid {
@@ -166,10 +256,6 @@ impl CardFieldsArgs {
 
         if let Some(full_name) = &self.full_name {
             props.push(prop(VcardPropKind::Fn, text(full_name)));
-        }
-
-        if self.names_any() {
-            props.push(prop(VcardPropKind::N, VcardValue::N(self.name(card))));
         }
 
         if !self.nickname.is_empty() {
@@ -210,36 +296,6 @@ impl CardFieldsArgs {
         }
 
         props
-    }
-
-    /// The `N` value the name flags describe, over the card's own.
-    fn name(&self, card: &VcardCst) -> VcardN<'static> {
-        let existing = card.props.iter().find(|line| names(line, VcardPropKind::N));
-
-        let component = |index: usize| match existing {
-            Some(line) => line
-                .value
-                .decode_component_list(index)
-                .iter()
-                .map(|value| Cow::Owned(value.to_string()))
-                .collect(),
-            None => Vec::new(),
-        };
-
-        // NOTE: a flag that was not passed leaves its component as the card
-        // wrote it, so setting a family name does not clear the given one.
-        let over = |flag: &[String], index: usize| match flag.is_empty() {
-            true => component(index),
-            false => owned(flag),
-        };
-
-        VcardN {
-            family: over(&self.family_name, 0),
-            given: over(&self.given_name, 1),
-            additional: over(&self.middle_name, 2),
-            prefixes: over(&self.name_prefix, 3),
-            suffixes: over(&self.name_suffix, 4),
-        }
     }
 
     /// Whether any of the five name flags was given.
@@ -438,5 +494,28 @@ mod tests {
         let out = apply(CARD, &["--phone", "+1-555-0100"]);
 
         assert!(out.contains("TEL:+1-555-0100"));
+    }
+
+    #[test]
+    fn a_name_flag_keeps_the_parameters_of_n() {
+        let card = "BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\n\
+                    N;SORT-AS=\"Doe,Jane\";LANGUAGE=en:Doe;Jane;;;\r\nEND:VCARD\r\n";
+        let out = apply(card, &["--given-name", "Janet"]);
+
+        assert!(
+            out.contains("N;SORT-AS=\"Doe,Jane\";LANGUAGE=en:Doe;Janet;;;\r\n"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn a_name_flag_decodes_a_quoted_printable_n_before_rewriting_it() {
+        let card = "BEGIN:VCARD\r\nVERSION:2.1\r\nFN:Andre Dupre\r\n\
+                    N;CHARSET=UTF-8;ENCODING=QUOTED-PRINTABLE:Dupr=C3=A9;Andr=C3=A9;;;\r\n\
+                    END:VCARD\r\n";
+        let out = apply(card, &["--given-name", "André"]);
+
+        assert!(out.contains("N;CHARSET=UTF-8:Dupré;André;;;\r\n"), "{out}");
+        assert!(!out.contains("=C3=A9"), "{out}");
     }
 }

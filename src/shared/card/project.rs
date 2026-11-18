@@ -140,7 +140,7 @@ fn is(prop: &VcardProp<'_>, kind: VcardPropKind) -> bool {
 /// 2.1), decoded and transcoded to UTF-8, its `;` kept literal; none for
 /// any other line. The decoded model keeps such a value raw, its cursor
 /// alone decodes it.
-fn transcode(line: &mut VcardLine<'_>) -> Option<String> {
+pub(crate) fn transcode(line: &mut VcardLine<'_>) -> Option<String> {
     let declares = line.params.iter().any(|param| {
         let name = param.name.get();
         let quoted_printable = |value: &str| value.eq_ignore_ascii_case("QUOTED-PRINTABLE");

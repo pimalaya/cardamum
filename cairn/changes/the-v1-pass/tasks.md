@@ -6,7 +6,7 @@ change: the-v1-pass
 # Tasks
 
 - [x] CAR-1: `vdir item move|copy` refuses a same-id target, `item-duplicate` (tests/duplicate.rs)
-- [ ] CAR-2: `N` rewritten by component, parameters kept
+- [x] CAR-2: the name flags edit the `N` line in place, parameters kept, a 2.1 quoted-printable value decoded first (src/shared/card/fields.rs)
 - [x] CAR-3: 2.1 quoted-printable and CHARSET decoded in the projection (src/shared/card/project.rs)
 - [ ] CAR-8: unified card verbs on `.vcf` only
 - [ ] CAR-14: private composer draft

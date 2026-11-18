@@ -23,3 +23,4 @@ change: the-v1-pass
 - [ ] io-pimdir next release: `PimdirFormatRefusal` text (C1), `enqueue_user_body` (C2), `PimdirActionHandle` queue rows (C4)
 - [ ] Live check on the Microsoft test account: Graph default-folder resolution of CAR-5
 - [x] CAL-14 twin: a configured `pimdir.account` the store lacks is refused, naming its accounts (src/pimdir/client.rs `resolve_account`)
+- [x] The `.well-known` probe runs on an `https` origin alone, as calendula 7ac87ce (src/carddav/client.rs; src/account/check.rs test)

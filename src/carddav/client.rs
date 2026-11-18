@@ -123,7 +123,9 @@ pub fn open_carddav_client(config: CarddavConfig, resolver: &mut SecretResolver)
     // 404s everything outside `/dav/*`, so probe `.well-known/carddav` and
     // follow its redirect.
     let server = match server.path() {
-        "" | "/" => probe_carddav_context_root(&server, &tls, &proxy).unwrap_or(server),
+        "" | "/" if server.scheme() == "https" => {
+            probe_carddav_context_root(&server, &tls, &proxy).unwrap_or(server)
+        }
         _ => server,
     };
 
@@ -160,6 +162,9 @@ pub fn propfind_home(client: &mut Inner) -> Result<(), WebdavClientStdError> {
 }
 
 /// Probes `.well-known/carddav` on a bare-origin `server` with a GET.
+///
+/// Run on an `https` origin alone: the probe opens TLS, which a plain
+/// `http` port never answers.
 ///
 /// Returns the context-root redirect target when the server publishes
 /// one over `https`. Silent: a failed probe or a response without a

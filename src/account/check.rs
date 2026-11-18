@@ -553,6 +553,34 @@ mod carddav_tests {
         serde_json::to_value(backend_check("carddav", result)).unwrap()
     }
 
+    /// A bare `http` origin is not probed for `.well-known/carddav`: the
+    /// probe opens TLS, which a plain port never answers, so the first
+    /// connection the server sees carries the principal walk's request.
+    #[test]
+    fn a_bare_http_origin_is_not_probed_over_tls() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let first = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut byte = [0u8; 1];
+            stream.read_exact(&mut byte).unwrap();
+            let response = "HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\
+                            Connection: close\r\n\r\n";
+            let _ = stream.write_all(response.as_bytes());
+            byte[0]
+        });
+
+        let server = format!("http://127.0.0.1:{port}/");
+        let _ = check(&config(Some(server), None));
+
+        let byte = first.join().unwrap();
+        assert!(
+            byte.is_ascii_uppercase(),
+            "a TLS record ({byte:#04x}), not a request"
+        );
+    }
+
     /// A `home` block sends nothing while connecting, so the check sends
     /// it a request: a refused credential fails it with the code and the
     /// error a `server` block fails with.

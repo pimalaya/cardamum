@@ -12,7 +12,7 @@ change: the-v1-pass
 - [ ] CAR-14: private composer draft
 - [x] CAR-4 with TWN-4: the `.well-known` redirect followed over https only, a `server` naming a scheme read as written (src/carddav/client.rs)
 - [x] CAR-11: `carddav delete <ADDRESSBOOK> <CARD-ID>` (id required), `carddav rmcol <ADDRESSBOOK>`; `carddav put --if-none-match` takes `*` alone, the one value io-webdav sends (src/carddav/delete.rs, rmcol.rs, put.rs)
-- [ ] TWN-3: `no-performer` (after TRI-3 lands in src/pimdir)
+- [x] TWN-3: the refusal coded `no-performer`, as calendula (src/pimdir/backend.rs `writable`, cairn/spec/backends.md)
 - [ ] CAR-5: address book honoured on JMAP, Graph, People
 - [ ] io-pimdir 0.16 bump
 - [x] v1: `removed_key!` gone (src/config.rs), a removed key refused by serde as unknown; MIGRATION.md removed; CHANGELOG and cairn/spec/config.md follow

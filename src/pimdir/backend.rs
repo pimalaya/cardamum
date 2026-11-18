@@ -784,10 +784,12 @@ impl PimdirBackend {
         self.known_collection(collection)?;
 
         if self.inner.reader.collection_sources(collection)?.is_empty() {
-            bail!(
-                "Addressbook `{collection}` is one no source syncs, so a card written \
-                 there would never reach a server; write into a synced addressbook"
+            let message = format!(
+                "No source syncs address book `{collection}` yet, so a card written \
+                 there would be pushed by nobody: run a sync first, or write into a \
+                 synced address book"
             );
+            return Err(CodedError::new(ErrorCode::NoPerformer, message).into());
         }
 
         Ok(())
@@ -1492,25 +1494,23 @@ mod tests {
     /// would never reach a server.
     #[test]
     fn a_write_into_an_address_book_no_source_syncs_is_refused() {
+        use pimalaya_cli::error::code_of;
+
         let (dir, mut backend) = store();
         let id = kept(&dir);
         let created = card(1, "Joe Bloggs");
 
-        let err = backend
-            .create_card("local", created.clone())
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("no source syncs"), "{err}");
+        let err = backend.create_card("local", created.clone()).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::NoPerformer), "{err:#}");
+        assert!(err.to_string().contains("No source syncs"), "{err:#}");
         let err = backend
             .update_card("local", &id, card(2, "Jane Roe"), None)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("no source syncs"), "{err}");
-        let err = backend
-            .delete_card("local", &id, None)
-            .unwrap_err()
-            .to_string();
-        assert!(err.contains("no source syncs"), "{err}");
+            .unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::NoPerformer), "{err:#}");
+        assert!(err.to_string().contains("No source syncs"), "{err:#}");
+        let err = backend.delete_card("local", &id, None).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::NoPerformer), "{err:#}");
+        assert!(err.to_string().contains("No source syncs"), "{err:#}");
 
         let producer = backend.inner.producer().unwrap();
         assert!(producer.pending_actions("local").unwrap().is_empty());

@@ -1,7 +1,7 @@
 ---
 cairn: change
 id: carddav-query-filter
-status: active
+status: landed
 created: 2026-09-26
 ---
 

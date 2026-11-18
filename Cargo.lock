@@ -2055,7 +2055,9 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4e9d3a6221632badbdc1b7fa9bb8518386ff0b5dfd12eacfcbcec88db38884d"
 dependencies = [
+ "encoding_rs",
  "memchr",
+ "quoted-printable-codec",
  "serde_json",
 ]
 

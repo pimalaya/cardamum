@@ -7,7 +7,7 @@ change: the-v1-pass
 
 - [x] CAR-1: `vdir item move|copy` refuses a same-id target, `item-duplicate` (tests/duplicate.rs)
 - [ ] CAR-2: `N` rewritten by component, parameters kept
-- [ ] CAR-3: 2.1 quoted-printable decoded
+- [x] CAR-3: 2.1 quoted-printable and CHARSET decoded in the projection (src/shared/card/project.rs)
 - [ ] CAR-8: unified card verbs on `.vcf` only
 - [ ] CAR-14: private composer draft
 - [ ] CAR-4 with TWN-4: https-only redirect, strict `server` parse

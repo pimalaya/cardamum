@@ -15,7 +15,7 @@ use io_webdav::{
 use pimalaya_config::secret::SecretResolver;
 
 use crate::{
-    carddav::client::{is_missing, refused, rejects_card, row_code},
+    carddav::client::{is_missing, names_precondition, refused, rejects_card, row_code},
     config::CarddavConfig,
     error::{self, ErrorCode, ItemError},
     shared::{
@@ -179,12 +179,19 @@ impl CarddavBackend {
     }
 
     /// Creates a card inside `addressbook_id` under a fresh UUID name.
+    ///
+    /// The `PUT` names a resource no card holds yet, so a 404, a 410 or a
+    /// 409 naming no precondition (RFC 4918 §9.7.1) says the collection
+    /// is missing: `addressbook-not-found` naming it.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let id = fresh_card_id()?;
         let created = self
             .inner
             .create_card(addressbook_id, &id, contents)
-            .map_err(card_write_error)?;
+            .map_err(|err| match lacks_collection(&err) {
+                true => error::addressbook_not_found(addressbook_id, err.into()),
+                false => card_write_error(err),
+            })?;
         Ok(created.id)
     }
 
@@ -319,6 +326,16 @@ fn card_write_error(err: WebdavClientStdError) -> Error {
          most require a UID property, and some (e.g. iCloud) also require an N \
          property",
     )
+}
+
+/// Whether the `PUT` creating a card found no collection to create it in:
+/// 404 or 410, or 409 naming no precondition, the missing parent of RFC
+/// 4918 §9.7.1 (a 409 naming one is a `no-uid-conflict`).
+fn lacks_collection(err: &WebdavClientStdError) -> bool {
+    match refused(err) {
+        Some((409, body)) => !names_precondition(body),
+        _ => is_missing(err),
+    }
 }
 
 /// The failure of a request on the card `card_id`, `card-not-found` when
@@ -832,5 +849,23 @@ END:VCARD&#13;
             "{mkcol}"
         );
         assert!(mkcol.contains("My Book"), "{mkcol}");
+    }
+
+    /// A card added to an address book the server does not hold is
+    /// `addressbook-not-found` naming it, the server's answer in `sources`:
+    /// the `PUT` of a new resource answered 404, or 409 naming no
+    /// precondition, the missing parent of RFC 4918 §9.7.1.
+    #[test]
+    fn a_card_added_to_an_unknown_address_book_is_not_found() {
+        let missing = Some(ErrorCode::AddressbookNotFound);
+
+        for status in [404, 409] {
+            let err = answering(status, "")
+                .create_card("nope", CARD.to_vec())
+                .unwrap_err();
+            assert_eq!(code_of(&err), missing, "{err:#}");
+            assert_eq!(err.to_string(), "Addressbook `nope` not found");
+            assert!(format!("{err:#}").contains(&status.to_string()), "{err:#}");
+        }
     }
 }

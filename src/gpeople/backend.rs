@@ -224,9 +224,13 @@ impl GpeopleBackend {
         Ok(())
     }
 
-    /// Lists the contacts of the group, each projected onto a vCard.
+    /// Lists the contacts of the group, each projected onto a vCard, the
+    /// `take` after the first `skip`.
     ///
-    /// An unknown group fails rather than list as empty.
+    /// People pages the connections of every group at once, so the group's
+    /// own are counted as they come: the listing stops once it holds the
+    /// `skip` before the window and the window. An unknown group fails
+    /// rather than list as empty.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
@@ -256,6 +260,10 @@ impl GpeopleBackend {
                     .filter(|person| in_group(person, addressbook_id))
                     .map(|person| into_card(addressbook_id, person)),
             );
+
+            if take.is_some_and(|take| cards.len() >= skip.saturating_add(take)) {
+                break;
+            }
 
             match current.next_page_token {
                 Some(next) => page_token = Some(next),
@@ -933,5 +941,92 @@ mod tests {
         let lines = lines(&requests);
         assert_eq!(lines.len(), 1, "{lines:?}");
         assert!(lines[0].contains("connections"), "{lines:?}");
+    }
+
+    /// A page of People connections `first..first + len`, its
+    /// `nextPageToken` naming the next while `more`.
+    fn connection_page(first: usize, len: usize, more: bool) -> Vec<u8> {
+        let connections: Vec<_> = (first..first + len)
+            .map(|n| {
+                json!({"resourceName": format!("people/c{n}"), "etag": "e",
+                       "memberships": [{"contactGroupMembership": {
+                           "contactGroupResourceName": "contactGroups/myContacts"}}]})
+            })
+            .collect();
+        let mut page = json!({"connections": connections});
+        if more {
+            page["nextPageToken"] = json!(format!("t{}", first + len));
+        }
+        response(&page)
+    }
+
+    /// A page of a long listing reads the connections only until it holds
+    /// the cards before the page, the page and the card telling whether
+    /// another follows.
+    #[test]
+    fn a_page_reads_only_the_pages_it_needs() {
+        let pages: Vec<_> = (0..5).map(|n| connection_page(n * 2, 2, n < 4)).collect();
+        let (script, requests) = Script::new(pages);
+        let mut backend = GpeopleBackend {
+            inner: GpeopleClientStd::new(script, "token"),
+        };
+
+        let cards = backend.list_cards(MY_CONTACTS_GROUP, 0, Some(3)).unwrap();
+        let ids: Vec<&str> = cards.iter().map(|card| card.id.as_str()).collect();
+        assert_eq!(ids, ["c0", "c1", "c2"]);
+        assert_eq!(lines(&requests).len(), 2);
+
+        let pages: Vec<_> = (0..5).map(|n| connection_page(n * 2, 2, n < 4)).collect();
+        let (script, requests) = Script::new(pages);
+        let mut backend = GpeopleBackend {
+            inner: GpeopleClientStd::new(script, "token"),
+        };
+
+        let cards = backend.list_cards(MY_CONTACTS_GROUP, 2, Some(3)).unwrap();
+        let ids: Vec<&str> = cards.iter().map(|card| card.id.as_str()).collect();
+        assert_eq!(ids, ["c2", "c3", "c4"]);
+        assert_eq!(lines(&requests).len(), 3);
+    }
+
+    /// An update People refuses for the stale `etag` it carries is
+    /// `precondition-failed`, as the other backends code a stale version:
+    /// People answers 400 `FAILED_PRECONDITION`, a 412 reading the same.
+    /// An expired sync token, refused the same way, is no stale version.
+    #[test]
+    fn a_stale_etag_is_a_failed_precondition() {
+        let current = json!({
+            "resourceName": "people/c1",
+            "etag": "e2",
+            "names": [{"givenName": "Jane", "familyName": "Doe"}],
+        });
+        let stale = json!({"error": {
+            "code": 400,
+            "message": "Request person.etag is different than the current person.etag. Clear local cache and get the latest person.",
+            "status": "FAILED_PRECONDITION",
+        }});
+        let failed = Some(ErrorCode::PreconditionFailed);
+
+        for status in [400, 412] {
+            let refused = script::response(status, "application/json", &stale.to_string());
+            let (script, _) = Script::new([response(&current), refused]);
+            let mut backend = GpeopleBackend {
+                inner: GpeopleClientStd::new(script, "token"),
+            };
+
+            let err = backend
+                .update_card(MY_CONTACTS_GROUP, "c1", CARD.into(), Some("e1"))
+                .unwrap_err();
+            assert_eq!(error::code(&err), failed, "{err:#}");
+            assert_eq!(code_of(&with_code(err, error::code)), failed);
+        }
+
+        let expired = json!({"error": {
+            "code": 400,
+            "message": "Sync token is expired. Clear local cache and retry call without the sync token.",
+            "status": "FAILED_PRECONDITION",
+            "details": [{"@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                         "reason": "EXPIRED_SYNC_TOKEN"}],
+        }});
+        assert_eq!(delete_code(400, expired), None);
     }
 }

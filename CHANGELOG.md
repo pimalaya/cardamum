@@ -49,6 +49,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Changed `card list` on JMAP, Microsoft Graph and Google People to read the page it prints: JMAP asks its window (`position`, `limit`) in chunks the server takes, Graph sends `$skip` and `$top`, People stops once it holds the window, where each read the whole address book (100 requests for page 1 of 10,000 Graph contacts, now 1). On JMAP an unreadable card's entry prints on the page holding it.
+- Changed `card add -k <unknown>` on CardDAV and JMAP to fail coded `addressbook-not-found`, a stale People `etag` to be `precondition-failed`, and a JMAP method error inside a typed call (`forbidden` on `card list`) to carry its code, where each was uncoded.
 - **Breaking:** changed `msgraph contacts create` and `update` to send the JSON as written and print what Graph answered as sent, where they went through io-msgraph's contact model: a key the model lacks was dropped from the request while Graph answered 200.
 - **Breaking:** changed `jmap contact-card query` to print the query's state as `queryState`, where it printed it as `state`, the key `contact-card get` prints and `contact-card changes` takes.
 - **Breaking:** changed a field flag to refuse a source holding anything after its first card, a partial second card included, where it dropped it.

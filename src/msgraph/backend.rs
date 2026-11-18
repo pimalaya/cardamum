@@ -175,14 +175,20 @@ impl MsgraphBackend {
 
     /// Lists the contacts of the folder, each projected onto a vCard
     /// document, the `take` after the first `skip`.
+    ///
+    /// Graph is asked for that window alone (`$skip`, `$top` capped at
+    /// [`PAGE_SIZE`]), and a next link is followed only until the window
+    /// is held, Graph answering fewer contacts than asked when it pleases.
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
         skip: usize,
         take: Option<usize>,
     ) -> Result<Vec<Card>> {
+        let top = take.map_or(PAGE_SIZE, |take| take.min(PAGE_SIZE as usize) as u32);
         let params = MsgraphContactsListParams {
-            top: Some(100),
+            top: Some(top),
+            skip: (skip > 0).then(|| u32::try_from(skip).unwrap_or(u32::MAX)),
             expand: Some(MSGRAPH_CONTACT_STASH_EXPAND),
             ..Default::default()
         };
@@ -202,13 +208,17 @@ impl MsgraphBackend {
                     .map(|contact| into_card(addressbook_id, contact)),
             );
 
+            if take.is_some_and(|take| cards.len() >= take) {
+                break;
+            }
+
             match current.next_link {
                 Some(next) => current = self.inner.page_get(&next, None)?.response,
                 None => break,
             }
         }
 
-        Ok(window(cards, skip, take))
+        Ok(window(cards, 0, take))
     }
 
     /// Reads the contact `card_id`, `$expand`ing `expand` when given,
@@ -346,6 +356,9 @@ impl MsgraphBackend {
 
 /// The server a refused guard names.
 const SERVER: &str = "Microsoft Graph";
+
+/// The most contacts one listing request asks Graph for (`$top`).
+const PAGE_SIZE: u32 = 100;
 
 /// Maps the sentinel Contacts folder id to the omitted folder segment.
 fn folder(addressbook_id: &str) -> Option<&str> {
@@ -636,5 +649,59 @@ mod tests {
 
         let defaults: Vec<_> = books.iter().map(|book| (&*book.id, book.default)).collect();
         assert_eq!(defaults, [(CONTACTS_FOLDER, true), ("AAMkF", false)]);
+    }
+
+    /// A page of Graph contacts `first..first + len`, its `@odata.nextLink`
+    /// pointing past it while `more`.
+    fn contact_page(first: usize, len: usize, more: bool) -> Vec<u8> {
+        let value: Vec<_> = (first..first + len)
+            .map(|n| json!({"id": format!("AAMk{n}"), "displayName": format!("C{n}")}))
+            .collect();
+        let mut body = json!({"value": value});
+        if more {
+            let next = format!(
+                "https://graph.microsoft.com/v1.0/me/contacts?$top=2&$skip={}",
+                first + len
+            );
+            body["@odata.nextLink"] = json!(next);
+        }
+        script::response(200, "application/json", &body.to_string())
+    }
+
+    /// The request lines a server received, in order.
+    fn request_lines(requests: &script::Requests) -> Vec<String> {
+        let requests = requests.lock().unwrap();
+        requests
+            .iter()
+            .map(|request| {
+                let request = String::from_utf8_lossy(request);
+                request.lines().next().unwrap_or_default().to_owned()
+            })
+            .collect()
+    }
+
+    /// A page of a long folder asks Graph for that page alone, `$skip`
+    /// past the cards before it and `$top` the page and the card telling
+    /// whether another follows, and follows a short answer's next link
+    /// only until it holds them.
+    #[test]
+    fn a_page_reads_only_the_pages_it_needs() {
+        let pages = (0..5).map(|n| contact_page(n * 2, 2, n < 4)).collect();
+        let (mut backend, requests) = scripted(pages);
+        let cards = backend.list_cards(CONTACTS_FOLDER, 0, Some(3)).unwrap();
+
+        let ids: Vec<&str> = cards.iter().map(|card| card.id.as_str()).collect();
+        assert_eq!(ids, ["AAMk0", "AAMk1", "AAMk2"]);
+        let lines = request_lines(&requests);
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert!(lines[0].contains("%24top=3"), "{lines:?}");
+        assert!(!lines[0].contains("%24skip"), "{lines:?}");
+
+        let (mut backend, requests) = scripted(vec![contact_page(4, 3, true)]);
+        let cards = backend.list_cards(CONTACTS_FOLDER, 4, Some(3)).unwrap();
+        assert_eq!(cards.len(), 3);
+        let lines = request_lines(&requests);
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(lines[0].contains("%24skip=4"), "{lines:?}");
     }
 }

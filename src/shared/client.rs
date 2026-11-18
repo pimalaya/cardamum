@@ -762,7 +762,6 @@ impl AddressbookClient {
 /// item after them when `take` is `None`.
 #[cfg(any(
     feature = "carddav",
-    feature = "jmap",
     feature = "msgraph",
     feature = "gpeople",
     feature = "vdir",
@@ -779,7 +778,7 @@ pub fn window<T>(items: Vec<T>, skip: usize, take: Option<usize>) -> Vec<T> {
 
 /// The errors of a listing that reads the whole address book before
 /// cutting its page: on the first page only, so no page repeats them.
-#[cfg(any(feature = "carddav", feature = "jmap", feature = "vdir"))]
+#[cfg(any(feature = "carddav", feature = "vdir"))]
 pub fn first_page(errors: Vec<ItemError>, skip: usize) -> Vec<ItemError> {
     match skip {
         0 => errors,
@@ -808,7 +807,9 @@ pub fn unreadable(contents: &[u8]) -> Option<Error> {
 pub struct CardWindow {
     /// The cards listed, in the backend's order. A card the backend
     /// names in `errors` may still hold its place here, so a page counts
-    /// it; the page leaves it out.
+    /// it; the page leaves it out. A card with no id and no contents is a
+    /// place alone, held for a card the backend could not name, and the
+    /// page leaves it out with no entry.
     pub cards: Vec<Card>,
     /// The error of each card the backend could not read, in the order
     /// met.
@@ -834,6 +835,10 @@ impl CardPage {
         // NOTE: the page is cut before a card leaves, so a card in `errors`
         // keeps its place and the next page starts where this one ended.
         cards.retain(|card| {
+            if card.id.is_empty() && card.contents.is_empty() {
+                return false;
+            }
+
             let id = Some(card.id.as_str());
             if errors.iter().any(|error| error.id.as_deref() == id) {
                 return false;
@@ -928,5 +933,21 @@ mod tests {
                 .iter()
                 .all(|error| error.code == Some(ErrorCode::CardUnreadable))
         );
+    }
+
+    /// A card with no id and no contents holds a place the page counts,
+    /// and leaves with no entry of its own.
+    #[test]
+    fn a_place_alone_is_counted_and_left_out() {
+        let window = CardWindow {
+            cards: vec![card("1", CARD), card("", ""), card("3", CARD)],
+            errors: Vec::new(),
+        };
+
+        let page = CardPage::of(window, Some(3));
+        assert!(page.more);
+        let ids: Vec<&str> = page.cards.iter().map(|card| card.id.as_str()).collect();
+        assert_eq!(ids, ["1"]);
+        assert!(page.errors.is_empty());
     }
 }

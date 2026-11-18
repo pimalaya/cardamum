@@ -30,3 +30,6 @@ change: the-v1-pass
 - [x] With `pimdir.account` unset, only the accounts holding address books count (src/pimdir/client.rs `resolve_account`), as himalaya and calendula
 - [x] CAR-12 (1) a source with anything after its first card refused, appended lines end as the card does; (2) a `tel:`/`mailto:` scheme is no type (src/shared/card/fields.rs); (3) an invalid vdir id `card-not-found` (src/vdir/client.rs); (5) `jmap contact-card query` prints `queryState` (src/jmap/render.rs); (4) and (8) done earlier (2d6ae68, d7cb9d6)
 - [x] CAR-12 (6): `msgraph contacts create|update` send the JSON as written through `MsgraphClient::raw_send` and print the answer raw (src/msgraph/client.rs, contacts/{input,create,update}.rs)
+- [x] CAR-6: JMAP, Graph, People `card list` read the page they print (src/{jmap,msgraph,gpeople}/backend.rs, src/shared/client.rs)
+- [x] CAR-7: People stale etag `precondition-failed` (src/gpeople/client.rs), `card add -k <unknown>` `addressbook-not-found` on JMAP and CardDAV (src/jmap/backend.rs, src/carddav/backend.rs), JMAP method errors in typed calls coded (src/jmap/error.rs)
+- [ ] CAR-12 (7): Graph `addressbook list` at every folder depth (neverest precedent of 2026-11-17)

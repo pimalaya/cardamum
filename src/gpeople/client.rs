@@ -157,14 +157,36 @@ pub(crate) fn is_missing(err: &GpeopleClientStdError) -> bool {
 
 /// The code of a Google refusal, neverest's (its src/throttle.rs): a 429,
 /// or a 403 naming a rate limit or a quota, is `rate-limited`; any other
-/// 403 `permission-denied`.
+/// 403 `permission-denied`. A 412, or a `FAILED_PRECONDITION` naming no
+/// expired sync token, is `precondition-failed`: People answers the
+/// stale `etag` of an update so (400 `FAILED_PRECONDITION`).
 fn google_code(err: &GpeopleApiError) -> Option<ErrorCode> {
     match err.status {
         429 => Some(ErrorCode::RateLimited),
         403 if names_rate_limit(err) => Some(ErrorCode::RateLimited),
         403 => Some(ErrorCode::PermissionDenied),
+        412 => Some(ErrorCode::PreconditionFailed),
+        _ if names_stale_version(err) => Some(ErrorCode::PreconditionFailed),
         _ => None,
     }
+}
+
+/// Whether a Google refusal says the version a write carries is stale:
+/// `FAILED_PRECONDITION` or the `failedPrecondition` reason, unless it
+/// names an expired sync token, refused the same way.
+fn names_stale_version(err: &GpeopleApiError) -> bool {
+    let failed = err.google_status.as_deref() == Some("FAILED_PRECONDITION")
+        || err
+            .reasons
+            .iter()
+            .any(|reason| reason == "failedPrecondition");
+    let expired = err
+        .detail_reasons
+        .iter()
+        .any(|reason| reason == "EXPIRED_SYNC_TOKEN")
+        || squeeze(&err.message).contains("synctoken");
+
+    failed && !expired
 }
 
 /// Whether a Google refusal names a rate limit or a quota, by reason or

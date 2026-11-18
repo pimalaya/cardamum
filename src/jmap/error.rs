@@ -18,7 +18,10 @@ use io_jmap::{
     },
     rfc9610::{
         address_book::set::JmapAddressBookSetItemError,
-        contact_card::{copy::JmapContactCardCopyItemError, set::JmapContactCardSetItemError},
+        contact_card::{
+            copy::JmapContactCardCopyItemError, query::JmapContactCardQueryError,
+            set::JmapContactCardSetItemError,
+        },
     },
 };
 use pimalaya_cli::sanitize;
@@ -118,7 +121,7 @@ pub(crate) fn refusal_code(cause: &(dyn std::error::Error + 'static)) -> Option<
         return err.code;
     }
 
-    if let Some(JmapMethodError::Forbidden { .. }) = cause.downcast_ref::<JmapMethodError>() {
+    if let Some(JmapMethodError::Forbidden { .. }) = method_error(cause) {
         return Some(ErrorCode::PermissionDenied);
     }
 
@@ -145,7 +148,7 @@ pub(crate) fn refusal(cause: &(dyn std::error::Error + 'static)) -> Option<Refus
         return Some(described(None, Some(err.type_name.clone()), message));
     }
 
-    if let Some(err) = cause.downcast_ref::<JmapMethodError>() {
+    if let Some(err) = method_error(cause) {
         return Some(typed(err));
     }
 
@@ -155,6 +158,18 @@ pub(crate) fn refusal(cause: &(dyn std::error::Error + 'static)) -> Option<Refus
             Some(described(Some(*status), None, cause.to_string()))
         }
         _ => None,
+    }
+}
+
+/// The method error of a chain cause: one in the chain, or the one the
+/// typed `ContactCard/query` call holds without naming it as its source.
+fn method_error<'a>(cause: &'a (dyn std::error::Error + 'static)) -> Option<&'a JmapMethodError> {
+    match cause.downcast_ref::<JmapClientStdError>() {
+        Some(JmapClientStdError::ContactCardQuery(
+            JmapContactCardQueryError::QueryMethod(err) | JmapContactCardQueryError::GetMethod(err),
+        )) => Some(err),
+        Some(_) => None,
+        None => cause.downcast_ref::<JmapMethodError>(),
     }
 }
 
@@ -381,5 +396,20 @@ mod tests {
             Some(ErrorCode::AddressbookNotFound)
         );
         assert_eq!(err.to_string(), "AddressBook destroy rejected: notFound");
+    }
+
+    /// A method error the typed `ContactCard/query` holds, naming it as no
+    /// source, is read as one the chain holds: coded, and printed as the
+    /// refusal it is.
+    #[test]
+    fn a_query_method_error_is_a_refusal() {
+        let forbidden = JmapMethodError::Forbidden { description: None };
+        let err =
+            JmapClientStdError::ContactCardQuery(JmapContactCardQueryError::QueryMethod(forbidden));
+
+        assert_eq!(refusal_code(&err), Some(ErrorCode::PermissionDenied));
+        let refusal = refusal(&err).unwrap();
+        assert_eq!(refusal.reason.as_deref(), Some("forbidden"));
+        assert_eq!(refusal.status, None);
     }
 }

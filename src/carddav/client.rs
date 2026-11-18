@@ -398,7 +398,7 @@ pub(crate) fn rejects_card(status: u16, body: &str) -> bool {
 
 /// Whether a refusal's body is a `DAV:error` element, which names the
 /// precondition the request failed (RFC 4918 §16).
-fn names_precondition(body: &str) -> bool {
+pub(crate) fn names_precondition(body: &str) -> bool {
     body.contains(":error") || body.contains("<error")
 }
 

@@ -28,7 +28,9 @@ use io_jmap::{
         contact_card::{
             JmapContactCard,
             get::JmapContactCardGetOptions,
-            query::{JmapContactCardFilter, JmapContactCardQueryOptions},
+            query::{
+                JmapContactCardFilter, JmapContactCardQueryOptions, JmapContactCardQueryOutput,
+            },
             set::{JmapContactCardPatch, JmapContactCardSetArgs, JmapContactCardSetItemError},
         },
     },
@@ -47,7 +49,7 @@ use crate::{
     shared::{
         addressbook::{Addressbook, AddressbookDiff},
         card::{Card, CardUpdateOutcome},
-        client::{CardWindow, first_page, window},
+        client::CardWindow,
     },
 };
 
@@ -174,11 +176,16 @@ impl JmapBackend {
     /// Lists the AddressBook's cards as vCard documents, the `take` after
     /// the first `skip`.
     ///
-    /// A card that does not convert to a vCard is left out, an entry naming
-    /// it instead, on the first page only: the query reads every card.
+    /// The query asks for that window alone (`position`, `limit`), in
+    /// chunks no wider than the session's `maxObjectsInGet`, the chained
+    /// `ContactCard/get` fetching what the query found. A server answering
+    /// fewer cards than asked is asked again from where it stopped while
+    /// its `total` says more follow, or, giving none, while it answered
+    /// every card asked. A card that does not convert to a vCard is left
+    /// out, an entry naming it instead, on the page holding it.
     ///
-    /// A query that fails or finds nothing is checked against the address
-    /// books, one `AddressBook/get`, so an unknown one fails
+    /// A first query that fails or finds nothing is checked against the
+    /// address books, one `AddressBook/get`, so an unknown one fails
     /// `addressbook-not-found` naming it rather than reading as empty or as
     /// the server's refusal of the filter.
     pub fn list_cards(
@@ -187,29 +194,75 @@ impl JmapBackend {
         skip: usize,
         take: Option<usize>,
     ) -> Result<CardWindow> {
+        let max_get = self
+            .inner
+            .session()
+            .and_then(|session| session.core_capability().max_objects_in_get)
+            .filter(|max| *max > 0);
+        let mut places = Vec::new();
+        let mut position = skip as u64;
+
+        loop {
+            let left = take.map(|take| take.saturating_sub(places.len()) as u64);
+            let limit = match (left, max_get) {
+                (Some(left), Some(max)) => Some(left.min(max)),
+                (left, max) => left.or(max),
+            };
+            let first = places.is_empty() && position == skip as u64;
+            let out = self.query_cards(addressbook_id, position, limit, first)?;
+
+            let listed = (out.cards.len() + out.not_found.len()) as u64;
+            position += listed;
+            places.extend(out.cards.into_iter().map(Some));
+            places.extend(out.not_found.iter().map(|_| None));
+
+            let done = listed == 0
+                || left.is_some_and(|left| listed >= left)
+                || match out.total {
+                    Some(total) => position >= total,
+                    None => limit.is_none_or(|limit| listed < limit),
+                };
+
+            if done {
+                break;
+            }
+        }
+
+        Ok(project_cards(addressbook_id, places, take))
+    }
+
+    /// Queries the AddressBook's cards from `position`, `limit` at most,
+    /// the `first` query of a listing checked against the address books
+    /// when it fails or finds nothing.
+    fn query_cards(
+        &mut self,
+        addressbook_id: &str,
+        position: u64,
+        limit: Option<u64>,
+        first: bool,
+    ) -> Result<JmapContactCardQueryOutput> {
         let opts = JmapContactCardQueryOptions {
             filter: Some(JmapContactCardFilter {
                 in_address_book: Some(addressbook_id.to_string()),
                 ..Default::default()
             }),
+            position: Some(position),
+            limit,
             ..Default::default()
         };
 
-        let cards = match self.inner.contact_card_query(opts) {
-            Ok(out) if !out.cards.is_empty() => out.cards,
+        match self.inner.contact_card_query(opts) {
+            Ok(out) if !first || !out.cards.is_empty() => Ok(out),
+            Err(err) if !first => Err(err.into()),
             queried => match (self.holds_addressbook(addressbook_id)?, queried) {
-                (true, queried) => queried?.cards,
+                (true, queried) => Ok(queried?),
                 (false, Ok(_)) => {
                     let cause = anyhow!("JMAP AddressBook/get answered the id as `notFound`");
-                    return Err(error::addressbook_not_found(addressbook_id, cause));
+                    Err(error::addressbook_not_found(addressbook_id, cause))
                 }
-                (false, Err(err)) => {
-                    return Err(error::addressbook_not_found(addressbook_id, err.into()));
-                }
+                (false, Err(err)) => Err(error::addressbook_not_found(addressbook_id, err.into())),
             },
-        };
-
-        Ok(project_cards(addressbook_id, cards, skip, take))
+        }
     }
 
     /// Whether the account holds the AddressBook `id`.
@@ -264,6 +317,11 @@ impl JmapBackend {
     }
 
     /// Creates the vCard as a ContactCard, returning the id the server minted.
+    ///
+    /// A create refused with no code of its own, or `notFound`, is checked
+    /// against the address books, one `AddressBook/get`, so a card added
+    /// to an unknown one fails `addressbook-not-found` naming it, the
+    /// server's refusal in `sources`.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         let vcard = into_vcard_text(contents)?;
         let card = project::to_jscontact(&vcard).map_err(Error::msg)?;
@@ -284,7 +342,15 @@ impl JmapBackend {
         let out = self.inner.contact_card_set(args)?;
 
         if let Some(err) = out.not_created.into_values().next() {
-            return Err(card_write_error("create", &err, &unmapped));
+            let refusal = card_write_error("create", &err, &unmapped);
+
+            if matches!(err.code(), None | Some(ErrorCode::CardNotFound))
+                && !self.holds_addressbook(addressbook_id)?
+            {
+                return Err(error::addressbook_not_found(addressbook_id, refusal));
+            }
+
+            return Err(refusal);
         }
 
         out.created
@@ -421,34 +487,56 @@ pub fn jmap_http_auth(
     }
 }
 
-/// The `take` cards of `cards` after the first `skip`, as vCard documents
-/// of `addressbook_id`, beside an entry for each card that does not
-/// convert, on the first page only.
+/// The queried `places` as vCard documents of `addressbook_id`, beside an
+/// entry for each card that does not convert, `None` standing for a card
+/// the query found and the get did not.
+///
+/// Every place holds one card of the window, so the page counts it: a
+/// card that does not convert, or that the get did not find, holds it
+/// with a [`placeholder`], as does the card past a page of `take` minus
+/// one, which only tells that another follows and is never converted.
 fn project_cards(
     addressbook_id: &str,
-    cards: Vec<JmapContactCard>,
-    skip: usize,
+    places: Vec<Option<JmapContactCard>>,
     take: Option<usize>,
 ) -> CardWindow {
-    let mut listed = Vec::new();
+    let mut cards = Vec::new();
     let mut errors = Vec::new();
 
-    for card in cards {
+    for (index, place) in places.into_iter().enumerate() {
+        let Some(card) = place else {
+            cards.push(placeholder(addressbook_id, None));
+            continue;
+        };
         let id = card.id.clone();
 
+        if take.is_some_and(|take| index + 1 >= take) {
+            cards.push(placeholder(addressbook_id, id));
+            continue;
+        }
+
         match project::to_card(addressbook_id, card) {
-            Ok(card) => listed.push(card),
+            Ok(card) => cards.push(card),
             Err(err) => {
                 let err =
                     Error::msg(err).context("Cannot convert the JMAP contact card to a vCard");
                 errors.push(error::unreadable_card(id.as_deref(), err));
+                cards.push(placeholder(addressbook_id, id));
             }
         }
     }
 
-    CardWindow {
-        cards: window(listed, skip, take),
-        errors: first_page(errors, skip),
+    CardWindow { cards, errors }
+}
+
+/// The card holding the place of one the page leaves out: its `id`,
+/// empty when it has none, and no contents.
+fn placeholder(addressbook_id: &str, id: Option<String>) -> Card {
+    Card {
+        id: id.unwrap_or_default(),
+        addressbook_id: addressbook_id.to_string(),
+        etag: None,
+        contents: Vec::new(),
     }
 }
 
@@ -517,6 +605,7 @@ fn card_write_error(verb: &str, err: &JmapContactCardSetItemError, unmapped: &[S
 mod tests {
     use pimalaya_config::secret::{Secret, SecretResolver};
     use secrecy::{ExposeSecret, SecretString};
+    use serde_json::Value;
 
     use super::jmap_http_auth;
     use crate::config::JmapAuthConfig;
@@ -728,8 +817,9 @@ mod tests {
         assert_eq!(header.expose_secret(), "Basic dXNlcjpwYcOpc3M=");
     }
 
-    /// A card that does not convert is an entry, the other cards listed;
-    /// a later page repeats no entry, the query reading every card.
+    /// A card that does not convert is an entry, the other cards listed,
+    /// and keeps its place in the window, as does the card past the page,
+    /// never converted, and a card the get did not find.
     #[test]
     fn a_card_that_does_not_project_is_an_entry_the_others_listed() {
         use io_jmap::rfc9610::contact_card::JmapContactCard;
@@ -746,27 +836,224 @@ mod tests {
                 .unwrap()
                 .clone(),
         };
-        let cards = || {
-            vec![
-                card(Some("c1"), "Ada"),
-                card(None, "Nobody"),
-                card(Some("c3"), "Bob"),
-            ]
-        };
+        let places = vec![
+            Some(card(Some("c1"), "Ada")),
+            Some(card(None, "Nobody")),
+            None,
+            Some(card(Some("c4"), "Bob")),
+            Some(card(None, "Next")),
+        ];
 
-        let first = project_cards("book", cards(), 0, Some(2));
-        let ids: Vec<&str> = first.cards.iter().map(|card| card.id.as_str()).collect();
-        assert_eq!(ids, ["c1", "c3"]);
-        assert_eq!(first.errors.len(), 1);
-        assert_eq!(first.errors[0].id, None);
-        assert_eq!(first.errors[0].code, Some(ErrorCode::CardUnreadable));
+        let window = project_cards("book", places, Some(5));
+        let ids: Vec<&str> = window.cards.iter().map(|card| card.id.as_str()).collect();
+        assert_eq!(ids, ["c1", "", "", "c4", ""]);
+        let held: Vec<bool> = window.cards.iter().map(|c| c.contents.is_empty()).collect();
+        assert_eq!(held, [false, true, true, false, true]);
+        assert_eq!(window.errors.len(), 1);
+        assert_eq!(window.errors[0].id, None);
+        assert_eq!(window.errors[0].code, Some(ErrorCode::CardUnreadable));
         assert_eq!(
-            first.errors[0].sources,
+            window.errors[0].sources,
             ["JMAP ContactCard is missing its id"]
         );
+    }
 
-        let second = project_cards("book", cards(), 1, Some(2));
-        assert_eq!(second.cards.len(), 1);
-        assert!(second.errors.is_empty());
+    /// The backend over a JMAP server whose session states `max_get` as
+    /// its `maxObjectsInGet`, answering each request with the next of
+    /// `bodies`.
+    fn scripted_limited(
+        max_get: u64,
+        bodies: &[String],
+    ) -> (super::JmapBackend, crate::script::Requests) {
+        let bodies: Vec<&str> = bodies.iter().map(String::as_str).collect();
+        let (mut backend, requests) = scripted(&bodies);
+        let core = serde_json::json!({"maxObjectsInGet": max_get});
+        let session = backend.inner.session.as_mut().unwrap();
+        session
+            .capabilities
+            .insert("urn:ietf:params:jmap:core".into(), core);
+        (backend, requests)
+    }
+
+    /// A `ContactCard/query` and its `ContactCard/get` answering the cards
+    /// `ids` from `position`, out of `total` when given.
+    fn query_page(ids: &[&str], position: usize, total: Option<usize>) -> String {
+        use serde_json::json;
+
+        let list: Vec<_> = ids
+            .iter()
+            .map(|id| {
+                json!({"id": id, "addressBookIds": {"book": true},
+                       "@type": "Card", "name": {"full": id}})
+            })
+            .collect();
+        let mut query = json!({
+            "accountId": "a1", "queryState": "q", "ids": ids,
+            "position": position, "canCalculateChanges": false,
+        });
+        if let Some(total) = total {
+            query["total"] = json!(total);
+        }
+        let get = json!({"accountId": "a1", "state": "s1", "list": list, "notFound": []});
+        json!({"methodResponses": [
+            ["ContactCard/query", query, "c0"],
+            ["ContactCard/get", get, "c1"],
+        ], "sessionState": "s"})
+        .to_string()
+    }
+
+    /// The `position` and `limit` each `ContactCard/query` a server
+    /// received asked for.
+    fn query_windows(requests: &crate::script::Requests) -> Vec<(Value, Value)> {
+        let requests = requests.lock().unwrap();
+        requests
+            .iter()
+            .map(|request| {
+                let request = String::from_utf8_lossy(request);
+                let (_, body) = request.split_once("\r\n\r\n").unwrap();
+                let body: Value = serde_json::from_str(body).unwrap();
+                let args = &body["methodCalls"][0][1];
+                (args["position"].clone(), args["limit"].clone())
+            })
+            .collect()
+    }
+
+    /// A page asks the query for its own window alone, the page and the
+    /// card telling whether another follows, from the cards before it.
+    #[test]
+    fn a_page_queries_its_window_alone() {
+        use serde_json::json;
+
+        let (mut backend, requests) = scripted(&[&query_page(&["c3", "c4", "c5"], 2, Some(9))]);
+        let window = backend.list_cards("book", 2, Some(3)).unwrap();
+
+        let ids: Vec<&str> = window.cards.iter().map(|card| card.id.as_str()).collect();
+        assert_eq!(ids, ["c3", "c4", "c5"]);
+        assert_eq!(query_windows(&requests), [(json!(2), json!(3))]);
+    }
+
+    /// A page wider than the session's `maxObjectsInGet` is read in
+    /// chunks no wider, and a server answering fewer cards than asked is
+    /// asked again from where it stopped while its `total` says more
+    /// follow.
+    #[test]
+    fn a_page_is_read_in_chunks_the_server_takes() {
+        use serde_json::json;
+
+        let bodies = [
+            query_page(&["c1", "c2"], 0, Some(9)),
+            query_page(&["c3"], 2, Some(9)),
+        ];
+        let (mut backend, requests) = scripted_limited(2, &bodies);
+        let window = backend.list_cards("book", 0, Some(3)).unwrap();
+        assert_eq!(window.cards.len(), 3);
+        assert_eq!(
+            query_windows(&requests),
+            [(json!(0), json!(2)), (json!(2), json!(1))]
+        );
+
+        let bodies = [
+            query_page(&["c1"], 0, Some(9)),
+            query_page(&["c2", "c3"], 1, Some(9)),
+        ];
+        let (mut backend, requests) = scripted(&bodies.each_ref().map(String::as_str));
+        let window = backend.list_cards("book", 0, Some(3)).unwrap();
+        assert_eq!(window.cards.len(), 3);
+        assert_eq!(
+            query_windows(&requests),
+            [(json!(0), json!(3)), (json!(1), json!(2))]
+        );
+
+        let bodies = [
+            query_page(&["c1", "c2"], 0, Some(3)),
+            query_page(&["c3"], 2, Some(3)),
+        ];
+        let (mut backend, requests) = scripted_limited(2, &bodies);
+        let window = backend.list_cards("book", 0, None).unwrap();
+        assert_eq!(window.cards.len(), 3);
+        assert_eq!(
+            query_windows(&requests),
+            [(json!(0), json!(2)), (json!(2), json!(2))]
+        );
+    }
+
+    /// A card added to an address book the account does not hold is
+    /// `addressbook-not-found` naming it, whatever SetError the server
+    /// refuses the create with, as the other verbs answer an unknown one;
+    /// one it holds keeps the server's refusal as it is.
+    #[test]
+    fn a_card_added_to_an_unknown_address_book_is_not_found() {
+        use pimalaya_cli::error::code_of;
+
+        use crate::error::ErrorCode;
+
+        let refused = |set_error: &str| {
+            format!(
+                r#"{{"methodResponses": [["ContactCard/set", {{
+                    "accountId": "a1", "oldState": "s1", "newState": "s1",
+                    "notCreated": {{"c0": {set_error}}}
+                }}, "c0"]], "sessionState": "s"}}"#
+            )
+        };
+        let invalid = refused(r#"{"type": "invalidProperties", "properties": ["addressBookIds"]}"#);
+        let not_found = refused(r#"{"type": "notFound"}"#);
+
+        for set in [&invalid, &not_found] {
+            let (mut backend, requests) = scripted(&[set, &books(&[], &["nope"])]);
+            let err = backend.create_card("nope", CARD.to_vec()).unwrap_err();
+
+            assert_eq!(
+                code_of(&err),
+                Some(ErrorCode::AddressbookNotFound),
+                "{err:#}"
+            );
+            assert_eq!(err.to_string(), "Addressbook `nope` not found");
+            assert!(format!("{err:#}").contains("rejected"), "{err:#}");
+            assert_eq!(requests.lock().unwrap().len(), 2);
+        }
+
+        let (mut backend, _) = scripted(&[&invalid, &books(&["RBk"], &[])]);
+        let err = backend.create_card("RBk", CARD.to_vec()).unwrap_err();
+        assert_eq!(crate::error::code(&err), None, "{err:#}");
+    }
+
+    /// The backend over a JMAP server answering each request with the
+    /// next of `responses`, whole HTTP answers.
+    fn answering(responses: Vec<Vec<u8>>) -> super::JmapBackend {
+        let (mut backend, _) = scripted(&[]);
+        let session = backend.inner.session.take().unwrap();
+        let (script, _) = crate::script::Script::new(responses);
+        let auth = SecretString::from("Bearer token");
+        let inner = io_jmap::client::JmapClientStd::from_parts(script, auth, session);
+        super::JmapBackend { inner }
+    }
+
+    /// A listing the server refuses carries the code of its refusal: an
+    /// HTTP 403 `permission-denied`, a 429 `rate-limited`, as does a
+    /// `forbidden` method error answering the query of an address book
+    /// the account holds.
+    #[test]
+    fn a_refused_listing_carries_its_code() {
+        use crate::{error::ErrorCode, script::response};
+
+        let refusing = |status| {
+            let refusal = response(status, "application/json", "{}");
+            answering(vec![refusal.clone(), refusal])
+        };
+
+        let err = refusing(403).list_cards("RBk", 0, Some(3)).unwrap_err();
+        let denied = Some(ErrorCode::PermissionDenied);
+        assert_eq!(crate::error::code(&err), denied, "{err:#}");
+
+        let err = refusing(429).list_cards("RBk", 0, Some(3)).unwrap_err();
+        let limited = Some(ErrorCode::RateLimited);
+        assert_eq!(crate::error::code(&err), limited, "{err:#}");
+
+        let forbidden = r#"{"methodResponses": [["error", {
+            "type": "forbidden"
+        }, "c0"]], "sessionState": "s"}"#;
+        let (mut backend, _) = scripted(&[forbidden, &books(&["RBk"], &[])]);
+        let err = backend.list_cards("RBk", 0, Some(3)).unwrap_err();
+        assert_eq!(crate::error::code(&err), denied, "{err:#}");
     }
 }

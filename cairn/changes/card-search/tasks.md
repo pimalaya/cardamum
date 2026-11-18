@@ -6,7 +6,7 @@ change: card-search
 # Tasks
 
 - [ ] Owner decision on vdir (`partial` through the local matcher, or `none`).
-- [ ] io-pimdir: the in-memory card matcher, tested on the SEARCH §11 contact vectors (its own change in io-pimdir's cairn).
+- [x] io-pimdir: the in-memory card matcher, tested on the SEARCH §11 contact vectors (io-pimdir master, 2026-11-18: `PimdirQuery::store_terms`, `PimdirCard::read`, `match_cards`, under `search`, no SQLite; unreleased).
 - [ ] io-pimdir: release with the matcher; keep it building under `search` without `client` (true on master 2026-11-14), or split a `query` feature if ical-rs and mime-rs weigh on non-pimdir builds.
 - [ ] src/capability.rs: `card.search` and `card.search.relevance` rows for every backend, the `card search` leaf.
 - [ ] src/shared/card/search.rs: the command, parsing with `PimdirQuery::parse`, refusing store terms with `query-unsupported` before connecting.

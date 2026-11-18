@@ -6,46 +6,47 @@ use core::fmt;
 
 use anyhow::Result;
 use clap::Parser;
-use io_msgraph::v1::rest::users::MsgraphUser;
 use pimalaya_cli::{fields::Fields, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
+use serde_json::{Map, Value};
 
 use crate::msgraph::client::MsgraphClient;
 
 /// GET the signed-in user (Graph `/me`).
 ///
-/// JSON output: the raw Graph user object.
+/// JSON output: the Graph user object as Graph sent it, every property
+/// kept.
 #[derive(Debug, Parser)]
 pub struct MsgraphProfileGetCommand;
 
 impl MsgraphProfileGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
-        let user = client.me()?.response;
+        let user = client.raw_get(&[])?;
         printer.out(MsgraphProfileGetOutput(user))
     }
 }
 
-/// The signed-in user, emitted verbatim by `--json`.
+/// The signed-in user as Graph sent it, every property kept, rendered as
+/// aligned text or, under `--json`, verbatim.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(transparent)]
-pub struct MsgraphProfileGetOutput(
-    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub MsgraphUser,
-);
+pub struct MsgraphProfileGetOutput(#[schemars(with = "Map<String, Value>")] pub Value);
 
 impl fmt::Display for MsgraphProfileGetOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let user = &self.0;
-        let text = |value: &Option<String>| match value {
-            Some(value) => sanitize::text(value).into_owned(),
-            None => String::new(),
-        };
-
         let mut fields = Fields::default();
-        fields.push("Id", sanitize::text(&user.id));
-        fields.push("Display name", text(&user.display_name));
-        fields.push("Mail", text(&user.mail));
-        fields.push("User principal name", text(&user.user_principal_name));
+
+        for (label, key) in [
+            ("Id", "id"),
+            ("Display name", "displayName"),
+            ("Mail", "mail"),
+            ("User principal name", "userPrincipalName"),
+        ] {
+            let value = self.0.get(key).and_then(Value::as_str).unwrap_or_default();
+            fields.push(label, sanitize::text(value));
+        }
+
         write!(f, "{fields}")
     }
 }

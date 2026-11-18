@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added the `--json` error codes `store-account-ambiguous`, `store-account-unknown`, `row-not-found`, `confirmation-required` and `page-token-invalid`, as Himalaya codes them: an unset `pimdir.account` on a store holding several accounts, a configured one the store does not hold, a `pimdir queue cancel` of a row the account's queue does not hold, one with no terminal and no `--yes`, and a `pimdir search` page token it did not print, each uncoded before.
 - Added `default` to every address book in `addressbook list --json` (pimdir draft-04): `true` on the one the server names the default, read on the pimdir backend from the role the sync engine recorded (`collections.role`), JMAP's `isDefault`, the default Contacts folder on Microsoft Graph and myContacts on Google People, `false` on CardDAV and vdir, which name none.
 - Added the common fields of a card to the `card list` and `card read` JSON: `uid`, `fullName`, `givenName`, `familyName`, every address in `emails` and number in `phones`, `organization`, `organizationUnits`, `title` and `note`, read through the decoded vCard.
 - Added `--if-match` to `card delete`: CardDAV sends it as `If-Match`, pimdir checks it against the card's version, Microsoft Graph and JMAP compare it with the version they read first, and the backends that cannot gate a delete (vdir, People) refuse it.
@@ -48,6 +49,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **Breaking:** changed a server's refusal inside the `carddav`, `jmap`, `msgraph` and `gpeople` namespaces, the `request` commands included, to print as the command's result and exit 3, as Himalaya's protocol namespaces do: `{"refusal": {"status", "reason", "message", "code", "retryAfter"}}`, where it printed the failure object and exited 1. A command getting no answer (network, TLS, a body that does not parse) still fails, exit 1, and the unified commands keep the failure object.
+- **Breaking:** changed `jmap contact-card copy` to print `{ids, errors}`, the copies made and one item error per card the server refused, exit 3 when one was, where it failed on the first refusal saying nothing of the copies made.
+- **Breaking:** changed `msgraph contacts get`, `msgraph contact-folders get`, `msgraph profile get`, `gpeople connections get`, `gpeople contact-groups get`, `gpeople profile get`, `jmap address-book get` and `jmap contact-card get` to print each resource as the provider sent it, every property kept, where they printed it through io-msgraph's, io-gpeople's and io-jmap's types, which dropped the properties they do not model and added defaults the server never sent.
+- **Breaking:** changed `pimdir queue cancel` to refuse a row it cannot cancel before asking, and to refuse to ask with no terminal and no `--yes`, coded `confirmation-required`, where it asked first.
+- Changed a JMAP HTTP 403, a JMAP HTTP 429 and a JMAP method error `forbidden` to carry `permission-denied` and `rate-limited`, as Himalaya codes them.
 - **Breaking:** changed `carddav delete` to require its card id: `carddav delete <ADDRESSBOOK>` deleted the whole address book, so an unset shell variable deleted every card. Delete a collection with `carddav rmcol`. `carddav put --if-none-match` now takes `*` alone, where any value sent `*`.
 - **Breaking:** changed `vdir item move` and `copy` to fail coded `item-duplicate` when the target holds an item of the same id, both left as they were, where the target's card was replaced.
 - **Breaking:** changed a pimdir write into an address book no source syncs to fail coded `no-performer`, as Himalaya and Calendula code it, where it carried no code.

@@ -64,7 +64,11 @@ impl JmapContactCardQueryCommand {
 
         printer.out(Paginated {
             inner: JmapContactCardsOutput {
-                cards: out.cards,
+                cards: out
+                    .cards
+                    .iter()
+                    .map(serde_json::to_value)
+                    .collect::<Result<_, _>>()?,
                 state: out.query_state,
             },
             next_page: next_page.then(|| next.to_string()),

@@ -8,12 +8,12 @@ use pimalaya_cli::printer::Printer;
 
 use crate::msgraph::{
     client::{MsgraphClient, contact_refusal},
-    contacts::render::MsgraphContactOutput,
+    contacts::render::MsgraphContactGetOutput,
 };
 
 /// GET a contact by id.
 ///
-/// JSON output: the raw Graph contact object.
+/// JSON output: the contact as Graph sent it, every property kept.
 #[derive(Debug, Parser)]
 pub struct MsgraphContactGetCommand {
     /// Contact id.
@@ -24,9 +24,8 @@ pub struct MsgraphContactGetCommand {
 impl MsgraphContactGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
         let contact = client
-            .contact_get(&self.contact_id, None)
-            .map_err(contact_refusal)?
-            .response;
-        printer.out(MsgraphContactOutput(contact))
+            .raw_get(&["contacts", &self.contact_id])
+            .map_err(contact_refusal)?;
+        printer.out(MsgraphContactGetOutput(contact))
     }
 }

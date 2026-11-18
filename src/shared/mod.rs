@@ -10,4 +10,11 @@ pub mod client;
 #[cfg(any(feature = "jmap", feature = "msgraph", feature = "gpeople"))]
 pub mod raw_json;
 pub mod receipt;
+#[cfg(any(
+    feature = "carddav",
+    feature = "gpeople",
+    feature = "jmap",
+    feature = "msgraph"
+))]
+pub mod refusal;
 pub mod uuid;

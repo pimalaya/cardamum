@@ -17,6 +17,14 @@
 //! command names, or the default one it takes, is coded the same way,
 //! read from the `AccountError` pimalaya-config returns.
 
+#[cfg(any(
+    feature = "carddav",
+    feature = "gpeople",
+    feature = "jmap",
+    feature = "msgraph"
+))]
+use std::fmt;
+
 use anyhow::Error;
 #[cfg(feature = "pimdir")]
 use io_pimdir::client::PimdirError;
@@ -177,6 +185,20 @@ pub enum ErrorCode {
     /// The pimdir tag names no flag, or adds and removes one flag: nothing
     /// was staged.
     TagRefused,
+    /// The pimdir store holds several accounts and `pimdir.account` names
+    /// none: nothing was read.
+    StoreAccountAmbiguous,
+    /// The pimdir store holds no collection of the account
+    /// `pimdir.account` names: nothing was read.
+    StoreAccountUnknown,
+    /// No pimdir queue row of the account has the id given: nothing was
+    /// cancelled.
+    RowNotFound,
+    /// The command asks to confirm, and no terminal can answer: pass
+    /// `--yes`. Nothing was done.
+    ConfirmationRequired,
+    /// The page token is not one the command printed: nothing was listed.
+    PageTokenInvalid,
 }
 
 /// The pimdir codes cardamum relays, by io-pimdir's spelling, which
@@ -215,6 +237,14 @@ const PIMDIR_CODES: &[(&str, ErrorCode)] = &[
     ("tag-refused", ErrorCode::TagRefused),
 ];
 
+/// The refusal of a pimdir page token the command did not print, under
+/// `page-token-invalid`.
+#[cfg(feature = "pimdir")]
+pub fn page_token_invalid(token: &str) -> Error {
+    let message = format!("Invalid page token {token}");
+    pimalaya_cli::error::CodedError::new(ErrorCode::PageTokenInvalid, message).into()
+}
+
 #[cfg(feature = "pimdir")]
 impl ErrorCode {
     /// The code of a pimdir failure, read from the one io-pimdir names
@@ -242,7 +272,16 @@ type Reader = fn(&(dyn std::error::Error + 'static)) -> Option<ErrorCode>;
 /// codes.
 fn typed_code(err: &Error) -> Option<ErrorCode> {
     let readers: &[Reader] = &[
+        #[cfg(any(
+            feature = "carddav",
+            feature = "gpeople",
+            feature = "jmap",
+            feature = "msgraph"
+        ))]
+        coded_cause_code,
         account_code,
+        #[cfg(feature = "jmap")]
+        crate::jmap::error::refusal_code,
         #[cfg(feature = "carddav")]
         crate::carddav::client::refusal_code,
         #[cfg(feature = "gpeople")]
@@ -255,6 +294,90 @@ fn typed_code(err: &Error) -> Option<ErrorCode> {
 
     err.chain()
         .find_map(|cause| readers.iter().find_map(|reader| reader(cause)))
+}
+
+/// A typed error a code was put on, kept whole in the chain: a protocol
+/// command still prints what the server answered
+/// ([`crate::shared::refusal`]), which a [`with_code`] rebuilding the
+/// chain from its messages would lose.
+#[cfg(any(
+    feature = "carddav",
+    feature = "gpeople",
+    feature = "jmap",
+    feature = "msgraph"
+))]
+#[derive(Debug)]
+pub struct CodedCause {
+    code: ErrorCode,
+    cause: Box<dyn std::error::Error + Send + Sync + 'static>,
+}
+
+#[cfg(any(
+    feature = "carddav",
+    feature = "gpeople",
+    feature = "jmap",
+    feature = "msgraph"
+))]
+impl CodedCause {
+    /// The typed error, as the backend returned it.
+    pub fn cause(&self) -> &(dyn std::error::Error + 'static) {
+        &*self.cause
+    }
+}
+
+#[cfg(any(
+    feature = "carddav",
+    feature = "gpeople",
+    feature = "jmap",
+    feature = "msgraph"
+))]
+impl fmt::Display for CodedCause {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.cause, f)
+    }
+}
+
+#[cfg(any(
+    feature = "carddav",
+    feature = "gpeople",
+    feature = "jmap",
+    feature = "msgraph"
+))]
+impl std::error::Error for CodedCause {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.cause.source()
+    }
+}
+
+/// `cause` carrying `code`, the typed error kept whole.
+#[cfg(all(
+    any(
+        feature = "carddav",
+        feature = "gpeople",
+        feature = "jmap",
+        feature = "msgraph"
+    ),
+    any(feature = "carddav", feature = "gpeople", feature = "msgraph", test)
+))]
+pub fn coded_cause(
+    cause: impl std::error::Error + Send + Sync + 'static,
+    code: ErrorCode,
+) -> Error {
+    Error::new(CodedCause {
+        code,
+        cause: Box::new(cause),
+    })
+}
+
+/// The code a [`CodedCause`] carries.
+#[cfg(any(
+    feature = "carddav",
+    feature = "gpeople",
+    feature = "jmap",
+    feature = "msgraph"
+))]
+fn coded_cause_code(cause: &(dyn std::error::Error + 'static)) -> Option<ErrorCode> {
+    cause.downcast_ref::<CodedCause>().map(|coded| coded.code)
 }
 
 /// The code of the account `-a` names, or the default one, not taken.

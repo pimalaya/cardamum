@@ -7,17 +7,23 @@ use anyhow::Result;
 use clap::Subcommand;
 use pimalaya_cli::printer::Printer;
 
-use crate::carddav::{
-    client::{CarddavClient, check_addressbook_id, check_addressbook_name, check_card_id},
-    delete::CarddavDeleteCommand,
-    discover::CarddavDiscoverCommand,
-    get::CarddavGetCommand,
-    mkcol::CarddavMkcolCommand,
-    propfind::CarddavPropfindCommand,
-    proppatch::CarddavProppatchCommand,
-    put::CarddavPutCommand,
-    report::cli::CarddavReportCommand,
-    rmcol::CarddavRmcolCommand,
+use crate::{
+    carddav::{
+        client::{
+            CarddavClient, check_addressbook_id, check_addressbook_name, check_card_id,
+            refusal as dav_refusal,
+        },
+        delete::CarddavDeleteCommand,
+        discover::CarddavDiscoverCommand,
+        get::CarddavGetCommand,
+        mkcol::CarddavMkcolCommand,
+        propfind::CarddavPropfindCommand,
+        proppatch::CarddavProppatchCommand,
+        put::CarddavPutCommand,
+        report::cli::CarddavReportCommand,
+        rmcol::CarddavRmcolCommand,
+    },
+    shared::refusal,
 };
 
 /// CardDAV-specific API.
@@ -73,7 +79,7 @@ impl CarddavCommand {
     }
 
     pub fn execute(self, printer: &mut impl Printer, client: CarddavClient) -> Result<()> {
-        match self {
+        let result = match self {
             Self::Discover(cmd) => cmd.execute(printer, client),
             Self::Propfind(cmd) => cmd.execute(printer, client),
             Self::Proppatch(cmd) => cmd.execute(printer, client),
@@ -83,16 +89,89 @@ impl CarddavCommand {
             Self::Get(cmd) => cmd.execute(printer, client),
             Self::Put(cmd) => cmd.execute(printer, client),
             Self::Delete(cmd) => cmd.execute(printer, client),
-        }
+        };
+
+        refusal::print(printer, &[dav_refusal], result)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use clap::{CommandFactory, Parser};
+    use io_webdav::{client::WebdavClientStd, rfc4918::WebdavAuth};
+    use pimalaya_cli::{error::partial_outcome_of, printer::CapturePrinter};
+    use serde_json::{Value, json};
+    use url::Url;
 
     use super::CarddavCommand;
-    use crate::cli::{Cli, Command};
+    use crate::{
+        carddav::client::CarddavClient,
+        cli::{Cli, Command},
+        script::{self, Script},
+    };
+
+    /// Runs `cardamum carddav <args>` over a CardDAV server answering
+    /// `responses`, returning its result and what it printed.
+    fn run(args: &[&str], responses: Vec<Vec<u8>>) -> (anyhow::Result<()>, Option<Value>) {
+        let (script, _) = Script::new(responses);
+        let base = Url::parse("https://dav.example.org/").unwrap();
+        let home = base.join("/dav/").unwrap();
+        let inner =
+            WebdavClientStd::from_parts(script, WebdavAuth::None, base, None, None, Some(home));
+        let line = ["cardamum", "carddav"]
+            .into_iter()
+            .chain(args.iter().copied());
+        let Some(Command::Carddav(cmd)) = Cli::try_parse_from(line).unwrap().cmd else {
+            panic!("not a carddav command: {args:?}");
+        };
+        let mut printer = CapturePrinter::default();
+        let result = cmd.execute(&mut printer, CarddavClient::new(inner));
+        (result, printer.into_single().ok())
+    }
+
+    /// A card the server does not hold is the command's result, under
+    /// `refusal`, coded `card-not-found` as the failure was, and exits 3.
+    #[test]
+    fn a_missing_card_is_the_result() {
+        let response = script::response(404, "text/plain", "Not Found");
+        let (result, printed) = run(&["get", "book", "c1.vcf"], vec![response]);
+
+        let err = result.unwrap_err();
+        assert!(partial_outcome_of(&err).is_some(), "{err:#}");
+        let refusal = json!({"refusal": {
+            "status": 404,
+            "reason": null,
+            "message": "Not Found",
+            "code": "card-not-found",
+            "retryAfter": null,
+        }});
+        assert_eq!(printed, Some(refusal));
+    }
+
+    /// A write the server forbids is the result, coded
+    /// `permission-denied`.
+    #[test]
+    fn a_forbidden_delete_is_the_result() {
+        let response = script::response(403, "text/plain", "Forbidden");
+        let (result, printed) = run(&["delete", "book", "c1.vcf"], vec![response]);
+
+        let err = result.unwrap_err();
+        assert!(partial_outcome_of(&err).is_some(), "{err:#}");
+        let printed = printed.unwrap();
+        assert_eq!(printed["refusal"]["status"], 403, "{printed}");
+        assert_eq!(printed["refusal"]["code"], "permission-denied", "{printed}");
+    }
+
+    /// A server giving no answer at all fails the command, nothing
+    /// printed.
+    #[test]
+    fn no_answer_is_a_failure() {
+        let (result, printed) = run(&["get", "book", "c1.vcf"], Vec::new());
+
+        let err = result.unwrap_err();
+        assert!(partial_outcome_of(&err).is_none(), "{err:#}");
+        assert_eq!(printed, None);
+    }
 
     /// `carddav create` runs `carddav mkcol`, flags included, hidden from
     /// the help as every former name is.

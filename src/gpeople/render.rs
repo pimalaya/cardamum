@@ -116,6 +116,21 @@ impl fmt::Display for GpeoplePersonOutput {
     }
 }
 
+/// A person read by resource name, emitted by `--json` as People sent it,
+/// every property kept; the text reads what it shows from it.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(transparent)]
+pub struct GpeoplePersonGetOutput(
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub serde_json::Value,
+);
+
+impl fmt::Display for GpeoplePersonGetOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let person = serde_json::from_value(self.0.clone()).unwrap_or_default();
+        GpeoplePersonOutput(person).fmt(f)
+    }
+}
+
 /// Bare id behind a `contactGroups/<id>` resource name.
 pub fn group_id(group: &GpeopleContactGroup) -> &str {
     group
@@ -195,6 +210,21 @@ impl fmt::Display for GpeopleContactGroupOutput {
         fields.push("Resource name", sanitize::text(&group.resource_name));
         fields.push("Members", member_count(group));
         write!(f, "{fields}")
+    }
+}
+
+/// A contact group read by resource name, emitted by `--json` as People
+/// sent it, every property kept; the text reads what it shows from it.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(transparent)]
+pub struct GpeopleContactGroupGetOutput(
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub serde_json::Value,
+);
+
+impl fmt::Display for GpeopleContactGroupGetOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let group = serde_json::from_value(self.0.clone()).unwrap_or_default();
+        GpeopleContactGroupOutput(group).fmt(f)
     }
 }
 

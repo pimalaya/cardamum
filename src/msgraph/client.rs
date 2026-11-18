@@ -6,21 +6,32 @@
 use std::ops::{Deref, DerefMut};
 
 use anyhow::{Result, anyhow};
-use io_msgraph::v1::client::{
-    MsgraphClientStd, MsgraphClientStdConnectOptions, MsgraphClientStdError,
+use io_msgraph::v1::{
+    client::{MsgraphClientStd, MsgraphClientStdConnectOptions, MsgraphClientStdError},
+    send::{MSGRAPH_API_BASE, MsgraphSend, MsgraphSendError, path_segment, user_path},
 };
-use pimalaya_cli::error::with_code;
 use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
+use serde_json::Value;
+use url::Url;
 
 use crate::{
     config::{AccountConfig, ProxyConfig},
-    error::ErrorCode,
+    error::{ErrorCode, coded_cause},
+    shared::refusal::Refusal,
 };
 
 /// The connected Graph client.
 pub struct MsgraphClient {
     inner: MsgraphClientStd,
+}
+
+#[cfg(test)]
+impl MsgraphClient {
+    /// Wraps an io-msgraph client, as a test drives one over a script.
+    pub fn over(inner: MsgraphClientStd) -> Self {
+        Self { inner }
+    }
 }
 
 impl Deref for MsgraphClient {
@@ -77,12 +88,51 @@ pub(crate) fn refusal_code(cause: &(dyn std::error::Error + 'static)) -> Option<
     }
 }
 
+/// The refusal of a Graph error in a chain, for the `msgraph` commands:
+/// the status, `error.code` and `error.message` of what Graph answered.
+pub(crate) fn refusal(cause: &(dyn std::error::Error + 'static)) -> Option<Refusal> {
+    let err = match cause.downcast_ref::<MsgraphClientStdError>() {
+        Some(MsgraphClientStdError::Send(err)) => err,
+        Some(_) => return None,
+        None => cause.downcast_ref::<MsgraphSendError>()?,
+    };
+    let err = err.api()?;
+
+    Some(Refusal {
+        status: Some(err.status),
+        reason: Some(err.code.clone()).filter(|code| !code.is_empty()),
+        message: err.message.clone(),
+        code: None,
+        retry_after: err.retry_after.map(|delay| delay.as_secs()),
+    })
+}
+
+impl MsgraphClient {
+    /// The resource at `segments` under the mailbox owner (`me` or
+    /// `users/<id>`), each segment percent-encoded, none naming the owner
+    /// itself, as Graph sent it.
+    pub fn raw_get(&mut self, segments: &[&str]) -> Result<Value, MsgraphClientStdError> {
+        let mut path = user_path(&self.user_id).map_err(MsgraphClientStdError::Send)?;
+
+        for segment in segments {
+            path.push('/');
+            path.push_str(&path_segment(segment).map_err(MsgraphClientStdError::Send)?);
+        }
+
+        let url = Url::parse(MSGRAPH_API_BASE)
+            .and_then(|base| base.join(&path))
+            .map_err(|err| MsgraphClientStdError::Send(err.into()))?;
+        let auth = self.auth.clone();
+        Ok(self.run(MsgraphSend::<Value>::get(&auth, url))?.response)
+    }
+}
+
 /// The failure of a request naming one contact, coded `card-not-found`
 /// when Graph holds no such contact, its message Graph's: the specific
 /// commands code it as the unified ones do.
 pub(crate) fn contact_refusal(err: MsgraphClientStdError) -> anyhow::Error {
     match is_missing(&err) {
-        true => with_code(err.into(), |_| Some(ErrorCode::CardNotFound)),
+        true => coded_cause(err, ErrorCode::CardNotFound),
         false => err.into(),
     }
 }
@@ -92,7 +142,7 @@ pub(crate) fn contact_refusal(err: MsgraphClientStdError) -> anyhow::Error {
 /// Graph's: the specific commands code it as the unified ones do.
 pub(crate) fn folder_refusal(err: MsgraphClientStdError) -> anyhow::Error {
     match is_missing(&err) {
-        true => with_code(err.into(), |_| Some(ErrorCode::AddressbookNotFound)),
+        true => coded_cause(err, ErrorCode::AddressbookNotFound),
         false => err.into(),
     }
 }

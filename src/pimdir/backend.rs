@@ -366,13 +366,7 @@ impl PimdirBackend {
             PimdirActionStatus::Pending { kind, .. }
             | PimdirActionStatus::Parked { kind, .. }
             | PimdirActionStatus::Unconfirmed { kind, .. } => kind,
-            PimdirActionStatus::Applied { .. } => bail!("Row {id} was applied already"),
-            // NOTE: a bare row id states no store, so io-pimdir follows it
-            // unchecked and never answers a reset for it.
-            PimdirActionStatus::Unknown | PimdirActionStatus::Reset => bail!(
-                "No queued action with row {id} in this account's queue; \
-                 it may have been synced already"
-            ),
+            status => return Err(uncancellable(id, &status)),
         };
 
         let root = &self.inner.root;
@@ -395,7 +389,7 @@ impl PimdirBackend {
             .map_err(|err| refusal(err, context.clone()))?;
 
         if !dropped {
-            bail!("No queued action with row {id}; it may have been synced already");
+            return Err(row_not_found(id));
         }
 
         Ok(kind)
@@ -857,6 +851,25 @@ impl PimdirBackend {
 /// How the refusal of a write whose `--if-match` names a version the
 /// card no longer has starts, a prefix callers may match on.
 pub const PRECONDITION_FAILED: &str = "Precondition failed";
+
+/// Why queue row `id`, standing at `status`, cannot be cancelled: applied
+/// already, or not a row of the account's queue, under `row-not-found`. A
+/// bare row id states no store, so io-pimdir follows it unchecked and
+/// never answers a reset for it; one would read as not found.
+pub fn uncancellable(id: i64, status: &PimdirActionStatus) -> Error {
+    match status {
+        PimdirActionStatus::Applied { .. } => anyhow!("Row {id} was applied already"),
+        _ => row_not_found(id),
+    }
+}
+
+/// The refusal of a queue row the account's queue does not hold.
+fn row_not_found(id: i64) -> Error {
+    let message = format!(
+        "No queued action with row {id} in this account's queue; it may have been synced already"
+    );
+    CodedError::new(ErrorCode::RowNotFound, message).into()
+}
 
 /// Fails unless `if_match` names the card's current version.
 ///

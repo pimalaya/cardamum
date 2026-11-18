@@ -25,12 +25,11 @@ use io_webdav::{
     rfc4918::{
         RESOURCETYPE, WebdavAuth, check_collection_id, check_resource_id,
         follow_redirects::WebdavFollowRedirectsError, propfind::WebdavPropfind,
-        send::WebdavSendError,
+        send::WebdavSendError, summarize_body,
     },
     rfc6578::sync_collection::WebdavSyncCollectionError,
 };
 use log::warn;
-use pimalaya_cli::error::with_code;
 use pimalaya_config::secret::SecretResolver;
 use pimalaya_stream::{
     proxy::Proxy,
@@ -42,7 +41,8 @@ use url::Url;
 
 use crate::{
     config::{AccountConfig, CarddavAuthConfig, CarddavConfig, ProxyConfig, parse_url},
-    error::{self, ErrorCode},
+    error::{self, ErrorCode, coded_cause},
+    shared::refusal::Refusal,
 };
 
 /// CardDAV client the protocol-specific commands run against.
@@ -282,6 +282,46 @@ pub(crate) fn refused(err: &WebdavClientStdError) -> Option<(u16, &str)> {
     }
 }
 
+/// The refusal of a CardDAV error in a chain, for the `carddav` commands:
+/// the status the server answered and the summary of its body, else the
+/// error's own text; a WebDAV server names no reason of its own.
+pub(crate) fn refusal(cause: &(dyn std::error::Error + 'static)) -> Option<Refusal> {
+    let err = cause.downcast_ref::<WebdavClientStdError>()?;
+    let (status, body) = answered(err)?;
+    let message = match summarize_body(body) {
+        summary if summary.is_empty() => err.to_string(),
+        summary => summary,
+    };
+
+    Some(Refusal {
+        status: Some(status),
+        reason: None,
+        message,
+        code: None,
+        retry_after: None,
+    })
+}
+
+/// The status and body of every answer refusing a request, the ones
+/// io-webdav names a reason for (an unsupported report or filter, a
+/// duplicate `UID`) included.
+fn answered(err: &WebdavClientStdError) -> Option<(u16, &str)> {
+    if let Some(refused) = refused(err) {
+        return Some(refused);
+    }
+
+    let WebdavClientStdError::Send(send) = err else {
+        return None;
+    };
+
+    match send {
+        WebdavSendError::UnsupportedReport { status, body }
+        | WebdavSendError::UnsupportedFilter { status, body }
+        | WebdavSendError::DuplicateUid { status, body } => Some((*status, body)),
+        _ => None,
+    }
+}
+
 /// `err` under a message saying the account configures no `auth`, when
 /// the server answered a request 401 (RFC 9110 §15.5.2) and `auth` sent
 /// no credential; any other failure is `err` unchanged, its code kept.
@@ -367,7 +407,7 @@ fn names_precondition(body: &str) -> bool {
 /// commands code it as the unified ones do.
 pub(crate) fn card_refusal(err: WebdavClientStdError) -> anyhow::Error {
     match is_missing(&err) {
-        true => with_code(err.into(), |_| Some(ErrorCode::CardNotFound)),
+        true => coded_cause(err, ErrorCode::CardNotFound),
         false => err.into(),
     }
 }

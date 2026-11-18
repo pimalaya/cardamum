@@ -105,24 +105,6 @@ impl fmt::Display for IdReceipt {
     }
 }
 
-/// The receipt of a write in a protocol namespace acting on several items.
-#[cfg(feature = "jmap")]
-#[derive(Debug, Serialize, JsonSchema)]
-pub struct IdsReceipt {
-    /// The ids of the items acted on, in the order acted on.
-    pub ids: Vec<String>,
-    /// What the text form says was done, as in `ContactCards copied`.
-    #[serde(skip)]
-    pub done: &'static str,
-}
-
-#[cfg(feature = "jmap")]
-impl fmt::Display for IdsReceipt {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{}: {}", self.done, sanitize::text(&self.ids.join(", ")))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::shared::receipt::{Write, WriteReceipt};

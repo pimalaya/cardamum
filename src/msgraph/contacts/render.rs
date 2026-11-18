@@ -90,6 +90,21 @@ impl fmt::Display for MsgraphContactOutput {
     }
 }
 
+/// A contact read by id, emitted by `--json` as Graph sent it, every
+/// property kept; the text reads what it shows from it.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(transparent)]
+pub struct MsgraphContactGetOutput(
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub serde_json::Value,
+);
+
+impl fmt::Display for MsgraphContactGetOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let contact = serde_json::from_value(self.0.clone()).unwrap_or_default();
+        MsgraphContactOutput(contact).fmt(f)
+    }
+}
+
 /// The name, emails and phones of a contact, sanitized, a field Graph
 /// sent no value for printing no line.
 fn contact_fields(contact: &MsgraphContact) -> Fields<'static> {

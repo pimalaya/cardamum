@@ -135,11 +135,12 @@ fn reinstall(found: Option<&str>) -> String {
 /// no configuration.
 ///
 /// A store several accounts share is what `pimdir.account` answers, and
-/// leaving it unset there errors rather than guess: one CLI view is one
-/// account, and mixing their address books would write a card into one
-/// that belongs to another. A configured account the store holds no
-/// collection of is refused, naming the ones it holds, rather than read
-/// as an empty account.
+/// leaving it unset there errors rather than guess, under
+/// `store-account-ambiguous`: one CLI view is one account, and mixing
+/// their address books would write a card into one that belongs to
+/// another. A configured account the store holds no collection of is
+/// refused under `store-account-unknown`, naming the ones it holds,
+/// rather than read as an empty account.
 fn resolve_account(reader: &PimdirReader, configured: Option<String>) -> Result<Option<String>> {
     let mut accounts: Vec<Option<String>> = reader
         .list_collections()
@@ -160,10 +161,11 @@ fn resolve_account(reader: &PimdirReader, configured: Option<String>) -> Result<
 
     if let Some(account) = &configured {
         if !accounts.is_empty() && !accounts.contains(&configured) {
-            return Err(anyhow!(
+            let message = format!(
                 "The pimdir store holds no account `{account}` ({}); fix `pimdir.account`",
                 names(&accounts),
-            ));
+            );
+            return Err(CodedError::new(ErrorCode::StoreAccountUnknown, message).into());
         }
 
         return Ok(configured);
@@ -171,9 +173,12 @@ fn resolve_account(reader: &PimdirReader, configured: Option<String>) -> Result<
 
     match accounts.as_slice() {
         [] | [_] => Ok(accounts.into_iter().next().flatten()),
-        _ => Err(anyhow!(
-            "The pimdir store holds several accounts ({}); name one with `pimdir.account`",
-            names(&accounts),
-        )),
+        _ => {
+            let message = format!(
+                "The pimdir store holds several accounts ({}); name one with `pimdir.account`",
+                names(&accounts),
+            );
+            Err(CodedError::new(ErrorCode::StoreAccountAmbiguous, message).into())
+        }
     }
 }

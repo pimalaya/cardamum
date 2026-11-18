@@ -9,17 +9,16 @@ use clap::Parser;
 use io_jmap::rfc9610::contact_card::copy::JmapContactCardCopyArgs;
 use pimalaya_cli::printer::Printer;
 
-use crate::{
-    jmap::{client::JmapClient, error::set_error},
-    shared::receipt::IdsReceipt,
-};
+use crate::jmap::{client::JmapClient, set::JmapSetReceipt};
 
 /// Copy ContactCards from another JMAP account (`ContactCard/copy`).
 ///
 /// The cards land in the AddressBooks of this account that
 /// `--to-address-book` names.
 ///
-/// JSON output: `{"ids"}`.
+/// JSON output: `{"ids", "errors"}`, the ids of the copies made, then
+/// one item error per card the server refused, keyed by the id given;
+/// a refused card exits 3.
 #[derive(Debug, Parser)]
 pub struct JmapContactCardCopyCommand {
     /// ContactCard id(s) in the source account.
@@ -55,21 +54,11 @@ impl JmapContactCardCopyCommand {
 
         let out = client.contact_card_copy(self.from_account, cards)?;
 
-        if let Some((id, err)) = out.not_created.into_iter().next() {
-            return Err(set_error(
-                &format!("ContactCard `{id}` copy rejected"),
-                &err,
-            ));
-        }
-
         let ids: Vec<String> = out
             .created
             .into_values()
             .filter_map(|card| card.id)
             .collect();
-        printer.out(IdsReceipt {
-            ids,
-            done: "ContactCards copied",
-        })
+        JmapSetReceipt::new("ContactCards copied", ids, out.not_created).print(printer)
     }
 }

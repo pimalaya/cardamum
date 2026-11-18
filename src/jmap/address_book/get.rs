@@ -4,14 +4,14 @@
 
 use anyhow::Result;
 use clap::Parser;
-use io_jmap::rfc9610::address_book::get::JmapAddressBookGetOptions;
 use pimalaya_cli::printer::Printer;
 
-use crate::jmap::{client::JmapClient, render::JmapAddressBooksOutput};
+use crate::jmap::{client::JmapClient, raw, render::JmapAddressBooksOutput};
 
 /// Get JMAP AddressBooks by id (`AddressBook/get`); omit ids for all.
 ///
-/// JSON output: `{"list": [<raw JMAP AddressBook>...], "state"}`.
+/// JSON output: `{"list": [<AddressBook as the server sent it>...],
+/// "state"}`.
 #[derive(Debug, Parser)]
 pub struct JmapAddressBookGetCommand {
     /// AddressBook id(s) to fetch. Omit to fetch all.
@@ -21,15 +21,12 @@ pub struct JmapAddressBookGetCommand {
 
 impl JmapAddressBookGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: JmapClient) -> Result<()> {
-        let opts = JmapAddressBookGetOptions {
-            ids: (!self.ids.is_empty()).then_some(self.ids),
-            ..Default::default()
-        };
-        let out = client.address_book_get(opts)?;
+        let ids = (!self.ids.is_empty()).then_some(self.ids);
+        let out = raw::get(&mut client, "AddressBook", ids)?;
 
         printer.out(JmapAddressBooksOutput {
-            books: out.address_books,
-            state: out.new_state,
+            books: out.list,
+            state: out.state,
         })
     }
 }

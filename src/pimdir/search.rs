@@ -5,7 +5,7 @@
 
 use std::fmt;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use io_pimdir::client::search::{
     PimdirSearchClock, PimdirSearchCursor, PimdirSearchOptions, PimdirSearchSort,
@@ -22,7 +22,7 @@ use serde::Serialize;
 use crate::{
     account::context::Account,
     backend::Backend,
-    error::{ItemError, partial_when},
+    error::{ItemError, page_token_invalid, partial_when},
     pimdir::{
         backend::PimdirBackend,
         index::{PimdirCardCoverage, PimdirCardHit, parse_query},
@@ -110,7 +110,7 @@ impl PimdirSearchCommand {
         let page = match &self.page_token.token {
             Some(token) => {
                 let cursor = PimdirSearchCursor::from_token(token)
-                    .with_context(|| format!("Invalid page token {token}"))?;
+                    .ok_or_else(|| page_token_invalid(token))?;
                 options.after = Some(cursor);
                 None
             }

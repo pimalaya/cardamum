@@ -3,22 +3,30 @@
 //! The `pimdir queue cancel` command, retracting one queued or parked
 //! action before its owner applies it.
 
-use std::fmt;
+use std::{
+    fmt,
+    io::{IsTerminal, stdin},
+};
 
 use anyhow::{Result, bail};
 use clap::Parser;
 use io_pimdir::client::producer::PimdirActionStatus;
-use pimalaya_cli::{printer::Printer, prompt, sanitize};
+use pimalaya_cli::{error::CodedError, printer::Printer, prompt, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::pimdir::backend::PimdirBackend;
+use crate::{
+    error::ErrorCode,
+    pimdir::backend::{PimdirBackend, uncancellable},
+};
 
 /// Cancel one queued or parked action, by the row id `queue list` prints.
 ///
 /// This is the only way back for a queued creation: a staged update is
 /// undone by updating again, where a card that does not exist yet cannot
-/// be deleted. Only a row of the account's address books is taken.
+/// be deleted. Only a row of the account's address books is taken, a row
+/// it cannot cancel refused before anything is asked, and with no terminal
+/// to answer `--yes` is required.
 ///
 /// An unconfirmed row, one the sync engine sent without learning its
 /// outcome, is cancelled the same way, which undoes nothing: it may have
@@ -47,7 +55,7 @@ impl PimdirQueueCancelCommand {
                 (kind, false)
             }
             PimdirActionStatus::Unconfirmed { kind, .. } => (kind, true),
-            _ => (String::from("action"), false),
+            status => return Err(uncancellable(self.id, &status)),
         };
         let question = match unconfirmed {
             true => format!(
@@ -62,6 +70,14 @@ impl PimdirQueueCancelCommand {
                 self.id
             ),
         };
+        if !self.yes && !stdin().is_terminal() {
+            let message = format!(
+                "Cannot ask to cancel row {} with no terminal: pass --yes",
+                self.id
+            );
+            return Err(CodedError::new(ErrorCode::ConfirmationRequired, message).into());
+        }
+
         if !self.yes && !prompt::bool(question, false)? {
             bail!("Cancellation aborted");
         }

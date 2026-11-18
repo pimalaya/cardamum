@@ -4,17 +4,17 @@
 
 use anyhow::Result;
 use clap::Parser;
-use io_gpeople::v1::rest::people::vcard::GPEOPLE_PERSON_VCARD_FIELDS;
+use io_gpeople::v1::{query::to_field_mask, rest::people::vcard::GPEOPLE_PERSON_VCARD_FIELDS};
 use pimalaya_cli::printer::Printer;
 
 use crate::gpeople::{
     client::{GpeopleClient, person_refusal},
-    render::GpeoplePersonOutput,
+    render::GpeoplePersonGetOutput,
 };
 
 /// GET a contact by id.
 ///
-/// JSON output: the raw People person object.
+/// JSON output: the person as People sent it, every property kept.
 #[derive(Debug, Parser)]
 pub struct GpeopleConnectionGetCommand {
     /// Person id (the segment after `people/`).
@@ -24,12 +24,11 @@ pub struct GpeopleConnectionGetCommand {
 
 impl GpeopleConnectionGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: GpeopleClient) -> Result<()> {
-        let resource_name = format!("people/{}", self.person_id);
+        let fields = [("personFields", to_field_mask(GPEOPLE_PERSON_VCARD_FIELDS))];
         let person = client
-            .person_get(&resource_name, GPEOPLE_PERSON_VCARD_FIELDS, &[])
-            .map_err(person_refusal)?
-            .response;
+            .raw_get("people", &self.person_id, &fields)
+            .map_err(person_refusal)?;
 
-        printer.out(GpeoplePersonOutput(person))
+        printer.out(GpeoplePersonGetOutput(person))
     }
 }

@@ -8,12 +8,12 @@ use pimalaya_cli::printer::Printer;
 
 use crate::msgraph::{
     client::{MsgraphClient, folder_refusal},
-    contact_folders::render::MsgraphContactFolderOutput,
+    contact_folders::render::MsgraphContactFolderGetOutput,
 };
 
 /// GET a contact folder by id.
 ///
-/// JSON output: the raw Graph folder object.
+/// JSON output: the folder as Graph sent it, every property kept.
 #[derive(Debug, Parser)]
 pub struct MsgraphContactFolderGetCommand {
     /// Folder id.
@@ -24,9 +24,8 @@ pub struct MsgraphContactFolderGetCommand {
 impl MsgraphContactFolderGetCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
         let folder = client
-            .contact_folder_get(&self.folder_id)
-            .map_err(folder_refusal)?
-            .response;
-        printer.out(MsgraphContactFolderOutput(folder))
+            .raw_get(&["contactFolders", &self.folder_id])
+            .map_err(folder_refusal)?;
+        printer.out(MsgraphContactFolderGetOutput(folder))
     }
 }

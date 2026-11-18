@@ -8,20 +8,30 @@ use std::ops::{Deref, DerefMut};
 use anyhow::{Result, anyhow};
 use io_gpeople::v1::{
     client::{GpeopleClientStd, GpeopleClientStdConnectOptions, GpeopleClientStdError},
-    send::{GpeopleApiError, GpeopleSendError},
+    send::{GPEOPLE_API_BASE, GpeopleApiError, GpeopleSend, GpeopleSendError},
 };
-use pimalaya_cli::error::with_code;
 use pimalaya_config::secret::SecretResolver;
 use secrecy::ExposeSecret;
+use serde_json::Value;
+use url::Url;
 
 use crate::{
     config::{AccountConfig, ProxyConfig},
-    error::ErrorCode,
+    error::{ErrorCode, coded_cause},
+    shared::refusal::Refusal,
 };
 
 /// The connected People client.
 pub struct GpeopleClient {
     inner: GpeopleClientStd,
+}
+
+#[cfg(test)]
+impl GpeopleClient {
+    /// Wraps an io-gpeople client, as a test drives one over a script.
+    pub fn over(inner: GpeopleClientStd) -> Self {
+        Self { inner }
+    }
 }
 
 impl Deref for GpeopleClient {
@@ -68,12 +78,61 @@ pub(crate) fn refusal_code(cause: &(dyn std::error::Error + 'static)) -> Option<
     }
 }
 
+/// The refusal of a People error in a chain, for the `gpeople` commands:
+/// the status, the first reason (else the canonical status) and the
+/// message of what People answered.
+pub(crate) fn refusal(cause: &(dyn std::error::Error + 'static)) -> Option<Refusal> {
+    let err = match cause.downcast_ref::<GpeopleClientStdError>() {
+        Some(GpeopleClientStdError::Send(err)) => err,
+        Some(_) => return None,
+        None => cause.downcast_ref::<GpeopleSendError>()?,
+    };
+    let err = err.api()?;
+    let reason = err.reasons.first().or(err.google_status.as_ref());
+
+    Some(Refusal {
+        status: Some(err.status),
+        reason: reason.cloned(),
+        message: err.message.clone(),
+        code: None,
+        retry_after: None,
+    })
+}
+
+impl GpeopleClient {
+    /// The resource `<collection>/<id>`, queried by `pairs`, as People
+    /// sent it, the id one percent-encoded segment.
+    pub fn raw_get(
+        &mut self,
+        collection: &str,
+        id: &str,
+        pairs: &[(&str, String)],
+    ) -> Result<Value, GpeopleClientStdError> {
+        if matches!(id, "" | "." | "..") {
+            let err = format!("Resource name {collection}/{id:?} names no resource");
+            return Err(GpeopleSendError::InvalidRequest(err).into());
+        }
+
+        let mut url = Url::parse(GPEOPLE_API_BASE).map_err(GpeopleSendError::from)?;
+        url.path_segments_mut()
+            .map_err(|()| GpeopleSendError::InvalidRequest(GPEOPLE_API_BASE.into()))?
+            .pop_if_empty()
+            .push(collection)
+            .push(id);
+        url.query_pairs_mut()
+            .extend_pairs(pairs.iter().map(|(key, value)| (*key, value.as_str())));
+
+        let auth = self.auth.clone();
+        Ok(self.run(GpeopleSend::<Value>::get(&auth, url))?.response)
+    }
+}
+
 /// The failure of a request naming one person, coded `card-not-found`
 /// when People holds no such person, its message People's: the specific
 /// commands code it as the unified ones do.
 pub(crate) fn person_refusal(err: GpeopleClientStdError) -> anyhow::Error {
     match is_missing(&err) {
-        true => with_code(err.into(), |_| Some(ErrorCode::CardNotFound)),
+        true => coded_cause(err, ErrorCode::CardNotFound),
         false => err.into(),
     }
 }

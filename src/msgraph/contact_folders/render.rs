@@ -63,6 +63,21 @@ impl fmt::Display for MsgraphContactFolderOutput {
     }
 }
 
+/// A contact folder read by id, emitted by `--json` as Graph sent it,
+/// every property kept; the text reads what it shows from it.
+#[derive(Clone, Debug, Serialize, JsonSchema)]
+#[serde(transparent)]
+pub struct MsgraphContactFolderGetOutput(
+    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub serde_json::Value,
+);
+
+impl fmt::Display for MsgraphContactFolderGetOutput {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let folder = serde_json::from_value(self.0.clone()).unwrap_or_default();
+        MsgraphContactFolderOutput(folder).fmt(f)
+    }
+}
+
 /// The name and parent of a folder, sanitized.
 fn folder_fields(folder: &MsgraphContactFolder) -> Fields<'static> {
     let parent = folder.parent_folder_id.as_deref().unwrap_or_default();

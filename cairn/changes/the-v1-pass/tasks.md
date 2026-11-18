@@ -18,9 +18,13 @@ change: the-v1-pass
 - [x] carddav-query-filter folded and archived (3f78dba)
 - [x] The landed lines folded into cairn/spec, CHANGELOG, log 2026-11-18-the-v1-pass
 - [ ] CAR-14: private composer draft through pimalaya-cli `file::private_options`, once released
-- [ ] COH-5: a protocol refusal and a partial write are a result, exit 3 (owner ruling 2026-11-18), the `request` commands included; himalaya's shape first
-- [ ] Single-resource protocol reads print raw (owner ruling 2026-11-18)
+- [x] COH-5: a protocol refusal and a partial write are a result, exit 3 (owner ruling 2026-11-18), the `request` commands included; himalaya's shape first
+- [x] Single-resource protocol reads print raw (owner ruling 2026-11-18)
 - [ ] io-pimdir next release: `PimdirFormatRefusal` text (C1), `enqueue_user_body` (C2), `PimdirActionHandle` queue rows (C4)
 - [ ] Live check on the Microsoft test account: Graph default-folder resolution of CAR-5
 - [x] CAL-14 twin: a configured `pimdir.account` the store lacks is refused, naming its accounts (src/pimdir/client.rs `resolve_account`)
 - [x] The `.well-known` probe runs on an `https` origin alone, as calendula 7ac87ce (src/carddav/client.rs; src/account/check.rs test)
+- [x] COH-5 landed: a server's refusal in the `carddav`, `jmap`, `msgraph` and `gpeople` namespaces prints `{refusal: {status, reason, message, code, retryAfter}}`, exit 3, `jmap contact-card copy` prints `{ids, errors}` (src/shared/refusal.rs, src/error.rs `CodedCause`, readers in src/carddav/client.rs, src/msgraph/client.rs, src/gpeople/client.rs, src/jmap/error.rs `JmapSetRefusal`, dispatch in src/{carddav,jmap,msgraph,gpeople}/cli.rs, src/jmap/set.rs, src/jmap/contact_card/copy.rs, src/json_schema.rs `refusable!`; tests in those cli.rs and src/shared/refusal.rs)
+- [x] Single reads raw: `msgraph contacts|contact-folders|profile get`, `gpeople connections|contact-groups|profile get`, `jmap address-book|contact-card get` print the provider's payload (src/msgraph/client.rs `raw_get`, src/gpeople/client.rs `raw_get`, src/jmap/raw.rs, the get.rs files, src/msgraph/*/render.rs, src/gpeople/render.rs, src/jmap/render.rs; tests `a_single_read_prints_the_payload_as_sent`, `a_get_prints_the_objects_as_sent`)
+- [x] pimdir refusals coded as Himalaya's: `store-account-ambiguous`, `store-account-unknown` (src/pimdir/client.rs `resolve_account`), `page-token-invalid` (src/pimdir/search.rs, src/error.rs `page_token_invalid`), `row-not-found` and `confirmation-required` on `pimdir queue cancel`, refused before asking (src/pimdir/backend.rs `uncancellable`, src/pimdir/queue/cancel.rs); test tests/pimdir_refusals.rs
+- [ ] With `pimdir.account` unset, count only the accounts holding contacts, as himalaya counts those holding mail (twin of store-account-ambiguous)

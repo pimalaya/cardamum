@@ -5,7 +5,9 @@
 //! payload. [`JsonSchemaCommand`] writes one file per entry.
 //!
 //! Every runnable command appears, a write by its receipt, and a command
-//! printing one of two types is described by both, through `OneOf`.
+//! printing one of two types is described by both, through `OneOf`, and a
+//! protocol command, whose server's refusal is its result, by its own
+//! type or the refusal, through `Refusable`.
 //!
 //! Protocol-specific entries are gated behind the same cargo features as
 //! their command modules, so the registry stays coherent under any
@@ -39,6 +41,18 @@ pub fn registry() -> JsonSchemaRegistry {
     macro_rules! insert {
         ($key:expr, $ty:ty) => {
             registry.insert::<$ty>($key);
+        };
+    }
+
+    #[cfg(any(
+        feature = "carddav",
+        feature = "gpeople",
+        feature = "jmap",
+        feature = "msgraph"
+    ))]
+    macro_rules! refusable {
+        ($key:expr, $ty:ty) => {
+            registry.insert::<crate::shared::refusal::Refusable<$ty>>($key);
         };
     }
 
@@ -90,37 +104,37 @@ pub fn registry() -> JsonSchemaRegistry {
 
     #[cfg(feature = "carddav")]
     {
-        insert!(
+        refusable!(
             "cardamum-carddav-discover",
             crate::carddav::discover::CarddavDiscoverOutput
         );
-        insert!(
+        refusable!(
             "cardamum-carddav-propfind",
             crate::carddav::propfind::CarddavPropfindOutput
         );
-        insert!(
+        refusable!(
             "cardamum-carddav-get",
             crate::carddav::get::CarddavGetOutput
         );
         // NOTE: `report query` and `report multiget` both answer with the
         // card table of `report::entries`.
-        insert!(
+        refusable!(
             "cardamum-carddav-report-query",
             crate::carddav::report::entries::CarddavCardEntriesOutput
         );
-        insert!(
+        refusable!(
             "cardamum-carddav-report-multiget",
             crate::carddav::report::entries::CarddavCardEntriesOutput
         );
-        insert!(
+        refusable!(
             "cardamum-carddav-report-sync",
             crate::carddav::report::sync::CarddavReportSyncOutput
         );
-        insert!(
+        refusable!(
             "cardamum-carddav-report-raw",
             crate::carddav::report::raw::CarddavReportRawOutput
         );
-        insert!(
+        refusable!(
             "cardamum-carddav-put",
             crate::carddav::put::CarddavPutOutput
         );
@@ -130,7 +144,7 @@ pub fn registry() -> JsonSchemaRegistry {
             "cardamum-carddav-proppatch",
             "cardamum-carddav-delete",
         ] {
-            insert!(key, IdReceipt);
+            refusable!(key, IdReceipt);
         }
     }
 
@@ -141,37 +155,37 @@ pub fn registry() -> JsonSchemaRegistry {
             JmapContactCardOutput, JmapContactCardsOutput,
         };
 
-        insert!("cardamum-jmap-address-book-get", JmapAddressBooksOutput);
-        insert!("cardamum-jmap-address-book-create", JmapAddressBookOutput);
+        refusable!("cardamum-jmap-address-book-get", JmapAddressBooksOutput);
+        refusable!("cardamum-jmap-address-book-create", JmapAddressBookOutput);
         // NOTE: an update the server answers with no changed property
         // prints its receipt.
-        insert!(
+        refusable!(
             "cardamum-jmap-address-book-update",
             OneOf<JmapAddressBookOutput, IdReceipt>
         );
-        insert!("cardamum-jmap-address-book-destroy", IdReceipt);
-        insert!("cardamum-jmap-address-book-changes", JmapChangesOutput);
-        insert!("cardamum-jmap-contact-card-get", JmapContactCardsOutput);
-        insert!(
+        refusable!("cardamum-jmap-address-book-destroy", IdReceipt);
+        refusable!("cardamum-jmap-address-book-changes", JmapChangesOutput);
+        refusable!("cardamum-jmap-contact-card-get", JmapContactCardsOutput);
+        refusable!(
             "cardamum-jmap-contact-card-query",
             Paginated<JmapContactCardsOutput>
         );
-        insert!("cardamum-jmap-contact-card-create", JmapContactCardOutput);
-        insert!(
+        refusable!("cardamum-jmap-contact-card-create", JmapContactCardOutput);
+        refusable!(
             "cardamum-jmap-contact-card-update",
             OneOf<JmapContactCardOutput, IdReceipt>
         );
-        insert!("cardamum-jmap-contact-card-destroy", IdReceipt);
-        insert!(
+        refusable!("cardamum-jmap-contact-card-destroy", IdReceipt);
+        refusable!(
             "cardamum-jmap-contact-card-copy",
-            crate::shared::receipt::IdsReceipt
+            crate::jmap::set::JmapSetReceipt
         );
-        insert!("cardamum-jmap-contact-card-changes", JmapChangesOutput);
-        insert!(
+        refusable!("cardamum-jmap-contact-card-changes", JmapChangesOutput);
+        refusable!(
             "cardamum-jmap-session-get",
             crate::jmap::session::get::JmapSessionGetOutput
         );
-        insert!(
+        refusable!(
             "cardamum-jmap-request",
             crate::shared::raw_json::RawJsonOutput
         );
@@ -184,47 +198,50 @@ pub fn registry() -> JsonSchemaRegistry {
             contacts::render::{MsgraphContactOutput, MsgraphContactsOutput},
         };
 
-        insert!(
+        refusable!(
             "cardamum-msgraph-contact-folders-list",
             Paginated<MsgraphContactFoldersOutput>
         );
-        insert!(
+        refusable!(
             "cardamum-msgraph-contact-folders-child-folders",
             Paginated<MsgraphContactFoldersOutput>
         );
-        insert!(
+        refusable!(
             "cardamum-msgraph-contact-folders-get",
-            MsgraphContactFolderOutput
+            crate::msgraph::contact_folders::render::MsgraphContactFolderGetOutput
         );
-        insert!(
+        refusable!(
             "cardamum-msgraph-contact-folders-create",
             MsgraphContactFolderOutput
         );
-        insert!(
+        refusable!(
             "cardamum-msgraph-contact-folders-rename",
             MsgraphContactFolderOutput
         );
-        insert!(
+        refusable!(
             "cardamum-msgraph-contacts-list",
             Paginated<MsgraphContactsOutput>
         );
-        insert!("cardamum-msgraph-contacts-get", MsgraphContactOutput);
-        insert!("cardamum-msgraph-contacts-create", MsgraphContactOutput);
-        insert!("cardamum-msgraph-contacts-update", MsgraphContactOutput);
-        insert!(
+        refusable!(
+            "cardamum-msgraph-contacts-get",
+            crate::msgraph::contacts::render::MsgraphContactGetOutput
+        );
+        refusable!("cardamum-msgraph-contacts-create", MsgraphContactOutput);
+        refusable!("cardamum-msgraph-contacts-update", MsgraphContactOutput);
+        refusable!(
             "cardamum-msgraph-contacts-delta",
             Paginated<crate::msgraph::contacts::delta::MsgraphContactDeltaOutput>
         );
-        insert!(
+        refusable!(
             "cardamum-msgraph-profile-get",
             crate::msgraph::profile::get::MsgraphProfileGetOutput
         );
-        insert!(
+        refusable!(
             "cardamum-msgraph-request",
             crate::shared::raw_json::RawJsonOutput
         );
-        insert!("cardamum-msgraph-contacts-delete", IdReceipt);
-        insert!("cardamum-msgraph-contact-folders-delete", IdReceipt);
+        refusable!("cardamum-msgraph-contacts-delete", IdReceipt);
+        refusable!("cardamum-msgraph-contact-folders-delete", IdReceipt);
     }
 
     #[cfg(feature = "gpeople")]
@@ -234,47 +251,53 @@ pub fn registry() -> JsonSchemaRegistry {
             GpeoplePersonsOutput,
         };
 
-        insert!(
+        refusable!(
             "cardamum-gpeople-contact-groups-list",
             Paginated<GpeopleContactGroupsOutput>
         );
-        insert!(
+        refusable!(
             "cardamum-gpeople-contact-groups-get",
-            GpeopleContactGroupOutput
+            crate::gpeople::render::GpeopleContactGroupGetOutput
         );
-        insert!(
+        refusable!(
             "cardamum-gpeople-contact-groups-create",
             GpeopleContactGroupOutput
         );
-        insert!(
+        refusable!(
             "cardamum-gpeople-contact-groups-update",
             GpeopleContactGroupOutput
         );
-        insert!(
+        refusable!(
             "cardamum-gpeople-connections-list",
             Paginated<GpeoplePersonsOutput>
         );
-        insert!("cardamum-gpeople-connections-get", GpeoplePersonOutput);
-        insert!("cardamum-gpeople-connections-create", GpeoplePersonOutput);
-        insert!("cardamum-gpeople-connections-update", GpeoplePersonOutput);
-        insert!("cardamum-gpeople-connections-search", GpeoplePersonsOutput);
-        insert!(
+        refusable!(
+            "cardamum-gpeople-connections-get",
+            crate::gpeople::render::GpeoplePersonGetOutput
+        );
+        refusable!("cardamum-gpeople-connections-create", GpeoplePersonOutput);
+        refusable!("cardamum-gpeople-connections-update", GpeoplePersonOutput);
+        refusable!("cardamum-gpeople-connections-search", GpeoplePersonsOutput);
+        refusable!(
             "cardamum-gpeople-other-contacts-list",
             Paginated<GpeoplePersonsOutput>
         );
-        insert!(
+        refusable!(
             "cardamum-gpeople-other-contacts-search",
             GpeoplePersonsOutput
         );
-        insert!("cardamum-gpeople-other-contacts-copy", GpeoplePersonOutput);
-        insert!("cardamum-gpeople-profile-get", GpeoplePersonOutput);
-        insert!(
+        refusable!("cardamum-gpeople-other-contacts-copy", GpeoplePersonOutput);
+        refusable!(
+            "cardamum-gpeople-profile-get",
+            crate::gpeople::render::GpeoplePersonGetOutput
+        );
+        refusable!(
             "cardamum-gpeople-request",
             crate::shared::raw_json::RawJsonOutput
         );
-        insert!("cardamum-gpeople-connections-delete", IdReceipt);
-        insert!("cardamum-gpeople-contact-groups-delete", IdReceipt);
-        insert!(
+        refusable!("cardamum-gpeople-connections-delete", IdReceipt);
+        refusable!("cardamum-gpeople-contact-groups-delete", IdReceipt);
+        refusable!(
             "cardamum-gpeople-contact-groups-members",
             crate::gpeople::contact_group::members::GpeopleMembersOutput
         );

@@ -34,15 +34,14 @@ pub fn card_books(card: &JmapContactCard) -> String {
         .join(",")
 }
 
-/// A list of address books; `--json` emits the raw JMAP objects and the
-/// state token to feed to `changes`.
+/// A list of address books; `--json` emits the JMAP objects as the server
+/// sent them and the state token to feed to `changes`.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapAddressBooksOutput {
-    /// The raw JMAP AddressBook objects.
+    /// The JMAP AddressBook objects, as the server sent them.
     #[serde(rename = "list")]
-    #[schemars(with = "Vec<serde_json::Value>")]
-    pub books: Vec<JmapAddressBook>,
+    pub books: Vec<serde_json::Value>,
     /// The state token to feed to `address-book changes`.
     pub state: String,
 }
@@ -52,6 +51,7 @@ impl fmt::Display for JmapAddressBooksOutput {
         let mut records = Records::default();
 
         for book in &self.books {
+            let book: JmapAddressBook = serde_json::from_value(book.clone()).unwrap_or_default();
             let mut fields = Fields::default();
             fields.push("Name", text(book.name.as_deref()));
 
@@ -96,15 +96,14 @@ impl fmt::Display for JmapAddressBookOutput {
     }
 }
 
-/// A list of contact cards; `--json` emits the raw JMAP objects and the
-/// state token to feed to `changes`.
+/// A list of contact cards; `--json` emits the JMAP objects as the server
+/// sent them and the state token to feed to `changes`.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct JmapContactCardsOutput {
-    /// The raw JMAP ContactCard objects.
+    /// The JMAP ContactCard objects, as the server sent them.
     #[serde(rename = "list")]
-    #[schemars(with = "Vec<serde_json::Value>")]
-    pub cards: Vec<JmapContactCard>,
+    pub cards: Vec<serde_json::Value>,
     /// The state token to feed to `contact-card changes`.
     pub state: String,
 }
@@ -115,6 +114,9 @@ impl fmt::Display for JmapContactCardsOutput {
             let mut columns = Columns::new(["ID", "ADDRESS-BOOKS", "NAME"]);
 
             for card in &self.cards {
+                let card: JmapContactCard =
+                    serde_json::from_value(card.clone()).unwrap_or_default();
+                let card = &card;
                 columns.push([
                     text(card.id.as_deref()),
                     sanitize::text(&card_books(card)).into_owned(),

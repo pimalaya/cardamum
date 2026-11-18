@@ -8,7 +8,7 @@ use pimalaya_cli::printer::Printer;
 
 use crate::msgraph::{
     client::{MsgraphClient, folder_refusal},
-    contacts::{input::ContactJsonArg, render::MsgraphContactOutput},
+    contacts::{input::ContactJsonArg, render::MsgraphContactGetOutput},
 };
 
 /// Create a contact from a raw Graph contact JSON body.
@@ -27,11 +27,14 @@ pub struct MsgraphContactCreateCommand {
 impl MsgraphContactCreateCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
         let contact = self.json.read()?;
+        let segments = match self.folder.as_deref() {
+            Some(folder) => vec!["contactFolders", folder, "contacts"],
+            None => vec!["contacts"],
+        };
         let created = client
-            .contact_create(self.folder.as_deref(), &contact)
-            .map_err(folder_refusal)?
-            .response;
+            .raw_send("POST", &segments, &contact)
+            .map_err(folder_refusal)?;
 
-        printer.out(MsgraphContactOutput(created))
+        printer.out(MsgraphContactGetOutput(created))
     }
 }

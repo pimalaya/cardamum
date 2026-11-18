@@ -139,4 +139,38 @@ mod tests {
             assert_eq!(printed, Some(sent), "{line:?}");
         }
     }
+
+    /// A contact create or update sends the JSON as written, a key
+    /// io-msgraph's model lacks included, and prints what Graph answered.
+    #[test]
+    fn a_contact_write_sends_and_prints_the_json_as_written() {
+        let body = r#"{"displayName":"Ada","xUnmodeled":{"kept":true}}"#;
+        let lines: [&[&str]; 2] = [
+            &["contacts", "create", body],
+            &["contacts", "update", "AAMk", body],
+        ];
+
+        for line in lines {
+            let answer = json!({"id": "AAMk", "displayName": "Ada", "xUnmodeled": {"kept": true}});
+            let response = script::response(200, "application/json", &answer.to_string());
+            let (script, requests) = Script::new([response]);
+            let client =
+                MsgraphClient::over(MsgraphClientStd::new(script, "token", Default::default()));
+            let argv = ["cardamum", "msgraph"]
+                .into_iter()
+                .chain(line.iter().copied());
+            let Some(Command::Msgraph(cmd)) = Cli::try_parse_from(argv).unwrap().cmd else {
+                panic!("not a msgraph command: {line:?}");
+            };
+            let mut printer = CapturePrinter::default();
+            cmd.execute(&mut printer, client).unwrap();
+
+            let request = String::from_utf8_lossy(&requests.lock().unwrap()[0]).into_owned();
+            assert!(
+                request.contains(r#""xUnmodeled":{"kept":true}"#),
+                "{line:?}: {request}"
+            );
+            assert_eq!(printer.into_single().unwrap(), answer, "{line:?}");
+        }
+    }
 }

@@ -108,6 +108,35 @@ pub(crate) fn refusal(cause: &(dyn std::error::Error + 'static)) -> Option<Refus
 }
 
 impl MsgraphClient {
+    /// Sends `body` as written to the resource at `segments` under the
+    /// mailbox owner with `method` (`POST`, `PATCH`), returning what Graph
+    /// answered as it sent it: no key the client's model lacks is dropped
+    /// on the way out nor on the way back.
+    pub fn raw_send(
+        &mut self,
+        method: &str,
+        segments: &[&str],
+        body: &Value,
+    ) -> Result<Value, MsgraphClientStdError> {
+        let mut path = user_path(&self.user_id).map_err(MsgraphClientStdError::Send)?;
+
+        for segment in segments {
+            path.push('/');
+            path.push_str(&path_segment(segment).map_err(MsgraphClientStdError::Send)?);
+        }
+
+        let url = Url::parse(MSGRAPH_API_BASE)
+            .and_then(|base| base.join(&path))
+            .map_err(|err| MsgraphClientStdError::Send(err.into()))?;
+        let auth = self.auth.clone();
+        let send = match method {
+            "PATCH" => MsgraphSend::<Value>::patch_json(&auth, url, body),
+            _ => MsgraphSend::<Value>::post_json(&auth, url, body),
+        }
+        .map_err(MsgraphClientStdError::Send)?;
+        Ok(self.run(send)?.response)
+    }
+
     /// The resource at `segments` under the mailbox owner (`me` or
     /// `users/<id>`), each segment percent-encoded, none naming the owner
     /// itself, as Graph sent it.

@@ -8,7 +8,7 @@ use pimalaya_cli::printer::Printer;
 
 use crate::msgraph::{
     client::{MsgraphClient, contact_refusal},
-    contacts::{input::ContactJsonArg, render::MsgraphContactOutput},
+    contacts::{input::ContactJsonArg, render::MsgraphContactGetOutput},
 };
 
 /// Update a contact from a raw Graph contact JSON body (PATCH: only the
@@ -29,10 +29,9 @@ impl MsgraphContactUpdateCommand {
     pub fn execute(self, printer: &mut impl Printer, mut client: MsgraphClient) -> Result<()> {
         let contact = self.json.read()?;
         let updated = client
-            .contact_update(&self.contact_id, &contact)
-            .map_err(contact_refusal)?
-            .response;
+            .raw_send("PATCH", &["contacts", &self.contact_id], &contact)
+            .map_err(contact_refusal)?;
 
-        printer.out(MsgraphContactOutput(updated))
+        printer.out(MsgraphContactGetOutput(updated))
     }
 }

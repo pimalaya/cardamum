@@ -195,7 +195,7 @@ pub fn registry() -> JsonSchemaRegistry {
     {
         use crate::msgraph::{
             contact_folders::render::{MsgraphContactFolderOutput, MsgraphContactFoldersOutput},
-            contacts::render::{MsgraphContactOutput, MsgraphContactsOutput},
+            contacts::render::{MsgraphContactGetOutput, MsgraphContactsOutput},
         };
 
         refusable!(
@@ -222,12 +222,9 @@ pub fn registry() -> JsonSchemaRegistry {
             "cardamum-msgraph-contacts-list",
             Paginated<MsgraphContactsOutput>
         );
-        refusable!(
-            "cardamum-msgraph-contacts-get",
-            crate::msgraph::contacts::render::MsgraphContactGetOutput
-        );
-        refusable!("cardamum-msgraph-contacts-create", MsgraphContactOutput);
-        refusable!("cardamum-msgraph-contacts-update", MsgraphContactOutput);
+        refusable!("cardamum-msgraph-contacts-get", MsgraphContactGetOutput);
+        refusable!("cardamum-msgraph-contacts-create", MsgraphContactGetOutput);
+        refusable!("cardamum-msgraph-contacts-update", MsgraphContactGetOutput);
         refusable!(
             "cardamum-msgraph-contacts-delta",
             Paginated<crate::msgraph::contacts::delta::MsgraphContactDeltaOutput>

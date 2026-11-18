@@ -10,7 +10,6 @@ use std::{
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use io_msgraph::v1::rest::users::contacts::MsgraphContact;
 
 /// Positional raw Graph-contact JSON source for `create` / `update`.
 #[derive(Debug, Parser)]
@@ -21,11 +20,12 @@ pub struct ContactJsonArg {
 }
 
 impl ContactJsonArg {
-    /// Reads the source and parses it into a Graph contact.
+    /// Reads the source as raw JSON, sent to Graph as written: a key
+    /// io-msgraph's contact model lacks reaches the server.
     ///
     /// A `-` reads stdin, an existing path is read as a file, and anything
     /// else is the JSON itself.
-    pub fn read(self) -> Result<MsgraphContact> {
+    pub fn read(self) -> Result<serde_json::Value> {
         let raw = if self.body == "-" {
             pimalaya_cli::session::check_stdin(crate::error::ErrorCode::StdinTaken)?;
             let mut buf = String::new();

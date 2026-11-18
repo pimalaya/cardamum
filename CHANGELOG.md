@@ -49,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **Breaking:** changed `msgraph contacts create` and `update` to send the JSON as written and print what Graph answered as sent, where they went through io-msgraph's contact model: a key the model lacks was dropped from the request while Graph answered 200.
 - **Breaking:** changed `jmap contact-card query` to print the query's state as `queryState`, where it printed it as `state`, the key `contact-card get` prints and `contact-card changes` takes.
 - **Breaking:** changed a field flag to refuse a source holding anything after its first card, a partial second card included, where it dropped it.
 - Changed an invalid vdir card id (`a/b`) to fail coded `card-not-found`, where it was uncoded.

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added `handle` to the `pimdir queue show` and `pimdir queue cancel` JSON, beside the integer `row`, as `pimdir queue list` prints it (pimalaya-cli's output.md): the handle given, or a bare id given named under the store's identity. Their text names the row by its handle.
 - Added `card search <query>...`, searching the account's cards in the pimdir query language over every address book, or the one `-k` names: pimdir answers from the store's index, vdir matches every card of the scope with io-pimdir's matcher, so a query answers one hit set on both. A term only a pimdir store answers (`tag:`, `flag:`, `is:`...) is refused on vdir with the new `--json` error code `query-unsupported`, never dropped; `--sort relevance` is pimdir's alone. The capabilities `card.search` and `card.search.relevance`, and the MCP tool `card_search`, come with it; CardDAV, JMAP, Microsoft Graph and Google People do not serve it yet (#25).
 - Added row handles to `pimdir queue show` and `pimdir queue cancel`: a row may be named `<store-id>.<incarnation>.<id>`, a handle of another store (a copy restored since) reading `reset` and refused by `cancel` coded `store-reset`; a bare row id is taken as before. `pimdir queue list` rows and `pimdir status` parked rows carry `handle`, printed in the text in place of the bare row, so a row picked from a listing is checked too.
 

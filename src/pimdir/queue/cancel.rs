@@ -38,7 +38,7 @@ use crate::{
 /// length of the call and fails while a sync holds it. A store another
 /// version of the sync engine wrote is refused rather than reshaped.
 ///
-/// JSON output: `{"row", "kind", "unconfirmed"}`.
+/// JSON output: `{"row", "handle", "kind", "unconfirmed"}`.
 #[derive(Debug, Parser)]
 pub struct PimdirQueueCancelCommand {
     /// Row id of the queued action, as `pimdir queue list` prints it, or
@@ -85,9 +85,11 @@ impl PimdirQueueCancelCommand {
             bail!("Cancellation aborted");
         }
 
+        let handle = backend.named(&self.id)?;
         let kind = backend.cancel_queued(&self.id)?;
         printer.out(PimdirQueueCancelOutput {
-            id: self.id.id,
+            row: handle.id,
+            handle: handle.to_string(),
             kind,
             unconfirmed,
         })
@@ -98,9 +100,12 @@ impl PimdirQueueCancelCommand {
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PimdirQueueCancelOutput {
-    /// The row that was cancelled.
-    #[serde(rename = "row")]
-    pub id: i64,
+    /// The queue row id cancelled.
+    pub row: i64,
+    /// The row's handle, its id under the store's identity (pimdir STORAGE
+    /// §4.5): the handle given, or the bare id given named under this
+    /// store's identity.
+    pub handle: String,
     /// The action kind it held: `add`, `update`, `remove`, ...
     pub kind: String,
     /// Whether the row was unconfirmed, its request sent and its outcome
@@ -111,7 +116,7 @@ pub struct PimdirQueueCancelOutput {
 impl fmt::Display for PimdirQueueCancelOutput {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let kind = sanitize::text(&self.kind);
-        let id = self.id;
+        let id = &self.handle;
         match self.unconfirmed {
             true => writeln!(
                 f,
@@ -132,7 +137,8 @@ mod tests {
     #[test]
     fn cancelling_an_unconfirmed_row_says_it_may_have_taken_effect() {
         let cancelled = PimdirQueueCancelOutput {
-            id: 9,
+            row: 9,
+            handle: "e2646df031cd876334410c4df14ebd86.1.9".into(),
             kind: "add".into(),
             unconfirmed: true,
         };
@@ -140,7 +146,12 @@ mod tests {
         let json = serde_json::to_value(&cancelled).unwrap();
         assert_eq!(
             json,
-            serde_json::json!({"row": 9, "kind": "add", "unconfirmed": true})
+            serde_json::json!({
+                "row": 9,
+                "handle": "e2646df031cd876334410c4df14ebd86.1.9",
+                "kind": "add",
+                "unconfirmed": true,
+            })
         );
         let line = cancelled.to_string();
         assert!(line.contains("may have taken effect"), "{line}");

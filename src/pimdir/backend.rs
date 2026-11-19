@@ -199,6 +199,20 @@ impl PimdirBackend {
         })
     }
 
+    /// The handle `given` names under a store: as given when it names one,
+    /// a bare id named under this store's identity, as `pimdir queue list`
+    /// prints its handle.
+    pub fn named(&self, given: &PimdirActionHandle) -> Result<PimdirActionHandle> {
+        if given.store.is_some() {
+            return Ok(given.clone());
+        }
+
+        Ok(PimdirActionHandle {
+            id: given.id,
+            store: Some(self.store_identity()?),
+        })
+    }
+
     /// The ids of the account's address books a queue command reads,
     /// `addressbook` alone when named, refused when the account holds no
     /// such address book.
@@ -895,7 +909,7 @@ pub fn uncancellable(row: &PimdirActionHandle, status: &PimdirActionStatus) -> E
 }
 
 /// The handle of the row `id` of the store `identity`, as `pimdir queue
-/// show` and `cancel` take it.
+/// show` and `cancel` take and print it.
 pub fn handle(identity: &PimdirStoreIdentity, id: i64) -> String {
     PimdirActionHandle {
         id,
@@ -2146,8 +2160,9 @@ mod tests {
             .unwrap();
 
         // The update is the first row this store queued.
+        let row = backend.named(&PimdirActionHandle::from(1)).unwrap();
         let show = crate::pimdir::queue::show::PimdirQueueShowOutput::new(
-            1,
+            &row,
             backend.queue_row(1).unwrap(),
         );
         let json = serde_json::to_value(&show).unwrap();
@@ -2491,6 +2506,55 @@ mod tests {
         assert_eq!(pending(&backend), 1);
 
         assert_eq!(backend.cancel_queued(&parsed).unwrap(), "add");
+        assert_eq!(pending(&backend), 0);
+    }
+
+    /// `queue show` and `queue cancel` print the row with its handle beside
+    /// it, as `queue list` does: a bare id named under this store's
+    /// identity, a handle as given, in the JSON and in the text.
+    #[test]
+    fn show_and_cancel_print_the_row_with_its_handle() {
+        use clap::Parser;
+
+        use crate::pimdir::queue::{
+            cancel::PimdirQueueCancelCommand, show::PimdirQueueShowCommand,
+        };
+
+        let (_dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        let row = backend.queued_cards(None).unwrap()[0].id;
+        let named = handle(&backend.store_identity().unwrap(), row);
+        let bare = row.to_string();
+
+        for given in [bare.as_str(), named.as_str()] {
+            let mut out = Captured::default();
+            PimdirQueueShowCommand::parse_from(["show", given])
+                .execute(&mut out, &backend)
+                .unwrap();
+            assert_eq!(out.json["row"], row, "{}", out.json);
+            assert_eq!(out.json["handle"], named.as_str(), "{}", out.json);
+            assert_eq!(out.json["state"], "pending", "{}", out.json);
+            assert!(
+                out.text.starts_with(&format!("Row {named} ")),
+                "{}",
+                out.text
+            );
+        }
+
+        let mut out = Captured::default();
+        PimdirQueueCancelCommand::parse_from(["cancel", "-y", &bare])
+            .execute(&mut out, &backend)
+            .unwrap();
+        assert_eq!(
+            out.json,
+            serde_json::json!({
+                "row": row,
+                "handle": named,
+                "kind": "add",
+                "unconfirmed": false,
+            })
+        );
+        assert!(out.text.contains(&format!("(row {named})")), "{}", out.text);
         assert_eq!(pending(&backend), 0);
     }
 

@@ -70,7 +70,14 @@ const TOOLS: &[McpTool] = &[
     McpTool::write("addressbook", "delete", true),
     McpTool::read("card", "list"),
     McpTool::read("card", "read"),
-    #[cfg(any(feature = "vdir", feature = "pimdir"))]
+    #[cfg(any(
+        feature = "vdir",
+        feature = "pimdir",
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "gpeople"
+    ))]
     McpTool::read("card", "search"),
     McpTool::write("card", "add", false),
     McpTool::write("card", "update", true),

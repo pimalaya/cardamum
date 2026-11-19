@@ -11,7 +11,8 @@ change: card-search
 - [x] src/capability.rs: `card.search` (pimdir `full`, vdir `partial`, the network backends `none`) and `card.search.relevance` (pimdir alone), the `card search` leaf.
 - [x] src/shared/card/search.rs: the command; the query parsed by src/shared/query.rs `parse_query` (moved from src/pimdir/index.rs), store terms refused with `query-unsupported` before anything is read.
 - [x] The matching path for vdir (src/shared/card/search.rs `matched_page`): every address book in scope listed, every card matched at once (`person:` reads them all), sorted by the folded full name, paged by number.
-- [ ] The matching path for carddav, jmap, msgraph and gpeople: the same `matched_page`, declared `partial` once a search over the largest test address book is measured.
+- [x] The matching path for carddav, jmap, msgraph and gpeople: `card search`, its MCP tool and schema built with any backend, io-pimdir `search` and ariadne pulled by each network feature (Cargo.toml), the same `matched_page` (test `a_graph_search_matches_every_folder_depth`, over a scripted Graph session, a card two folders deep)
+- [ ] Declare `card.search` `partial` on carddav, jmap, msgraph and gpeople (src/capability.rs `NO_SEARCH` rows) once a search over the largest test address book is measured; `none` until then
 - [x] pimdir: delegates to `pimdir search`'s page walk (src/pimdir/search.rs `search_page`), its hits, cursor and coverage verdict mapped onto the unified output.
 - [x] `query-unsupported` in src/error.rs and the code table; `query-refused` raised by `card search`.
 - [x] MCP `card_search` tool (src/mcp.rs; tests/mcp.rs calls it).

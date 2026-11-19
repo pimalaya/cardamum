@@ -19,7 +19,7 @@ use std::{
 
 use anyhow::{Context, Error, Result, anyhow, bail};
 use log::{debug, info};
-use pimalaya_cli::{file::private_options, printer::Printer, prompt, session};
+use pimalaya_cli::{file::private_options, printer::Printer, prompt, session, shell::quote};
 use pimalaya_config::command::{self, CommandConfig};
 
 use crate::shared::{card::vcard::check, uuid::uuid_v4};
@@ -210,14 +210,9 @@ fn seed_file(path: &Path, seed: &[u8]) -> Result<()> {
     file.write_all(seed).with_context(context)
 }
 
-/// Single-quotes a path for a shell command line.
-fn quote(path: &str) -> String {
-    format!("'{}'", path.replace('\'', r"'\''"))
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{quote, seed_file};
+    use super::seed_file;
 
     /// The file a composer is handed is its owner's alone, and one planted
     /// at its path, a symbolic link included, is not written through.
@@ -239,12 +234,5 @@ mod tests {
         symlink(&target, &link).unwrap();
         assert!(seed_file(&link, b"seed").is_err());
         assert_eq!(std::fs::read(&target).unwrap(), b"kept");
-    }
-
-    #[test]
-    fn a_quoted_path_survives_a_quote_of_its_own() {
-        assert_eq!(quote("/tmp/plain.vcf"), "'/tmp/plain.vcf'");
-        assert_eq!(quote("/tmp/a b.vcf"), "'/tmp/a b.vcf'");
-        assert_eq!(quote("/tmp/it's.vcf"), r"'/tmp/it'\''s.vcf'");
     }
 }

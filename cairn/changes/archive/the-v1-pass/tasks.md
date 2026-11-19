@@ -32,4 +32,7 @@ change: the-v1-pass
 - [x] CAR-12 (6): `msgraph contacts create|update` send the JSON as written through `MsgraphClient::raw_send` and print the answer raw (src/msgraph/client.rs, contacts/{input,create,update}.rs)
 - [x] CAR-6: JMAP, Graph, People `card list` read the page they print (src/{jmap,msgraph,gpeople}/backend.rs, src/shared/client.rs)
 - [x] CAR-7: People stale etag `precondition-failed` (src/gpeople/client.rs), `card add -k <unknown>` `addressbook-not-found` on JMAP and CardDAV (src/jmap/backend.rs, src/carddav/backend.rs), JMAP method errors in typed calls coded (src/jmap/error.rs)
-- [ ] CAR-12 (7): Graph `addressbook list` at every folder depth (neverest precedent of 2026-11-17)
+- [x] CAR-12 (7): Graph `addressbook list` at every folder depth, each folder's `childFolders` listed in turn, every page read, keyed by id and named by display name, as neverest 2026-11-17 (src/msgraph/backend.rs `list_addressbooks`; test `every_folder_depth_is_listed`, failed on the old listing)
+- [x] CAR-13 remainder: the `-b` help names the commands reading it and says `auto` takes the first configured backend whatever the command, a command it does not serve refused `capability-missing` (src/cli.rs)
+- [x] CAR-14 remainder: the composer's draft path quoted through pimalaya-cli 0.6.1 `shell::quote`, double quotes on Windows where `cmd /C` runs the line (src/shared/card/composer.rs); the local POSIX-only `quote` and its test gone
+- [x] The CAR-1 delta folded into cairn/spec/commands.md ("A vdir move or copy never replaces an item"), which the first landing had folded as a code-table row alone

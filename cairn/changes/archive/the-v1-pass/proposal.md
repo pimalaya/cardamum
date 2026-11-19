@@ -1,7 +1,7 @@
 ---
 cairn: change
 id: the-v1-pass
-status: active
+status: landed
 created: 2026-11-18
 ---
 

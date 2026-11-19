@@ -73,10 +73,14 @@ pub struct Cli {
     pub account: AccountFlag,
     /// Force a specific backend for cross-protocol commands.
     ///
-    /// Only the unified commands read it, the protocol-specific ones always
-    /// using their own backend. `auto`, the default, picks the first
-    /// configured backend the command supports; an explicit value bails when
-    /// the account has no such block, or the command no such implementation.
+    /// Only the unified commands read it (`addressbook`, `card`, `account
+    /// check`, `account capability`, and `repl` and `mcp` for their
+    /// session), the protocol-specific ones always using their own backend.
+    /// `auto`, the default, picks the first configured backend, whatever the
+    /// command needs: a command it does not serve is refused coded
+    /// `capability-missing`, and a backend this build leaves out naming the
+    /// cargo feature bringing it back. An explicit value bails when the
+    /// account has no such block.
     #[arg(short, long, global = true, default_value_t, value_parser = backend::parser())]
     pub backend: Backend,
     #[command(flatten)]

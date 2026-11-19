@@ -7,7 +7,14 @@ pub mod addressbook;
 pub mod arg;
 pub mod card;
 pub mod client;
-#[cfg(any(feature = "vdir", feature = "pimdir"))]
+#[cfg(any(
+    feature = "vdir",
+    feature = "pimdir",
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople"
+))]
 pub mod query;
 #[cfg(any(feature = "jmap", feature = "msgraph", feature = "gpeople"))]
 pub mod raw_json;

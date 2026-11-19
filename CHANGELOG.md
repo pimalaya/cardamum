@@ -53,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Changed
 
 - **BREAKING**: Changed the pimdir backend to io-pimdir 0.17.0, pimdir storage-draft-14: a store an earlier sync engine wrote is refused (`store-version`) and never migrated, its refusal now io-pimdir's one wording naming cardamum, which says to sync it with that engine until nothing is queued, then set it aside and sync a new store.
+- Changed `card search` and the MCP tool `card_search` to be built in with any backend, not only with `vdir` or `pimdir`: the CardDAV, JMAP, Microsoft Graph and Google People features pull io-pimdir's query matcher. Those backends still refuse it with `capability-missing` until a search over a large address book is measured.
 - Changed a pimdir card write to drop every `X-PIMDIR-` property from the card before it is queued (pimdir STORAGE §18), so no instruction to a sync engine enters the queue unasked.
 - Changed the dependencies to pimalaya-cli 0.6.1, pimalaya-config 0.6.0 and io-jmap 0.10.1.
 - Changed `card list` on JMAP, Microsoft Graph and Google People to read the page it prints: JMAP asks its window (`position`, `limit`) in chunks the server takes, Graph sends `$skip` and `$top`, People stops once it holds the window, where each read the whole address book (100 requests for page 1 of 10,000 Graph contacts, now 1). On JMAP an unreadable card's entry prints on the page holding it.
@@ -179,6 +180,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed `addressbook list` on Microsoft Graph showing the top-level contact folders alone: every folder is listed whatever its depth, keyed by its id and named by its display name, as neverest lists them.
+- Fixed a shell composer failing to open its draft on Windows: the path is double-quoted there, where the line runs under `cmd /C`, and single-quoted elsewhere as before.
+- Fixed the `-b` help saying only the unified commands read the flag and that `auto` picks a backend the command supports: `account`, `repl` and `mcp` read it too, and `auto` takes the first configured backend, refusing a command it does not serve with `capability-missing`.
 - Fixed the file a composer edits being readable by other users under a permissive umask: it is created 0600 on Unix, and a file or a symbolic link planted at its path is refused rather than written through.
 - Fixed install.sh saving an HTTP error page as the archive, then failing to extract it: the download fails on an HTTP error (`curl -f`).
 - Fixed `--phone tel:+33...` writing `TEL;TYPE=tel:+33...`: a `tel:` or `mailto:` scheme is no type, the number or address written without it.

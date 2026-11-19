@@ -26,7 +26,14 @@ pub enum CardCommand {
     List(CardListCommand),
     #[command(after_long_help = capability::help("card", "read"))]
     Read(CardReadCommand),
-    #[cfg(any(feature = "vdir", feature = "pimdir"))]
+    #[cfg(any(
+        feature = "vdir",
+        feature = "pimdir",
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "gpeople"
+    ))]
     #[command(after_long_help = capability::help("card", "search"))]
     Search(crate::shared::card::search::CardSearchCommand),
     Build(Box<CardBuildCommand>),
@@ -51,7 +58,14 @@ impl CardCommand {
             Self::Build(cmd) => cmd.execute(printer, account.config_paths, account.name),
             Self::List(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),
             Self::Read(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),
-            #[cfg(any(feature = "vdir", feature = "pimdir"))]
+            #[cfg(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            ))]
             Self::Search(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),
             Self::Add(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),
             Self::Update(cmd) => session.run_unified(printer, |p, client| cmd.execute(p, client)),

@@ -613,7 +613,14 @@ impl AddressbookClient {
     /// One page of the cards `search` matches: the index answers on
     /// pimdir, and every other backend has every card of the scope
     /// matched by cardamum.
-    #[cfg(any(feature = "vdir", feature = "pimdir"))]
+    #[cfg(any(
+        feature = "vdir",
+        feature = "pimdir",
+        feature = "carddav",
+        feature = "jmap",
+        feature = "msgraph",
+        feature = "gpeople"
+    ))]
     pub fn search_cards(
         &mut self,
         search: &crate::shared::card::search::CardSearch,

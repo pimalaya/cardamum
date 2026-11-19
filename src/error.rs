@@ -243,7 +243,14 @@ const PIMDIR_CODES: &[(&str, ErrorCode)] = &[
 
 /// The refusal of a page token the command did not print, under
 /// `page-token-invalid`.
-#[cfg(any(feature = "vdir", feature = "pimdir"))]
+#[cfg(any(
+    feature = "vdir",
+    feature = "pimdir",
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople"
+))]
 pub fn page_token_invalid(token: &str) -> Error {
     let message = format!("Invalid page token {token}");
     pimalaya_cli::error::CodedError::new(ErrorCode::PageTokenInvalid, message).into()

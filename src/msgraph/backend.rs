@@ -14,6 +14,8 @@
 //! contact's folder, so a read, an update or a delete acts only on a
 //! contact the named folder holds.
 
+use std::collections::VecDeque;
+
 use anyhow::{Error, Result, bail};
 use io_msgraph::v1::{
     client::{MsgraphClientStd, MsgraphClientStdConnectOptions, MsgraphClientStdError},
@@ -66,6 +68,9 @@ impl MsgraphBackend {
     /// Lists the contact folders as addressbooks, the default Contacts
     /// folder first under the [`CONTACTS_FOLDER`] sentinel id, marked
     /// `default`: the folder Graph creates a contact in when none is named.
+    ///
+    /// Every folder is listed whatever its depth, the children of each
+    /// folder listed in turn, every page of each listing read.
     pub fn list_addressbooks(&mut self) -> Result<Vec<Addressbook>> {
         let mut books = vec![Addressbook {
             id: CONTACTS_FOLDER.to_string(),
@@ -75,29 +80,44 @@ impl MsgraphBackend {
             default: true,
         }];
 
-        let mut page = self
-            .inner
-            .contact_folders_list(&Default::default())?
-            .response;
+        let params = MsgraphContactFoldersListParams::default();
+        let mut parents: VecDeque<Option<String>> = VecDeque::from([None]);
 
-        loop {
-            for folder in page.value {
-                books.push(Addressbook {
-                    name: if folder.display_name.is_empty() {
-                        folder.id.clone()
-                    } else {
-                        folder.display_name
-                    },
-                    id: folder.id,
-                    description: None,
-                    color: None,
-                    default: false,
-                });
-            }
+        while let Some(parent) = parents.pop_front() {
+            let mut page = match parent {
+                None => self.inner.contact_folders_list(&params)?.response,
+                Some(id) => {
+                    self.inner
+                        .contact_child_folders_list(&id, &params)
+                        .map_err(|err| folder_error(&id, err))?
+                        .response
+                }
+            };
 
-            match page.next_link {
-                Some(next) => page = self.inner.page_get(&next, None)?.response,
-                None => break,
+            loop {
+                for folder in page.value {
+                    if folder.id.is_empty() {
+                        continue;
+                    }
+
+                    parents.push_back(Some(folder.id.clone()));
+                    books.push(Addressbook {
+                        name: if folder.display_name.is_empty() {
+                            folder.id.clone()
+                        } else {
+                            folder.display_name
+                        },
+                        id: folder.id,
+                        description: None,
+                        color: None,
+                        default: false,
+                    });
+                }
+
+                match page.next_link {
+                    Some(next) => page = self.inner.page_get(&next, None)?.response,
+                    None => break,
+                }
             }
         }
 
@@ -644,11 +664,67 @@ mod tests {
     fn the_contacts_folder_is_the_default() {
         let folders = r#"{"value":[{"id":"AAMkF","displayName":"Friends"}]}"#;
         let folders = script::response(200, "application/json", folders);
-        let (mut backend, _) = scripted(vec![folders]);
+        let (mut backend, _) = scripted(vec![folders, folder_page(&[], None)]);
         let books = backend.list_addressbooks().unwrap();
 
         let defaults: Vec<_> = books.iter().map(|book| (&*book.id, book.default)).collect();
         assert_eq!(defaults, [(CONTACTS_FOLDER, true), ("AAMkF", false)]);
+    }
+
+    /// A page of Graph contact folders, `(id, displayName)` each, its
+    /// `@odata.nextLink` set when `next` names one.
+    fn folder_page(folders: &[(&str, &str)], next: Option<&str>) -> Vec<u8> {
+        let value: Vec<_> = folders
+            .iter()
+            .map(|(id, name)| json!({"id": id, "displayName": name}))
+            .collect();
+        let mut body = json!({"value": value});
+        if let Some(next) = next {
+            body["@odata.nextLink"] = json!(next);
+        }
+        script::response(200, "application/json", &body.to_string())
+    }
+
+    /// Every contact folder is an address book whatever its depth: each
+    /// folder's children are listed in turn, every page of each listing
+    /// read, a child keyed by its id and named by its display name.
+    #[test]
+    fn every_folder_depth_is_listed() {
+        let next = "https://graph.microsoft.com/v1.0/me/contactFolders/AAMkW/childFolders?$skip=1";
+        let (mut backend, requests) = scripted(vec![
+            folder_page(&[("AAMkW", "Work"), ("AAMkF", "Friends")], None),
+            folder_page(&[("AAMkP", "Projects")], Some(next)),
+            folder_page(&[("AAMkC", "Clients")], None),
+            folder_page(&[], None),
+            folder_page(&[("AAMkY", "2026")], None),
+            folder_page(&[], None),
+            folder_page(&[], None),
+        ]);
+        let books = backend.list_addressbooks().unwrap();
+
+        let books: Vec<_> = books
+            .iter()
+            .map(|book| (&*book.id, &*book.name, book.default))
+            .collect();
+        assert_eq!(
+            books,
+            [
+                (CONTACTS_FOLDER, "Contacts", true),
+                ("AAMkW", "Work", false),
+                ("AAMkF", "Friends", false),
+                ("AAMkP", "Projects", false),
+                ("AAMkC", "Clients", false),
+                ("AAMkY", "2026", false),
+            ]
+        );
+
+        let lines = request_lines(&requests);
+        assert_eq!(lines.len(), 7, "{lines:?}");
+        assert!(lines[1].contains("/AAMkW/childFolders"), "{lines:?}");
+        assert!(lines[2].contains("/AAMkW/childFolders"), "{lines:?}");
+        assert!(lines[2].contains("skip=1"), "{lines:?}");
+        assert!(lines[3].contains("/AAMkF/childFolders"), "{lines:?}");
+        assert!(lines[4].contains("/AAMkP/childFolders"), "{lines:?}");
     }
 
     /// A page of Graph contacts `first..first + len`, its `@odata.nextLink`

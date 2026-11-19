@@ -399,3 +399,76 @@ pub fn pimdir_page(
         errors: found.errors,
     })
 }
+
+#[cfg(all(test, feature = "msgraph"))]
+mod tests {
+    use io_msgraph::v1::client::MsgraphClientStd;
+    use io_pimdir::search::query::PimdirQuery;
+    use serde_json::json;
+
+    use crate::{
+        backend::Backend,
+        config::{AccountConfig, Config},
+        msgraph::backend::MsgraphBackend,
+        script::{self, Script},
+        shared::{
+            card::search::{CardSearch, CardSearchSort, matched_page},
+            client::AddressbookClient,
+        },
+    };
+
+    /// A Graph answer listing `value`, one page.
+    fn page(value: serde_json::Value) -> Vec<u8> {
+        let body = json!({ "value": value }).to_string();
+        script::response(200, "application/json", &body)
+    }
+
+    /// A search of `query` over every address book of the account.
+    fn search(query: &str) -> CardSearch {
+        CardSearch {
+            query: PimdirQuery::parse(query).unwrap(),
+            words: query.to_owned(),
+            addressbook: None,
+            sort: CardSearchSort::Name,
+            limit: 25,
+            page: 1,
+            token: None,
+        }
+    }
+
+    /// On Graph, a search lists every folder whatever its depth, every
+    /// card of each, and matches them as an index would: a diacritic-free
+    /// word finds the accented name of a card two folders deep.
+    #[test]
+    fn a_graph_search_matches_every_folder_depth() {
+        let (script, _) = Script::new([
+            page(json!([{"id": "AAMkW", "displayName": "Work"}])),
+            page(json!([{"id": "AAMkP", "displayName": "Projects"}])),
+            page(json!([])),
+            page(json!([{"id": "AAMkA", "displayName": "Ada Byron"}])),
+            page(json!([{"id": "AAMkB", "displayName": "Bob Martin"}])),
+            page(json!([{"id": "AAMkE", "displayName": "Élodie Martin"}])),
+        ]);
+        let account = AccountConfig {
+            msgraph: Some(toml::from_str(r#"auth.token.raw = "token""#).unwrap()),
+            ..Default::default()
+        };
+        let mut client =
+            AddressbookClient::new(Config::default(), "work".into(), account, Backend::Auto)
+                .unwrap();
+        client.open_msgraph(MsgraphBackend {
+            inner: MsgraphClientStd::new(script, "token", Default::default()),
+        });
+
+        let found = matched_page(&mut client, &search("elodie")).unwrap();
+
+        let hits: Vec<_> = found
+            .cards
+            .iter()
+            .map(|card| (&*card.addressbook_id, &*card.id))
+            .collect();
+        assert_eq!(hits, [("AAMkP", "AAMkE")]);
+        assert!(found.complete);
+        assert_eq!(found.next_page, None);
+    }
+}

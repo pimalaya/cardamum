@@ -92,12 +92,12 @@ Inside the `carddav`, `jmap`, `msgraph` and `gpeople` namespaces, a completion t
 - THEN it prints `{"ids":["n1"],"errors":[{"id":"c2","code":"card-not-found",…}]}` and exits 3
 
 ### Requirement: A raw request stays on the provider's API origin
-`msgraph request` and `gpeople request` SHALL refuse, before anything is sent, a URL whose origin (scheme, host and port) is not the API base's (`https://graph.microsoft.com`, `https://people.googleapis.com`), a path being joined onto the base and a full URL taken as given, so the account's bearer token never leaves for another host. The refusal says `Cannot send a request to <origin>: it is off the API origin <base origin>, which alone receives the account's token`, carrying no code. `jmap request` takes no URL: it posts to the session's `apiUrl` alone.
+`msgraph request` and `gpeople request` SHALL refuse, before anything is sent, a URL whose origin (scheme, host and port) is not the API base's (`https://graph.microsoft.com`, `https://people.googleapis.com`), a path being joined onto the base and a full URL taken as given, so the account's bearer token never leaves for another host. The refusal says `Cannot send a request to <origin>: it is off the API origin <base origin>, which alone receives the account's token`, coded `request-origin` (pimalaya-cli's `error::request_origin`), exit 1. `jmap request` takes no URL: it posts to the session's `apiUrl` alone.
 
 #### Scenario: A full URL on another host
 - GIVEN a Microsoft Graph account
 - WHEN `cardamum msgraph request get https://attacker.example/v1.0/me` runs
-- THEN it fails naming `https://attacker.example` as off the API origin, and no request is sent
+- THEN it exits 1 with the failure object coded `request-origin`, naming `https://attacker.example` as off the API origin, and no request is sent
 
 ### Requirement: Specific commands take their ids positionally
 A protocol-specific command SHALL take the ids it operates on as positional arguments, repeatable where the protocol accepts several, and reserve flags for the rest, mirroring Himalaya. A short option SHALL NOT be given to an argument whose letter the global options already use: clap asserts on the collision in a debug build and silently makes the letter ambiguous in a release one, so the command never runs either way.
@@ -301,6 +301,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | Code | Raised when |
 |---|---|
 | `usage-invalid` | the command line, a REPL line or an MCP tool call's arguments do not match the grammar (pimalaya-cli's `CommonCode::UsageInvalid`); the command line exits 2 |
+| `request-origin` | `msgraph request` or `gpeople request` was given a URL off the API origin, which alone receives the account's token (pimalaya-cli's `CommonCode::RequestOrigin`, "A raw request stays on the provider's API origin"); nothing was sent |
 | `account-missing` | no account has the name `-a` gives, `default` included (pimalaya-config's `AccountError::Missing`) |
 | `account-default-missing` | no `-a` names an account and none is marked `default = true` (`AccountError::NoDefault`) |
 | `account-default-several` | no `-a` names an account and several are marked `default = true` (`AccountError::SeveralDefaults`) |
@@ -371,7 +372,7 @@ A card a command names that the address book does not hold SHALL fail with carda
 A card command given no `-k/--addressbook`, and `addressbook update` given no address book, over an account setting no `addressbook.default` SHALL fail coded `addressbook-default-missing`, exit 1, the error naming the flag and the key: ``No default addressbook found, name one with `-k <ADDRESSBOOK-ID>` or set `addressbook.default` ``, as calendula refuses a missing default calendar (`calendar-default-missing`) and the family a missing default account (`account-default-missing`).
 
 ### Requirement: The JSON contract is described and versioned
-`json-schema` SHALL describe the failure object under the key `cardamum-error`, its `code` typed by the code vocabulary and pimalaya-cli's `usage-invalid`, and the item error of an `errors` list under `cardamum-item-error`, its `code` typed by the code vocabulary. Every generated schema SHALL carry an `$id` naming the contract version: the major version of cardamum, or `0.<minor>` before 1.0. Every registered payload SHALL be a JSON object, checked by a test: a command whose shapes are one untagged type answers an empty object for a shape carrying nothing (an abandoned `card add -i`), never `null`. Piped `--json` output SHALL print one value per line.
+`json-schema` SHALL describe the failure object under the key `cardamum-error`, its `code` typed by the code vocabulary and pimalaya-cli's common codes (`usage-invalid`, `request-origin`), and the item error of an `errors` list under `cardamum-item-error`, its `code` typed by the code vocabulary. Every generated schema SHALL carry an `$id` naming the contract version: the major version of cardamum, or `0.<minor>` before 1.0. Every registered payload SHALL be a JSON object, checked by a test: a command whose shapes are one untagged type answers an empty object for a shape carrying nothing (an abandoned `card add -i`), never `null`. Piped `--json` output SHALL print one value per line.
 
 ### Requirement: A card projects its common fields
 `card list` rows and the `card read` output SHALL carry the card's common fields, read through vcard-rs's decoded model rather than off raw lines: `uid`, `fullName`, `givenName` and `familyName` (the `N` components, space-joined), `emails` and `phones` (every `EMAIL` and `TEL` in document order, a `tel:` URI as its number), `organization` and `organizationUnits` (the `ORG` components), `title` and `note`. A vCard 2.1 value in `QUOTED-PRINTABLE` or a foreign `CHARSET` SHALL be decoded and transcoded to UTF-8 before it is projected (vcard-rs's value cursor, its `quoted-printable` and `encoding` features), never printed as `=C3=A9`. A card that does not parse, or whose bytes are not UTF-8, SHALL project nothing rather than fail the listing, never a lossy decode. The projection is read-only: the vCard stays the record.

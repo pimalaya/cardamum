@@ -6,7 +6,7 @@
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use io_msgraph::v1::send::{MSGRAPH_API_BASE, MsgraphSend, MsgraphSendOutput};
-use pimalaya_cli::printer::Printer;
+use pimalaya_cli::{error::request_origin, printer::Printer};
 use serde_json::Value;
 use url::Url;
 
@@ -66,12 +66,10 @@ fn resolve_url(path: &str) -> Result<Url> {
     };
 
     if url.origin() != base.origin() {
-        bail!(
-            "Cannot send a request to `{}`: it is off the API origin `{}`, \
-             which alone receives the account's token",
-            url.origin().ascii_serialization(),
-            base.origin().ascii_serialization(),
-        );
+        return Err(request_origin(
+            &url.origin().ascii_serialization(),
+            &base.origin().ascii_serialization(),
+        ));
     }
 
     Ok(url)
@@ -79,6 +77,8 @@ fn resolve_url(path: &str) -> Result<Url> {
 
 #[cfg(test)]
 mod tests {
+    use pimalaya_cli::error::{CommonCode, code_of};
+
     use super::resolve_url;
 
     /// A path and a full URL on the Graph origin resolve, the `beta`
@@ -95,9 +95,9 @@ mod tests {
         assert_eq!(resolve_url(beta).unwrap().as_str(), beta);
     }
 
-    /// A URL off the Graph origin is refused before the token is sent:
-    /// another host, plain HTTP, another port, and an absolute URL a path
-    /// would join over the base.
+    /// A URL off the Graph origin is refused before the token is sent,
+    /// coded `request-origin`: another host, plain HTTP, another port, and
+    /// an absolute URL a path would join over the base.
     #[test]
     fn a_url_off_the_graph_origin_is_refused() {
         for url in [
@@ -108,8 +108,12 @@ mod tests {
             "HTTPS://attacker.example/me",
             "ftp://attacker.example/me",
         ] {
-            let err = resolve_url(url).expect_err(url).to_string();
-            assert!(err.contains("off the API origin"), "{url}: {err}");
+            let err = resolve_url(url).expect_err(url);
+            assert_eq!(code_of::<CommonCode>(&err), Some(CommonCode::RequestOrigin));
+            assert!(
+                err.to_string().contains("off the API origin"),
+                "{url}: {err}"
+            );
         }
     }
 }

@@ -26,6 +26,7 @@ use io_pimdir::{
         reader::{PimdirCollection, PimdirItem},
     },
     codec::{PimdirAction, PimdirActionHandle, PimdirStoreIdentity, action_from_payload},
+    collection,
     object::PimdirHash,
     placement::PimdirFlags,
     summary::{PimdirSummary, contact},
@@ -51,7 +52,7 @@ use crate::{
 };
 
 /// The media type a pimdir collection carries to be an addressbook.
-const CARD_KIND: &str = "text/vcard";
+pub(crate) const CARD_KIND: &str = "text/vcard";
 
 /// How many items to pull per keyset page when scanning a whole collection.
 #[cfg(not(test))]
@@ -677,8 +678,9 @@ impl PimdirBackend {
     /// The address book collections of the configured account.
     ///
     /// One store holds every kind a sync caches (pimdir STORAGE §4.3, §14),
-    /// so the kind separates an address book from a mailbox or a calendar.
-    /// A kind-less one counts: a sync predating kinds left the column empty.
+    /// so the kind separates an address book from a mailbox or a calendar,
+    /// read on its media type (`collection::media_type`). An undeclared
+    /// one, of the empty kind, belongs to no application's kind.
     pub(crate) fn collections(&self) -> Result<Vec<PimdirCollection>> {
         let collections = match self.inner.account.as_deref() {
             Some(account) => self
@@ -690,7 +692,7 @@ impl PimdirBackend {
 
         Ok(collections
             .into_iter()
-            .filter(|collection| is_card_kind(&collection.kind))
+            .filter(|held| collection::media_type(&held.kind) == CARD_KIND)
             .collect())
     }
 
@@ -956,14 +958,6 @@ fn check_version(
         ),
     )
     .into())
-}
-
-/// Whether a collection kind makes an address book: its media type, the
-/// part before any `;` parameter, is `text/vcard`, as io-pimdir reads it
-/// when it picks the summaries, or it is empty, a sync predating kinds
-/// having left it so.
-pub(crate) fn is_card_kind(kind: &str) -> bool {
-    kind.is_empty() || kind.split(';').next().unwrap_or_default().trim() == CARD_KIND
 }
 
 /// The card a queue row creates or addresses, as `pimdir queue list`
@@ -1633,9 +1627,8 @@ mod tests {
         assert_eq!(pending(&backend), 0);
     }
 
-    /// A kind is a media type, compared before its parameters as io-pimdir
-    /// compares it when it picks the summaries; a calendar is no address
-    /// book.
+    /// A kind is a media type, read as io-pimdir reads it; a calendar is no
+    /// address book.
     #[test]
     fn an_address_book_is_told_by_its_media_type() {
         let dir = tempfile::tempdir().unwrap();
@@ -1646,12 +1639,6 @@ mod tests {
                 .ensure_collection("calendar", "text/calendar")
                 .unwrap();
         }
-
-        // NOTE: a store at storage-draft-05 closes the kind to bare media
-        // types, but one an earlier io-pimdir wrote is read as it is, its
-        // kinds not yet repaired by its owner.
-        assert!(is_card_kind("text/vcard; version=4.0"));
-        assert!(!is_card_kind("text/calendar; component=VEVENT"));
 
         let mut backend = PimdirBackend::new(PimdirConfig {
             root: dir.path().to_path_buf(),
@@ -1702,6 +1689,52 @@ mod tests {
             .map(|book| book.id)
             .collect();
         assert_eq!(ids, ["work/book"]);
+    }
+
+    /// An undeclared collection, of the empty kind, belongs to no
+    /// application's kind: it is no address book, and its account is not
+    /// one holding contacts.
+    #[test]
+    fn an_undeclared_collection_is_no_address_book() {
+        let dir = tempfile::tempdir().unwrap();
+        for (account, id, kind) in [("work", "work/book", CARD_KIND), ("old", "old/any", "")] {
+            io_pimdir::client::PimdirStore::open(dir.path())
+                .unwrap()
+                .for_account(account)
+                .ensure_collection(id, kind)
+                .unwrap();
+        }
+        let open = |account: Option<&str>| {
+            PimdirBackend::new(PimdirConfig {
+                root: dir.path().to_path_buf(),
+                account: account.map(String::from),
+            })
+            .unwrap()
+        };
+
+        let ids: Vec<String> = open(None)
+            .list_addressbooks()
+            .unwrap()
+            .into_iter()
+            .map(|book| book.id)
+            .collect();
+        assert_eq!(ids, ["work/book"]);
+        assert!(open(Some("old")).list_addressbooks().unwrap().is_empty());
+    }
+
+    /// A configured account is accepted on a store holding no collection
+    /// yet: a first sync has not run, which is no misconfiguration.
+    #[test]
+    fn a_configured_account_opens_a_store_holding_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        drop(io_pimdir::client::PimdirStore::open(dir.path()).unwrap());
+
+        let mut backend = PimdirBackend::new(PimdirConfig {
+            root: dir.path().to_path_buf(),
+            account: Some(String::from("work")),
+        })
+        .unwrap();
+        assert!(backend.list_addressbooks().unwrap().is_empty());
     }
 
     /// What a command printed, as text and as JSON.

@@ -13,7 +13,7 @@ use io_pimdir::{
 };
 use pimalaya_cli::error::CodedError;
 
-use crate::{config::PimdirConfig, error::ErrorCode, pimdir::backend::is_card_kind};
+use crate::{config::PimdirConfig, error::ErrorCode, pimdir::backend::CARD_KIND};
 
 /// The process name each staged action records (pimdir STORAGE §15.1).
 ///
@@ -124,23 +124,15 @@ pub(crate) fn refusal(
 /// their address books would write a card into one that belongs to
 /// another. A configured account the store holds no collection of is
 /// refused under `store-account-unknown`, naming the ones it holds,
-/// rather than read as an empty account.
+/// rather than read as an empty account; on a store holding no collection
+/// yet it is accepted, a first sync not having run.
 fn resolve_account(reader: &PimdirReader, configured: Option<String>) -> Result<Option<String>> {
-    let collections = reader
-        .list_collections()
-        .map_err(|err| anyhow!("List pimdir collections: {err}"))?;
-
-    let accounts_of = |cards_only: bool| {
-        let mut accounts: Vec<Option<String>> = collections
-            .iter()
-            .filter(|collection| !cards_only || is_card_kind(&collection.kind))
-            .map(|collection| collection.account.clone())
-            .collect();
-        accounts.sort();
-        accounts.dedup();
-        accounts
+    let accounts_of = |kind| {
+        reader
+            .accounts_of(kind)
+            .map_err(|err| anyhow!("List pimdir collections: {err}"))
     };
-    let accounts = accounts_of(false);
+    let accounts = accounts_of(None)?;
 
     let names = |accounts: &[Option<String>]| {
         accounts
@@ -162,7 +154,7 @@ fn resolve_account(reader: &PimdirReader, configured: Option<String>) -> Result<
         return Ok(configured);
     }
 
-    let accounts = accounts_of(true);
+    let accounts = accounts_of(Some(CARD_KIND))?;
 
     match accounts.as_slice() {
         [] | [_] => Ok(accounts.into_iter().next().flatten()),

@@ -53,6 +53,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Changed the io-pimdir dependency to 0.18.0.
+- Changed the pimalaya-cli dependency to 0.7.0.
+- Changed the ical-rs dependency, through io-pimdir, to 0.7.2.
+- **BREAKING**: Changed the pimdir backend to count an undeclared collection, of the empty kind, as no address book: it is no longer listed, read or written, and its account no longer counts when cardamum derives the account from the store, where a sync predating kinds was assumed to have left it so (io-pimdir's ruling: an empty kind belongs to no application's kind).
+- Changed `msgraph request` and `gpeople request` to code a URL off the API origin `request-origin` under `--json`, where the refusal carried no code.
 - **BREAKING**: Changed the pimdir backend to io-pimdir 0.17.0, pimdir storage-draft-14: a store an earlier sync engine wrote is refused (`store-version`) and never migrated, its refusal now io-pimdir's one wording naming cardamum, which says to sync it with that engine until nothing is queued, then set it aside and sync a new store.
 - Changed `card search` and the MCP tool `card_search` to be built in with any backend, not only with `vdir` or `pimdir`: the CardDAV, JMAP, Microsoft Graph and Google People features pull io-pimdir's query matcher. Those backends still refuse it with `capability-missing` until a search over a large address book is measured.
 - Changed a pimdir card write to drop every `X-PIMDIR-` property from the card before it is queued (pimdir STORAGE §18), so no instruction to a sync engine enters the queue unasked.

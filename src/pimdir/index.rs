@@ -16,7 +16,7 @@ use io_pimdir::{
     },
     search::{
         coverage::{PimdirSearchCoverage, PimdirSearchTemporal},
-        query::{PimdirQuery, PimdirQueryKind, PimdirQueryPredicate, PimdirQueryTerm},
+        query::{PimdirQuery, PimdirQueryKind},
     },
     summary::{PimdirSummary, contact::PimdirContactSummary},
 };
@@ -97,34 +97,15 @@ impl PimdirBackend {
     }
 
     /// `query` scoped to the account's cards, `addressbook` alone when
-    /// given.
-    ///
-    /// NOTE: the scope stays top-level, where io-pimdir reads its coverage.
+    /// given, as io-pimdir scopes a query its coverage reads
+    /// ([`PimdirQuery::scoped`]).
     fn scope(&self, query: PimdirQuery, addressbook: Option<&str>) -> Result<PimdirQuery> {
-        let mut conjuncts = match query {
-            PimdirQuery::And(conjuncts) => conjuncts,
-            query => vec![query],
-        };
-        let term = |predicate| {
-            PimdirQuery::Term(PimdirQueryTerm {
-                predicate,
-                start: 0,
-                end: 0,
-            })
-        };
-
-        conjuncts.push(term(PimdirQueryPredicate::Kind(PimdirQueryKind::Contact)));
-        if let Some(account) = &self.inner.account {
-            conjuncts.push(term(PimdirQueryPredicate::Account(account.clone())));
-        }
         if let Some(addressbook) = addressbook {
             self.known_collection(addressbook)?;
-            conjuncts.push(term(PimdirQueryPredicate::Collection(
-                addressbook.to_string(),
-            )));
         }
 
-        Ok(PimdirQuery::And(conjuncts))
+        let account = self.inner.account.as_deref();
+        Ok(query.scoped(Some(PimdirQueryKind::Contact), account, addressbook))
     }
 
     /// A hit as `card list` lists a card: read through the index's own
@@ -271,28 +252,15 @@ impl From<&PimdirSearchCoverage> for PimdirCardCoverage {
             PimdirSearchTemporal::Bounded { filling, .. } => *filling,
         };
 
-        let local = &coverage.local;
-        let reads = &local.reads;
-        // NOTE: a body out of sight counts against an answer only for a
-        // kind whose bodies a term of the query reads (pimdir SEARCH §8.2).
-        let read = local
-            .kinds
-            .iter()
-            .filter(|(kind, _)| reads.kinds.contains(*kind))
-            .map(|(_, unread)| unread);
-        let bodiless = local
-            .kinds
-            .iter()
-            .filter(|(kind, _)| reads.kinds.contains(*kind) || reads.counts_bodiless(kind))
-            .map(|(_, unread)| unread.bodiless);
+        let unread = coverage.unread_counted();
 
         Self {
             complete: coverage.is_complete(),
-            bodiless: bodiless.sum(),
-            missing: read.clone().map(|unread| unread.missing).sum(),
-            unparseable: read.map(|unread| unread.unparseable).sum(),
-            unindexed: local.unindexed,
-            behind: local.behind,
+            bodiless: unread.bodiless,
+            missing: unread.missing,
+            unparseable: unread.unparseable,
+            unindexed: coverage.local.unindexed,
+            behind: coverage.local.behind,
             filling,
         }
     }

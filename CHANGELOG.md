@@ -69,9 +69,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Changed `pimdir search` to print its text cursor as `Next page: --page-token <token>`, the token `nextPage` holds.
 - Changed `addressbook create` on pimdir to fail `addressbook-duplicate` for an address book the store holds, before `capability-missing`.
 - Changed a bare `cardamum --json` to fail `usage-invalid`, exit 2, through pimalaya-cli.
-- Changed the io-pimdir dependency to 0.18.0.
+- **BREAKING**: Changed the io-pimdir dependency to 0.19.0, pimdir storage-draft-15: a store or a sync state of draft-14 is refused and never migrated.
 - Changed the pimalaya-cli dependency to 0.7.0.
-- Changed the ical-rs dependency, through io-pimdir, to 0.7.2.
+- Changed the vcard-rs dependency to 0.6.1, and ical-rs and mime-rs, through io-pimdir, to 0.7.3 and 0.2.1.
 - **BREAKING**: Changed the pimdir backend to count an undeclared collection, of the empty kind, as no address book: it is no longer listed, read or written, and its account no longer counts when cardamum derives the account from the store, where a sync predating kinds was assumed to have left it so (io-pimdir's ruling: an empty kind belongs to no application's kind).
 - Changed `msgraph request` and `gpeople request` to code a URL off the API origin `request-origin` under `--json`, where the refusal carried no code.
 - **BREAKING**: Changed the pimdir backend to io-pimdir 0.17.0, pimdir storage-draft-14: a store an earlier sync engine wrote is refused (`store-version`) and never migrated, its refusal now io-pimdir's one wording naming cardamum, which says to sync it with that engine until nothing is queued, then set it aside and sync a new store.
@@ -202,6 +202,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed a pimdir `card add` of a card with no `UID` and an `X-PIMDIR-` property queueing it under the `hash:` key of the bytes before that property was dropped, a key naming a body the store never holds: the key is now the one io-pimdir derives from the queued body, the id reported (io-pimdir 0.19.0 refuses the former with `hash-key-mismatch`).
 - Fixed `card list` and `jmap contact-card query` to code a page token they did not print `page-token-invalid`.
 - Fixed the composer refused inside a session to be coded `stdin-taken`, and a source neither a readable file nor vCard contents `card-invalid`.
 - Fixed `card read` on a vdir file or a pimdir body that cannot be read failing uncoded with the bare system error: it fails coded `card-unreadable`, ``Cannot read card `<id>` in address book `<addressbook>` ``, the error in `sources`, as `card list` names such a card, and so do `card update` starting from the card and a pimdir `card update` or `card delete` given `--if-match`. A pimdir update or delete given no version no longer reads the body, so such a card can be replaced or removed.

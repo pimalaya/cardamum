@@ -22,7 +22,7 @@ use anyhow::{Error, Result, anyhow, bail};
 use io_pimdir::{
     client::{
         PimdirError, PimdirStore,
-        producer::{PimdirActionStatus, PimdirPendingAction},
+        producer::{PimdirActionStatus, PimdirEnqueued, PimdirPendingAction},
         reader::{PimdirCollection, PimdirItem},
     },
     codec::{PimdirAction, PimdirActionHandle, PimdirStoreIdentity, action_from_payload},
@@ -647,21 +647,29 @@ impl PimdirBackend {
     /// Stages a locally-authored card as an `add` action the next sync
     /// applies and uploads.
     ///
-    /// Returns the card's link id, its `UID`: a queued create carries no
-    /// public `seq` until the store's owner applies it, so there is no
-    /// store-assigned id to report yet. The owner derives the summary from
-    /// the body, and the key it derives is the one reported here.
+    /// Returns the card's link id, its `UID` or the `hash:` key of its
+    /// body: a queued create carries no public `seq` until the store's
+    /// owner applies it, so there is no store-assigned id to report yet.
+    /// The action states the `UID`, which a queued duplicate is checked
+    /// against, and no `hash:` key: the store derives that one from the
+    /// body it holds, its `X-PIMDIR-` properties taken out, and reports
+    /// it.
     pub fn create_card(&mut self, addressbook_id: &str, contents: Vec<u8>) -> Result<String> {
         self.writable(addressbook_id)?;
 
-        let link_id = contact::derive(&contents).link_id;
+        let derived = contact::derive(&contents).link_id;
+        let stated = (!derived.as_str().starts_with("hash:")).then_some(derived);
 
-        self.stage(addressbook_id, &contents, |hash| PimdirAction::Add {
-            link_id: Some(link_id.clone()),
+        let enqueued = self.stage(addressbook_id, &contents, |hash| PimdirAction::Add {
+            link_id: stated,
             flags: PimdirFlags::default(),
             object: Some(hash),
             supersedes: None,
         })?;
+
+        let link_id = enqueued
+            .link_id
+            .ok_or_else(|| anyhow!("The pimdir store reported no key for the queued card"))?;
 
         Ok(link_id.0)
     }
@@ -953,13 +961,14 @@ impl PimdirBackend {
     /// staging lock, named by the store's own hash, and append the row
     /// pinning it, in one transaction: a refused write leaves no body in
     /// the blob tree, and a collector never sees one unpinned. The partial
-    /// supports the gate passed the action with are logged.
+    /// supports the gate passed the action with are logged, and the row's
+    /// receipt returned.
     fn stage(
         &mut self,
         collection: &str,
         contents: &[u8],
         action: impl FnOnce(PimdirHash) -> PimdirAction,
-    ) -> Result<()> {
+    ) -> Result<PimdirEnqueued> {
         let enqueued = self
             .inner
             .producer()?
@@ -969,7 +978,7 @@ impl PimdirBackend {
         for partial in &enqueued.partial {
             warn!("{partial}");
         }
-        Ok(())
+        Ok(enqueued)
     }
 }
 
@@ -1320,6 +1329,26 @@ mod tests {
         let body = String::from_utf8(cards[0].contents.clone()).unwrap();
         assert!(!body.contains("X-PIMDIR-"), "{body}");
         assert!(body.contains("FN:Jane Doe"), "{body}");
+    }
+
+    /// A card with no `UID` carrying an `X-PIMDIR-` property is queued under
+    /// the `hash:` key of the bytes the store holds, its instructions taken
+    /// out, and that key is the id reported.
+    #[test]
+    fn a_uidless_card_is_keyed_by_its_stripped_body() {
+        let (dir, mut backend) = store();
+        let card = b"BEGIN:VCARD\r\nVERSION:4.0\r\nFN:Jane Doe\r\n\
+            X-PIMDIR-ONLINE-MEETING:yes\r\nEND:VCARD\r\n";
+
+        let id = backend.create_card("book", card.to_vec()).unwrap();
+        assert!(id.starts_with("hash:"), "{id}");
+        assert_ne!(id, contact::derive(card).link_id.0);
+        drain(&dir);
+
+        let cards = backend.list_cards("book", 0, None).unwrap().cards;
+        assert_eq!(cards.len(), 1);
+        assert!(!cards[0].contents.windows(9).any(|w| w == b"X-PIMDIR-"));
+        assert_eq!(id, contact::derive(&cards[0].contents).link_id.0);
     }
 
     const JANE: &[u8] = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:c1\r\n\

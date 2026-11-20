@@ -186,6 +186,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed `card read` on a vdir file or a pimdir body that cannot be read failing uncoded with the bare system error: it fails coded `card-unreadable`, ``Cannot read card `<id>` in address book `<addressbook>` ``, the error in `sources`, as `card list` names such a card, and so do `card update` starting from the card and a pimdir `card update` or `card delete` given `--if-match`. A pimdir update or delete given no version no longer reads the body, so such a card can be replaced or removed.
 - Fixed `addressbook list` on Microsoft Graph showing the top-level contact folders alone: every folder is listed whatever its depth, keyed by its id and named by its display name, as neverest lists them.
 - Fixed a shell composer failing to open its draft on Windows: the path is double-quoted there, where the line runs under `cmd /C`, and single-quoted elsewhere as before.
 - Fixed the `-b` help saying only the unified commands read the flag and that `auto` picks a backend the command supports: `account`, `repl` and `mcp` read it too, and `auto` takes the first configured backend, refusing a command it does not serve with `capability-missing`.

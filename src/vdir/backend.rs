@@ -173,7 +173,10 @@ impl VdirBackend {
         let item = self
             .inner
             .get_item(path, card_id)
-            .map_err(|err| card_error(addressbook_id, card_id, err))?;
+            .map_err(|err| match missing_code(&err) {
+                Some(ErrorCode::CardNotFound) => card_error(addressbook_id, card_id, err),
+                _ => error::card_unreadable(addressbook_id, card_id, err.into()),
+            })?;
 
         Ok(Card {
             id: card_id.to_string(),

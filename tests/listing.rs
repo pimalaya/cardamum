@@ -100,6 +100,35 @@ fn a_card_file_that_cannot_be_read_is_an_entry_the_others_listed() {
     assert_eq!(errors[0]["sources"].as_array().unwrap().len(), 1, "{json}");
 }
 
+/// A read of the card, and an update starting from it, fail coded
+/// `card-unreadable` naming the card, as its listing entry is coded.
+#[test]
+fn a_card_file_that_cannot_be_read_fails_its_read_coded() {
+    let (home, config) = vdir();
+    if !unreadable(home.path()) {
+        return;
+    }
+
+    let reads: [&[&str]; 2] = [
+        &["--json", "card", "read", "-k", "book", "eve"],
+        &[
+            "--json", "card", "update", "-k", "book", "eve", "--note", "x",
+        ],
+    ];
+    for args in reads {
+        let output = run(home.path(), &config, args);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(output.status.code(), Some(1), "{stdout}");
+        let json: Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(json["code"], "card-unreadable", "{json}");
+        assert_eq!(
+            json["error"], "Cannot read card `eve` in address book `book`",
+            "{json}"
+        );
+        assert!(!json["sources"].as_array().unwrap().is_empty(), "{json}");
+    }
+}
+
 /// The whole directory is read for every page, so its entries print on
 /// the first page alone.
 #[test]

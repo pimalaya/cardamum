@@ -553,7 +553,12 @@ impl PimdirBackend {
 
         let item = self.item(addressbook_id, card_id)?;
         let contents = match &item.object {
-            Some(hash) => self.inner.reader.blobs().get(hash)?,
+            Some(hash) => self
+                .inner
+                .reader
+                .blobs()
+                .get(hash)
+                .map_err(|err| error::card_unreadable(addressbook_id, card_id, err.into()))?,
             None => None,
         };
         let (Some(hash), Some(contents)) = (item.object, contents) else {
@@ -618,7 +623,10 @@ impl PimdirBackend {
         self.writable(addressbook_id)?;
 
         let item = self.item(addressbook_id, card_id)?;
-        check_version(self.version(&item)?, addressbook_id, card_id, if_match)?;
+        if let Some(expected) = if_match {
+            let version = self.version(addressbook_id, card_id, &item)?;
+            check_version(version, addressbook_id, card_id, expected)?;
+        }
         let seq = item.seq;
         // NOTE: the version matched, so the item's body is the one read.
         let read = if_match.and(item.object);
@@ -654,7 +662,10 @@ impl PimdirBackend {
         self.writable(addressbook_id)?;
 
         let item = self.item(addressbook_id, card_id)?;
-        check_version(self.version(&item)?, addressbook_id, card_id, if_match)?;
+        if let Some(expected) = if_match {
+            let version = self.version(addressbook_id, card_id, &item)?;
+            check_version(version, addressbook_id, card_id, expected)?;
+        }
         let seq = item.seq;
         // NOTE: the version matched, so the item's body is the one read.
         let read = if_match.and(item.object);
@@ -830,13 +841,24 @@ impl PimdirBackend {
 
     /// A stored item's version, the hash of its body, when the body is
     /// local: none for one never fetched and none for one whose blob is
-    /// gone from the store.
-    fn version(&self, item: &PimdirItem) -> Result<Option<String>> {
+    /// gone from the store; `card-unreadable` for one it cannot read.
+    fn version(
+        &self,
+        addressbook_id: &str,
+        card_id: &str,
+        item: &PimdirItem,
+    ) -> Result<Option<String>> {
         let Some(hash) = &item.object else {
             return Ok(None);
         };
 
-        let local = self.inner.reader.blobs().reader(hash)?.is_some();
+        let local = self
+            .inner
+            .reader
+            .blobs()
+            .reader(hash)
+            .map_err(|err| error::card_unreadable(addressbook_id, card_id, err.into()))?
+            .is_some();
         Ok(local.then(|| hash.0.clone()))
     }
 
@@ -938,12 +960,9 @@ fn check_version(
     current: Option<String>,
     addressbook_id: &str,
     card_id: &str,
-    if_match: Option<&str>,
+    if_match: &str,
 ) -> Result<()> {
-    let Some(expected) = if_match else {
-        return Ok(());
-    };
-    let expected = expected.trim().trim_matches('"');
+    let expected = if_match.trim().trim_matches('"');
 
     if current.as_deref() == Some(expected) {
         return Ok(());
@@ -1511,6 +1530,44 @@ mod tests {
         assert_eq!(page.errors.len(), 1, "{:?}", page.errors);
         assert_eq!(page.errors[0].id.as_deref(), Some(id.as_str()));
         assert_eq!(page.errors[0].code, Some(ErrorCode::CardUnreadable));
+    }
+
+    /// A body the store cannot read fails a read, and a write guarded on
+    /// its version, `card-unreadable` naming the card, as its listing
+    /// entry is coded; a write guarded on nothing reads no body.
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_body_fails_its_read_coded() {
+        use pimalaya_cli::error::code_of;
+
+        use crate::error::ErrorCode;
+
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        drain(&dir);
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
+        let etag = backend.get_card("book", &id).unwrap().etag.unwrap();
+        poison(&backend, std::slice::from_ref(&id));
+        let message = format!("Cannot read card `{id}` in address book `book`");
+
+        let err = backend.get_card("book", &id).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::CardUnreadable), "{err:#}");
+        assert_eq!(err.to_string(), message);
+        assert!(err.chain().count() > 1, "{err:#}");
+
+        let err = backend
+            .update_card("book", &id, JANE.to_vec(), Some(&etag))
+            .unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::CardUnreadable), "{err:#}");
+        assert_eq!(err.to_string(), message);
+
+        let err = backend.delete_card("book", &id, Some(&etag)).unwrap_err();
+        assert_eq!(code_of(&err), Some(ErrorCode::CardUnreadable), "{err:#}");
+        assert_eq!(err.to_string(), message);
+
+        backend.delete_card("book", &id, None).unwrap();
     }
 
     /// A body the item names but its blob tree no longer holds is not

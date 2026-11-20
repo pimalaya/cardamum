@@ -111,7 +111,13 @@ An id SHALL name an address book or name nothing: one store holds the collection
 An id naming no address book of the account SHALL be refused naming the ones it holds. Ids carry the sync engine's namespace and are not guessable, so an error asking for one that shows none leaves the user nothing to act on.
 
 ### Requirement: pimdir is a cache, not a server
-The pimdir backend SHALL treat the store as a possibly-partial cache. `get_card` on a card whose body is not local SHALL fail coded `body-pending`, ``Card `<id>` in `<addressbook>` is not downloaded yet (body not fetched); run a sync to hydrate it``, the cue to sync, rather than a data-loss error, exit 1, as Himalaya reads such a message: a card never fetched (`level < Full`, no stored object) and one whose blob file is gone or fails its name alike (pimdir GUIDE §14). The card still lists: `list_cards` SHALL project the stored contact summary (pimdir STORAGE Annex A) into a minimal preview vCard (`UID`, `FN`, `EMAIL`), the name escaped back into a content line, so a contact list reads correctly before a full sync, while `get_card` refuses outright so a preview can never be mistaken for the document of record.
+The pimdir backend SHALL treat the store as a possibly-partial cache. `get_card` on a card whose body is not local SHALL fail coded `body-pending`, ``Card `<id>` in `<addressbook>` is not downloaded yet (body not fetched); run a sync to hydrate it``, the cue to sync, rather than a data-loss error, exit 1, as Himalaya reads such a message: a card never fetched (`level < Full`, no stored object) and one whose blob file is gone or fails its name alike (pimdir GUIDE §14). The card still lists: `list_cards` SHALL project the stored contact summary (pimdir STORAGE Annex A) into a minimal preview vCard (`UID`, `FN`, `EMAIL`), the name escaped back into a content line, so a contact list reads correctly before a full sync, while `get_card` refuses outright so a preview can never be mistaken for the document of record. A body the store holds but cannot read (an I/O error) SHALL fail `get_card`, and an update or a delete given `--if-match`, coded `card-unreadable`, ``Cannot read card `<id>` in address book `<addressbook>` ``, the store's error in `sources`, as `card list` codes its entry; an update or a delete given no version SHALL read no body, so such a card can still be replaced or removed.
+
+#### Scenario: A body the store cannot read
+- GIVEN a pimdir address book holding a synced card whose blob file has no read permission
+- WHEN `cardamum --json card read <id>` runs
+- THEN it fails coded `card-unreadable`, its error naming the card and the address book, the permission error in `sources`, exit 1, as `card list` names it in `errors`
+- AND `card delete <id>` with no `--if-match` stages its removal
 
 #### Scenario: A body gone from the blob tree
 - GIVEN a pimdir address book holding a synced card whose blob file was removed

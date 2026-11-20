@@ -451,6 +451,15 @@ pub fn card_not_found(addressbook_id: &str, card_id: &str, cause: Error) -> Erro
     with_code(cause, |_| Some(ErrorCode::CardNotFound)).context(message)
 }
 
+/// The failure to read the card `card_id` the backend holds, `cause` why:
+/// cardamum's sentence naming it, coded as `cause` is or
+/// `card-unreadable`, as a listing codes its entry.
+#[cfg(any(feature = "pimdir", feature = "vdir"))]
+pub fn card_unreadable(addressbook_id: &str, card_id: &str, cause: Error) -> Error {
+    let message = format!("Cannot read card `{card_id}` in address book `{addressbook_id}`");
+    with_code(cause, |_| Some(ErrorCode::CardUnreadable)).context(message)
+}
+
 /// The failure of the address book `id` the backend does not hold, `cause`
 /// what it answered: cardamum's sentence naming it, the backend's text in
 /// `sources`.

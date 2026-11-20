@@ -253,6 +253,7 @@ fn what_cannot_run_in_a_session_is_refused_and_the_session_goes_on() {
     for answer in &answers[2..5] {
         let error = answer["error"].as_str().unwrap_or_default();
         assert!(error.contains("composer (-i)"), "{answer}");
+        assert_eq!(answer["code"], "stdin-taken", "{answer}");
     }
 
     assert_eq!(answers[5]["code"], "stdin-taken", "{}", answers[5]);
@@ -282,9 +283,8 @@ fn a_version_line_prints_the_version() {
     assert_eq!(lines.next(), Some(version), "{stdout}");
     let line = lines.next().unwrap_or_default();
     assert!(line.starts_with(long), "{stdout}");
-    // NOTE: clap names the subcommand, as the command line does.
-    let sub = lines.find(|line| line.starts_with("cardamum-card-list v"));
-    assert!(sub.is_some(), "{stdout}");
+    let longs = stdout.lines().filter(|line| line.starts_with(long));
+    assert_eq!(longs.count(), 2, "{stdout}");
 
     let last = values(stdout.lines().last().unwrap_or_default());
     assert_eq!(last[0]["cards"][0]["id"], "ada", "{stdout}");

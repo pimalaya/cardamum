@@ -68,7 +68,7 @@ fn an_unserved_verb_is_refused_before_anything_is_touched() {
     let json: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(json["code"], "capability-missing", "{json}");
     let error = json["error"].as_str().unwrap();
-    assert!(error.contains("`card.remove.if-match`"), "{error}");
+    assert!(error.contains("`card.delete.if-match`"), "{error}");
 
     let card = home.path().join("contacts/personal/ada.vcf");
     assert_eq!(fs::read_to_string(card).unwrap(), CARD);
@@ -94,7 +94,7 @@ fn the_account_lists_what_its_backend_serves() {
     assert_eq!(row("card.add")["backend"], "vdir");
     assert_eq!(row("card.add")["level"], "full");
     assert_eq!(row("card.add")["detail"], Value::Null);
-    assert_eq!(row("card.remove.if-match")["level"], "none");
+    assert_eq!(row("card.delete.if-match")["level"], "none");
 }
 
 /// The text is a list headed by the account, one line per capability:
@@ -107,7 +107,7 @@ fn the_capabilities_print_one_line_each_under_the_account() {
 
     assert!(text.starts_with("Account:  example\n\n"), "{text}");
     assert!(
-        text.contains("\ncard.add                 vdir  full     -\n"),
+        text.contains("\ncard.add                        vdir  full     -\n"),
         "{text}"
     );
 }
@@ -142,7 +142,7 @@ fn a_unified_leaf_help_names_the_backends_serving_it() {
 
     assert!(help.contains("Backends:"), "{help}");
     assert!(
-        help.contains("card.remove.if-match: partial on carddav, jmap, msgraph;"),
+        help.contains("card.delete.if-match: partial on carddav, jmap, msgraph;"),
         "{help}"
     );
 }

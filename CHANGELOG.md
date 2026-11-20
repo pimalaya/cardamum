@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Added `client.cert` and `client.key` to every `<backend>.tls` table, a PEM client certificate and its PEM private key presented when the server asks for one, both required once `client` is given.
+- Added the account-level `tls` table, each network backend's `tls` taking from it, field by field, what it leaves unset (`client` as one), as Himalaya's.
+- Added `tls` to each backend row of `account check --json`, `{provider, crypto, cert, clientCert}` as configured, `null` for a local backend or a cleartext connection; the text appends `, TLS` and its parts set.
+- Added `errors` to `pimdir queue list --json`: an item error coded `action-malformed` for each address book whose queue holds a row that does not decode, its pending rows then left out, the command exiting 3.
+- Added an `Exit status 3:` line to the `--help` of every `carddav`, `jmap`, `msgraph` and `gpeople` command.
+- Added `accounts`, a hidden alias of `account`.
 - Added `handle` to the `pimdir queue show` and `pimdir queue cancel` JSON, beside the integer `row`, as `pimdir queue list` prints it (pimalaya-cli's output.md): the handle given, or a bare id given named under the store's identity. Their text names the row by its handle.
 - Added `card search <query>...`, searching the account's cards in the pimdir query language over every address book, or the one `-k` names: pimdir answers from the store's index, vdir matches every card of the scope with io-pimdir's matcher, so a query answers one hit set on both. A term only a pimdir store answers (`tag:`, `flag:`, `is:`...) is refused on vdir with the new `--json` error code `query-unsupported`, never dropped; `--sort relevance` is pimdir's alone. The capabilities `card.search` and `card.search.relevance`, and the MCP tool `card_search`, come with it; CardDAV, JMAP, Microsoft Graph and Google People do not serve it yet (#25).
 - Added row handles to `pimdir queue show` and `pimdir queue cancel`: a row may be named `<store-id>.<incarnation>.<id>`, a handle of another store (a copy restored since) reading `reset` and refused by `cancel` coded `store-reset`; a bare row id is taken as before. `pimdir queue list` rows and `pimdir status` parked rows carry `handle`, printed in the text in place of the bare row, so a row picked from a listing is checked too.
@@ -53,6 +59,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING**: Changed `account check --json` to pimalaya-cli's list of accounts, `{accounts: [{account, backends}]}`.
+- Changed the `account capability` names to the unified commands they stand for: `addressbook.rename` to `addressbook.update`, `addressbook.description` to `addressbook.update.description`, `addressbook.color` to `addressbook.update.color`, `card.remove` to `card.delete`, `card.remove.if-match` to `card.delete.if-match` and `card.search.relevance` to `card.search.sort`.
+- Changed `pimdir queue list --json` to `{actions, parked, errors}`, `actions` holding every pending row of every kind where `cards` held the creations alone.
+- Changed `pimdir queue show --json` to the row `pimdir queue list` prints, plus `state`, `appliedAt` and `refusals`.
+
+  `itemId` replaces `seq`. A row the account's queue does not hold fails coded `row-not-found` and a handle of another store `store-reset`, exit 1, where both printed a state.
+- Changed the parked rows of `pimdir status --json` to name their address book `collection`, as a queue row does, where they named it `addressbookId`.
+- Changed `pimdir search` to print its text cursor as `Next page: --page-token <token>`, the token `nextPage` holds.
+- Changed `addressbook create` on pimdir to fail `addressbook-duplicate` for an address book the store holds, before `capability-missing`.
+- Changed a bare `cardamum --json` to fail `usage-invalid`, exit 2, through pimalaya-cli.
 - Changed the io-pimdir dependency to 0.18.0.
 - Changed the pimalaya-cli dependency to 0.7.0.
 - Changed the ical-rs dependency, through io-pimdir, to 0.7.2.
@@ -186,6 +202,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed `card list` and `jmap contact-card query` to code a page token they did not print `page-token-invalid`.
+- Fixed the composer refused inside a session to be coded `stdin-taken`, and a source neither a readable file nor vCard contents `card-invalid`.
 - Fixed `card read` on a vdir file or a pimdir body that cannot be read failing uncoded with the bare system error: it fails coded `card-unreadable`, ``Cannot read card `<id>` in address book `<addressbook>` ``, the error in `sources`, as `card list` names such a card, and so do `card update` starting from the card and a pimdir `card update` or `card delete` given `--if-match`. A pimdir update or delete given no version no longer reads the body, so such a card can be replaced or removed.
 - Fixed `addressbook list` on Microsoft Graph showing the top-level contact folders alone: every folder is listed whatever its depth, keyed by its id and named by its display name, as neverest lists them.
 - Fixed a shell composer failing to open its draft on Windows: the path is double-quoted there, where the line runs under `cmd /C`, and single-quoted elsewhere as before.

@@ -52,7 +52,7 @@ impl AddressbookUpdateCommand {
     pub fn execute(self, printer: &mut impl Printer, client: &mut AddressbookClient) -> Result<()> {
         let mut capabilities = Vec::new();
         if self.name.is_some() {
-            capabilities.push(Capability::AddressbookRename);
+            capabilities.push(Capability::AddressbookUpdate);
         }
         if self.description.is_some() {
             capabilities.push(Capability::AddressbookDescription);

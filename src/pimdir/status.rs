@@ -32,7 +32,7 @@ use crate::pimdir::backend::PimdirBackend;
 ///
 /// JSON output: `{"account", "accounts", "addressbooks": [{"id", "name",
 /// "total", "hydrated", "queued"}], "parked": [{"row", "handle",
-/// "addressbookId", "kind", "error"}], "refused": [{"addressbookId",
+/// "collection", "kind", "error"}], "refused": [{"addressbookId",
 /// "itemId", "source", "reason", "refusedAt"}]}`.
 #[derive(Debug, Parser)]
 pub struct PimdirStatusCommand;
@@ -88,8 +88,8 @@ pub struct PimdirParkedStatus {
     /// The row's handle, its id under the store's identity (pimdir STORAGE
     /// §4.5), which `pimdir queue show` and `cancel` take and check.
     pub handle: String,
-    /// The address book the action targets.
-    pub addressbook_id: String,
+    /// The address book the action is queued on, as a queue row names it.
+    pub collection: String,
     /// The action kind (`add`, `update`, `remove`…).
     pub kind: String,
     /// Why the owner parked it.
@@ -153,7 +153,7 @@ impl fmt::Display for PimdirStatusOutput {
                 columns.push([
                     sanitize::text(&parked.handle).into_owned(),
                     sanitize::text(&parked.kind).into_owned(),
-                    sanitize::text(&parked.addressbook_id).into_owned(),
+                    sanitize::text(&parked.collection).into_owned(),
                     sanitize::text(&parked.error).into_owned(),
                 ]);
             }

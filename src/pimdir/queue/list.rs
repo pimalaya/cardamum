@@ -1,7 +1,7 @@
 //! # pimdir queue list
 //!
-//! The `pimdir queue list` command, listing the card creations staged and
-//! the rows the store's owner parked in the account's address books.
+//! The `pimdir queue list` command, listing the rows staged and the rows
+//! the store's owner parked in the account's address books.
 
 use std::fmt;
 
@@ -11,25 +11,33 @@ use pimalaya_cli::{listing::Listing, printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::{backend::Backend, pimdir::backend::PimdirBackend};
+use crate::{
+    backend::Backend,
+    error::{ItemError, partial_when},
+    pimdir::backend::PimdirBackend,
+};
 
-/// List the cards staged for creation and the parked rows.
+/// List the rows staged and the parked rows.
 ///
-/// A card added on pimdir waits in the store's queue until the sync engine
-/// applies it, and has no id until then, so `card list` cannot show it.
-/// This is where it shows: the row handle to cancel it by, when it was queued,
-/// the link id `card add` reported and its full name.
+/// A write on pimdir waits in the store's queue until the sync engine
+/// applies it; a card added has no id until then, so `card list` cannot
+/// show it. This is where every staged row shows, of every kind: the row
+/// handle to cancel it by, when it was queued, its kind, the link id
+/// `card add` reported or the card it addresses, and its full name.
 ///
-/// Staged updates and deletions need no such view, addressing cards that
-/// already exist. A row of any kind the sync engine parked, refusing to
+/// A row of any kind the sync engine parked, refusing to
 /// apply it without an operator, is listed `parked` with why: cancel it,
 /// or fix what parked it. One the engine sent without learning its outcome
 /// is listed `unconfirmed` instead: it may have taken effect.
 ///
-/// JSON output: `{"cards": [<row>], "parked": [<row>]}`, each row the
-/// family's `{"row", "kind", "collection", "linkId", "itemId", "producer",
-/// "queuedAt", "attempts", "unconfirmed", "error"}` plus `handle` and
-/// `fullName`.
+/// A queued row the store cannot decode leaves its address book's pending
+/// rows out and lists an item error naming the address book, the command
+/// then exiting 3.
+///
+/// JSON output: `{"actions": [<row>], "parked": [<row>], "errors": [{"id",
+/// "code", "error", "sources"}]}`, each row the family's `{"row",
+/// "handle", "kind", "collection", "linkId", "itemId", "producer",
+/// "queuedAt", "attempts", "unconfirmed", "error"}` plus `fullName`.
 #[derive(Debug, Parser)]
 pub struct PimdirQueueListCommand {
     /// Address book to list, every one of the account's when omitted.
@@ -38,7 +46,7 @@ pub struct PimdirQueueListCommand {
 }
 
 impl PimdirQueueListCommand {
-    /// Lists the creations and the parked rows, and prints them.
+    /// Lists the staged rows and the parked ones, and prints them.
     pub fn execute(
         self,
         printer: &mut impl Printer,
@@ -46,15 +54,19 @@ impl PimdirQueueListCommand {
         backend: &PimdirBackend,
     ) -> Result<()> {
         let addressbook = self.addressbook.as_deref();
-        let cards = backend.queued_cards(addressbook)?;
+        let (actions, errors) = backend.pending_rows(addressbook)?;
         let parked = backend.parked_rows(addressbook)?;
 
-        printer.out(PimdirQueueListOutput {
+        let output = PimdirQueueListOutput {
             account: account.to_owned(),
             addressbook: self.addressbook,
-            cards,
+            actions,
             parked,
-        })
+            errors,
+        };
+
+        printer.out(&output)?;
+        partial_when(&output.errors)
     }
 }
 
@@ -111,10 +123,13 @@ pub struct PimdirQueueListOutput {
     /// The address book listed, `None` for every one of the account's.
     #[serde(skip)]
     pub addressbook: Option<String>,
-    /// The cards staged for creation, pending.
-    pub cards: Vec<PimdirQueueRow>,
+    /// The pending rows, any kind.
+    pub actions: Vec<PimdirQueueRow>,
     /// The parked rows, any kind.
     pub parked: Vec<PimdirQueueRow>,
+    /// The error of each address book whose pending rows could not be
+    /// decoded, left out of `actions`.
+    pub errors: Vec<ItemError>,
 }
 
 impl fmt::Display for PimdirQueueListOutput {
@@ -125,7 +140,7 @@ impl fmt::Display for PimdirQueueListOutput {
         listing.head("Addressbook", addressbook);
         listing.empty = Some("Nothing queued nor parked");
 
-        for queued in &self.cards {
+        for queued in &self.actions {
             listing.items.push([
                 sanitize::text(&queued.handle).into_owned(),
                 String::from("queued"),
@@ -155,6 +170,10 @@ impl fmt::Display for PimdirQueueListOutput {
             listing.header.push(("Cancel", cancel));
         }
 
+        for error in &self.errors {
+            listing.errors.push(error);
+        }
+
         write!(f, "{listing}")
     }
 }
@@ -173,7 +192,7 @@ mod tests {
         let output = PimdirQueueListOutput {
             account: String::from("perso"),
             addressbook: None,
-            cards: vec![PimdirQueueRow {
+            actions: vec![PimdirQueueRow {
                 id: 3,
                 handle: format!("{STORE}.1.3"),
                 kind: String::from("add"),
@@ -201,13 +220,14 @@ mod tests {
                 error: Some(String::from("conflict")),
                 full_name: None,
             }],
+            errors: Vec::new(),
         };
 
         let json = serde_json::to_value(&output).unwrap();
         assert_eq!(
             json,
             serde_json::json!({
-                "cards": [{
+                "actions": [{
                     "row": 3, "handle": format!("{STORE}.1.3"), "kind": "add", "collection": "book",
                     "linkId": "urn:uuid:1", "itemId": null,
                     "producer": "cardamum", "queuedAt": "2026-11-15T10:00:00.000Z",
@@ -221,6 +241,7 @@ mod tests {
                     "attempts": 1, "unconfirmed": false, "error": "conflict",
                     "fullName": null,
                 }],
+                "errors": [],
             })
         );
 

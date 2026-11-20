@@ -2,12 +2,12 @@
 //!
 //! What each backend serves of the unified API.
 //!
-//! The names follow pimdir STORAGE Annex B without its domain word, the
-//! collection read as the addressbook: cardamum's `card.add` is pimdir's
-//! `contacts.card.add`, its `addressbook.create` pimdir's
-//! `collection.create`. A backend declares a capability only when it
-//! gives the result every other declarer gives; a different result stays
-//! protocol-specific.
+//! A capability is named after the unified command it stands for,
+//! `<noun>.<verb>` (`card.delete`, `addressbook.update`), or
+//! `<noun>.<verb>.<argument>` for a flag of that command a backend may
+//! not serve (`card.delete.if-match`), never in the store's vocabulary.
+//! A backend declares a capability only when it gives the result every
+//! other declarer gives; a different result stays protocol-specific.
 //!
 //! A verb a backend does not serve fails before connecting, with the
 //! `capability-missing` code. The tables are plain data keyed by backend
@@ -34,7 +34,7 @@ pub enum Capability {
     /// Choosing the id of an addressbook created.
     AddressbookCreateId,
     /// Renaming an addressbook.
-    AddressbookRename,
+    AddressbookUpdate,
     /// Deleting an addressbook and the cards it holds.
     AddressbookDelete,
     /// Setting an addressbook's description.
@@ -47,18 +47,18 @@ pub enum Capability {
     CardRead,
     /// Searching the cards with the pimdir query language.
     CardSearch,
-    /// Ordering the hits of a search by relevance.
+    /// Ordering the hits of a search by relevance (`--sort relevance`).
     CardSearchRelevance,
     /// Adding a card to an addressbook.
     CardAdd,
     /// Replacing a card.
     CardUpdate,
-    /// Removing a card.
-    CardRemove,
+    /// Deleting a card.
+    CardDelete,
     /// Replacing a card only while it is at a given version.
     CardUpdateIfMatch,
-    /// Removing a card only while it is at a given version.
-    CardRemoveIfMatch,
+    /// Deleting a card only while it is at a given version.
+    CardDeleteIfMatch,
 }
 
 impl Capability {
@@ -67,7 +67,7 @@ impl Capability {
         C::AddressbookList,
         C::AddressbookCreate,
         C::AddressbookCreateId,
-        C::AddressbookRename,
+        C::AddressbookUpdate,
         C::AddressbookDelete,
         C::AddressbookDescription,
         C::AddressbookColor,
@@ -77,30 +77,31 @@ impl Capability {
         C::CardSearchRelevance,
         C::CardAdd,
         C::CardUpdate,
-        C::CardRemove,
+        C::CardDelete,
         C::CardUpdateIfMatch,
-        C::CardRemoveIfMatch,
+        C::CardDeleteIfMatch,
     ];
 
-    /// The capability's name, pimdir's grammar without the domain word.
+    /// The capability's name: the unified command it stands for, plus the
+    /// long flag when it is an argument of that command.
     pub fn name(self) -> &'static str {
         match self {
             Self::AddressbookList => "addressbook.list",
             Self::AddressbookCreate => "addressbook.create",
             Self::AddressbookCreateId => "addressbook.create.id",
-            Self::AddressbookRename => "addressbook.rename",
+            Self::AddressbookUpdate => "addressbook.update",
             Self::AddressbookDelete => "addressbook.delete",
-            Self::AddressbookDescription => "addressbook.description",
-            Self::AddressbookColor => "addressbook.color",
+            Self::AddressbookDescription => "addressbook.update.description",
+            Self::AddressbookColor => "addressbook.update.color",
             Self::CardList => "card.list",
             Self::CardRead => "card.read",
             Self::CardSearch => "card.search",
-            Self::CardSearchRelevance => "card.search.relevance",
+            Self::CardSearchRelevance => "card.search.sort",
             Self::CardAdd => "card.add",
             Self::CardUpdate => "card.update",
-            Self::CardRemove => "card.remove",
+            Self::CardDelete => "card.delete",
             Self::CardUpdateIfMatch => "card.update.if-match",
-            Self::CardRemoveIfMatch => "card.remove.if-match",
+            Self::CardDeleteIfMatch => "card.delete.if-match",
         }
     }
 }
@@ -204,7 +205,7 @@ const LEAVES: &[(&str, &str, &[Capability])] = &[
         "addressbook",
         "update",
         &[
-            C::AddressbookRename,
+            C::AddressbookUpdate,
             C::AddressbookDescription,
             C::AddressbookColor,
         ],
@@ -215,7 +216,7 @@ const LEAVES: &[(&str, &str, &[Capability])] = &[
     ("card", "search", &[C::CardSearch, C::CardSearchRelevance]),
     ("card", "add", &[C::CardAdd]),
     ("card", "update", &[C::CardUpdate, C::CardUpdateIfMatch]),
-    ("card", "delete", &[C::CardRemove, C::CardRemoveIfMatch]),
+    ("card", "delete", &[C::CardDelete, C::CardDeleteIfMatch]),
 ];
 
 /// Whether `backend` serves the leaf `group leaf` at all, its first
@@ -323,7 +324,7 @@ const CARDDAV: &[Row] = &[
         Server("the server may forbid creating an addressbook, as iCloud does"),
     ),
     (C::AddressbookCreateId, Full),
-    (C::AddressbookRename, Full),
+    (C::AddressbookUpdate, Full),
     (
         C::AddressbookDelete,
         Server("the server may forbid deleting an addressbook, as iCloud does"),
@@ -336,10 +337,10 @@ const CARDDAV: &[Row] = &[
     (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
-    (C::CardRemove, Full),
+    (C::CardDelete, Full),
     (C::CardUpdateIfMatch, Full),
     (
-        C::CardRemoveIfMatch,
+        C::CardDeleteIfMatch,
         Partial("sent as `If-Match`, which some servers ignore on a delete, as iCloud does"),
     ),
 ];
@@ -349,7 +350,7 @@ const JMAP: &[Row] = &[
     (C::AddressbookList, Full),
     (C::AddressbookCreate, Full),
     (C::AddressbookCreateId, Not(MINTED_ID)),
-    (C::AddressbookRename, Full),
+    (C::AddressbookUpdate, Full),
     (C::AddressbookDelete, Full),
     (C::AddressbookDescription, Full),
     (
@@ -362,9 +363,9 @@ const JMAP: &[Row] = &[
     (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
-    (C::CardRemove, Full),
+    (C::CardDelete, Full),
     (C::CardUpdateIfMatch, Partial(CARD_HASH)),
-    (C::CardRemoveIfMatch, Partial(CARD_HASH)),
+    (C::CardDeleteIfMatch, Partial(CARD_HASH)),
 ];
 
 /// Microsoft Graph contacts.
@@ -373,7 +374,7 @@ const MSGRAPH: &[Row] = &[
     (C::AddressbookCreate, Full),
     (C::AddressbookCreateId, Not(MINTED_ID)),
     (
-        C::AddressbookRename,
+        C::AddressbookUpdate,
         Partial("the default Contacts folder cannot be renamed"),
     ),
     (
@@ -394,9 +395,9 @@ const MSGRAPH: &[Row] = &[
     (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
-    (C::CardRemove, Full),
+    (C::CardDelete, Full),
     (C::CardUpdateIfMatch, Partial(CHANGE_KEY)),
-    (C::CardRemoveIfMatch, Partial(CHANGE_KEY)),
+    (C::CardDeleteIfMatch, Partial(CHANGE_KEY)),
 ];
 
 /// Google People.
@@ -405,7 +406,7 @@ const GPEOPLE: &[Row] = &[
     (C::AddressbookCreate, Full),
     (C::AddressbookCreateId, Not(MINTED_ID)),
     (
-        C::AddressbookRename,
+        C::AddressbookUpdate,
         Partial("the Contacts system group cannot be renamed"),
     ),
     (
@@ -426,10 +427,10 @@ const GPEOPLE: &[Row] = &[
     (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
-    (C::CardRemove, Full),
+    (C::CardDelete, Full),
     (C::CardUpdateIfMatch, Full),
     (
-        C::CardRemoveIfMatch,
+        C::CardDeleteIfMatch,
         Not("Google People cannot gate a delete on an etag"),
     ),
 ];
@@ -439,7 +440,7 @@ const VDIR: &[Row] = &[
     (C::AddressbookList, Full),
     (C::AddressbookCreate, Full),
     (C::AddressbookCreateId, Full),
-    (C::AddressbookRename, Full),
+    (C::AddressbookUpdate, Full),
     (C::AddressbookDelete, Full),
     (C::AddressbookDescription, Full),
     (C::AddressbookColor, Full),
@@ -449,9 +450,9 @@ const VDIR: &[Row] = &[
     (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
-    (C::CardRemove, Full),
+    (C::CardDelete, Full),
     (C::CardUpdateIfMatch, Not(NO_VERSION)),
-    (C::CardRemoveIfMatch, Not(NO_VERSION)),
+    (C::CardDeleteIfMatch, Not(NO_VERSION)),
 ];
 
 /// A pimdir store a sync engine fills.
@@ -459,7 +460,7 @@ const PIMDIR: &[Row] = &[
     (C::AddressbookList, Full),
     (C::AddressbookCreate, Not(PIMDIR_COLLECTION)),
     (C::AddressbookCreateId, Not(PIMDIR_COLLECTION)),
-    (C::AddressbookRename, Not(PIMDIR_COLLECTION)),
+    (C::AddressbookUpdate, Not(PIMDIR_COLLECTION)),
     (C::AddressbookDelete, Not(PIMDIR_COLLECTION)),
     (C::AddressbookDescription, Not(PIMDIR_COLLECTION)),
     (C::AddressbookColor, Not(PIMDIR_COLLECTION)),
@@ -469,9 +470,9 @@ const PIMDIR: &[Row] = &[
     (C::CardSearchRelevance, Full),
     (C::CardAdd, Partial(PIMDIR_QUEUED)),
     (C::CardUpdate, Partial(PIMDIR_QUEUED)),
-    (C::CardRemove, Partial(PIMDIR_QUEUED)),
+    (C::CardDelete, Partial(PIMDIR_QUEUED)),
     (C::CardUpdateIfMatch, Full),
-    (C::CardRemoveIfMatch, Full),
+    (C::CardDeleteIfMatch, Full),
 ];
 
 #[cfg(test)]
@@ -500,9 +501,9 @@ mod tests {
         assert!(message.contains("no version to compare"), "{message}");
 
         assert!(require("carddav", &[C::CardUpdate, C::CardUpdateIfMatch]).is_ok());
-        assert!(require("jmap", &[C::CardRemove, C::CardRemoveIfMatch]).is_ok());
+        assert!(require("jmap", &[C::CardDelete, C::CardDeleteIfMatch]).is_ok());
         assert!(require("msgraph", &[C::CardUpdate, C::CardUpdateIfMatch]).is_ok());
-        assert!(require("msgraph", &[C::AddressbookRename]).is_ok());
+        assert!(require("msgraph", &[C::AddressbookUpdate]).is_ok());
     }
 
     #[test]
@@ -510,9 +511,9 @@ mod tests {
         let help = help("card", "delete");
         let expected = "\
 Backends:
-  card.remove: full on carddav, jmap, msgraph, gpeople, vdir; partial on pimdir
+  card.delete: full on carddav, jmap, msgraph, gpeople, vdir; partial on pimdir
     pimdir: queued for the next sync, and refused when a source of the store does not support it
-  card.remove.if-match: partial on carddav, jmap, msgraph; none on gpeople, vdir; full on pimdir
+  card.delete.if-match: partial on carddav, jmap, msgraph; none on gpeople, vdir; full on pimdir
     carddav: sent as `If-Match`, which some servers ignore on a delete, as iCloud does
     jmap: compared with a hash of the ContactCard read just before the write, so a write landing in between is not caught
     msgraph: compared with the contact's `changeKey` read just before the write, so a write landing in between is not caught

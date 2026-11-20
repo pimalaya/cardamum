@@ -165,9 +165,15 @@ fn account_check_reports_a_backend_left_out_as_failed() {
 
     let output = run(home.path(), GPEOPLE, &["account", "check"]);
     let json = printed(&output, 3);
-    assert_eq!(json["backends"][0]["backend"], "gpeople", "{json}");
-    assert_eq!(json["backends"][0]["ok"], false, "{json}");
-    assert_eq!(json["backends"][0]["code"], "backend-not-built", "{json}");
+    assert_eq!(
+        json["accounts"][0]["backends"][0]["backend"], "gpeople",
+        "{json}"
+    );
+    assert_eq!(json["accounts"][0]["backends"][0]["ok"], false, "{json}");
+    assert_eq!(
+        json["accounts"][0]["backends"][0]["code"], "backend-not-built",
+        "{json}"
+    );
 }
 
 /// `backends` holds the built backends alone, each a `--backend` value,

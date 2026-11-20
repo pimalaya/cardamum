@@ -105,18 +105,20 @@ mod vdir;
 use std::process;
 
 use anyhow::Result;
+use clap::CommandFactory;
 use pimalaya_cli::{
-    clap::parse,
+    clap::{meet_bare_invocation, parse},
     error::{EXIT_FAILURE, ErrorReport},
     log::Logger,
     printer::StdoutPrinter,
     welcome::{is_wanted, shipped_sample},
 };
-use pimalaya_config::toml::ConfigMissingError;
+use pimalaya_config::toml::{ConfigMissingError, TomlConfig};
 use simd_cpu::SimdCpu;
 
 use crate::{
     cli::Cli,
+    config::Config,
     error::ErrorCode,
     session::{Session, SessionAccount},
 };
@@ -156,7 +158,11 @@ fn execute(cli: Cli, printer: &mut StdoutPrinter) -> Result<()> {
     };
 
     let Some(cmd) = cli.cmd else {
-        return cli::meet_bare_invocation(account.config_paths);
+        let config_missing = || {
+            let config = Config::load(account.config_paths);
+            config.err().filter(|err| err.is::<ConfigMissingError>())
+        };
+        return meet_bare_invocation(printer, Cli::command(), config_missing);
     };
 
     let mut session = Session {

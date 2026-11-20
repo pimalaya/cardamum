@@ -22,7 +22,7 @@ use anyhow::{Error, Result, anyhow, bail};
 use io_pimdir::{
     client::{
         PimdirError, PimdirStore,
-        producer::PimdirActionStatus,
+        producer::{PimdirActionStatus, PimdirPendingAction},
         reader::{PimdirCollection, PimdirItem},
     },
     codec::{PimdirAction, PimdirActionHandle, PimdirStoreIdentity, action_from_payload},
@@ -36,7 +36,7 @@ use pimalaya_cli::error::CodedError;
 
 use crate::{
     config::{AccountConfig, PimdirConfig},
-    error::{self, ErrorCode},
+    error::{self, ErrorCode, ItemError},
     pimdir::{
         client::{PimdirClient, refusal},
         queue::list::PimdirQueueRow,
@@ -170,7 +170,7 @@ impl PimdirBackend {
             .map(|parked| PimdirParkedStatus {
                 row: parked.id,
                 handle: handle(&identity, parked.id),
-                addressbook_id: parked.collection,
+                collection: parked.collection,
                 kind: parked.action,
                 error: parked.error,
             })
@@ -228,47 +228,100 @@ impl PimdirBackend {
         Ok(ids)
     }
 
-    /// The card creations staged in the account's address books, or in
-    /// `addressbook` alone, in the order they were queued.
+    /// The pending rows of every kind in the account's address books, or
+    /// in `addressbook` alone, in the order they were queued, and an item
+    /// error for each address book whose queue holds a row that does not
+    /// decode, whose rows are then left out.
     ///
     /// A queued creation has no public id until the owner applies it, so
     /// no listing shows it: this is where it does, by its queue row, the
     /// link id `card add` reported, and the full name of the body it pins
     /// when that body is local.
-    pub fn queued_cards(&self, addressbook: Option<&str>) -> Result<Vec<PimdirQueueRow>> {
+    pub fn pending_rows(
+        &self,
+        addressbook: Option<&str>,
+    ) -> Result<(Vec<PimdirQueueRow>, Vec<ItemError>)> {
         let identity = self.store_identity()?;
-        let mut cards = Vec::new();
+        let mut rows = Vec::new();
+        let mut errors = Vec::new();
 
         for collection in self.queue_collections(addressbook)? {
-            let pending = self
-                .inner
-                .reader
-                .pending_creates(&collection)
-                .map_err(|err| refusal(err, "Read the pimdir queue"))?;
+            let pending = match self.inner.reader.pending_actions(&collection) {
+                Ok(pending) => pending,
+                Err(err @ PimdirError::Action(_)) => {
+                    let context = format!("Decode the pimdir queue of address book `{collection}`");
+                    errors.push(ItemError::new(None, &refusal(err, context)));
+                    continue;
+                }
+                Err(err) => return Err(refusal(err, "Read the pimdir queue")),
+            };
 
             for queued in pending {
-                let kind = queued.action.kind().to_owned();
-                let target = self.row_target(&queued.collection, queued.action)?;
-
-                cards.push(PimdirQueueRow {
-                    id: queued.id,
-                    handle: handle(&identity, queued.id),
-                    kind,
-                    collection: queued.collection,
-                    link_id: target.link_id,
-                    item_id: target.item_id,
-                    producer: queued.producer,
-                    queued_at: queued.created_at,
-                    attempts: u64::try_from(queued.attempts).unwrap_or_default(),
-                    unconfirmed: false,
-                    error: None,
-                    full_name: target.full_name,
-                });
+                rows.push(self.pending_row(&identity, queued)?);
             }
         }
 
-        cards.sort_by_key(|card| card.id);
-        Ok(cards)
+        rows.sort_by_key(|row| row.id);
+        Ok((rows, errors))
+    }
+
+    /// The queue row `handle` names, pending or parked in `collection`, as
+    /// `pimdir queue list` prints it, refused `row-not-found` when the
+    /// queue holds it no more.
+    pub fn listed_row(
+        &self,
+        handle: &PimdirActionHandle,
+        collection: &str,
+    ) -> Result<PimdirQueueRow> {
+        let parked = self.parked_rows(Some(collection))?;
+
+        if let Some(row) = parked.into_iter().find(|row| row.id == handle.id) {
+            return Ok(row);
+        }
+
+        let identity = self.store_identity()?;
+        let pending = self
+            .inner
+            .reader
+            .pending_actions(collection)
+            .map_err(|err| refusal(err, format!("Read queue row {handle}")))?;
+
+        match pending.into_iter().find(|queued| queued.id == handle.id) {
+            Some(queued) => self.pending_row(&identity, queued),
+            None => Err(row_not_found(handle)),
+        }
+    }
+
+    /// The listed row of the pending action `queued`.
+    fn pending_row(
+        &self,
+        identity: &PimdirStoreIdentity,
+        queued: PimdirPendingAction,
+    ) -> Result<PimdirQueueRow> {
+        let kind = queued.action.kind().to_owned();
+        let target = self.row_target(&queued.collection, queued.action)?;
+
+        Ok(PimdirQueueRow {
+            id: queued.id,
+            handle: handle(identity, queued.id),
+            kind,
+            collection: queued.collection,
+            link_id: target.link_id,
+            item_id: target.item_id,
+            producer: queued.producer,
+            queued_at: queued.created_at,
+            attempts: u64::try_from(queued.attempts).unwrap_or_default(),
+            unconfirmed: false,
+            error: None,
+            full_name: target.full_name,
+        })
+    }
+
+    /// The full name of the card `seq` of `collection`, `None` when the
+    /// store holds no such card.
+    pub fn full_name(&self, collection: &str, seq: i64) -> Result<Option<String>> {
+        let item = self.inner.reader.get_item(collection, seq)?;
+        Ok(item.and_then(|item| contact_full_name(item.summary)))
     }
 
     /// The rows of any kind the owner parked in the account's address
@@ -453,6 +506,17 @@ impl PimdirBackend {
 
         addressbooks.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(addressbooks)
+    }
+
+    /// Refuses a create naming the address book `id` the store holds
+    /// already, coded `addressbook-duplicate`.
+    pub fn check_new_addressbook(&self, id: &str) -> Result<()> {
+        if self.collections()?.iter().any(|held| held.id == id) {
+            let message = format!("Cannot create address book `{id}`: it exists already");
+            return Err(CodedError::new(ErrorCode::AddressbookDuplicate, message).into());
+        }
+
+        Ok(())
     }
 
     /// Always fails, a collection being the store owner's to declare.
@@ -913,11 +977,11 @@ impl PimdirBackend {
 /// card no longer has starts, a prefix callers may match on.
 pub const PRECONDITION_FAILED: &str = "Precondition failed";
 
-/// Why queue row `row`, standing at `status`, cannot be cancelled: applied
-/// already, queued in another store than this one under `store-reset`, or
-/// not a row of the account's queue under `row-not-found`. A bare row id
-/// states no store, so io-pimdir follows it unchecked and never answers a
-/// reset for it.
+/// Why queue row `row`, standing at `status`, cannot be cancelled nor
+/// shown as a queued row: applied already, queued in another store than
+/// this one under `store-reset`, or not a row of the account's queue under
+/// `row-not-found`. A bare row id states no store, so io-pimdir follows it
+/// unchecked and never answers a reset for it.
 pub fn uncancellable(row: &PimdirActionHandle, status: &PimdirActionStatus) -> Error {
     match status {
         PimdirActionStatus::Applied { .. } => anyhow!("Row {row} was applied already"),
@@ -943,7 +1007,7 @@ pub fn handle(identity: &PimdirStoreIdentity, id: i64) -> String {
 }
 
 /// The refusal of a queue row the account's queue does not hold.
-fn row_not_found(row: &PimdirActionHandle) -> Error {
+pub fn row_not_found(row: &PimdirActionHandle) -> Error {
     let message = format!(
         "No queued action with row {row} in this account's queue; it may have been synced already"
     );
@@ -2192,7 +2256,7 @@ mod tests {
 
         assert_eq!(status.parked.len(), 1, "{:?}", status.parked);
         let parked = &status.parked[0];
-        assert_eq!(parked.addressbook_id, "work/book");
+        assert_eq!(parked.collection, "work/book");
         assert_eq!(parked.kind, "update");
         assert!(
             parked.error.contains("body replaced since it was read"),
@@ -2211,7 +2275,7 @@ mod tests {
         assert!(text.contains(&parked.error), "{text}");
 
         let json = serde_json::to_value(&status).unwrap();
-        assert_eq!(json["parked"][0]["addressbookId"], "work/book");
+        assert_eq!(json["parked"][0]["collection"], "work/book");
         assert_eq!(json["parked"][0]["row"], parked.row);
         assert_eq!(json["parked"][0]["handle"], parked.handle);
     }
@@ -2251,13 +2315,21 @@ mod tests {
 
         // The update is the first row this store queued.
         let row = backend.named(&PimdirActionHandle::from(1)).unwrap();
-        let show = crate::pimdir::queue::show::PimdirQueueShowOutput::new(
-            &row,
-            backend.queue_row(1).unwrap(),
+        let PimdirActionStatus::Applied {
+            applied_at,
+            collection,
+            seq,
+            refusals,
+        } = backend.queue_row(1).unwrap()
+        else {
+            panic!("row 1 is not applied");
+        };
+        let show = crate::pimdir::queue::show::PimdirQueueShowOutput::applied(
+            &row, applied_at, collection, seq, refusals, None,
         );
         let json = serde_json::to_value(&show).unwrap();
         assert_eq!(json["state"], "applied", "{json}");
-        assert_eq!(json["seq"].to_string(), id, "{json}");
+        assert_eq!(json["itemId"], id.as_str(), "{json}");
         assert_eq!(json["refusals"][0]["source"], "carddav", "{json}");
         assert_eq!(json["refusals"][0]["collection"], "book", "{json}");
         assert_eq!(json["refusals"][0]["reason"], "403 Forbidden", "{json}");
@@ -2520,7 +2592,7 @@ mod tests {
         let (_dir, mut backend) = store();
         let link_id = backend.create_card("book", JANE.to_vec()).unwrap();
 
-        let queued = backend.queued_cards(None).unwrap();
+        let queued = backend.pending_rows(None).unwrap().0;
         assert_eq!(queued.len(), 1, "{queued:?}");
         assert_eq!(queued[0].collection, "book");
         assert_eq!(queued[0].kind, "add");
@@ -2529,7 +2601,7 @@ mod tests {
         assert_eq!(queued[0].full_name.as_deref(), Some("Jane Doe"));
         assert_eq!((queued[0].attempts, queued[0].unconfirmed), (0, false));
         assert_eq!(queued[0].error, None);
-        assert_eq!(backend.queued_cards(Some("book")).unwrap().len(), 1);
+        assert_eq!(backend.pending_rows(Some("book")).unwrap().0.len(), 1);
 
         let row = queued[0].id;
         let status = backend.queue_row(row).unwrap();
@@ -2539,7 +2611,7 @@ mod tests {
         );
 
         assert_eq!(backend.cancel_queued(row).unwrap(), "add");
-        assert!(backend.queued_cards(None).unwrap().is_empty());
+        assert!(backend.pending_rows(None).unwrap().0.is_empty());
         assert_eq!(pending(&backend), 0);
         let gone = backend.queue_row(row).unwrap();
         assert!(matches!(gone, PimdirActionStatus::Unknown), "{gone:?}");
@@ -2612,7 +2684,7 @@ mod tests {
 
         let (_dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
-        let row = backend.queued_cards(None).unwrap()[0].id;
+        let row = backend.pending_rows(None).unwrap().0[0].id;
         let named = handle(&backend.store_identity().unwrap(), row);
         let bare = row.to_string();
 
@@ -2656,7 +2728,7 @@ mod tests {
 
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
-        let row = backend.queued_cards(None).unwrap()[0].id;
+        let row = backend.pending_rows(None).unwrap().0[0].id;
         drain(&dir);
 
         let id = backend.list_cards("book", 0, None).unwrap().cards[0]
@@ -2748,11 +2820,12 @@ mod tests {
         let output = PimdirQueueListOutput {
             account: String::from("perso"),
             addressbook: None,
-            cards: backend.queued_cards(None).unwrap(),
+            actions: backend.pending_rows(None).unwrap().0,
             parked: backend.parked_rows(None).unwrap(),
+            errors: Vec::new(),
         };
         let json = serde_json::to_value(&output).unwrap();
-        let (add, update) = (&json["cards"][0], &json["parked"][0]);
+        let (add, update) = (&json["actions"][0], &json["parked"][0]);
 
         let keys = [
             "row",
@@ -2801,6 +2874,60 @@ mod tests {
             PimdirActionStatus::Pending { .. }
         ));
         backend.cancel_queued(handle).unwrap();
-        assert!(backend.queued_cards(None).unwrap().is_empty());
+        assert!(backend.pending_rows(None).unwrap().0.is_empty());
+    }
+
+    /// Every pending row lists, of every kind: an update and a removal of
+    /// stored cards beside a creation, each shown as listed.
+    #[test]
+    fn every_pending_row_lists_whatever_its_kind() {
+        let (dir, mut backend) = store();
+        pulled(&dir, "book", JANE);
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
+        let renamed = String::from_utf8(JANE.to_vec())
+            .unwrap()
+            .replace("Jane Doe", "Jane Roe")
+            .into_bytes();
+        backend.update_card("book", &id, renamed, None).unwrap();
+        backend.delete_card("book", &id, None).unwrap();
+
+        let (rows, errors) = backend.pending_rows(None).unwrap();
+        assert!(errors.is_empty(), "{errors:?}");
+        let kinds: Vec<&str> = rows.iter().map(|row| row.kind.as_str()).collect();
+        assert_eq!(kinds, ["update", "remove"], "{rows:?}");
+        assert_eq!(rows[1].item_id.as_deref(), Some(id.as_str()));
+
+        let handle = backend
+            .named(&PimdirActionHandle::from(rows[1].id))
+            .unwrap();
+        let listed = backend.listed_row(&handle, "book").unwrap();
+        assert_eq!(
+            serde_json::to_value(&listed).unwrap(),
+            serde_json::to_value(&rows[1]).unwrap()
+        );
+    }
+
+    /// A pending row that does not decode is an item error naming its
+    /// address book, coded `action-malformed`, rather than a failure of
+    /// the whole listing.
+    #[test]
+    fn an_undecodable_pending_row_is_an_item_error() {
+        let (dir, mut backend) = store();
+        backend.create_card("book", JANE.to_vec()).unwrap();
+        drop(backend);
+        rewrite(dir.path(), "\"v\":1", "\"w\":1");
+
+        let backend = PimdirBackend::new(PimdirConfig {
+            root: dir.path().to_path_buf(),
+            account: None,
+        })
+        .unwrap();
+        let (rows, errors) = backend.pending_rows(None).unwrap();
+        assert!(rows.is_empty(), "{rows:?}");
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].code, Some(ErrorCode::ActionMalformed));
+        assert!(errors[0].error.contains("`book`"), "{errors:?}");
     }
 }

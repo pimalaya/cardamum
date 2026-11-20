@@ -14,9 +14,9 @@
 //! (`pimalaya_cli::session::check_stdin`), and so is the composer, whose
 //! editor would fight the session for the terminal.
 
-use anyhow::{Result, anyhow};
+use anyhow::Result;
 use clap::Parser;
-use pimalaya_cli::{printer::Printer, repl::Repl};
+use pimalaya_cli::{error::CodedError, printer::Printer, repl::Repl};
 
 use crate::{
     cli::{Command, resolve_account},
@@ -64,7 +64,7 @@ impl ReplCommand {
 /// installs no Ctrl-C handler, so an interrupted editor would end the
 /// session with it.
 fn composer() -> anyhow::Error {
-    anyhow!(
-        "Cannot run the composer (-i) inside a session; pass the vCard or the field flags instead"
-    )
+    let message =
+        "Cannot run the composer (-i) inside a session; pass the vCard or the field flags instead";
+    CodedError::new(ErrorCode::StdinTaken, message).into()
 }

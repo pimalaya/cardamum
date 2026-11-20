@@ -11,6 +11,7 @@ use std::{
 
 use anyhow::{Context, Result, bail};
 use clap::ValueEnum;
+use pimalaya_cli::error::CodedError;
 use vcard::{
     builder::VcardBuilder,
     prop::uid::UID,
@@ -19,7 +20,7 @@ use vcard::{
     version::VcardVersion,
 };
 
-use crate::shared::uuid::uuid_v4;
+use crate::{error::ErrorCode, shared::uuid::uuid_v4};
 
 /// Resolves a vCard source into raw bytes.
 ///
@@ -56,7 +57,8 @@ pub fn read_source(source: &str) -> Result<Vec<u8>> {
         return Ok(source.as_bytes().to_vec());
     }
 
-    bail!("Source `{source}` is neither a readable file nor vCard contents")
+    let message = format!("Source `{source}` is neither a readable file nor vCard contents");
+    Err(CodedError::new(ErrorCode::CardInvalid, message).into())
 }
 
 /// Refuses a source that carries no card at all.
@@ -142,5 +144,20 @@ impl From<CardVersionArg> for VcardVersion {
             CardVersionArg::V3_0 => Self::V3_0,
             CardVersionArg::V4_0 => Self::V4_0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use pimalaya_cli::error::code_of;
+
+    use crate::{error::ErrorCode, shared::card::vcard::read_source};
+
+    #[test]
+    fn a_source_that_is_neither_a_file_nor_a_card_is_refused() {
+        let err = read_source("not a vcard").unwrap_err();
+
+        assert_eq!(code_of(&err), Some(ErrorCode::CardInvalid), "{err:#}");
+        assert!(err.to_string().contains("neither a readable file"), "{err}");
     }
 }

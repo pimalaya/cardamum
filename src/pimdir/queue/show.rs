@@ -14,11 +14,14 @@ use pimalaya_cli::{printer::Printer, sanitize};
 use schemars::JsonSchema;
 use serde::Serialize;
 
-use crate::pimdir::backend::PimdirBackend;
+use crate::pimdir::{
+    backend::{PimdirBackend, uncancellable},
+    queue::list::PimdirQueueRow,
+};
 
 /// Show where one queue row stands, by the row id `pimdir queue list`
 /// printed, or by a row handle naming its store
-/// (`<store-id>.<incarnation>.<id>`), which reads `reset` when the store
+/// (`<store-id>.<incarnation>.<id>`), refused `store-reset` when the store
 /// is another one.
 ///
 /// A row is `pending` until the sync engine applies it, `parked` when the
@@ -30,13 +33,15 @@ use crate::pimdir::backend::PimdirBackend;
 /// row led to, with its reason, held until the card is edited or removed.
 /// The store keeps what became of an applied row for seven days, and while
 /// a refusal stands on its card, under the address book it was queued on,
-/// or under none once that address book is gone; past that, and for a
-/// cancelled row, the state is `unknown`. A row of another account reads
-/// as `unknown` too.
+/// or under none once that address book is gone. Past that, a cancelled
+/// row and a row of another account are refused `row-not-found`.
 ///
-/// JSON output: `{"row", "handle", "state", "collection", "kind",
-/// "attempts", "error", "appliedAt", "seq", "refusals": [{"collection",
-/// "source", "reason", "refusedAt"}]}`.
+/// JSON output: the `pimdir queue list` row, `{"row", "handle", "kind",
+/// "collection", "linkId", "itemId", "producer", "queuedAt", "attempts",
+/// "unconfirmed", "error", "fullName"}`, plus `"state"`, `"appliedAt"` and
+/// `"refusals": [{"collection", "source", "reason", "refusedAt"}]`. An
+/// applied row, which the queue holds no more, prints `null` for what only
+/// the queue kept: `kind`, `producer`, `queuedAt` and `attempts`.
 #[derive(Debug, Parser)]
 pub struct PimdirQueueShowCommand {
     /// The queue row id, or its handle.
@@ -47,9 +52,40 @@ pub struct PimdirQueueShowCommand {
 impl PimdirQueueShowCommand {
     /// Looks the row up in the account's queue and receipts.
     pub fn execute(self, printer: &mut impl Printer, backend: &PimdirBackend) -> Result<()> {
-        let status = backend.queue_row(&self.id)?;
         let handle = backend.named(&self.id)?;
-        printer.out(PimdirQueueShowOutput::new(&handle, status))
+
+        let output = match backend.queue_row(&self.id)? {
+            PimdirActionStatus::Pending { collection, .. } => {
+                let row = backend.listed_row(&handle, &collection)?;
+                PimdirQueueShowOutput::listed(row, PimdirQueueState::Pending)
+            }
+            PimdirActionStatus::Parked { collection, .. } => {
+                let row = backend.listed_row(&handle, &collection)?;
+                PimdirQueueShowOutput::listed(row, PimdirQueueState::Parked)
+            }
+            PimdirActionStatus::Unconfirmed { collection, .. } => {
+                let row = backend.listed_row(&handle, &collection)?;
+                PimdirQueueShowOutput::listed(row, PimdirQueueState::Unconfirmed)
+            }
+            PimdirActionStatus::Applied {
+                applied_at,
+                collection,
+                seq,
+                refusals,
+            } => {
+                let full_name = match (&collection, seq) {
+                    (Some(collection), Some(seq)) => backend.full_name(collection, seq)?,
+                    _ => None,
+                };
+
+                PimdirQueueShowOutput::applied(
+                    &handle, applied_at, collection, seq, refusals, full_name,
+                )
+            }
+            status => return Err(uncancellable(&self.id, &status)),
+        };
+
+        printer.out(output)
     }
 }
 
@@ -65,17 +101,13 @@ pub enum PimdirQueueState {
     /// it may have, and waits for the engine to confirm it or for a
     /// cancellation; `error` holds what the engine recorded.
     Unconfirmed,
-    /// Applied by the sync engine; `seq` is the card it acted on, and
+    /// Applied by the sync engine; `itemId` is the card it acted on, and
     /// `refusals` the servers that refused the change it led to.
     Applied,
-    /// Neither queued nor known applied: cancelled, or applied long ago.
-    Unknown,
-    /// The store is not the one the row was queued in, a copy restored
-    /// since, where the id may name another row: nothing is read of it.
-    Reset,
 }
 
-/// The `pimdir queue show` output.
+/// The `pimdir queue show` output: the `pimdir queue list` row, plus what
+/// only a read carries.
 #[derive(Clone, Debug, Serialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PimdirQueueShowOutput {
@@ -85,24 +117,35 @@ pub struct PimdirQueueShowOutput {
     /// §4.5): the handle given, or the bare id given named under this
     /// store's identity.
     pub handle: String,
-    /// Where it stands.
-    pub state: PimdirQueueState,
-    /// The collection it is anchored on: `null` when unknown, and for an
-    /// applied row whose address book is gone since.
-    pub collection: Option<String>,
-    /// The action kind (`add`, `update`, `remove`…), while queued.
+    /// The action kind as the store holds it, `null` once applied.
     pub kind: Option<String>,
-    /// Apply attempts so far, while queued.
-    pub attempts: Option<i64>,
+    /// The address book the row is queued on, `null` for an applied row
+    /// whose address book is gone since.
+    pub collection: Option<String>,
+    /// The link id of the card the row creates, `null` when it creates
+    /// none or is applied.
+    pub link_id: Option<String>,
+    /// The id of the stored card the row addresses, or the one an applied
+    /// row acted on (the one an add created), as `card read` takes it.
+    pub item_id: Option<String>,
+    /// The process that staged it, `null` once applied.
+    pub producer: Option<String>,
+    /// When the row was appended, `null` once applied.
+    pub queued_at: Option<String>,
+    /// How many times the sync engine tried it, `null` once applied.
+    pub attempts: Option<u64>,
+    /// Whether the row's outcome is unknown.
+    pub unconfirmed: bool,
     /// Why the row was parked, or what the sync engine recorded of an
     /// unconfirmed one.
     pub error: Option<String>,
+    /// The card's full name, `null` when there is none to read.
+    pub full_name: Option<String>,
+    /// Where it stands.
+    pub state: PimdirQueueState,
     /// When the row was applied, RFC 3339.
     pub applied_at: Option<String>,
-    /// The id of the card an applied row acted on (the one an add
-    /// created), as `card read` takes it.
-    pub seq: Option<i64>,
-    /// The refusals standing on that card, empty but for an applied row.
+    /// The refusals standing on the card, empty but for an applied row.
     pub refusals: Vec<PimdirQueueRefusal>,
 }
 
@@ -134,77 +177,53 @@ impl From<PimdirReceiptRefusal> for PimdirQueueRefusal {
 }
 
 impl PimdirQueueShowOutput {
-    /// Projects io-pimdir's status of the row `handle` names.
-    pub fn new(handle: &PimdirActionHandle, status: PimdirActionStatus) -> Self {
-        let row = Self {
+    /// The listed `row`, standing at `state`.
+    pub fn listed(row: PimdirQueueRow, state: PimdirQueueState) -> Self {
+        Self {
+            row: row.id,
+            handle: row.handle,
+            kind: Some(row.kind),
+            collection: Some(row.collection),
+            link_id: row.link_id,
+            item_id: row.item_id,
+            producer: Some(row.producer),
+            queued_at: Some(row.queued_at),
+            attempts: Some(row.attempts),
+            unconfirmed: row.unconfirmed,
+            error: row.error,
+            full_name: row.full_name,
+            state,
+            applied_at: None,
+            refusals: Vec::new(),
+        }
+    }
+
+    /// The row `handle` names, applied at `applied_at` in `collection` on
+    /// the card `seq` of full name `full_name`, `refusals` standing there.
+    pub fn applied(
+        handle: &PimdirActionHandle,
+        applied_at: String,
+        collection: Option<String>,
+        seq: Option<i64>,
+        refusals: Vec<PimdirReceiptRefusal>,
+        full_name: Option<String>,
+    ) -> Self {
+        Self {
             row: handle.id,
             handle: handle.to_string(),
-            state: PimdirQueueState::Unknown,
-            collection: None,
             kind: None,
+            collection,
+            link_id: None,
+            item_id: seq.map(|seq| seq.to_string()),
+            producer: None,
+            queued_at: None,
             attempts: None,
+            unconfirmed: false,
             error: None,
-            applied_at: None,
-            seq: None,
-            refusals: Vec::new(),
-        };
-
-        match status {
-            PimdirActionStatus::Pending {
-                collection,
-                kind,
-                attempts,
-            } => Self {
-                state: PimdirQueueState::Pending,
-                collection: Some(collection),
-                kind: Some(kind),
-                attempts: Some(attempts),
-                ..row
-            },
-            PimdirActionStatus::Parked {
-                collection,
-                kind,
-                attempts,
-                error,
-            } => Self {
-                state: PimdirQueueState::Parked,
-                collection: Some(collection),
-                kind: Some(kind),
-                attempts: Some(attempts),
-                error: Some(error),
-                ..row
-            },
-            PimdirActionStatus::Unconfirmed {
-                collection,
-                kind,
-                attempts,
-                detail,
-            } => Self {
-                state: PimdirQueueState::Unconfirmed,
-                collection: Some(collection),
-                kind: Some(kind),
-                attempts: Some(attempts),
-                error: Some(detail),
-                ..row
-            },
-            PimdirActionStatus::Applied {
-                applied_at,
-                collection,
-                seq,
-                refusals,
-            } => Self {
-                state: PimdirQueueState::Applied,
-                collection,
-                applied_at: Some(applied_at),
-                seq,
-                refusals: refusals.into_iter().map(Into::into).collect(),
-                ..row
-            },
-            PimdirActionStatus::Unknown => row,
-            PimdirActionStatus::Reset => Self {
-                state: PimdirQueueState::Reset,
-                ..row
-            },
+            full_name,
+            state: PimdirQueueState::Applied,
+            applied_at: Some(applied_at),
+            refusals: refusals.into_iter().map(Into::into).collect(),
         }
     }
 }
@@ -236,8 +255,8 @@ impl fmt::Display for PimdirQueueShowOutput {
                     Some(_) => write!(f, "Row {id} was applied in {collection}")?,
                     None => write!(f, "Row {id} was applied in an address book deleted since")?,
                 }
-                if let Some(seq) = self.seq {
-                    write!(f, ", on card {seq}")?;
+                if let Some(item_id) = &self.item_id {
+                    write!(f, ", on card {}", sanitize::text(item_id))?;
                 }
                 writeln!(f)?;
                 for refusal in &self.refusals {
@@ -252,15 +271,6 @@ impl fmt::Display for PimdirQueueShowOutput {
                 }
                 Ok(())
             }
-            PimdirQueueState::Unknown => writeln!(
-                f,
-                "Row {id} is neither queued nor known applied: cancelled, or applied long ago"
-            ),
-            PimdirQueueState::Reset => writeln!(
-                f,
-                "Row {id} was queued in another store: a copy restored since, where this id \
-                 may name another row"
-            ),
         }
     }
 }
@@ -284,16 +294,17 @@ mod tests {
         }
     }
 
+    /// An applied add prints the list row's keys, `null` where only the
+    /// queue kept a value, the card it created as `itemId`.
     #[test]
-    fn an_applied_add_prints_its_seq() {
-        let row = PimdirQueueShowOutput::new(
+    fn an_applied_add_prints_the_list_row_and_its_card() {
+        let row = PimdirQueueShowOutput::applied(
             &handle(12),
-            PimdirActionStatus::Applied {
-                applied_at: "2026-10-04T20:00:00Z".into(),
-                collection: Some("carddav/contacts".into()),
-                seq: Some(42),
-                refusals: Vec::new(),
-            },
+            "2026-10-04T20:00:00Z".into(),
+            Some("carddav/contacts".into()),
+            Some(42),
+            Vec::new(),
+            Some("Jane Doe".into()),
         );
         let json = serde_json::to_value(&row).unwrap();
         assert_eq!(
@@ -301,16 +312,89 @@ mod tests {
             serde_json::json!({
                 "row": 12,
                 "handle": format!("{STORE}.1.12"),
-                "state": "applied",
-                "collection": "carddav/contacts",
                 "kind": null,
+                "collection": "carddav/contacts",
+                "linkId": null,
+                "itemId": "42",
+                "producer": null,
+                "queuedAt": null,
                 "attempts": null,
+                "unconfirmed": false,
                 "error": null,
+                "fullName": "Jane Doe",
+                "state": "applied",
                 "appliedAt": "2026-10-04T20:00:00Z",
-                "seq": 42,
                 "refusals": [],
             })
         );
+    }
+
+    /// A queued row prints the row `pimdir queue list` prints for it, every
+    /// key of it, then its state.
+    #[test]
+    fn a_queued_row_prints_its_list_row() {
+        let listed = PimdirQueueRow {
+            id: 3,
+            handle: format!("{STORE}.1.3"),
+            kind: String::from("add"),
+            collection: String::from("book"),
+            link_id: Some(String::from("urn:uuid:1")),
+            item_id: None,
+            producer: String::from("cardamum"),
+            queued_at: String::from("2026-11-15T10:00:00.000Z"),
+            attempts: 0,
+            unconfirmed: false,
+            error: None,
+            full_name: Some(String::from("Jane Doe")),
+        };
+        let mut expected = serde_json::to_value(&listed).unwrap();
+
+        let row = PimdirQueueShowOutput::listed(listed, PimdirQueueState::Pending);
+        let json = serde_json::to_value(&row).unwrap();
+
+        let object = expected.as_object_mut().unwrap();
+        object.insert("state".into(), "pending".into());
+        object.insert("appliedAt".into(), serde_json::Value::Null);
+        object.insert("refusals".into(), serde_json::json!([]));
+        let listed: Vec<String> = object.keys().cloned().collect();
+        assert_eq!(json, expected);
+
+        let keys: Vec<String> = json.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(keys, listed);
+        assert_eq!(
+            row.to_string(),
+            format!("Row {STORE}.1.3 (add in book) is pending\n")
+        );
+    }
+
+    /// A row its performer sent and could not confirm is no failure and no
+    /// success (pimdir STORAGE §15.2): it reads `unconfirmed`, with what
+    /// the performer recorded, never `parked`.
+    #[test]
+    fn an_unconfirmed_row_says_it_may_have_taken_effect() {
+        let listed = PimdirQueueRow {
+            id: 9,
+            handle: format!("{STORE}.1.9"),
+            kind: String::from("add"),
+            collection: String::from("book"),
+            link_id: None,
+            item_id: None,
+            producer: String::from("cardamum"),
+            queued_at: String::from("2026-11-15T10:00:00.000Z"),
+            attempts: 1,
+            unconfirmed: true,
+            error: Some(String::from("unconfirmed: connection lost after PUT")),
+            full_name: None,
+        };
+        let row = PimdirQueueShowOutput::listed(listed, PimdirQueueState::Unconfirmed);
+
+        let json = serde_json::to_value(&row).unwrap();
+        assert_eq!(json["state"], "unconfirmed");
+        assert_eq!(json["unconfirmed"], true);
+
+        let line = row.to_string();
+        assert!(line.contains("maybe performed"), "{line}");
+        assert!(line.contains("connection lost after PUT"), "{line}");
     }
 
     /// An applied row whose change a server refused for good shows applied,
@@ -318,19 +402,18 @@ mod tests {
     /// §15.4), and the JSON lists them.
     #[test]
     fn an_applied_row_prints_the_refusals_on_its_card() {
-        let row = PimdirQueueShowOutput::new(
+        let row = PimdirQueueShowOutput::applied(
             &handle(12),
-            PimdirActionStatus::Applied {
-                applied_at: "2026-11-15T20:00:00.000Z".into(),
-                collection: Some("book".into()),
-                seq: Some(42),
-                refusals: vec![PimdirReceiptRefusal {
-                    collection: "book".into(),
-                    source: "carddav".into(),
-                    reason: "403 Forbidden".into(),
-                    refused_at: "2026-11-15T20:05:00.000Z".into(),
-                }],
-            },
+            "2026-11-15T20:00:00.000Z".into(),
+            Some("book".into()),
+            Some(42),
+            vec![PimdirReceiptRefusal {
+                collection: "book".into(),
+                source: "carddav".into(),
+                reason: "403 Forbidden".into(),
+                refused_at: "2026-11-15T20:05:00.000Z".into(),
+            }],
+            None,
         );
 
         let json = serde_json::to_value(&row).unwrap();
@@ -353,73 +436,22 @@ mod tests {
         );
     }
 
-    /// An intent its performer sent and could not confirm is no failure
-    /// and no success (pimdir STORAGE §15.2): it reads `unconfirmed`, with
-    /// what the performer recorded, never `parked`.
-    #[test]
-    fn an_unconfirmed_row_says_it_may_have_taken_effect() {
-        let row = PimdirQueueShowOutput::new(
-            &handle(9),
-            PimdirActionStatus::Unconfirmed {
-                collection: "carddav/contacts".into(),
-                kind: "add".into(),
-                attempts: 1,
-                detail: "connection lost after PUT".into(),
-            },
-        );
-
-        let json = serde_json::to_value(&row).unwrap();
-        assert_eq!(json["state"], "unconfirmed");
-        assert_eq!(json["kind"], "add");
-        assert_eq!(json["error"], "connection lost after PUT");
-
-        let line = row.to_string();
-        assert!(line.contains("unconfirmed"), "{line}");
-        assert!(line.contains("maybe performed"), "{line}");
-        assert!(line.contains("connection lost after PUT"), "{line}");
-    }
-
     /// A row applied on an address book deleted since keeps its receipt and
     /// names no collection (pimdir STORAGE §15.4).
     #[test]
     fn an_applied_row_of_a_deleted_addressbook_names_no_collection() {
-        let row = PimdirQueueShowOutput::new(
+        let row = PimdirQueueShowOutput::applied(
             &handle(4),
-            PimdirActionStatus::Applied {
-                applied_at: "2026-11-13T09:00:00Z".into(),
-                collection: None,
-                seq: None,
-                refusals: Vec::new(),
-            },
+            "2026-11-13T09:00:00Z".into(),
+            None,
+            None,
+            Vec::new(),
+            None,
         );
 
         let json = serde_json::to_value(&row).unwrap();
         assert_eq!(json["state"], "applied");
         assert_eq!(json["collection"], serde_json::Value::Null);
         assert!(row.to_string().contains("deleted since"), "{row}");
-    }
-
-    #[test]
-    fn an_unknown_row_prints_its_id_and_state() {
-        let json = serde_json::to_value(PimdirQueueShowOutput::new(
-            &handle(7),
-            PimdirActionStatus::Unknown,
-        ))
-        .unwrap();
-        assert_eq!(
-            json,
-            serde_json::json!({
-                "row": 7,
-                "handle": format!("{STORE}.1.7"),
-                "state": "unknown",
-                "collection": null,
-                "kind": null,
-                "attempts": null,
-                "error": null,
-                "appliedAt": null,
-                "seq": null,
-                "refusals": [],
-            })
-        );
     }
 }

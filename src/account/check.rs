@@ -10,8 +10,15 @@ use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use clap::Parser;
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople"
+))]
+use pimalaya_cli::account::BackendCheckTls;
 use pimalaya_cli::{
-    account::{AccountCheckOutput, BackendCheck},
+    account::{AccountCheck, AccountCheckOutput, BackendCheck},
     error::{PartialOutcome, with_code},
     printer::Printer,
 };
@@ -42,8 +49,9 @@ use crate::{
 /// it failed, its code and why. A failed backend exits the command with
 /// status 3, the report being the output rather than a failure object.
 ///
-/// JSON output: `{"account", "backends": [{"backend", "ok", "code",
-/// "error"}]}`.
+/// JSON output: `{"accounts": [{"account", "backends": [{"backend", "ok",
+/// "code", "error", "tls"}]}]}`, `tls` `null` for a local backend or a
+/// cleartext connection.
 #[derive(Debug, Parser)]
 pub struct AccountCheckCommand;
 
@@ -69,7 +77,7 @@ impl AccountCheckCommand {
         let mut config = Config::load(config_paths)?;
         let (name, account_config) = config.take_account(account_name)?;
 
-        let mut report = AccountCheckOutput {
+        let mut report = AccountCheck {
             account: name,
             backends: Vec::new(),
         };
@@ -104,40 +112,39 @@ impl AccountCheckCommand {
         if backend.allows_carddav()
             && let Some(carddav_config) = &account_config.carddav
         {
-            report.backends.push(backend_check(
-                "carddav",
-                connect_carddav(carddav_config, &mut resolver),
-            ));
+            let mut check =
+                backend_check("carddav", connect_carddav(carddav_config, &mut resolver));
+            check.tls = carddav_tls(carddav_config);
+            report.backends.push(check);
         }
 
         #[cfg(feature = "jmap")]
         if backend.allows_jmap()
             && let Some(jmap_config) = &account_config.jmap
         {
-            report.backends.push(backend_check(
-                "jmap",
-                connect_jmap(jmap_config, &mut resolver),
-            ));
+            let mut check = backend_check("jmap", connect_jmap(jmap_config, &mut resolver));
+            check.tls = (!is_cleartext(&jmap_config.server)).then(|| trust(&jmap_config.tls));
+            report.backends.push(check);
         }
 
         #[cfg(feature = "msgraph")]
         if backend.allows_msgraph()
             && let Some(msgraph_config) = &account_config.msgraph
         {
-            report.backends.push(backend_check(
-                "msgraph",
-                connect_msgraph(msgraph_config, &mut resolver),
-            ));
+            let mut check =
+                backend_check("msgraph", connect_msgraph(msgraph_config, &mut resolver));
+            check.tls = Some(trust(&msgraph_config.tls));
+            report.backends.push(check);
         }
 
         #[cfg(feature = "gpeople")]
         if backend.allows_gpeople()
             && let Some(gpeople_config) = &account_config.gpeople
         {
-            report.backends.push(backend_check(
-                "gpeople",
-                connect_gpeople(gpeople_config, &mut resolver),
-            ));
+            let mut check =
+                backend_check("gpeople", connect_gpeople(gpeople_config, &mut resolver));
+            check.tls = Some(trust(&gpeople_config.tls));
+            report.backends.push(check);
         }
 
         // NOTE: under `auto`, a backend the build leaves out is reported
@@ -157,8 +164,11 @@ impl AccountCheckCommand {
             bail!("No backend matching `{backend}` is configured for this account");
         }
 
-        let failed = report.backends.iter().any(|check| !check.ok);
-        printer.out(report)?;
+        let output = AccountCheckOutput {
+            accounts: vec![report],
+        };
+        let failed = !output.ok();
+        printer.out(output)?;
 
         // NOTE: the report names every backend's outcome, so a failed one
         // ends the command with the partial-outcome status rather than a
@@ -275,6 +285,55 @@ fn connect_gpeople(
 /// other command would be, a code read off a typed error included.
 fn backend_check(backend: &'static str, result: Result<()>) -> BackendCheck<ErrorCode> {
     BackendCheck::new(backend, result.map_err(|err| with_code(err, error::code)))
+}
+
+/// The TLS of a CardDAV block, `None` when its home or server names a
+/// cleartext `http` URL.
+#[cfg(feature = "carddav")]
+fn carddav_tls(config: &crate::config::CarddavConfig) -> Option<BackendCheckTls> {
+    let cleartext = match (&config.home, &config.server) {
+        (Some(home), _) => home.scheme() == "http",
+        (None, Some(server)) => is_cleartext(server),
+        (None, None) => false,
+    };
+
+    (!cleartext).then(|| trust(&config.tls))
+}
+
+/// Whether `server` names a cleartext scheme, `http` or JMAP's `jmap`.
+#[cfg(any(feature = "carddav", feature = "jmap"))]
+fn is_cleartext(server: &str) -> bool {
+    let scheme = server.split_once("://").map(|(scheme, _)| scheme);
+    scheme.is_some_and(|s| s.eq_ignore_ascii_case("http") || s.eq_ignore_ascii_case("jmap"))
+}
+
+/// The check row's TLS, as `tls` configures it: `None` where the build's
+/// default answers.
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople"
+))]
+fn trust(tls: &crate::config::TlsConfig) -> BackendCheckTls {
+    use crate::config::{RustlsCryptoConfig, TlsProviderConfig};
+
+    let provider = tls.provider.as_ref().map(|provider| match provider {
+        TlsProviderConfig::Rustls => "rustls",
+        TlsProviderConfig::NativeTls => "native-tls",
+    });
+    let crypto = tls.rustls.crypto.as_ref().map(|crypto| match crypto {
+        RustlsCryptoConfig::Aws => "aws",
+        RustlsCryptoConfig::Ring => "ring",
+    });
+    let client = tls.client.as_ref();
+
+    BackendCheckTls {
+        provider: provider.map(String::from),
+        crypto: crypto.map(String::from),
+        cert: tls.cert.as_ref().map(|cert| cert.display().to_string()),
+        client_cert: client.map(|client| client.cert.display().to_string()),
+    }
 }
 
 #[cfg(all(test, feature = "pimdir"))]
@@ -469,7 +528,7 @@ mod carddav_tests {
     use secrecy::SecretString;
     use serde_json::{Value, json};
 
-    use super::{backend_check, connect_carddav};
+    use super::{backend_check, carddav_tls, connect_carddav};
     use crate::config::{CarddavAuthConfig, CarddavConfig};
 
     /// A scripted server answering every request with `status` and no
@@ -606,6 +665,33 @@ mod carddav_tests {
             assert_eq!(home["error"], server["error"], "{home} {server}");
             assert!(!message.contains("no `auth`"), "{home}");
         }
+    }
+
+    /// A row names the TLS its block configures over an `https` URL, and
+    /// none over a cleartext `http` one.
+    #[test]
+    fn a_row_names_its_tls_unless_cleartext() {
+        let mut secure = config(Some(String::from("https://127.0.0.1:1/")), None);
+        secure.tls.provider = Some(crate::config::TlsProviderConfig::NativeTls);
+        secure.tls.cert = Some(std::path::PathBuf::from("/ca.pem"));
+        let mut row = backend_check("carddav", Ok(()));
+        row.tls = carddav_tls(&secure);
+        let row = serde_json::to_value(row).unwrap();
+        assert_eq!(
+            row.get("tls"),
+            Some(&json!({
+                "provider": "native-tls",
+                "crypto": null,
+                "cert": "/ca.pem",
+                "clientCert": null,
+            })),
+            "{row}"
+        );
+
+        let mut row = backend_check("carddav", Ok(()));
+        row.tls = carddav_tls(&config(Some(String::from("http://127.0.0.1:1/")), None));
+        let row = serde_json::to_value(row).unwrap();
+        assert_eq!(row.get("tls"), Some(&Value::Null), "{row}");
     }
 
     /// A 401 to a block with no `auth` says the account configures none,

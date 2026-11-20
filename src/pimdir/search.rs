@@ -245,12 +245,9 @@ impl fmt::Display for PimdirSearchOutput {
             },
             None => ListingPage::Token,
         };
-        let numbered_next = place.page.map(|page| (page + 1).to_string());
-        let next = match place.page {
-            Some(_) => self.next_page.as_ref().and(numbered_next.as_deref()),
-            None => self.next_page.as_deref(),
-        };
+        let next = self.next_page.as_deref();
         listing.page(page, self.hits.len(), ["card", "cards"], next);
+        listing.next_page = next.map(|next| format!("--page-token {}", sanitize::text(next)));
         self.coverage.note(&mut listing);
 
         let matched = self.hits.iter().any(|hit| hit.matched.is_some());
@@ -355,7 +352,7 @@ Incomplete:  1 card(s) have no local body and matched on their summary alone
     }
 
     /// A page pages as every listing does: `nextPage`, which `--page-token`
-    /// takes, `--page` in text, and no `more`; a card the store could not
+    /// takes, in text too, and no `more`; a card the store could not
     /// read is an `errors` entry, printed after the hits.
     #[test]
     fn a_page_names_the_next_and_its_errors() {
@@ -386,7 +383,7 @@ Page:         1, card 1
 
 7  book  body  alice@example.org  -  Alice Martin
 
-Next page: --page 2
+Next page: --page-token 2
 
 Error:  9  card-unreadable  Cannot read the card body
 ";

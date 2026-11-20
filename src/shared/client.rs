@@ -443,6 +443,46 @@ impl AddressbookClient {
         }
     }
 
+    /// Refuses, on pimdir, the one backend queuing its writes, a create
+    /// naming the address book `id` the store holds already, coded
+    /// `addressbook-duplicate` before the capability check refuses the
+    /// create itself; every other backend answers on the create, and a
+    /// store it cannot open leaves the refusal to that check.
+    #[cfg_attr(not(feature = "pimdir"), allow(unused_variables))]
+    pub fn check_new_addressbook(&mut self, id: &str) -> Result<()> {
+        if !self.queues_writes() {
+            return Ok(());
+        }
+
+        let Ok(client) = self.open() else {
+            return Ok(());
+        };
+
+        match client {
+            #[cfg(not(any(
+                feature = "vdir",
+                feature = "pimdir",
+                feature = "carddav",
+                feature = "jmap",
+                feature = "msgraph",
+                feature = "gpeople"
+            )))]
+            BackendClient::Unused(never) => match *never {},
+            #[cfg(feature = "vdir")]
+            BackendClient::Vdir(_) => Ok(()),
+            #[cfg(feature = "pimdir")]
+            BackendClient::Pimdir(client) => client.check_new_addressbook(id),
+            #[cfg(feature = "carddav")]
+            BackendClient::Carddav(_) => Ok(()),
+            #[cfg(feature = "jmap")]
+            BackendClient::Jmap(_) => Ok(()),
+            #[cfg(feature = "msgraph")]
+            BackendClient::Msgraph(_) => Ok(()),
+            #[cfg(feature = "gpeople")]
+            BackendClient::Gpeople(_) => Ok(()),
+        }
+    }
+
     /// Creates an addressbook and returns the id the backend assigned.
     ///
     /// `id` reaches the backends letting a client choose one, vdir and

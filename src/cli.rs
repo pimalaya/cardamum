@@ -6,6 +6,13 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople"
+))]
+use clap::Command as ClapCommand;
 use clap::{CommandFactory, Parser, Subcommand};
 use pimalaya_cli::{
     clap::{
@@ -102,16 +109,16 @@ pub enum Command {
     #[command(subcommand, alias = "cards")]
     Card(CardCommand),
     #[cfg(feature = "carddav")]
-    #[command(subcommand)]
+    #[command(subcommand, mut_subcommands = protocol_exit)]
     Carddav(CarddavCommand),
     #[cfg(feature = "jmap")]
-    #[command(subcommand)]
+    #[command(subcommand, mut_subcommands = protocol_exit)]
     Jmap(JmapCommand),
     #[cfg(feature = "msgraph")]
-    #[command(subcommand)]
+    #[command(subcommand, mut_subcommands = protocol_exit)]
     Msgraph(MsgraphCommand),
     #[cfg(feature = "gpeople")]
-    #[command(subcommand)]
+    #[command(subcommand, mut_subcommands = protocol_exit)]
     Gpeople(GpeopleCommand),
     #[cfg(feature = "pimdir")]
     #[command(subcommand)]
@@ -121,7 +128,7 @@ pub enum Command {
     Vdir(VdirCommand),
     Repl(ReplCommand),
     Mcp(McpCommand),
-    #[command(subcommand)]
+    #[command(subcommand, alias = "accounts")]
     Account(AccountCommand),
     #[command(alias = "completions")]
     Completion(CompletionCommand),
@@ -145,21 +152,6 @@ pub fn resolve_account(
     let mut config = Config::load(config_paths)?;
     let (name, account_config) = config.take_account(account_name)?;
     Ok((config, name, account_config))
-}
-
-/// Meets a bare `cardamum`: the help when a configuration exists, the
-/// missing configuration otherwise, which a person meets as the welcome.
-pub fn meet_bare_invocation(config_paths: &[PathBuf]) -> Result<()> {
-    // NOTE: a broken file counts as a configuration, its error left to
-    // the first command reading it.
-    if let Err(err) = Config::load(config_paths)
-        && err.is::<ConfigMissingError>()
-    {
-        return Err(err);
-    }
-
-    Cli::command().print_help()?;
-    Ok(())
 }
 
 /// The welcome a person meets when no configuration exists at `path`:
@@ -268,6 +260,29 @@ impl Command {
             Self::JsonSchema(cmd) => cmd.execute(printer, json_schema::registry()),
         }
     }
+}
+
+/// What exit status 3 means, under the help of every protocol command.
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople"
+))]
+const PROTOCOL_EXIT: &str =
+    "Exit status 3: the server refused the request, its answer printed as the result.";
+
+/// Gives `cmd` and every command under it the meaning of exit status 3,
+/// which a protocol command exits with when the server refuses it.
+#[cfg(any(
+    feature = "carddav",
+    feature = "jmap",
+    feature = "msgraph",
+    feature = "gpeople"
+))]
+fn protocol_exit(cmd: ClapCommand) -> ClapCommand {
+    cmd.mut_subcommands(protocol_exit)
+        .after_long_help(PROTOCOL_EXIT)
 }
 
 #[cfg(all(test, feature = "pimdir"))]

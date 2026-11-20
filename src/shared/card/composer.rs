@@ -19,10 +19,15 @@ use std::{
 
 use anyhow::{Context, Error, Result, anyhow, bail};
 use log::{debug, info};
-use pimalaya_cli::{file::private_options, printer::Printer, prompt, session, shell::quote};
+use pimalaya_cli::{
+    error::CodedError, file::private_options, printer::Printer, prompt, session, shell::quote,
+};
 use pimalaya_config::command::{self, CommandConfig};
 
-use crate::shared::{card::vcard::check, uuid::uuid_v4};
+use crate::{
+    error::ErrorCode,
+    shared::{card::vcard::check, uuid::uuid_v4},
+};
 
 /// The command a card is edited through.
 pub struct CardComposer {
@@ -54,10 +59,9 @@ impl CardComposer {
         // would take, and pimalaya-cli installs no Ctrl-C handler, so an
         // interrupted editor would end the session with it.
         if session::in_session() {
-            bail!(
-                "Cannot run a composer inside a session; pass the vCard or the field \
-                 flags instead"
-            );
+            let message = "Cannot run a composer inside a session; pass the vCard or the field \
+                           flags instead";
+            return Err(CodedError::new(ErrorCode::StdinTaken, message).into());
         }
 
         let path = temp_dir().join(format!("cardamum-{}.vcf", uuid_v4()?));

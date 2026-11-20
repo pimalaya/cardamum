@@ -52,9 +52,9 @@ pub enum ErrorCode {
     /// The backend the account resolves to is configured but left out of
     /// this build: the message names the cargo feature to rebuild with.
     BackendNotBuilt,
-    /// A command would read its input off stdin inside a session, where
-    /// stdin carries the commands: the caller passes it as an argument or
-    /// a file path.
+    /// A command would read its input off stdin, or run a composer, inside
+    /// a session, where the terminal carries the commands: the caller
+    /// passes it as an argument or a file path.
     StdinTaken,
     /// The backend the account resolves to does not serve a capability
     /// the command reaches, refused before connecting: the caller picks
@@ -87,7 +87,8 @@ pub enum ErrorCode {
     AddressbookDefaultMissing,
     /// The backend answered for a card cardamum could not read.
     CardUnreadable,
-    /// The server refused the card written as no vCard it takes (a
+    /// The source given is neither a readable file nor vCard contents, or
+    /// the server refused the card written as no vCard it takes (a
     /// CardDAV `valid-address-data` or `supported-address-data`
     /// precondition, or a refusal naming the vCard): nothing was written,
     /// and the caller fixes the card rather than its rights.
@@ -243,14 +244,6 @@ const PIMDIR_CODES: &[(&str, ErrorCode)] = &[
 
 /// The refusal of a page token the command did not print, under
 /// `page-token-invalid`.
-#[cfg(any(
-    feature = "vdir",
-    feature = "pimdir",
-    feature = "carddav",
-    feature = "jmap",
-    feature = "msgraph",
-    feature = "gpeople"
-))]
 pub fn page_token_invalid(token: &str) -> Error {
     let message = format!("Invalid page token {token}");
     pimalaya_cli::error::CodedError::new(ErrorCode::PageTokenInvalid, message).into()

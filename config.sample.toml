@@ -11,6 +11,11 @@ card.list.page-size = 25		# cards per page, absent -s, 0 listing every card
 
 #proxy = { url = "socks5h://localhost:1080", username = "alice", password.command = "exit 127" }	# with credentials
 
+#tls.provider = "rustls"			# the build's first otherwise, for every network backend
+#tls.rustls.crypto = "ring"			# the build's first otherwise
+#tls.cert = "/path/to/cert.pem"			# a PEM certificate to trust
+#tls.client = { cert = "/path/to/client.pem", key = "/path/to/client.key.pem" }	# a PEM client certificate and its PEM key (PKCS#8 under native-tls), for mutual TLS
+
 # CardDAV
 #
 #carddav.server = "https://dav.example.org/dav"		# the DAV context root, where the principal walk starts
@@ -25,7 +30,8 @@ card.list.page-size = 25		# cards per page, absent -s, 0 listing every card
 ##carddav.tls.provider = "native-tls"			# the platform's TLS
 ##carddav.tls.rustls.crypto = "ring"			# rustls on ring, the build's first otherwise
 ##carddav.tls.rustls.crypto = "aws"			# rustls on aws-lc-rs
-##carddav.tls.cert = "/path/to/cert.pem"		# a PEM certificate to trust
+##carddav.tls.cert = "/path/to/cert.pem"		# the tls keys, for CardDAV alone, field by field
+##carddav.tls.client = { cert = "/path/to/client.pem", key = "/path/to/client.key.pem" }	# a client certificate and its key
 ##carddav.proxy.url = "socks5h://localhost:1080"	# the proxy keys, for CardDAV alone
 
 # CardDAV without credentials

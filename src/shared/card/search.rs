@@ -48,7 +48,7 @@ use crate::{
 /// (`query-unsupported`).
 ///
 /// Hits are ordered by name, or by relevance on a backend ranking them
-/// (`card.search.relevance`).
+/// (`card.search.sort`).
 ///
 /// JSON output: `{"cards": [{...card list row}], "nextPage",
 /// "complete", "errors": [{"id", "code", "error", "sources"}]}`:

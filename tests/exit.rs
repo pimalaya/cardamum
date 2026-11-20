@@ -83,6 +83,32 @@ fn a_missing_default_addressbook_is_coded() {
     assert!(error.contains("`addressbook.default`"), "{error}");
 }
 
+/// A page token `card list` never printed fails coded, as `pimdir search`
+/// refuses one.
+#[test]
+fn a_card_list_page_token_it_never_printed_is_coded() {
+    let home = TempDir::new().unwrap();
+    let config = home.path().join("config.toml");
+    fs::create_dir(home.path().join("book")).unwrap();
+    let toml = format!(
+        "[accounts.a]\ndefault = true\nvdir.root = {:?}\n",
+        home.path().display().to_string(),
+    );
+    fs::write(&config, toml).unwrap();
+
+    let config = config.to_str().unwrap();
+    let args = ["--json", "-c", config, "card", "list", "-k", "book"];
+    let output = run(
+        home.path(),
+        &[&args[..], &["--page-token", "garbage"]].concat(),
+    );
+    let stdout = text(&output.stdout);
+
+    assert_eq!(output.status.code(), Some(1), "{stdout}");
+    let json: Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(json["code"], "page-token-invalid", "{json}");
+}
+
 #[test]
 fn a_failed_account_check_prints_its_report_and_exits_3() {
     let home = TempDir::new().unwrap();
@@ -100,8 +126,11 @@ fn a_failed_account_check_prints_its_report_and_exits_3() {
 
     assert_eq!(output.status.code(), Some(3), "{stdout}");
     let json: Value = serde_json::from_str(&stdout).unwrap();
-    assert_eq!(json["backends"][0]["backend"], "vdir", "{json}");
-    assert_eq!(json["backends"][0]["ok"], false, "{json}");
+    assert_eq!(
+        json["accounts"][0]["backends"][0]["backend"], "vdir",
+        "{json}"
+    );
+    assert_eq!(json["accounts"][0]["backends"][0]["ok"], false, "{json}");
 }
 
 #[test]
@@ -128,4 +157,26 @@ fn a_listing_with_errors_prints_its_result_and_exits_3() {
     assert_eq!(json["cards"], Value::Array(Vec::new()), "{json}");
     assert_eq!(json["errors"][0]["id"], "bad", "{json}");
     assert_eq!(json["errors"][0]["code"], "card-unreadable", "{json}");
+}
+
+/// Every protocol command, nested ones included, says what exit status 3
+/// means, a refusal of the server printed as the result.
+#[cfg(all(feature = "carddav", feature = "jmap", feature = "gpeople"))]
+#[test]
+fn every_protocol_command_documents_exit_status_3() {
+    let home = TempDir::new().unwrap();
+    let commands: [&[&str]; 3] = [
+        &["carddav", "propfind", "--help"],
+        &["carddav", "report", "sync", "--help"],
+        &["jmap", "contact-card", "query", "--help"],
+    ];
+
+    for args in commands {
+        let output = run(home.path(), args);
+        let help = text(&output.stdout);
+        assert!(help.contains("\nExit status 3: "), "{args:?}: {help}");
+    }
+
+    let output = run(home.path(), &["gpeople", "profile", "--help"]);
+    assert!(text(&output.stdout).contains("\nExit status 3: "));
 }

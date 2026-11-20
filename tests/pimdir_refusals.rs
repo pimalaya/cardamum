@@ -98,7 +98,8 @@ fn the_refusals_of_a_store_carry_their_codes() {
     let dir = TempDir::new().unwrap();
     let config = store(dir.path());
 
-    let cases: [(&[&str], &str); 3] = [
+    let cases: [(&[&str], &str); 4] = [
+        (&["pimdir", "queue", "show", "999"], "row-not-found"),
         (
             &["pimdir", "queue", "cancel", "999", "--yes"],
             "row-not-found",
@@ -124,13 +125,13 @@ fn a_cancellation_no_terminal_confirms_is_refused() {
     let config = store(dir.path());
     printed(&config, &["card", "add", "-k", "book", CARD], 0);
     let queue = printed(&config, &["pimdir", "queue", "list"], 0);
-    let row = queue["cards"][0]["row"].to_string();
+    let row = queue["actions"][0]["row"].to_string();
 
     let err = printed(&config, &["pimdir", "queue", "cancel", &row], 1);
     assert_eq!(err["code"], "confirmation-required", "{err}");
 
     let queue = printed(&config, &["pimdir", "queue", "list"], 0);
-    assert_eq!(queue["cards"].as_array().unwrap().len(), 1, "{queue}");
+    assert_eq!(queue["actions"].as_array().unwrap().len(), 1, "{queue}");
 }
 
 /// An account the store does not hold is refused rather than read as
@@ -151,4 +152,24 @@ fn the_account_is_the_one_named_or_refused() {
     let unset = config(dir.path(), &root, None);
     let err = printed(&unset, &["addressbook", "list"], 1);
     assert_eq!(err["code"], "store-account-ambiguous", "{err}");
+}
+
+/// A create naming an address book the store holds fails as a duplicate,
+/// before the refusal of a create the store takes from no producer.
+#[test]
+fn an_existing_addressbook_is_a_duplicate_before_a_missing_capability() {
+    let dir = TempDir::new().unwrap();
+    let config = store(dir.path());
+
+    let err = printed(
+        &config,
+        &["addressbook", "create", "Other", "--id", "book"],
+        1,
+    );
+    assert_eq!(err["code"], "addressbook-duplicate", "{err}");
+    let err = printed(&config, &["addressbook", "create", "book"], 1);
+    assert_eq!(err["code"], "addressbook-duplicate", "{err}");
+
+    let err = printed(&config, &["addressbook", "create", "Other"], 1);
+    assert_eq!(err["code"], "capability-missing", "{err}");
 }

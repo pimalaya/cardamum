@@ -5,7 +5,7 @@
 
 use std::fmt;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use pimalaya_cli::{
     clap::args::PageTokenArg,
@@ -19,7 +19,7 @@ use serde::Serialize;
 use crate::{
     backend::Backend,
     capability::Capability,
-    error::{ItemError, partial_when},
+    error::{ItemError, page_token_invalid, partial_when},
     shared::{
         arg::AddressbookIdArg,
         card::{Card, project::CardFields},
@@ -62,9 +62,7 @@ impl CardListCommand {
         client.require(&[Capability::CardList])?;
         let addressbook_id = client.account.addressbook_id(self.addressbook.id)?;
         let page = match &self.page_token.token {
-            Some(token) => token
-                .parse()
-                .with_context(|| format!("Invalid page token {token}"))?,
+            Some(token) => token.parse().map_err(|_| page_token_invalid(token))?,
             None => self.page,
         };
         let page = page.max(1);

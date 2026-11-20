@@ -79,6 +79,14 @@ A server answering a request 401 to a block sending no credential SHALL fail wit
 
 It SHALL be a pimalaya-config `CommandConfig`, taking the shell line and the argv list every other command field takes. The command must block until the edit is done, which the documentation SHALL say, since a graphical editor returning immediately is the way this fails in practice.
 
+### Requirement: TLS is set per account and per backend
+Every network backend block SHALL take a `tls` table spelled as pimalaya-config's toml.md writes it (*Every binary spells its TLS table alike*) and as Himalaya's: `provider` (`rustls` or `native-tls`), `rustls.crypto` (`aws` or `ring`), `cert` (a PEM certificate to trust) and `client` (`cert` and `key`, a PEM client certificate and its PEM private key, PKCS#8 under native-tls, both required once `client` is given), each optional, its paths shell-expanded. An account MAY carry a `tls` table of the same keys, which each network backend's `tls` SHALL take from, field by field, for what it leaves unset, `client` as one so a certificate is never paired with another table's key. A key the table does not read SHALL be refused by serde's `deny_unknown_fields` alone.
+
+#### Scenario: A backend table over the account's
+- GIVEN an account holding `tls.provider = "native-tls"`, `tls.cert = "/ca.pem"` and `tls.client`, and its `carddav.tls.cert = "/dav.pem"`
+- WHEN the configuration is loaded
+- THEN that backend runs native-tls trusting `/dav.pem` and presenting the account's client certificate, and every other network backend of the account native-tls trusting `/ca.pem`
+
 ### Requirement: A proxy is set per account and per backend
 An account's `proxy` SHALL apply to every network backend of that account (CardDAV, JMAP, Microsoft Graph, Google People) whose own block names no `proxy`, and a backend's own `proxy` SHALL win over it. With neither, the connection SHALL read the `all_proxy` and `https_proxy` environment variables, honouring `no_proxy`.
 
@@ -88,7 +96,7 @@ An account's `proxy` SHALL apply to every network backend of that account (CardD
 When no configuration exists at the first `-c` path or the default location, and stderr is a terminal with `--json` off, a bare `cardamum`, every command resolving an account and `account list` SHALL print pimalaya-cli's welcome on stderr and exit 1, printing nothing on stdout. The welcome SHALL frame Cardamum in one sentence, name the missing path, give the commands creating it from config.sample.toml (copied from share/doc/cardamum next to the binary when it is installed, downloaded with `curl` otherwise), invite the reader to edit it, and give the `addressbook list` command carrying the `-c` paths. Otherwise the missing-configuration error SHALL stand, as the failure object under `--json`.
 
 ### Requirement: A bare invocation shows the help
-A bare `cardamum` SHALL print the help when a configuration exists, a broken one included, its error left to the first command reading it. Without one it SHALL fail as a command resolving an account does, the welcome or the error. Nothing prompts.
+A bare `cardamum` SHALL print the help when a configuration exists, a broken one included, its error left to the first command reading it. Without one it SHALL fail as a command resolving an account does, the welcome or the error. Nothing prompts. Under `--json` it SHALL fail coded `usage-invalid`, exit 2, without reading the configuration (pimalaya-cli `clap::meet_bare_invocation`).
 
 ### Requirement: One default account
 Resolving the default account SHALL fail, naming them sorted, when several accounts are marked `default = true` once the configuration is loaded, layers and `-c` files merged. An account named with `-a` SHALL still resolve.

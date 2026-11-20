@@ -3,12 +3,15 @@
 //! Searches the ContactCards of the account, then fetches the ones the
 //! search matched.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use io_jmap::rfc9610::contact_card::query::{JmapContactCardFilter, JmapContactCardQueryOptions};
 use pimalaya_cli::{clap::args::PageTokenArg, output::Paginated, printer::Printer};
 
-use crate::jmap::{client::JmapClient, render::JmapContactCardsOutput};
+use crate::{
+    error::page_token_invalid,
+    jmap::{client::JmapClient, render::JmapContactCardsOutput},
+};
 
 /// Query JMAP ContactCards (`ContactCard/query` + `/get`).
 ///
@@ -39,8 +42,7 @@ impl JmapContactCardQueryCommand {
             Some(token) => Some(
                 token
                     .parse::<u64>()
-                    .ok()
-                    .with_context(|| format!("Invalid page token {token}"))?,
+                    .map_err(|_| page_token_invalid(token))?,
             ),
             None => None,
         };

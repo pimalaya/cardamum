@@ -11,7 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Added `client.cert` and `client.key` to every `<backend>.tls` table, a PEM client certificate and its PEM private key presented when the server asks for one, both required once `client` is given.
 - Added the account-level `tls` table, each network backend's `tls` taking from it, field by field, what it leaves unset (`client` as one), as Himalaya's.
 - Added `tls` to each backend row of `account check --json`, `{provider, crypto, cert, clientCert}` as configured, `null` for a local backend or a cleartext connection; the text appends `, TLS` and its parts set.
-- Added `errors` to `pimdir queue list --json`: an item error coded `action-malformed` for each address book whose queue holds a row that does not decode, its pending rows then left out, the command exiting 3.
+- Added `errors` to `pimdir queue list --json`: an item error coded `action-malformed` for each pending row whose payload does not decode, named by its handle and its address book, the other rows listed, the command exiting 3.
 - Added an `Exit status 3:` line to the `--help` of every `carddav`, `jmap`, `msgraph` and `gpeople` command.
 - Added `accounts`, a hidden alias of `account`.
 - Added `handle` to the `pimdir queue show` and `pimdir queue cancel` JSON, beside the integer `row`, as `pimdir queue list` prints it (pimalaya-cli's output.md): the handle given, or a bare id given named under the store's identity. Their text names the row by its handle.

@@ -25,6 +25,9 @@ change: follows-storage-draft-17
 
 ## MODIFIED Requirements
 
+### Requirement: An undecodable pending row is named alone
+(commands, backends) At io-pimdir 2314084 a pending row whose payload does not decode is listed by the reader as `PimdirAction::Unknown`: `pimdir queue list` SHALL give it an item error coded `action-malformed`, its `id` the row's handle, and list the other rows of its address book; `pimdir status` no longer fails on it.
+
 ### Requirement: A pimdir store of another version is refused in io-pimdir's words
 (backends) As now, the format version read being `storage-draft-17` (`io_pimdir::sql::FORMAT_VERSION` at io-pimdir 7f16b27, its release 0.20 once published) and the scenario's store `storage-draft-15`, the version io-pimdir 0.19 wrote: the message names `storage-draft-15`, `storage-draft-17`, an earlier sync engine, the queue synced until nothing is queued and the directory moved aside; the new store is synced anew by a neverest of the same io-pimdir.
 

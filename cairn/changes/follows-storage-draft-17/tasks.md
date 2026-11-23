@@ -38,7 +38,7 @@ Run top to bottom. Every cargo command: `nix develop --command`, `CARGO_TARGET_D
 
 ## G. Bugs
 
-- [ ] G1 Parked on needs-io-pimdir.md N1: an undecodable queue row hides its address book's rows.
+- [x] G1 Parked on needs-io-pimdir.md N1: an undecodable queue row hides its address book's rows.
 - [x] G2 A query refusal's text reads `Error: [unknown-field] Error: Query refused` (TRI-7, still at HEAD, I7): src/shared/query.rs:54 `refusal_report` drops the doubled word, as himalaya's pimdir search does. Test `a_refusal_names_error_once` fails before. Commit `fix(search): ...`.
 - [x] G3 Re-checked closed at HEAD, nothing owed: CAR-1 to CAR-14 (cardamum logs 2026-11-18, 2026-11-19), TRI-1, TRI-3, TRI-8, audit C4, C5 (inventory I8).
 

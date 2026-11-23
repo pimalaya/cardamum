@@ -25,7 +25,10 @@ use io_pimdir::{
         producer::{PimdirActionStatus, PimdirEnqueued, PimdirPendingAction},
         reader::{PimdirCollection, PimdirItem},
     },
-    codec::{PimdirAction, PimdirActionHandle, PimdirStoreIdentity, action_from_payload},
+    codec::{
+        PimdirAction, PimdirActionHandle, PimdirPayloadOutcome, PimdirStoreIdentity,
+        action_from_payload, payload_outcome,
+    },
     collection,
     object::PimdirHash,
     placement::PimdirFlags,
@@ -130,7 +133,7 @@ impl PimdirBackend {
             }));
 
             let (mut total, mut hydrated) = (0, 0);
-            self.scan(&collection.id, None, |item| {
+            self.scan(&collection.id, 0, None, false, |item| {
                 total += 1;
                 hydrated += usize::from(item.object.is_some());
                 Ok(ControlFlow::Continue(()))
@@ -257,6 +260,15 @@ impl PimdirBackend {
             };
 
             for queued in pending {
+                if let Some(err) = malformed(&queued.action) {
+                    let id = handle(&identity, queued.id);
+                    let message = format!("Decode queue row {id} of address book `{collection}`");
+                    let err = Error::from(CodedError::new(ErrorCode::ActionMalformed, err))
+                        .context(message);
+                    errors.push(ItemError::new(Some(&id), &err));
+                    continue;
+                }
+
                 rows.push(self.pending_row(&identity, queued)?);
             }
         }
@@ -573,7 +585,7 @@ impl PimdirBackend {
     pub fn list_cards(
         &mut self,
         addressbook_id: &str,
-        mut skip: usize,
+        skip: usize,
         take: Option<usize>,
     ) -> Result<CardWindow> {
         self.known_collection(addressbook_id)?;
@@ -585,13 +597,7 @@ impl PimdirBackend {
         let mut cards = Vec::new();
         let mut errors = Vec::new();
 
-        let want = take.map(|take| skip.saturating_add(take));
-        self.scan(addressbook_id, want, |item| {
-            if skip > 0 {
-                skip -= 1;
-                return Ok(ControlFlow::Continue(()));
-            }
-
+        self.scan(addressbook_id, skip, take, true, |item| {
             let (card, err) = self.listed_card(addressbook_id, item);
 
             if let Some(err) = err {
@@ -781,20 +787,39 @@ impl PimdirBackend {
             .collect())
     }
 
-    /// Walks every live item of a collection by keyset paging, each with
-    /// its summary joined, until `visit` breaks.
+    /// Walks the live items of a collection by keyset paging past the
+    /// `skip` first, until `visit` breaks, each with its summary joined
+    /// when `summaries` asks for it.
     ///
     /// The order is the contacts one the store maintains, display name
     /// ascending. One batch of rows is held at a time, never the
-    /// collection, and no more rows are read than the `want` first ones
-    /// when the visitor needs no more.
+    /// collection; the skipped rows are read without their summaries, and
+    /// no more rows are visited than `want` when the visitor needs no more.
     fn scan(
         &self,
         addressbook_id: &str,
+        mut skip: usize,
         want: Option<usize>,
+        summaries: bool,
         mut visit: impl FnMut(PimdirItem) -> Result<ControlFlow<()>>,
     ) -> Result<()> {
         let mut cursor: Option<(String, i64)> = None;
+        let reader = &self.inner.reader;
+
+        while skip > 0 {
+            let size = SCAN_BATCH.min(skip);
+            let after = cursor.as_ref().map(|(key, seq)| (key.as_str(), *seq));
+            let batch = reader.list_items_page_asc(addressbook_id, after, size)?;
+            let Some(last) = batch.last() else {
+                return Ok(());
+            };
+            cursor = Some((last.sort_key.clone(), last.seq));
+            if batch.len() < size {
+                return Ok(());
+            }
+            skip -= size;
+        }
+
         let mut read = 0;
 
         loop {
@@ -802,11 +827,11 @@ impl PimdirBackend {
                 Some(want) => SCAN_BATCH.min(want.saturating_sub(read)).max(1),
                 None => SCAN_BATCH,
             };
-            let batch = self.inner.reader.list_summaries(
-                addressbook_id,
-                cursor.as_ref().map(|(key, seq)| (key.as_str(), *seq)),
-                size,
-            )?;
+            let after = cursor.as_ref().map(|(key, seq)| (key.as_str(), *seq));
+            let batch = match summaries {
+                true => reader.list_summaries(addressbook_id, after, size)?,
+                false => reader.list_items_page_asc(addressbook_id, after, size)?,
+            };
             let len = batch.len();
             read += len;
             if let Some(last) = batch.last() {
@@ -1012,6 +1037,24 @@ pub fn uncancellable(row: &PimdirActionHandle, status: &PimdirActionStatus) -> E
             CodedError::new(ErrorCode::StoreReset, message).into()
         }
         _ => row_not_found(row),
+    }
+}
+
+/// Why a pending row does not decode: its payload is of a kind io-pimdir
+/// knows and breaks its schema (pimdir STORAGE §15.3), which the owner's
+/// drain parks. `None` for a row that decodes, and for a kind or version
+/// io-pimdir does not know, which is listed as it is.
+fn malformed(action: &PimdirAction) -> Option<String> {
+    let PimdirAction::Unknown { kind, payload, .. } = action else {
+        return None;
+    };
+
+    match payload_outcome(kind, payload) {
+        PimdirPayloadOutcome::Malformed => Some(match action_from_payload(kind, payload) {
+            Err(err) => err.to_string(),
+            Ok(_) => format!("The payload of a queued `{kind}` does not decode"),
+        }),
+        _ => None,
     }
 }
 
@@ -1483,7 +1526,7 @@ mod tests {
     /// every card built with its body, then the page cut in memory.
     fn eager(backend: &PimdirBackend, skip: usize, take: Option<usize>) -> Result<Vec<Card>> {
         let mut all = Vec::new();
-        backend.scan("book", None, |item| {
+        backend.scan("book", 0, None, true, |item| {
             all.push(item);
             Ok(ControlFlow::Continue(()))
         })?;
@@ -2599,12 +2642,11 @@ mod tests {
     }
 
     /// A queued action whose payload misses its version, as only another
-    /// program writes one, fails `pimdir status` with `action-malformed`
-    /// rather than with no code, until the owner's drain parks it.
+    /// program writes one, fails no `pimdir status`: it counts as no
+    /// queued creation (`pimdir queue list` names it), and shows parked
+    /// once the owner's drain parks it.
     #[test]
-    fn a_malformed_queued_action_carries_its_code() {
-        use pimalaya_cli::error::code_of;
-
+    fn a_malformed_queued_action_is_parked_by_the_drain() {
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
         drop(backend);
@@ -2615,8 +2657,9 @@ mod tests {
             account: None,
         })
         .unwrap();
-        let err = backend.status().unwrap_err();
-        assert_eq!(code_of(&err), Some(ErrorCode::ActionMalformed), "{err:#}");
+        let status = backend.status().unwrap();
+        assert_eq!(status.addressbooks[0].queued, 0, "{status:?}");
+        assert!(status.parked.is_empty(), "{status:?}");
 
         drain(&dir);
         let status = backend.status().unwrap();
@@ -2950,26 +2993,35 @@ mod tests {
         );
     }
 
-    /// A pending row that does not decode is an item error naming its
-    /// address book, coded `action-malformed`, rather than a failure of
-    /// the whole listing.
+    /// A pending row that does not decode is an item error naming it by
+    /// its handle and its address book, coded `action-malformed`, the
+    /// other rows of that address book listed.
     #[test]
     fn an_undecodable_pending_row_is_an_item_error() {
+        const ANN: &[u8] =
+            b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:c2\r\nFN:Ann Lee\r\nEND:VCARD\r\n";
+
         let (dir, mut backend) = store();
         backend.create_card("book", JANE.to_vec()).unwrap();
+        let bad = backend.pending_rows(None).unwrap().0[0].handle.clone();
         drop(backend);
         rewrite(dir.path(), "\"v\":1", "\"w\":1");
 
-        let backend = PimdirBackend::new(PimdirConfig {
+        let mut backend = PimdirBackend::new(PimdirConfig {
             root: dir.path().to_path_buf(),
             account: None,
         })
         .unwrap();
+        backend.create_card("book", ANN.to_vec()).unwrap();
+
         let (rows, errors) = backend.pending_rows(None).unwrap();
-        assert!(rows.is_empty(), "{rows:?}");
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        assert_eq!(rows[0].full_name.as_deref(), Some("Ann Lee"));
         assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].id.as_deref(), Some(bad.as_str()));
         assert_eq!(errors[0].code, Some(ErrorCode::ActionMalformed));
         assert!(errors[0].error.contains("`book`"), "{errors:?}");
+        assert!(errors[0].error.contains(&bad), "{errors:?}");
     }
 
     /// A `set-property` another program queues on a card lists as any row,

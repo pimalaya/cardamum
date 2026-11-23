@@ -204,6 +204,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed the text of a refused query, which read `Error: [unknown-field] Error: Query refused`: the second `Error:` is gone, as in Himalaya.
 - Fixed a pimdir `card add` of a card with no `UID` and an `X-PIMDIR-` property queueing it under the `hash:` key of the bytes before that property was dropped, a key naming a body the store never holds: the key is now the one io-pimdir derives from the queued body, the id reported (io-pimdir 0.19.0 refuses the former with `hash-key-mismatch`).
 - Fixed `card list` and `jmap contact-card query` to code a page token they did not print `page-token-invalid`.
 - Fixed the composer refused inside a session to be coded `stdin-taken`, and a source neither a readable file nor vCard contents `card-invalid`.

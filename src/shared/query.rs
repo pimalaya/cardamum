@@ -50,7 +50,8 @@ fn refusal_line(err: &PimdirQueryError) -> String {
 }
 
 /// A refusal drawn over the query with ariadne, without colour like every
-/// text output.
+/// text output, and without ariadne's `Error:`, which the command line
+/// prints before every error already.
 fn refusal_report(query: &str, err: &PimdirQueryError) -> String {
     let name = "query";
     let config = Config::default().with_color(false);
@@ -71,5 +72,27 @@ fn refusal_report(query: &str, err: &PimdirQueryError) -> String {
 
     let mut buf = Vec::new();
     let _ = report.finish().write((name, Source::from(query)), &mut buf);
-    String::from_utf8_lossy(&buf).into_owned()
+    String::from_utf8_lossy(&buf).replacen("Error: ", "", 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::shared::query::parse_query;
+
+    /// A refusal drawn for a terminal names its code and says `Query
+    /// refused` once, without a second `Error:` after the one the command
+    /// line prints before every error.
+    #[test]
+    fn a_refusal_names_error_once() {
+        let err = parse_query(&[String::from("nmae:alice")], false)
+            .err()
+            .unwrap();
+        let printed = format!("Error: {err}");
+
+        assert_eq!(printed.matches("Error:").count(), 1, "{printed}");
+        assert!(
+            printed.starts_with("Error: [unknown-field] Query refused"),
+            "{printed}"
+        );
+    }
 }

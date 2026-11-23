@@ -104,3 +104,22 @@ Release binaries, default features, copied to ext4 (bin/cardamum-base at 22c0bd5
 | `pimdir status` | 26.0 ms | 34.7 ms |
 
 The two regressions are the whole-collection walks through `list_summaries` (needs-io-pimdir N3, N4).
+
+## I11. Final tables (H5)
+
+Measured on 2026-11-23 at the end of the lane: old is the 0.19.1 binary (22c0bd5) on the draft-15 stores, rc the release build at io-pimdir 17d4ea8 (0.20.0 RC) on the draft-17 twins. Three copies of each binary on ext4, interleaved, hyperfine 1.20 `-N -w 3 -r 20` on CPU 15 under the measure lock, account `home`, book `home/contacts`, card 3153. The load average was 9 to 12 (other lanes building), so the window was the quietest of the night but not quiet; the A/A spread of the copies is under 14% on reads, under 20% on `search --page 5`. `card update` restores pimdir.db and runs `sync` before each run, and its A/A stays wide (16 to 145%), its time bound by the disk. Scripts and JSON: ~/code/pimalaya/.lanes/cardamum (measure.sh, measure-update.sh, summary.sh, hf/h5-*).
+
+| Command | 10k old | 10k rc | 100k old | 100k rc |
+| --- | --- | --- | --- | --- |
+| `card list -k home/contacts` | 7.20 ms | 2.49 ms | 8.97 ms | 2.59 ms |
+| `card list -k home/contacts --page 200` | 26.26 ms | 9.26 ms | 37.62 ms | 15.52 ms |
+| `card read -k home/contacts 3153` | 4.89 ms | 2.24 ms | 4.60 ms | 2.12 ms |
+| `pimdir search alice` | 38.70 ms | 7.50 ms | 399.28 ms | 30.22 ms |
+| `pimdir search --page 5 alice` | 154.10 ms | 16.39 ms | 1,912.75 ms | 132.55 ms |
+| `pimdir count alice` | 27.86 ms | 4.00 ms | 346.53 ms | 3.50 ms |
+| `card search alice` | 38.55 ms | 7.32 ms | 377.03 ms | 29.27 ms |
+| `pimdir status` | 32.18 ms | 11.46 ms | 321.39 ms | 131.59 ms |
+| `card update --if-match` | 9.05 ms | 7.04 ms | 14.81 ms | 7.19 ms |
+| `card search alice` over the vdir (6,965 cards) | 77.33 ms | 60.77 ms | | |
+
+Every rc median is at or under old; every page-1 read at 100k is under 50 ms (H3). The two regressions of I10 (`--page 200`, `pimdir status`) were app-side: both walked `list_summaries`, whose summary and address joins were 92% of the status (callgrind); they now read `list_items_page_asc` for the rows they only skip or count.

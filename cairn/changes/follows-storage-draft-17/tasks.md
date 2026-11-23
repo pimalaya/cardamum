@@ -49,18 +49,18 @@ Run top to bottom. Every cargo command: `nix develop --command`, `CARGO_TARGET_D
 - [x] H2 Measures, 10k and 100k: `card list -k home/contacts` page 1 and `--page 200`; `card read <id>`; `pimdir search alice` page 1 and `--page 5`; `pimdir count alice`; `card search alice`; `pimdir status`; `card update --if-match` on a store copy restored per run; H8 `card search alice` over the vdir.
 - [x] H3 Acceptance: each new median at most old ×1.05 or old + 1 ms, whichever is larger; at 100k, every page-1 read (list, read, search, count) under 50 ms. A miss is a finding for the io-pimdir lane, with its command. Known misses at 10k (I10): `card list --page 200` and `pimdir status`, filed as N3 and N4; they do not block the step, the report names them.
 - [x] H4 Candidate fixes, each kept only if H2 shows it beyond noise: one `PimdirIndex` held across `search_page`'s walk (src/pimdir/search.rs:136-190 opens it per page through `index`, src/pimdir/index.rs:90); `scan` reading `min(SCAN_BATCH, skip + take)` rows per batch (src/pimdir/backend.rs:799; page 1 reads 500 rows for 25).
-- [ ] H5 Final tables re-run in a quiet window; inventory and the log entry carry them.
+- [x] H5 Final tables re-run in a quiet window; inventory and the log entry carry them.
 
 ## I. Docs
 
 - [x] I1 Fold delta.md into cairn/spec (backends, commands, packaging); backends.md:216 and commands.md:459 name draft-17.
 - [x] I2 CHANGELOG Unreleased: BREAKING store refused and start over, the reserved forms, `label:` and `property:`, the date forms; Changed: features (no ical-rs, mime-rs in the binary).
 - [x] I3 README: the start-over note (old neverest syncs until nothing is queued, move the store aside, new neverest syncs anew; the index is neverest's). Man pages and completions regenerate from the doc comments.
-- [ ] I4 cairn/log/2026-11-2x-follows-storage-draft-17.md; `sh cairn/verify.sh`.
+- [x] I4 cairn/log/2026-11-2x-follows-storage-draft-17.md; `sh cairn/verify.sh`.
 
 ## J. Tests beyond the suite
 
-- [ ] J1 Cross-app, after neverest's lane lands 7f16b27: neverest syncs a local Radicale address book (under the `servers` lock) into a scratch store; cardamum `card list`, `pimdir search`, `card add`; neverest syncs again; Radicale holds the card, `pimdir queue list` is empty.
+- [x] J1 Cross-app, after neverest's lane lands 7f16b27: neverest syncs a local Radicale address book (under the `servers` lock) into a scratch store; cardamum `card list`, `pimdir search`, `card add`; neverest syncs again; Radicale holds the card, `pimdir queue list` is empty.
 - [ ] J2 Live (owner grant): `cargo test --test google -- --ignored anonymous::`; the credentialed suites as the owner runs them weekly.
 
 ## K. Release readiness (the owner's)

@@ -126,9 +126,10 @@ impl CardSearchCommand {
 /// The order of a card search (pimdir SEARCH §8.2).
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
 pub enum CardSearchSort {
-    /// By display name, A to Z.
+    /// By title, the display name, A to Z.
     #[default]
-    Name,
+    #[value(alias = "name")]
+    Title,
     /// Best match of the query's words first, where the backend ranks.
     Relevance,
 }
@@ -378,7 +379,7 @@ pub fn pimdir_page(
     use io_pimdir::client::search::{PimdirSearchCursor, PimdirSearchSort};
 
     let sort = match search.sort {
-        CardSearchSort::Name => PimdirSearchSort::Name,
+        CardSearchSort::Title => PimdirSearchSort::Title,
         CardSearchSort::Relevance => PimdirSearchSort::Relevance,
     };
     let (found, page) = crate::pimdir::search::search_page(
@@ -429,7 +430,7 @@ mod tests {
             query: PimdirQuery::parse(query).unwrap(),
             words: query.to_owned(),
             addressbook: None,
-            sort: CardSearchSort::Name,
+            sort: CardSearchSort::Title,
             limit: 25,
             page: 1,
             token: None,

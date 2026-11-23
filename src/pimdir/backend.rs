@@ -373,6 +373,7 @@ impl PimdirBackend {
             } => (link_id.map(|link_id| link_id.0), None, object),
             PimdirAction::Update { seq, object, .. } => (None, Some(seq), Some(object)),
             PimdirAction::SetFlags { seq, .. }
+            | PimdirAction::SetProperty { seq, .. }
             | PimdirAction::Remove { seq, .. }
             | PimdirAction::Move { seq, .. }
             | PimdirAction::Copy { seq, .. } => (None, Some(seq), None),
@@ -2059,6 +2060,7 @@ mod tests {
                     flags: PimdirFlags::default(),
                     status: PimdirStatus::Clean,
                     conflict_revision: None,
+                    server_object_id: None,
                     conflict_object: None,
                     base: Some(PimdirBase {
                         flags: PimdirFlags::default(),
@@ -2185,6 +2187,7 @@ mod tests {
                         flags: PimdirFlags::default(),
                         status: PimdirStatus::Clean,
                         conflict_revision: None,
+                        server_object_id: None,
                         conflict_object: None,
                         base: Some(PimdirBase {
                             flags: PimdirFlags::default(),

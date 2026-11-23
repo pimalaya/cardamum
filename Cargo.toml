@@ -20,12 +20,12 @@ default = ["rustls-ring", "carddav", "jmap", "msgraph", "gpeople", "vdir", "pimd
 native-tls = ["pimalaya-stream/native-tls", "io-webdav?/native-tls", "io-jmap?/native-tls", "io-msgraph?/native-tls", "io-gpeople?/native-tls"]
 rustls-aws = ["pimalaya-stream/rustls-aws", "io-webdav?/rustls-aws", "io-jmap?/rustls-aws", "io-msgraph?/rustls-aws", "io-gpeople?/rustls-aws"]
 rustls-ring = ["pimalaya-stream/rustls-ring", "io-webdav?/rustls-ring", "io-jmap?/rustls-ring", "io-msgraph?/rustls-ring", "io-gpeople?/rustls-ring"]
-carddav = ["dep:io-webdav", "dep:io-pimdir", "dep:ariadne", "io-pimdir/search"]
-jmap = ["dep:io-jmap", "dep:blake3", "vcard-rs/jscontact", "dep:io-pimdir", "dep:ariadne", "io-pimdir/search"]
-msgraph = ["dep:io-msgraph", "io-msgraph/vcard", "dep:io-pimdir", "dep:ariadne", "io-pimdir/search"]
-gpeople = ["dep:io-gpeople", "io-gpeople/vcard", "dep:io-pimdir", "dep:ariadne", "io-pimdir/search"]
-vdir = ["dep:io-vdir", "dep:io-pimdir", "dep:ariadne", "io-pimdir/search"]
-pimdir = ["dep:io-pimdir", "dep:ariadne", "io-pimdir/client", "io-pimdir/search"]
+carddav = ["dep:io-webdav", "dep:io-pimdir", "dep:ariadne", "io-pimdir/contact"]
+jmap = ["dep:io-jmap", "dep:blake3", "vcard-rs/jscontact", "dep:io-pimdir", "dep:ariadne", "io-pimdir/contact"]
+msgraph = ["dep:io-msgraph", "io-msgraph/vcard", "dep:io-pimdir", "dep:ariadne", "io-pimdir/contact"]
+gpeople = ["dep:io-gpeople", "io-gpeople/vcard", "dep:io-pimdir", "dep:ariadne", "io-pimdir/contact"]
+vdir = ["dep:io-vdir", "dep:io-pimdir", "dep:ariadne", "io-pimdir/contact"]
+pimdir = ["dep:io-pimdir", "dep:ariadne", "io-pimdir/client", "io-pimdir/contact", "io-pimdir/search"]
 vendored = ["pimalaya-stream/vendored", "io-webdav?/vendored", "io-jmap?/vendored", "io-msgraph?/vendored", "io-gpeople?/vendored", "io-pimdir?/vendored"]
 
 [profile.release]
@@ -39,6 +39,7 @@ pimalaya-cli = { version = "0.8.0", default-features = false, features = ["build
 
 [dev-dependencies]
 io-oauth = { version = "0.8", default-features = false, features = ["std", "jwt-bearer", "rustls-ring"] }
+io-pimdir = { version = "0.19.1", default-features = false, features = ["indexer"] }
 pimalaya-config = { version = "0.6.0", default-features = false, features = ["sample"] }
 tempfile = { version = "3", default-features = false }
 toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
@@ -69,3 +70,6 @@ serde_json = { version = "1", default-features = false, features = ["std"] }
 simd-cpu = { version = "0.1", default-features = false, features = ["std"] }
 url = { version = "2.5", default-features = false }
 vcard-rs = { version = "0.6.1", default-features = false, features = ["parser", "quoted-printable", "encoding"] }
+
+[patch.crates-io]
+io-pimdir = { git = "https://github.com/pimalaya/io-pimdir", rev = "7f16b27da3b11a42b9d81a522a3e6fa5eeeed994" }

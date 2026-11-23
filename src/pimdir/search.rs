@@ -191,9 +191,10 @@ pub fn search_page(
 /// The order of a card search (pimdir SEARCH §8.2).
 #[derive(Clone, Copy, Debug, Default, ValueEnum)]
 pub enum PimdirSearchSortArg {
-    /// By display name, A to Z.
+    /// By title, the display name, A to Z.
     #[default]
-    Name,
+    #[value(alias = "name")]
+    Title,
     /// Best match of the query's words first.
     Relevance,
 }
@@ -201,7 +202,7 @@ pub enum PimdirSearchSortArg {
 impl From<PimdirSearchSortArg> for PimdirSearchSort {
     fn from(sort: PimdirSearchSortArg) -> Self {
         match sort {
-            PimdirSearchSortArg::Name => Self::Name,
+            PimdirSearchSortArg::Title => Self::Title,
             PimdirSearchSortArg::Relevance => Self::Relevance,
         }
     }
@@ -349,6 +350,26 @@ Incomplete:  1 card(s) have no local body and matched on their summary alone
 7  book  body  alice@example.org  -  Alice Martin
 ";
         assert_eq!(output().to_string(), expected);
+    }
+
+    /// `--sort` shows SEARCH §8.2's `title` and `relevance`, and still
+    /// takes `name`, a hidden alias of `title`.
+    #[test]
+    fn the_sort_named_name_is_title() {
+        use clap::ValueEnum;
+
+        use crate::pimdir::search::PimdirSearchSortArg;
+
+        let shown: Vec<String> = PimdirSearchSortArg::value_variants()
+            .iter()
+            .filter_map(|sort| sort.to_possible_value())
+            .filter(|value| !value.is_hide_set())
+            .map(|value| value.get_name().to_owned())
+            .collect();
+        assert_eq!(shown, ["title", "relevance"]);
+
+        let name = PimdirSearchSortArg::from_str("name", false).unwrap();
+        assert!(matches!(name, PimdirSearchSortArg::Title));
     }
 
     /// A page pages as every listing does: `nextPage`, which `--page-token`

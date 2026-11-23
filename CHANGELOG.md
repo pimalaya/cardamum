@@ -59,6 +59,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- Changed the default `--sort` of `card search` and `pimdir search` to `title`, SEARCH §8.2's name of the display-name order; `name` stays a hidden alias of it.
+- Changed the dependency on io-pimdir to its storage-draft-17 revision; the network backends and vdir take its `contact` feature alone, so only the pimdir backend links SQLite, and the binary no longer links ical-rs and mime-rs.
 - **BREAKING**: Changed `account check --json` to pimalaya-cli's list of accounts, `{accounts: [{account, backends}]}`.
 - Changed the `account capability` names to the unified commands they stand for: `addressbook.rename` to `addressbook.update`, `addressbook.description` to `addressbook.update.description`, `addressbook.color` to `addressbook.update.color`, `card.remove` to `card.delete`, `card.remove.if-match` to `card.delete.if-match` and `card.search.relevance` to `card.search.sort`.
 - Changed `pimdir queue list --json` to `{actions, parked, errors}`, `actions` holding every pending row of every kind where `cards` held the creations alone.

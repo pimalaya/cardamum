@@ -445,6 +445,7 @@ mod tests {
                 flags: flags.clone(),
                 status: PimdirStatus::Clean,
                 conflict_revision: None,
+                server_object_id: None,
                 conflict_object: None,
                 base: Some(PimdirBase {
                     flags,
@@ -557,7 +558,7 @@ mod tests {
 
     fn page(backend: &PimdirBackend, text: &str, addressbook: Option<&str>) -> PimdirCardPage {
         let options = PimdirSearchOptions {
-            sort: io_pimdir::client::search::PimdirSearchSort::Name,
+            sort: io_pimdir::client::search::PimdirSearchSort::Title,
             ..Default::default()
         };
         backend
@@ -899,7 +900,7 @@ mod tests {
     fn hits_come_in_name_order_and_pages() {
         let (_dir, backend) = indexed_store();
         let options = |after| PimdirSearchOptions {
-            sort: io_pimdir::client::search::PimdirSearchSort::Name,
+            sort: io_pimdir::client::search::PimdirSearchSort::Title,
             limit: 2,
             after,
             ..Default::default()

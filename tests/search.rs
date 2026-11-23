@@ -137,6 +137,28 @@ fn the_hits_page_by_number() {
     assert_eq!(bad["code"], "page-token-invalid", "{bad}");
 }
 
+/// `--sort` shows `title` and `relevance`, and `name`, a hidden alias
+/// of `title`, still orders the hits by title.
+#[test]
+fn the_sort_named_name_is_title() {
+    let (home, config) = vdir();
+
+    let (code, title) = json(home.path(), &config, &["--sort", "title", "kind:contact"]);
+    assert_eq!(code, Some(0), "{title}");
+    let (code, name) = json(home.path(), &config, &["--sort", "name", "kind:contact"]);
+    assert_eq!(code, Some(0), "{name}");
+    assert_eq!(names(&name), names(&title));
+    assert_eq!(
+        names(&title),
+        ["Ada Lovelace", "Bob Durand", "Élodie Martin"]
+    );
+
+    let help = run(home.path(), &config, &["card", "search", "--help"]);
+    let help = String::from_utf8(help.stdout).unwrap();
+    assert!(help.contains("- title:"), "{help}");
+    assert!(!help.contains("- name:"), "{help}");
+}
+
 /// A malformed query is `query-refused`, a store term
 /// `query-unsupported` naming it, relevance `capability-missing`, and an
 /// unknown address book `addressbook-not-found` naming the ones held.

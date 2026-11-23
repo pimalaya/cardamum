@@ -130,7 +130,7 @@ impl PimdirBackend {
             }));
 
             let (mut total, mut hydrated) = (0, 0);
-            self.scan(&collection.id, |item| {
+            self.scan(&collection.id, None, |item| {
                 total += 1;
                 hydrated += usize::from(item.object.is_some());
                 Ok(ControlFlow::Continue(()))
@@ -585,7 +585,8 @@ impl PimdirBackend {
         let mut cards = Vec::new();
         let mut errors = Vec::new();
 
-        self.scan(addressbook_id, |item| {
+        let want = take.map(|take| skip.saturating_add(take));
+        self.scan(addressbook_id, want, |item| {
             if skip > 0 {
                 skip -= 1;
                 return Ok(ControlFlow::Continue(()));
@@ -785,21 +786,29 @@ impl PimdirBackend {
     ///
     /// The order is the contacts one the store maintains, display name
     /// ascending. One batch of rows is held at a time, never the
-    /// collection.
+    /// collection, and no more rows are read than the `want` first ones
+    /// when the visitor needs no more.
     fn scan(
         &self,
         addressbook_id: &str,
+        want: Option<usize>,
         mut visit: impl FnMut(PimdirItem) -> Result<ControlFlow<()>>,
     ) -> Result<()> {
         let mut cursor: Option<(String, i64)> = None;
+        let mut read = 0;
 
         loop {
+            let size = match want {
+                Some(want) => SCAN_BATCH.min(want.saturating_sub(read)).max(1),
+                None => SCAN_BATCH,
+            };
             let batch = self.inner.reader.list_summaries(
                 addressbook_id,
                 cursor.as_ref().map(|(key, seq)| (key.as_str(), *seq)),
-                SCAN_BATCH,
+                size,
             )?;
             let len = batch.len();
+            read += len;
             if let Some(last) = batch.last() {
                 cursor = Some((last.sort_key.clone(), last.seq));
             }
@@ -808,7 +817,7 @@ impl PimdirBackend {
                     return Ok(());
                 }
             }
-            if len < SCAN_BATCH {
+            if len < size {
                 return Ok(());
             }
         }
@@ -1474,7 +1483,7 @@ mod tests {
     /// every card built with its body, then the page cut in memory.
     fn eager(backend: &PimdirBackend, skip: usize, take: Option<usize>) -> Result<Vec<Card>> {
         let mut all = Vec::new();
-        backend.scan("book", |item| {
+        backend.scan("book", None, |item| {
             all.push(item);
             Ok(ControlFlow::Continue(()))
         })?;

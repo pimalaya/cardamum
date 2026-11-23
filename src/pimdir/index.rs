@@ -34,6 +34,10 @@ impl PimdirBackend {
     /// One page of the cards `query` matches in the account, or in the
     /// address book `addressbook` alone, ordered and paged by `options`.
     ///
+    /// `skip` pages are first walked through the cursor on the one index
+    /// opened, their hits never read: past the end, the page holds no hit,
+    /// no next page and the coverage of the last page walked.
+    ///
     /// A hit the store cannot read is an entry alone, coded as its failure
     /// is or `card-unreadable`, the other hits listed.
     pub fn search_cards(
@@ -41,11 +45,32 @@ impl PimdirBackend {
         query: PimdirQuery,
         addressbook: Option<&str>,
         options: &PimdirSearchOptions,
+        skip: usize,
     ) -> Result<PimdirCardPage> {
         let query = self.scope(query, addressbook)?;
         let index = self.index()?;
+        let mut options = options.clone();
+
+        for _ in 0..skip {
+            let skipped = index
+                .search(&query, &options)
+                .map_err(|err| refusal(err, "Search the pimdir index"))?;
+
+            match skipped.next {
+                Some(next) => options.after = Some(next),
+                None => {
+                    return Ok(PimdirCardPage {
+                        hits: Vec::new(),
+                        next: None,
+                        coverage: PimdirCardCoverage::from(&skipped.coverage),
+                        errors: Vec::new(),
+                    });
+                }
+            }
+        }
+
         let answer = index
-            .search(&query, options)
+            .search(&query, &options)
             .map_err(|err| refusal(err, "Search the pimdir index"))?;
 
         let mut hits = Vec::with_capacity(answer.hits.len());
@@ -562,7 +587,7 @@ mod tests {
             ..Default::default()
         };
         backend
-            .search_cards(query(text), addressbook, &options)
+            .search_cards(query(text), addressbook, &options, 0)
             .unwrap()
     }
 
@@ -710,7 +735,7 @@ mod tests {
         assert_eq!(coverage.bodiless, 1);
 
         let err = backend
-            .search_cards(query("offsite"), Some("nope"), &Default::default())
+            .search_cards(query("offsite"), Some("nope"), &Default::default(), 0)
             .err()
             .unwrap();
         assert!(err.to_string().contains("`nope` not found"), "{err}");
@@ -1001,7 +1026,7 @@ mod tests {
                 ..Default::default()
             };
             let mut ranked: Vec<String> = backend
-                .search_cards(query(text), None, &options)
+                .search_cards(query(text), None, &options, 0)
                 .unwrap()
                 .hits
                 .into_iter()
@@ -1035,10 +1060,10 @@ mod tests {
         );
 
         let first = backend
-            .search_cards(query("kind:contact"), None, &options(None))
+            .search_cards(query("kind:contact"), None, &options(None), 0)
             .unwrap();
         let second = backend
-            .search_cards(query("kind:contact"), None, &options(first.next))
+            .search_cards(query("kind:contact"), None, &options(first.next), 0)
             .unwrap();
         assert_eq!(second.hits.len(), 2);
         assert_eq!(
@@ -1046,7 +1071,7 @@ mod tests {
             Some("Carol Roux")
         );
         let last = backend
-            .search_cards(query("kind:contact"), None, &options(second.next))
+            .search_cards(query("kind:contact"), None, &options(second.next), 0)
             .unwrap();
         assert_eq!(last.hits.len(), 1);
         assert!(last.next.is_none());
@@ -1211,7 +1236,7 @@ mod tests {
     /// engine builds the index and advising to delete nothing.
     fn assert_refused(backend: &PimdirBackend, code: ErrorCode) -> String {
         let err = backend
-            .search_cards(query("peanuts"), None, &Default::default())
+            .search_cards(query("peanuts"), None, &Default::default(), 0)
             .err()
             .unwrap();
         assert_eq!(code_of(&err), Some(code), "{err:#}");

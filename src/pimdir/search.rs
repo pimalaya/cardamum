@@ -150,43 +150,21 @@ pub fn search_page(
         after: None,
         clock: PimdirSearchClock::default(),
     };
-    let mut past_end = None;
 
-    let page = match token {
+    let (skip, page) = match token {
         Some(token) => {
             let cursor =
                 PimdirSearchCursor::from_token(token).ok_or_else(|| page_token_invalid(token))?;
             options.after = Some(cursor);
-            None
+            (0, None)
         }
         None => {
             let page = page.max(1);
-
-            for _ in 1..page {
-                let skipped = backend.search_cards(query.clone(), addressbook, &options)?;
-
-                match skipped.next.clone() {
-                    Some(next) => options.after = Some(next),
-                    None => {
-                        past_end = Some(skipped);
-                        break;
-                    }
-                }
-            }
-
-            Some(page as u64)
+            (page - 1, Some(page as u64))
         }
     };
 
-    let found = match past_end {
-        Some(mut last) => {
-            last.hits.clear();
-            last.errors.clear();
-            last
-        }
-        None => backend.search_cards(query, addressbook, &options)?,
-    };
-
+    let found = backend.search_cards(query, addressbook, &options, skip)?;
     Ok((found, page))
 }
 

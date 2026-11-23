@@ -11,14 +11,36 @@ use io_jmap::{
 };
 use serde_json::{Map, Value, json};
 
-use crate::jmap::client::JmapClient;
+use crate::{
+    error::{ErrorCode, ItemError},
+    jmap::client::JmapClient,
+};
 
-/// What a `Foo/get` answered: its objects as sent, and its state.
+/// What a `Foo/get` answered: its objects as sent, its state, and the
+/// ids it found nothing for.
 pub struct JmapRawList {
     /// The objects of `list`, as the server sent them.
     pub list: Vec<Value>,
     /// The `state` of the answer.
     pub state: String,
+    /// The ids of `notFound`: those the get found no object for.
+    pub not_found: Vec<String>,
+}
+
+impl JmapRawList {
+    /// The item error of each id the get found nothing for, coded `code`,
+    /// `what` naming the object in the message.
+    pub fn not_found_errors(&self, code: ErrorCode, what: &str) -> Vec<ItemError> {
+        self.not_found
+            .iter()
+            .map(|id| ItemError {
+                id: Some(id.clone()),
+                code: Some(code),
+                error: format!("The JMAP server holds no such {what}"),
+                sources: vec![String::from("notFound")],
+            })
+            .collect()
+    }
 }
 
 /// Sends `<object>/get` of `ids` (every object when `None`) under the
@@ -57,6 +79,20 @@ pub fn get(client: &mut JmapClient, object: &str, ids: Option<Vec<String>>) -> R
         Some(Value::String(state)) => state,
         _ => String::new(),
     };
+    let not_found = match get.remove("notFound") {
+        Some(Value::Array(ids)) => ids
+            .into_iter()
+            .filter_map(|id| match id {
+                Value::String(id) => Some(id),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
 
-    Ok(JmapRawList { list, state })
+    Ok(JmapRawList {
+        list,
+        state,
+        not_found,
+    })
 }

@@ -217,4 +217,36 @@ mod tests {
             assert_eq!(printed["state"], "s1", "{command}: {printed}");
         }
     }
+
+    /// An id a get finds nothing for is an item error, coded as a unified
+    /// read of it is, beside the objects found, and exits 3.
+    #[test]
+    fn an_id_a_get_does_not_find_is_an_item_error() {
+        let cases = [
+            (
+                "ContactCard",
+                ["contact-card", "get", "c1", "c9"],
+                "card-not-found",
+            ),
+            (
+                "AddressBook",
+                ["address-book", "get", "b1", "c9"],
+                "addressbook-not-found",
+            ),
+        ];
+
+        for (object, command, code) in cases {
+            let sent = json!({"id": "c1", "name": {"full": "Jane"}});
+            let get = json!({"accountId": "a1", "state": "s1", "list": [sent], "notFound": ["c9"]});
+            let body = answer(json!([format!("{object}/get"), get, "c0"]));
+            let (result, printed) = run(&command, 200, body);
+
+            let err = result.unwrap_err();
+            assert!(partial_outcome_of(&err).is_some(), "{object}: {err:#}");
+            let printed = printed.unwrap();
+            assert_eq!(printed["list"], json!([sent]), "{object}: {printed}");
+            assert_eq!(printed["errors"][0]["id"], "c9", "{object}: {printed}");
+            assert_eq!(printed["errors"][0]["code"], code, "{object}: {printed}");
+        }
+    }
 }

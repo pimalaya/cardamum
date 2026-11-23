@@ -73,6 +73,7 @@ impl JmapContactCardQueryCommand {
                     .collect::<Result<_, _>>()?,
                 state: None,
                 query_state: Some(out.query_state),
+                errors: None,
             },
             next_page: next_page.then(|| next.to_string()),
         })

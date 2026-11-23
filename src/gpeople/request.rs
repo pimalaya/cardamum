@@ -57,13 +57,15 @@ fn parse_body(body: Option<&str>) -> Result<Value> {
     serde_json::from_str(body.unwrap_or("null")).context("Parse request body JSON error")
 }
 
-/// The request URL: a full URL as-is, else joined onto the People base,
-/// refused off the People origin.
+/// The request URL: a full URL (one holding `://`) as-is, else a path
+/// joined onto the People base, refused off the People origin. The path
+/// joins as `./<path>`, so the colon of a custom method on a collection
+/// (`people:createContact`) is not read as a scheme.
 fn resolve_url(path: &str) -> Result<Url> {
     let base = Url::parse(GPEOPLE_API_BASE)?;
-    let url = match path.starts_with("http") {
+    let url = match path.contains("://") {
         true => Url::parse(path)?,
-        false => base.join(path.trim_start_matches('/'))?,
+        false => base.join(&format!("./{}", path.trim_start_matches('/')))?,
     };
 
     if url.origin() != base.origin() {
@@ -90,6 +92,28 @@ mod tests {
 
         let full = "https://people.googleapis.com/v1/contactGroups";
         assert_eq!(resolve_url(full).unwrap().as_str(), full);
+    }
+
+    /// A path naming a custom method of a collection (`people:createContact`)
+    /// joins onto the People base, its colon not read as a scheme.
+    #[test]
+    fn a_custom_method_path_resolves_on_the_people_origin() {
+        for (path, url) in [
+            (
+                "people:createContact",
+                "https://people.googleapis.com/v1/people:createContact",
+            ),
+            (
+                "/contactGroups:batchGet?resourceNames=contactGroups/a",
+                "https://people.googleapis.com/v1/contactGroups:batchGet?resourceNames=contactGroups/a",
+            ),
+            (
+                "people/c1:updateContact",
+                "https://people.googleapis.com/v1/people/c1:updateContact",
+            ),
+        ] {
+            assert_eq!(resolve_url(path).expect(path).as_str(), url);
+        }
     }
 
     /// A URL off the People origin is refused before the token is sent,

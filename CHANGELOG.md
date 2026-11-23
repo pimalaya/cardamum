@@ -208,6 +208,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed `jmap contact-card get` and `jmap address-book get` dropping the ids the server found nothing for (`notFound`) and exiting 0: each is now an `errors` entry coded `card-not-found` or `addressbook-not-found`, the command exiting 3.
+- Fixed `gpeople connections update` replacing the `etag` its JSON names with the person's current one, which let a stale write overwrite a newer person: the JSON's etag is now sent as the guard, the current one fetched only when it names none.
+- Fixed `gpeople request` refusing a path naming a custom method on a collection (`people:createContact`, `contactGroups:batchGet`) as off the API origin: only an argument holding `://` is a full URL now, any other joining onto the People base.
 - Fixed the text of a refused query, which read `Error: [unknown-field] Error: Query refused`: the second `Error:` is gone, as in Himalaya.
 - Fixed a pimdir `card add` of a card with no `UID` and an `X-PIMDIR-` property queueing it under the `hash:` key of the bytes before that property was dropped, a key naming a body the store never holds: the key is now the one io-pimdir derives from the queued body, the id reported (io-pimdir 0.19.0 refuses the former with `hash-key-mismatch`).
 - Fixed `card list` and `jmap contact-card query` to code a page token they did not print `page-token-invalid`.

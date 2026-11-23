@@ -159,4 +159,24 @@ mod tests {
             assert!(sent.starts_with(request), "{line:?}: {sent}");
         }
     }
+
+    /// An update whose JSON names an etag sends that etag as its guard,
+    /// reading nothing first, so a person changed since the caller read
+    /// it is refused rather than overwritten.
+    #[test]
+    fn an_update_sends_the_etag_the_caller_gave() {
+        let body = r#"{"etag":"%Mine","names":[{"givenName":"Jane"}]}"#;
+        let updated = json!({"resourceName": "people/c9", "etag": "%Next"});
+        let (result, _, requests) = run(&["connections", "update", "c9", body], 200, updated);
+        result.unwrap();
+
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1);
+        let sent = String::from_utf8_lossy(&requests[0]).into_owned();
+        assert!(
+            sent.starts_with("PATCH /v1/people/c9:updateContact"),
+            "{sent}"
+        );
+        assert!(sent.contains(r#""etag":"%Mine""#), "{sent}");
+    }
 }

@@ -9,12 +9,15 @@ use core::fmt;
 use io_jmap::rfc9610::{address_book::JmapAddressBook, contact_card::JmapContactCard};
 use pimalaya_cli::{
     columns::Columns,
+    error::ItemErrors,
     fields::Fields,
     records::{Record, Records},
     sanitize,
 };
 use schemars::JsonSchema;
 use serde::Serialize;
+
+use crate::error::ItemError;
 
 /// JSContact `name.full` of a card, or the empty string.
 pub fn card_name(card: &JmapContactCard) -> &str {
@@ -44,6 +47,9 @@ pub struct JmapAddressBooksOutput {
     pub books: Vec<serde_json::Value>,
     /// The state token to feed to `address-book changes`.
     pub state: String,
+    /// The error of each id the get found no AddressBook for, coded
+    /// `addressbook-not-found`, `[]` when none.
+    pub errors: Vec<ItemError>,
 }
 
 impl fmt::Display for JmapAddressBooksOutput {
@@ -73,8 +79,20 @@ impl fmt::Display for JmapAddressBooksOutput {
             writeln!(f, "{records}")?;
         }
 
-        writeln!(f, "state: {}", sanitize::text(&self.state))
+        writeln!(f, "state: {}", sanitize::text(&self.state))?;
+        write_errors_after(f, &self.errors)
     }
+}
+
+/// Writes one blank line then the item errors, nothing when none.
+fn write_errors_after(f: &mut fmt::Formatter<'_>, errors: &[ItemError]) -> fmt::Result {
+    let mut rows = ItemErrors::default();
+
+    for error in errors {
+        rows.push(error);
+    }
+
+    rows.write_after(f)
 }
 
 /// A single address book; `--json` emits the raw JMAP object.
@@ -113,6 +131,10 @@ pub struct JmapContactCardsOutput {
     /// takes and `contact-card changes` does not; none for a get.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub query_state: Option<String>,
+    /// The error of each id a get found no ContactCard for, coded
+    /// `card-not-found`, `[]` when none; none for a query.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub errors: Option<Vec<ItemError>>,
 }
 
 impl fmt::Display for JmapContactCardsOutput {
@@ -142,7 +164,7 @@ impl fmt::Display for JmapContactCardsOutput {
             writeln!(f, "queryState: {}", sanitize::text(state))?;
         }
 
-        Ok(())
+        write_errors_after(f, self.errors.as_deref().unwrap_or_default())
     }
 }
 

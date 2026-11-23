@@ -2962,4 +2962,57 @@ mod tests {
         assert_eq!(errors[0].code, Some(ErrorCode::ActionMalformed));
         assert!(errors[0].error.contains("`book`"), "{errors:?}");
     }
+
+    /// A `set-property` another program queues on a card lists as any row,
+    /// naming the card it changes, and `queue show` and `queue cancel`
+    /// take it.
+    #[test]
+    fn a_set_property_row_names_its_card() {
+        use clap::Parser;
+        use io_pimdir::client::producer::PimdirProducer;
+
+        use crate::pimdir::queue::{
+            cancel::PimdirQueueCancelCommand, show::PimdirQueueShowCommand,
+        };
+
+        let (dir, mut backend) = store();
+        pulled(&dir, "book", JANE);
+        let id = backend.list_cards("book", 0, None).unwrap().cards[0]
+            .id
+            .clone();
+        let action = PimdirAction::SetProperty {
+            seq: id.parse().unwrap(),
+            key: String::from(io_pimdir::property::LABEL),
+            add: vec![String::from("vip")],
+            remove: Vec::new(),
+        };
+        PimdirProducer::open(dir.path(), "labeller")
+            .unwrap()
+            .enqueue("book", &action, None)
+            .unwrap();
+
+        let (rows, errors) = backend.pending_rows(None).unwrap();
+        assert!(errors.is_empty(), "{errors:?}");
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        let json = serde_json::to_value(&rows[0]).unwrap();
+        assert_eq!(json["kind"], "set-property", "{json}");
+        assert_eq!(json["itemId"], id.as_str(), "{json}");
+        assert_eq!(json["fullName"], "Jane Doe", "{json}");
+        assert_eq!(json["linkId"], serde_json::Value::Null, "{json}");
+        let row = rows[0].id.to_string();
+
+        let mut out = Captured::default();
+        PimdirQueueShowCommand::parse_from(["show", &row])
+            .execute(&mut out, &backend)
+            .unwrap();
+        assert_eq!(out.json["kind"], "set-property", "{}", out.json);
+        assert_eq!(out.json["state"], "pending", "{}", out.json);
+
+        let mut out = Captured::default();
+        PimdirQueueCancelCommand::parse_from(["cancel", "-y", &row])
+            .execute(&mut out, &backend)
+            .unwrap();
+        assert_eq!(out.json["kind"], "set-property", "{}", out.json);
+        assert_eq!(pending(&backend), 0);
+    }
 }

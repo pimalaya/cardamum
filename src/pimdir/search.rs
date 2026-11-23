@@ -38,10 +38,12 @@ use crate::{
 /// The query is pimdir SEARCH.md §8: words and "phrases" (a trailing `*`
 /// for a prefix), `field:value` terms (`email:`, `has:phone`,
 /// `has:address`, `has:birthday`, `has:photo`, `category:`, `collection:`
-/// and the others), `and`, `or`, `not` or a leading `-` (its word after
-/// `--`), and parentheses. Free text reaches a card's names,
-/// organization, notes and numbers. It is read over the account's cards,
-/// every address book of it unless `-k` names one.
+/// or `folder:`, `label:`, `property:` and the others), `and`, `or`, `not`
+/// or a leading `-` (its word after `--`), and parentheses. A word opening
+/// on `~` or `/`, or a value on `{`, is reserved and refused: quote it to
+/// search it. Free text reaches a card's names, organization, notes and
+/// numbers. It is read over the account's cards, every address book of it
+/// unless `-k` names one.
 ///
 /// The answer comes from the store's search index, which the sync engine
 /// builds and refreshes after each run: a card is found once it is synced

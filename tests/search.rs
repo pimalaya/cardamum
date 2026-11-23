@@ -159,6 +159,55 @@ fn the_sort_named_name_is_title() {
     assert!(!help.contains("- name:"), "{help}");
 }
 
+/// A word opening on `~` or `/`, or a value on `{`, is a form SEARCH
+/// §8.4 reserves, refused `query-refused` naming `reserved-form` and its
+/// span before anything is read; quoted, it is a phrase like any other.
+#[test]
+fn a_reserved_form_is_refused_on_every_backend() {
+    let (home, config) = vdir();
+
+    for (text, span) in [
+        ("~alice", "0..6"),
+        ("/home", "0..5"),
+        ("category:{x}", "9..12"),
+    ] {
+        let (code, refused) = json(home.path(), &config, &[text]);
+        assert_eq!(code, Some(1), "{text}: {refused}");
+        assert_eq!(refused["code"], "query-refused", "{text}: {refused}");
+        let error = refused["error"].as_str().unwrap();
+        assert!(
+            error.contains(&format!("reserved-form at {span}")),
+            "{text}: {error}"
+        );
+    }
+
+    let (code, quoted) = json(home.path(), &config, &["\"~alice\""]);
+    assert_eq!(code, Some(0), "{quoted}");
+    assert!(names(&quoted).is_empty(), "{quoted}");
+}
+
+/// `label:` and `property:` read the store's item properties, which no
+/// card of vdir holds: each is refused `query-unsupported` naming it,
+/// before anything is read.
+#[test]
+fn a_label_is_a_store_term() {
+    let (home, config) = vdir();
+
+    for (text, term) in [
+        ("label:x", "`label:x`"),
+        ("property:a/b=c", "`property:a/b=c`"),
+    ] {
+        let (code, unsupported) = json(home.path(), &config, &[text]);
+        assert_eq!(code, Some(1), "{text}: {unsupported}");
+        assert_eq!(
+            unsupported["code"], "query-unsupported",
+            "{text}: {unsupported}"
+        );
+        let error = unsupported["error"].as_str().unwrap();
+        assert!(error.contains(term), "{text}: {error}");
+    }
+}
+
 /// A malformed query is `query-refused`, a store term
 /// `query-unsupported` naming it, relevance `capability-missing`, and an
 /// unknown address book `addressbook-not-found` naming the ones held.

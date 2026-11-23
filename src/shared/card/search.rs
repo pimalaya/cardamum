@@ -35,20 +35,21 @@ use crate::{
 /// The query is pimdir SEARCH.md §8, the one `pimdir search` takes: words
 /// and "phrases" (a trailing `*` for a prefix), `field:value` terms
 /// (`email:`, `has:phone`, `category:` and the others), `and`, `or`,
-/// `not` or a leading `-` (its word after `--`), and parentheses. It is
-/// parsed before any backend is reached, so a query is refused the same
-/// way everywhere (`query-refused`). It reads every address book of the
-/// account, or the one `-k` names.
+/// `not` or a leading `-` (its word after `--`), and parentheses. A word
+/// opening on `~` or `/`, or a value on `{`, is reserved and refused: quote
+/// it to search it. It is parsed before any backend is reached, so a query
+/// is refused the same way everywhere (`query-refused`). It reads every
+/// address book of the account, or the one `-k` names.
 ///
 /// pimdir answers from the store's index, as `pimdir search` does. vdir
 /// reads every card of the address books in scope and matches each as an
 /// index holding them would: a term only a pimdir store answers (`tag:`,
 /// `flag:`, `is:`, `changed:`, `thread:`, `id:`, `linked:`, `account:`,
-/// `collection:`) is refused there whole, before anything is read
-/// (`query-unsupported`).
+/// `collection:`, `folder:`, `label:`, `property:`) is refused there whole,
+/// before anything is read (`query-unsupported`).
 ///
-/// Hits are ordered by name, or by relevance on a backend ranking them
-/// (`card.search.sort`).
+/// Hits are ordered by title (the display name), or by relevance on a
+/// backend ranking them (`card.search.sort`).
 ///
 /// JSON output: `{"cards": [{...card list row}], "nextPage",
 /// "complete", "errors": [{"id", "code", "error", "sources"}]}`:

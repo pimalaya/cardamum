@@ -829,15 +829,113 @@ mod tests {
         assert!(past["nextPage"].is_null());
     }
 
+    /// `pimdir search` and `pimdir count` refuse a form SEARCH §8.4
+    /// reserves (`~`, `/`, `{`) as `query-refused` naming `reserved-form`,
+    /// and answer it quoted.
+    #[test]
+    fn a_reserved_form_is_refused_by_search_and_count() {
+        use clap::Parser;
+        use pimalaya_cli::printer::CapturePrinter;
+
+        use crate::{
+            account::context::Account,
+            pimdir::{count::PimdirCountCommand, search::PimdirSearchCommand},
+        };
+
+        let (_dir, backend) = indexed_store();
+        let search = |text: &str| {
+            let cmd = PimdirSearchCommand::try_parse_from(["search", text]).unwrap();
+            let mut printer = CapturePrinter::default();
+            cmd.execute(&mut printer, "a", &Account::default(), &backend)
+        };
+        let count = |text: &str| {
+            let cmd = PimdirCountCommand::try_parse_from(["count", text]).unwrap();
+            cmd.execute(&mut CapturePrinter::default(), &backend)
+        };
+
+        for text in ["~alice", "/home", "category:{x}"] {
+            for err in [search(text).unwrap_err(), count(text).unwrap_err()] {
+                assert_eq!(code_of(&err), Some(ErrorCode::QueryRefused), "{text}");
+                assert!(err.to_string().contains("reserved-form"), "{text}: {err}");
+            }
+        }
+        search("\"~alice\"").unwrap();
+        count("\"~alice\"").unwrap();
+    }
+
+    /// A label the owner sets on a card is found by `label:` once the
+    /// index is refreshed, folded as labels compare, and `property:` reads
+    /// a property of the card's under its key.
+    #[test]
+    fn a_label_finds_its_card() {
+        let (dir, backend) = indexed_store();
+        let alice = page(&backend, "peanuts", None).hits[0].card.id.clone();
+        let seq: i64 = alice.parse().unwrap();
+        let mut store = PimdirStore::open(dir.path()).unwrap();
+        assert!(
+            store
+                .add_property(seq, io_pimdir::property::LABEL, "VIP")
+                .unwrap()
+        );
+        assert!(store.add_property(seq, "app/tier", "gold").unwrap());
+        drop(store);
+        refresh(dir.path());
+
+        assert_eq!(names(&backend, "label:vip", None), ["Alice Martin"]);
+        assert_eq!(
+            names(&backend, "property:app/tier=gold", None),
+            ["Alice Martin"]
+        );
+        assert!(names(&backend, "label:other", None).is_empty());
+    }
+
+    /// The forms search-draft-17 adds to the query language are taken and
+    /// answered: `mid:`, a relative date in minutes, hours or months, and
+    /// an instant.
+    #[test]
+    fn the_new_date_forms_are_accepted() {
+        let (_dir, backend) = indexed_store();
+
+        for text in [
+            "date:30min",
+            "date:2h",
+            "date:3mo",
+            "date:2026-08-01T10:00",
+            "kind:contact date:2026-08-01T10:00",
+        ] {
+            page(&backend, text, None);
+        }
+        assert!(names(&backend, "mid:x", None).is_empty());
+        assert!(names(&backend, "mid:agenda@example.org", None).is_empty());
+    }
+
     /// The matcher `card search` reads every other backend's cards with
     /// answers the hits the index answers over the same bodies, in the
-    /// same order: the unified search is one answer on every backend.
+    /// same title order, and the same set by relevance, a card with no
+    /// `FN` and one whose name folds among them: the unified search is
+    /// one answer on every backend.
     #[test]
     fn the_matcher_answers_the_hits_of_the_index() {
         use io_pimdir::search::{card::PimdirCard, fold};
 
-        let (_dir, backend) = indexed_store();
+        let (dir, mut backend) = indexed_store();
+        let emile = card(
+            "emile",
+            "Émile Zola",
+            "EMAIL:emile@example.org\r\nNOTE:Catering the offsite\r\n",
+        );
+        let nameless = b"BEGIN:VCARD\r\nVERSION:4.0\r\nUID:nora\r\nN:Nofn;Nora;;;\r\n\
+            EMAIL:nora@example.org\r\nORG:Corp\r\nEND:VCARD\r\n"
+            .to_vec();
+        for body in [&emile, &nameless] {
+            backend.create_card(BOOK, body.clone()).unwrap();
+        }
+        drain(dir.path());
+        refresh(dir.path());
+
         let bodies = [
+            emile,
+            nameless,
             card(
                 "carol",
                 "Carol Roux",
@@ -872,6 +970,10 @@ mod tests {
             "durand",
             "peanut*",
             "corp",
+            "emile",
+            "zola",
+            "nora",
+            "kind:contact",
         ] {
             let matched = query(text).match_cards(&cards).unwrap();
             let mut hits: Vec<String> = bodies
@@ -893,6 +995,21 @@ mod tests {
             let mut indexed = names(&backend, text, None);
             indexed.retain(|name| name != "Erin Quill");
             assert_eq!(hits, indexed, "{text}");
+
+            let options = PimdirSearchOptions {
+                sort: io_pimdir::client::search::PimdirSearchSort::Relevance,
+                ..Default::default()
+            };
+            let mut ranked: Vec<String> = backend
+                .search_cards(query(text), None, &options)
+                .unwrap()
+                .hits
+                .into_iter()
+                .map(|hit| hit.card.fields.full_name.unwrap_or_default())
+                .filter(|name| name != "Erin Quill")
+                .collect();
+            ranked.sort_by_key(|name| fold::value(name));
+            assert_eq!(hits, ranked, "{text} by relevance");
         }
     }
 

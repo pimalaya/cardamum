@@ -28,7 +28,7 @@ For the io-pimdir lane (io-pimdir cairn/changes/what-the-consumers-need). Nothin
 
 - **What**: `PimdirReader::list_summaries` (keyset batches of a collection with each item's summary) reads a row about 25 to 35% slower at 7f16b27 than at 0.19.1.
 - **Why**: cardamum's two whole-collection walks regress: `card list --page 200` (the cards before the page counted off their rows, STORAGE order) and `pimdir status` (every card of every address book walked to count `total` and `hydrated`).
-- **Evidence**: inventory I10, 10k-card stores from one generator seed at both drafts, release binaries, A/A copies within 4%: `card list -k home/contacts --page 200` 21.5 to 26.7 ms, `pimdir status` 26.0 to 34.7 ms (6,965 cards); every other read got faster.
+- **Evidence**: inventory I10, 10k-card stores from one generator seed at both drafts, release binaries, A/A copies within 4%: `card list -k home/contacts --page 200` 21.5 to 26.7 ms, `pimdir status` 26.0 to 34.7 ms (6,965 cards); every other read got faster. At 100k cards: `card list -k home/contacts --page 200` 40.3 to 45.7 ms, `pimdir status` 418 to 614 ms; the page-1 reads (list, read, search, count) 2.4 to 36 ms, down from 4.9 to 521 ms.
 - **App test**: tasks H2's two measures; acceptance H3.
 - **Workaround**: none needed for correctness; cardamum ships slower on these two until a release fixes it, or N4 lands.
 
@@ -36,7 +36,7 @@ For the io-pimdir lane (io-pimdir cairn/changes/what-the-consumers-need). Nothin
 
 - **What**: a reader count of a collection's live items and of those holding a body, the pending overlay folded or not, as `count_pending_creates` counts creates.
 - **Why**: `pimdir status` (src/pimdir/backend.rs:133-137) walks every summary to count two integers; audit-2026-11-12 C5 already notes "a count of bodied items would need a statement".
-- **Evidence**: as N3; at 100k cards the walk is linear in the store.
+- **Evidence**: as N3; at 100k cards (seed 7, 1,000,000 items, 68,837 cards in the account `home`) the walk is linear in the store: `pimdir status` 418 ms at 0.19.1, 614 ms at cc3021b (+47%, A/A under 9%, measured 2026-11-23 while other lanes built).
 - **App test**: `pimdir status` counts unchanged on the indexed fixtures (src/pimdir/backend.rs tests), its H2 measure.
 - **Workaround**: the walk, kept.
 

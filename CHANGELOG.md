@@ -59,6 +59,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **BREAKING**: Changed the pimdir store cardamum reads to storage-draft-17 and its search index to search-draft-17 (io-pimdir 0.20): a store an earlier neverest wrote is refused `store-version`, never migrated. Sync it with that neverest until nothing is queued, move its directory aside, and let a neverest of the same io-pimdir sync a new store and build its index (see the README).
+- **BREAKING**: Changed the query language of `card search`, `pimdir search` and `pimdir count` to search-draft-17: a word opening on `~` or `/`, or a value on `{`, is refused `query-refused` (`reserved-form`), quoted it is searched; `label:` and `property:` find the cards holding a label or property on pimdir and are refused `query-unsupported` elsewhere; `mid:`, an instant (`date:2026-08-01T10:00`) and the relative units `min`, `h` and `mo` are accepted.
+- Changed `pimdir queue list`, `show` and `cancel` to list a `set-property` row another program queued as any row, naming the card it changes.
+- Changed `pimdir search --page <n>` to walk the pages before it on one opened index without reading their cards, and `card list` on pimdir to read no more rows than the page needs.
 - Changed the default `--sort` of `card search` and `pimdir search` to `title`, SEARCH §8.2's name of the display-name order; `name` stays a hidden alias of it.
 - Changed the dependency on io-pimdir to its storage-draft-17 revision; the network backends and vdir take its `contact` feature alone, so only the pimdir backend links SQLite, and the binary no longer links ical-rs and mime-rs.
 - **BREAKING**: Changed `account check --json` to pimalaya-cli's list of accounts, `{accounts: [{account, backends}]}`.

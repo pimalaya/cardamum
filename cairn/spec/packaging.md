@@ -31,6 +31,14 @@ A server or proxy URL with a special scheme (`http`, `https`) SHALL be refused w
 ### Requirement: Feature-gated backends
 Every backend SHALL sit behind its own cargo feature (`carddav`, `jmap`, `msgraph`, `gpeople`, `vdir`, `pimdir`), so a build ships only the protocols it needs. A protocol command and its backend adapter compile only when its feature is on; the unified command tree compiles in every build.
 
+### Requirement: Only the pimdir backend links SQLite
+The `pimdir` feature SHALL take io-pimdir's `client`, `search` and `contact`; `carddav`, `jmap`, `msgraph`, `gpeople` and `vdir` SHALL take its `contact` alone (the card matcher, no SQLite, no mail or calendar parser). The tests take its `indexer` as a dev-dependency, so no release binary carries the index refresh.
+
+#### Scenario: A CardDAV-only build
+- GIVEN `--no-default-features --features rustls-ring,carddav`
+- WHEN `cargo tree -e normal -i rusqlite` runs
+- THEN no package matches
+
 ### Requirement: Every backend builds alone
 clippy `--all-targets -D warnings` SHALL pass on the default build, all features, `rustls-ring` with no backend, `native-tls,jmap`, `rustls-ring,vdir,pimdir` and each backend alone with `rustls-ring`, checked in CI.
 

@@ -213,12 +213,12 @@ A refusal none of these name SHALL carry no code, its reason kept in `sources`. 
 - THEN it exits 1 printing a failure object coded `permission-denied`
 
 ### Requirement: A pimdir store of another version is refused in io-pimdir's words
-The pimdir backend SHALL open a store of the format version the io-pimdir it builds against reads (`io_pimdir::sql::FORMAT_VERSION`, `storage-draft-14` in io-pimdir 0.17) and no other, earlier or later, refusing it as `store-version` and reading nothing in it (pimdir STORAGE §4.2, §6). Nothing migrates a draft store. The refusal's message SHALL be io-pimdir's one wording, `version::PimdirFormatRefusal` naming `cardamum` as the program, so every program of the family says it alike: it names the version the store records, or that it records none, and the one cardamum reads, and orders them by STORAGE §4.2. A store an earlier sync engine wrote is synced with that engine until nothing is queued, then its directory moved aside and a new store synced; a store a later engine wrote asks for a later cardamum. It SHALL NOT advise deleting the store: the queued writes live in that store alone.
+The pimdir backend SHALL open a store of the format version the io-pimdir it builds against reads (`io_pimdir::sql::FORMAT_VERSION`, `storage-draft-17` in io-pimdir cc3021b, its release 0.20 once published) and no other, earlier or later, refusing it as `store-version` and reading nothing in it (pimdir STORAGE §4.2, §6). Nothing migrates a draft store. The refusal's message SHALL be io-pimdir's one wording, `version::PimdirFormatRefusal` naming `cardamum` as the program, so every program of the family says it alike: it names the version the store records, or that it records none, and the one cardamum reads, and orders them by STORAGE §4.2. A store an earlier sync engine wrote is synced with that engine until nothing is queued, then its directory moved aside and a new store synced; a store a later engine wrote asks for a later cardamum. It SHALL NOT advise deleting the store: the queued writes live in that store alone.
 
 #### Scenario: A store an earlier sync engine wrote
-- GIVEN a pimdir store whose `store_meta.format_version` is `storage-draft-11`
+- GIVEN a pimdir store whose `store_meta.format_version` is `storage-draft-15`, as io-pimdir 0.19 wrote it
 - WHEN any cardamum command opens it
-- THEN it fails with the code `store-version` and a message naming `storage-draft-11`, `storage-draft-14`, an earlier sync engine, the queue synced until nothing is queued and the directory moved aside
+- THEN it fails with the code `store-version` and a message naming `storage-draft-15`, `storage-draft-17`, an earlier sync engine, the queue synced until nothing is queued and the directory moved aside
 
 #### Scenario: A store a later sync engine wrote
 - GIVEN a pimdir store of a later draft than cardamum reads

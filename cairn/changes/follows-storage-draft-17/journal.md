@@ -1,3 +1,10 @@
+---
+cairn: change
+id: follows-storage-draft-17
+status: active
+created: 2026-11-23
+---
+
 # Journal
 
 - 2026-11-23 A1: `cargo update -p url` gives url 2.5.9, form_urlencoded 1.2.3; `cargo deny check` advisories, bans, licenses, sources ok.
@@ -9,3 +16,12 @@
 - 2026-11-23 C2: the B5 binary on a copy of c10k-d15: `store-version`, exit 1, "Pimdir store is storage-draft-15, written by an earlier sync engine, and cardamum reads storage-draft-17 alone: a store is never migrated, so sync it with the engine that wrote it until nothing is queued, then move its directory aside and sync a new store".
 - 2026-11-23 E1-E5: tests added, all pass on cc3021b: tests/search.rs `a_reserved_form_is_refused_on_every_backend`, `a_label_is_a_store_term`; src/pimdir/index.rs `a_reserved_form_is_refused_by_search_and_count`, `a_label_finds_its_card` (a label set `VIP` found by `label:vip`, plus `property:app/tier=gold`), `the_new_date_forms_are_accepted`; src/pimdir/backend.rs `a_set_property_row_names_its_card`; the matcher test gains `Émile Zola` and a card with no `FN`, title order and relevance set both equal to the index. Not re-run on 0.19.1 (it does not compile there); inventory I7 holds the 0.19.1 answers.
 - 2026-11-23 E6: `card search` and `pimdir search` doc comments name `folder:`, `label:`, `property:` and the reserved forms.
+- 2026-11-23 H0: c10k d15 and d17 copied from the planning scratch into ~/code/pimalaya/.lanes/cardamum/stores; c100k (seed 7, 1,000,000 items, contacts kept) written there by the planning cardfix binaries at 0.19.1 and 7f16b27 (cc3021b changes no format); vdir of c10k home bodies (contacts 5,511, colleagues 1,454) exported by sqlite3 from c10k-d17.
+- 2026-11-23 H1: old = the planning bin/cardamum-base (22c0bd5, io-pimdir 0.19.1), new = release at a96cc63 (cc3021b); three copies each in .lanes/cardamum/bin; hyperfine 1.20 `-N -w 3 -r 20` on CPU 15 under the measure lock, copies interleaved (.lanes/cardamum/measure.sh, summary.sh).
+- 2026-11-23 H2 10k first pass: load average 22 (seven lanes building), A/A spreads 2 to 48%, indicative only; the quiet-window re-run decides.
+- 2026-11-23 H4: both candidates kept (beyond noise, c10k, load 21): one `PimdirIndex` across the page walk, skipped pages not hydrated (`search_cards_from`), `pimdir search --page 5 alice` 35.3 to 25.5 ms (A/A 8%); `scan` reading at most `skip + take` rows, `card list` page 1 6.4 to 3.1 ms twice (A/A under 10%); others unchanged within noise.
+- 2026-11-23 H2 (busy, load 12 to 22): old 0.19.1 vs the final tree (fin, identical to h4b), medians of three copies, A/A under 12% but update. c10k: list 8.25 to 2.77, list200 28.06 to 32.71 (+17%), read 4.89 to 2.34, search 38.34 to 7.95, search5 178.65 to 19.31, count 32.53 to 4.87, csearch 38.34 to 7.55, status 32.86 to 43.02 (+31%), vdir csearch 77.73 to 60.51, update 8.72 to 6.91 ms. c100k: list 8.57 to 2.74, list200 40.26 to 45.66 (+13%), read 4.89 to 2.39, search 395.39 to 30.42, search5 2468.75 to 152.61, count 499.21 to 22.58, csearch 521.46 to 36.31, status 418.08 to 613.88 (+47%), update 9.36 to 8.01 ms. JSON in .lanes/cardamum/hf.
+- 2026-11-23 H3: every page-1 read at 100k under 50 ms (max csearch 36.3); misses list200 and status only, the known N3 and N4 (needs-io-pimdir.md, 100k evidence added). The update measure restores pimdir.db and runs `sync` before each run: without the sync the A/A spread was 600%.
+- 2026-11-23 H5: parked until a quiet window at the end of the lane (load never under 12 so far).
+- 2026-11-23 G1: parked, waits on io-pimdir N1.
+- 2026-11-23 I1-I3: delta folded into cairn/spec backends.md, commands.md, packaging.md; CHANGELOG Changed (two BREAKING lines, set-property, the faster pages); README start-over note. I4 (log) waits on H5 and J1.

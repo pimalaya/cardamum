@@ -39,7 +39,7 @@ pimalaya-cli = { version = "0.8.1", default-features = false, features = ["build
 
 [dev-dependencies]
 io-oauth = { version = "0.8", default-features = false, features = ["std", "jwt-bearer", "rustls-ring"] }
-io-pimdir = { version = "0.20.2", default-features = false, features = ["indexer"] }
+io-pimdir = { version = "0.20.3", default-features = false, features = ["indexer"] }
 pimalaya-config = { version = "0.6.0", default-features = false, features = ["sample"] }
 tempfile = { version = "3", default-features = false }
 toml = { version = "1.1", default-features = false, features = ["parse", "serde"] }
@@ -56,7 +56,7 @@ io-http = { version = "0.9", default-features = false }
 io-jmap = { version = "0.11.1", default-features = false, features = ["std"], optional = true }
 io-msgraph = { version = "0.11.0", default-features = false, features = ["std"], optional = true }
 io-gpeople = { version = "0.9.1", default-features = false, features = ["std"], optional = true }
-io-pimdir = { version = "0.20.2", default-features = false, optional = true }
+io-pimdir = { version = "0.20.3", default-features = false, optional = true }
 io-vdir = { version = "0.3", default-features = false, features = ["client", "serde"], optional = true }
 io-webdav = { version = "0.14.0", default-features = false, features = ["std"], optional = true }
 log = { version = "0.4", default-features = false }

@@ -208,6 +208,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed the help of `addressbook delete` saying a Google People contact group goes with every card it holds: the group alone is deleted and its contacts stay in Contacts, a contact sitting in other groups too, which the help and the `addressbook.delete` detail of `account capability` now say.
+- Fixed `jmap address-book update --json` printing the `/set` reply's object, which states only what the server changed beyond the update, every other property as a default (`name: null`, every right `false`): it now always prints the id receipt `{"id"}`.
+- Fixed JMAP declaring `addressbook.delete` `full` when an address book may forbid its own deletion (`myRights.mayDelete: false`), as Fastmail's Personal does: `account capability` now says `server`.
 - Fixed JMAP declaring `addressbook.create` and `addressbook.update` `full` when a server may forbid both, as Fastmail does: `account capability` now says `server`, and `addressbook create` on an account whose session states `mayCreateAddressBook: false` fails coded `permission-denied` before any request.
 - Fixed `jmap address-book create --json` printing every property the server's reply left out as a default (`name: null`, every right `false`): it now prints the id receipt `{"id"}`, the id the server minted.
 - Fixed `vdir rename` onto a collection the root holds already failing with the raw "Directory not empty (os error 39)", or replacing an empty directory: it is refused coded `addressbook-duplicate`, ``Cannot rename collection `<id>` to `<new-id>`: it exists already``, nothing moved.

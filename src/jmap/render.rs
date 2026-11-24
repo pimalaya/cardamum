@@ -95,25 +95,6 @@ fn write_errors_after(f: &mut fmt::Formatter<'_>, errors: &[ItemError]) -> fmt::
     rows.write_after(f)
 }
 
-/// A single address book; `--json` emits the raw JMAP object.
-#[derive(Clone, Debug, Serialize, JsonSchema)]
-#[serde(transparent)]
-pub struct JmapAddressBookOutput(
-    #[schemars(with = "serde_json::Map<String, serde_json::Value>")] pub JmapAddressBook,
-);
-
-impl fmt::Display for JmapAddressBookOutput {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let book = &self.0;
-        let mut fields = Fields::default();
-        fields.push("Id", text(book.id.as_deref()));
-        fields.push("Name", text(book.name.as_deref()));
-        fields.push("Description", text_lines(book.description.as_deref()));
-        fields.push("Default", if book.is_default { "yes" } else { "no" });
-        write!(f, "{fields}")
-    }
-}
-
 /// A list of contact cards; `--json` emits the JMAP objects as the server
 /// sent them, beside the get's `state`, to feed to `contact-card changes`,
 /// or the query's `queryState`, to feed to a `queryChanges`.

@@ -357,7 +357,13 @@ const JMAP: &[Row] = &[
         C::AddressbookUpdate,
         Server("the server may forbid renaming an addressbook, as Fastmail does"),
     ),
-    (C::AddressbookDelete, Full),
+    (
+        C::AddressbookDelete,
+        Server(
+            "refused when the addressbook states `myRights.mayDelete: false`, as Fastmail's \
+             Personal does",
+        ),
+    ),
     (C::AddressbookDescription, Full),
     (
         C::AddressbookColor,
@@ -417,7 +423,10 @@ const GPEOPLE: &[Row] = &[
     ),
     (
         C::AddressbookDelete,
-        Partial("the Contacts system group cannot be deleted"),
+        Partial(
+            "a group is deleted alone, its contacts stay in Contacts, a contact sitting in other \
+             groups too; the Contacts system group cannot be deleted",
+        ),
     ),
     (
         C::AddressbookDescription,
@@ -520,6 +529,26 @@ mod tests {
             let support = support("jmap", capability);
             assert_eq!(support.level(), CapabilityLevel::Server, "{capability}");
         }
+    }
+
+    /// A JMAP AddressBook may forbid its own deletion
+    /// (`myRights.mayDelete: false`, as Fastmail's Personal book does), so
+    /// the delete is the server's, the detail naming the right.
+    #[test]
+    fn a_jmap_address_book_delete_is_the_server_s() {
+        let support = support("jmap", C::AddressbookDelete);
+        assert_eq!(support.level(), CapabilityLevel::Server);
+        let detail = support.detail().unwrap_or_default();
+        assert!(detail.contains("`myRights.mayDelete: false`"), "{detail}");
+    }
+
+    /// Deleting a People contact group keeps its contacts, which may sit
+    /// in other groups, so the detail the help prints says so.
+    #[test]
+    fn a_people_group_delete_says_the_contacts_stay() {
+        let detail = support("gpeople", C::AddressbookDelete).detail();
+        let detail = detail.unwrap_or_default();
+        assert!(detail.contains("its contacts stay"), "{detail}");
     }
 
     #[test]

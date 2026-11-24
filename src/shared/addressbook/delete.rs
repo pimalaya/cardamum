@@ -1,6 +1,7 @@
 //! # Addressbook delete command
 //!
-//! Deletes an addressbook and every card it contains.
+//! Deletes an addressbook and every card it contains, a Google People
+//! contact group excepted: its contacts stay.
 
 use anyhow::Result;
 use clap::Parser;
@@ -13,6 +14,9 @@ use crate::shared::{
 };
 
 /// Delete the given addressbook and every card it contains.
+///
+/// On Google People the contact group alone is deleted: its contacts
+/// stay in Contacts, a contact sitting in other groups too.
 ///
 /// The addressbook is named explicitly, with no default, deletion being
 /// destructive.

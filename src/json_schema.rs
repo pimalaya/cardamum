@@ -163,18 +163,13 @@ pub fn registry() -> JsonSchemaRegistry {
     #[cfg(feature = "jmap")]
     {
         use crate::jmap::render::{
-            JmapAddressBookOutput, JmapAddressBooksOutput, JmapChangesOutput,
-            JmapContactCardOutput, JmapContactCardsOutput,
+            JmapAddressBooksOutput, JmapChangesOutput, JmapContactCardOutput,
+            JmapContactCardsOutput,
         };
 
         refusable!("cardamum-jmap-address-book-get", JmapAddressBooksOutput);
         refusable!("cardamum-jmap-address-book-create", IdReceipt);
-        // NOTE: an update the server answers with no changed property
-        // prints its receipt.
-        refusable!(
-            "cardamum-jmap-address-book-update",
-            OneOf<JmapAddressBookOutput, IdReceipt>
-        );
+        refusable!("cardamum-jmap-address-book-update", IdReceipt);
         refusable!("cardamum-jmap-address-book-destroy", IdReceipt);
         refusable!("cardamum-jmap-address-book-changes", JmapChangesOutput);
         refusable!("cardamum-jmap-contact-card-get", JmapContactCardsOutput);

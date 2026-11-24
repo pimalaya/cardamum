@@ -16,6 +16,8 @@ The live test night of 2026-11-23 (workspace .lanes/live/report.md) ran every ca
 3. **People group delete keeps the contacts** (`deleteContacts=false`) while the help says "and every card it contains". Ruling recommended: keep the safe behaviour, a contact may sit in other groups; fix the help and the capability detail.
 4. **`jmap address-book create --json`** prints `name: null` and every right false: io-jmap fills what the /set reply omits with defaults. Print an id receipt, as himalaya's `jmap mailbox create` does.
 5. **`vdir rename` onto an existing collection** prints the raw "Directory not empty (os error 39)". Refuse it coded, naming the target.
+6. **`jmap address-book update --json`** prints the `/set` `updated` object, which holds only what the server changed (RFC 8620 §5.3), so the rest shows as defaults, as item 4 did. Print an id receipt.
+7. **JMAP `addressbook.delete` is declared `full`** while an AddressBook may forbid its deletion (`myRights.mayDelete`); Fastmail's Personal states `false`. Declare `server`.
 
 ## Not tested, for the next live run
 

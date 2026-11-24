@@ -55,6 +55,14 @@ The People backend SHALL read the contact group a card command names (`contactGr
 - WHEN `cardamum --json card add -k nope c.vcf` runs, or `cardamum --json card list -k nope`
 - THEN each exits 1 coded `addressbook-not-found` after one `GET contactGroups/nope`, and no `createContact` is sent
 
+### Requirement: A People group delete keeps its contacts
+`addressbook delete` on Google People SHALL delete the contact group alone (`contactGroups.delete` with `deleteContacts=false`), its contacts staying in myContacts: a contact may sit in other groups, and every contact sits in myContacts. The help of `addressbook delete` and the `addressbook.delete` detail of People (`partial`) SHALL say the contacts stay. `gpeople contact-groups delete --delete-contacts` deletes them on request.
+
+#### Scenario: A group deleted on People
+- GIVEN a Google account holding the contact group `g1` with the contact `c1`
+- WHEN `cardamum --json addressbook delete g1` runs
+- THEN it prints `{"id":"g1","queued":false}`, `g1` is gone and `c1` stays in myContacts
+
 ### Requirement: A network backend names an unknown address book
 A unified command naming an address book a CardDAV server, JMAP or Microsoft Graph does not hold SHALL fail coded `addressbook-not-found`, ``Addressbook `<id>` not found``, the server's answer in `sources` ("A command resolves its addressbook before acting" in commands), never with the server's bare refusal: on CardDAV a 404 or a 410 of the collection, on `card list`, `addressbook update` and `addressbook delete`; on Graph a 404 or a 400 `ErrorInvalidIdMalformed` of the folder, on `card list`, `card add`, `addressbook update` and `addressbook delete`; on JMAP a `card list` whose `ContactCard/query` fails or finds nothing SHALL ask `AddressBook/get` for the id, one request on that path alone, an id the account does not hold failing so with the query's refusal in `sources`, an empty listing of one it holds staying empty and a refusal over one it holds staying the refusal. A server answering an unknown collection otherwise (iCloud's 400 `invalid collection ID URI`) keeps its refusal.
 
@@ -106,7 +114,7 @@ A write creates whatever directory it is handed, a listing of a missing one answ
 - THEN each exits 1 coded `addressbook-duplicate`, ``Cannot rename collection `work` to `perso`: it exists already`` (or `empty`), and the three are left as they were
 
 ### Requirement: A JMAP account may forbid address book writes
-JMAP SHALL declare `addressbook.create` and `addressbook.update` `server`, a JMAP account being allowed to create no AddressBook (RFC 9610 §1.4.1 `mayCreateAddressBook`) and a server refusing the rename too, as Fastmail does. `addressbook create` SHALL be refused coded `permission-denied`, ``The JMAP account may not create address books (`mayCreateAddressBook`)``, before any `AddressBook/set`, when the session's contacts capability of the contacts account states `mayCreateAddressBook: false`; an account stating nothing is left to the server. `jmap address-book create` keeps the server's refusal as it is.
+JMAP SHALL declare `addressbook.create` and `addressbook.update` `server`, a JMAP account being allowed to create no AddressBook (RFC 9610 §1.4.1 `mayCreateAddressBook`) and a server refusing the rename too, as Fastmail does. JMAP SHALL declare `addressbook.delete` `server`, an AddressBook stating whether it may be destroyed (RFC 9610 §2 `myRights.mayDelete`), as Fastmail's Personal states `false`; the server's refusal is kept, no `AddressBook/get` read first. `addressbook create` SHALL be refused coded `permission-denied`, ``The JMAP account may not create address books (`mayCreateAddressBook`)``, before any `AddressBook/set`, when the session's contacts capability of the contacts account states `mayCreateAddressBook: false`; an account stating nothing is left to the server. `jmap address-book create` keeps the server's refusal as it is.
 
 #### Scenario: An account that may not create
 - GIVEN a JMAP account whose contacts capability states `mayCreateAddressBook: false`

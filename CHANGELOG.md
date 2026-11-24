@@ -208,6 +208,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed JMAP declaring `addressbook.create` and `addressbook.update` `full` when a server may forbid both, as Fastmail does: `account capability` now says `server`, and `addressbook create` on an account whose session states `mayCreateAddressBook: false` fails coded `permission-denied` before any request.
+- Fixed `jmap address-book create --json` printing every property the server's reply left out as a default (`name: null`, every right `false`): it now prints the id receipt `{"id"}`, the id the server minted.
+- Fixed `vdir rename` onto a collection the root holds already failing with the raw "Directory not empty (os error 39)", or replacing an empty directory: it is refused coded `addressbook-duplicate`, ``Cannot rename collection `<id>` to `<new-id>`: it exists already``, nothing moved.
 - Fixed `jmap contact-card get` and `jmap address-book get` dropping the ids the server found nothing for (`notFound`) and exiting 0: each is now an `errors` entry coded `card-not-found` or `addressbook-not-found`, the command exiting 3.
 - Fixed `gpeople connections update` replacing the `etag` its JSON names with the person's current one, which let a stale write overwrite a newer person: the JSON's etag is now sent as the guard, the current one fetched only when it names none.
 - Fixed `gpeople request` refusing a path naming a custom method on a collection (`people:createContact`, `contactGroups:batchGet`) as off the API origin: only an argument holding `://` is a full URL now, any other joining onto the People base.

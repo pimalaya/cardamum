@@ -20,6 +20,7 @@ use base64_codec::codec::Base64Codec;
 use io_jmap::{
     client::{JmapClientStd, JmapClientStdConnectOptions},
     rfc9610::{
+        JMAP_CONTACTS_CAPABILITY,
         address_book::{
             JmapAddressBook,
             get::JmapAddressBookGetOptions,
@@ -35,6 +36,7 @@ use io_jmap::{
         },
     },
 };
+use pimalaya_cli::error::CodedError;
 use pimalaya_config::secret::SecretResolver;
 use secrecy::{ExposeSecret, SecretString};
 use serde_json::Value;
@@ -90,7 +92,8 @@ impl JmapBackend {
             .collect())
     }
 
-    /// Creates an AddressBook and returns its server-assigned id.
+    /// Creates an AddressBook and returns its server-assigned id; refused
+    /// before any request when the account may not create one.
     ///
     /// JMAP AddressBooks carry no color, so passing one bails.
     pub fn create_addressbook(
@@ -101,6 +104,11 @@ impl JmapBackend {
     ) -> Result<String> {
         if color.is_some() {
             bail!("JMAP AddressBooks do not support color");
+        }
+
+        if self.may_create_addressbook() == Some(false) {
+            let message = "The JMAP account may not create address books (`mayCreateAddressBook`)";
+            return Err(CodedError::new(ErrorCode::PermissionDenied, message).into());
         }
 
         let create = BTreeMap::from([(
@@ -277,6 +285,16 @@ impl JmapBackend {
             .address_books
             .iter()
             .any(|book| book.id.as_deref() == Some(id)))
+    }
+
+    /// Whether the account may create AddressBooks, as its contacts
+    /// capability states (RFC 9610 §1.4.1), `None` when it states nothing.
+    fn may_create_addressbook(&self) -> Option<bool> {
+        let session = self.inner.session()?;
+        let account = session.account_for(JMAP_CONTACTS_CAPABILITY).ok()?;
+        let capabilities = &session.accounts.get(account)?.account_capabilities;
+        let contacts = capabilities.get(JMAP_CONTACTS_CAPABILITY)?;
+        contacts.get("mayCreateAddressBook")?.as_bool()
     }
 
     /// Reads the ContactCard `card_id`, converted to a vCard document.
@@ -1055,5 +1073,37 @@ mod tests {
         let (mut backend, _) = scripted(&[forbidden, &books(&["RBk"], &[])]);
         let err = backend.list_cards("RBk", 0, Some(3)).unwrap_err();
         assert_eq!(crate::error::code(&err), denied, "{err:#}");
+    }
+
+    /// An account whose contacts capability states
+    /// `mayCreateAddressBook: false` is refused `permission-denied` before
+    /// any `AddressBook/set`; one stating nothing is left to the server.
+    #[test]
+    fn an_account_that_may_not_create_is_refused_before_the_set() {
+        use crate::error::ErrorCode;
+
+        let with_contacts = |contacts: Value| {
+            let (mut backend, requests) = scripted(&[]);
+            let session = backend.inner.session.as_mut().unwrap();
+            let account = serde_json::json!({
+                "name": "a", "isPersonal": true, "isReadOnly": false,
+                "accountCapabilities": {"urn:ietf:params:jmap:contacts": contacts},
+            });
+            let account = serde_json::from_value(account).unwrap();
+            session.accounts.insert("a1".to_owned(), account);
+            (backend, requests)
+        };
+
+        let contacts = serde_json::json!({"mayCreateAddressBook": false});
+        let (mut backend, requests) = with_contacts(contacts);
+        let err = backend.create_addressbook("Work", None, None).unwrap_err();
+        let denied = Some(ErrorCode::PermissionDenied);
+        assert_eq!(crate::error::code(&err), denied, "{err:#}");
+        assert!(err.to_string().contains("mayCreateAddressBook"), "{err:#}");
+        assert!(requests.lock().unwrap().is_empty());
+
+        let (mut backend, requests) = with_contacts(serde_json::json!({}));
+        assert!(backend.create_addressbook("Work", None, None).is_err());
+        assert_eq!(requests.lock().unwrap().len(), 1);
     }
 }

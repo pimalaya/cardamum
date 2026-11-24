@@ -98,6 +98,21 @@ A write creates whatever directory it is handed, a listing of a missing one answ
 - WHEN `cardamum --json addressbook create work` or `cardamum --json vdir create work -n Other` runs
 - THEN each exits 1 coded `addressbook-duplicate`, ``Cannot create address book `work`: it exists already``, and `work` keeps its name and description
 
+`vdir rename <OLD-ID> <NEW-ID>` SHALL be refused the same way when NEW-ID is one directory name the home holds already, a directory (full or empty) or any other entry, coded `addressbook-duplicate`, ``Cannot rename collection `<old-id>` to `<new-id>`: it exists already``, exit 1, before anything moves: the rename would otherwise fail on a full directory with the raw OS error and replace an empty one. A NEW-ID that is not one directory name stays io-vdir's refusal.
+
+#### Scenario: A collection renamed onto another
+- GIVEN a vdir home holding the address books `work` and `perso`, and an empty directory `empty`
+- WHEN `cardamum --json vdir rename work perso` or `cardamum --json vdir rename work empty` runs
+- THEN each exits 1 coded `addressbook-duplicate`, ``Cannot rename collection `work` to `perso`: it exists already`` (or `empty`), and the three are left as they were
+
+### Requirement: A JMAP account may forbid address book writes
+JMAP SHALL declare `addressbook.create` and `addressbook.update` `server`, a JMAP account being allowed to create no AddressBook (RFC 9610 §1.4.1 `mayCreateAddressBook`) and a server refusing the rename too, as Fastmail does. `addressbook create` SHALL be refused coded `permission-denied`, ``The JMAP account may not create address books (`mayCreateAddressBook`)``, before any `AddressBook/set`, when the session's contacts capability of the contacts account states `mayCreateAddressBook: false`; an account stating nothing is left to the server. `jmap address-book create` keeps the server's refusal as it is.
+
+#### Scenario: An account that may not create
+- GIVEN a JMAP account whose contacts capability states `mayCreateAddressBook: false`
+- WHEN `cardamum --json addressbook create Work` runs
+- THEN it exits 1 coded `permission-denied`, and no `AddressBook/set` is sent
+
 ### Requirement: A cache renames nothing it cannot push
 The pimdir backend SHALL refuse every `addressbook update` field. Its collection row (id, display name, description, colour) is written by the sync from the server, and the backend stages item actions only, so any local edit of it is a change no sync would carry. A body not fetched yet SHALL fall back to the summary preview in a listing, rather than render as a blank row; a body the item names but the store no longer holds is named in `errors` ("Each backend names the cards it could not read").
 
@@ -190,12 +205,12 @@ A failure a server refused SHALL carry a code of the vocabulary Himalaya shares,
 
 | Code | When |
 |---|---|
-| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition nor the vCard, or `need-privileges` (RFC 3744 §7.1.1); a CardDAV listing, `report query` or `report multiget` row, or its refused `address-data`, answered 403; a JMAP `forbidden`, a SetError or a method error, and a JMAP HTTP 403, whichever request it answered |
+| `permission-denied` | an HTTP 403 that is no rate limit (Graph, People); a CardDAV 403 whose body names no precondition nor the vCard, or `need-privileges` (RFC 3744 §7.1.1); a CardDAV listing, `report query` or `report multiget` row, or its refused `address-data`, answered 403; a JMAP `forbidden`, a SetError or a method error, and a JMAP HTTP 403, whichever request it answered; a JMAP `addressbook create` on an account stating `mayCreateAddressBook: false`, refused before any request |
 | `quota-exceeded` | an HTTP 507; a CardDAV body naming `quota-not-exceeded` (RFC 4331 §6); Graph's `ErrorQuotaExceeded`; a JMAP `overQuota` |
 | `rate-limited` | an HTTP 429, or a People 403 naming a rate limit or a quota, or a JMAP `rateLimit`, a JMAP HTTP 429 included; cardamum retries nothing, so the first one met |
 | `card-not-found` | a card request answered 404 or 410 (CardDAV, People), a `carddav report multiget` row included, 404 or 400 `ErrorInvalidIdMalformed` (Graph), `notFound` (JMAP ContactCard); a vdir card file or a pimdir card that does not exist, or a pimdir card id that is no number; on the protocol commands naming one card as on the unified ones, the server's message kept there |
 | `addressbook-not-found` | an address book named that does not exist (vdir, pimdir); a JMAP AddressBook `notFound`; a CardDAV collection answered 404 or 410, a Graph folder 404 or a malformed folder id, a People group 404, an id JMAP's `AddressBook/get` does not hold ("A network backend names an unknown address book"); on the protocol commands naming one Graph folder as on the unified ones, Graph's message kept there |
-| `addressbook-duplicate` | `addressbook create` refused on an address book the backend holds ("A collection created twice is refused"): a CardDAV `MKCOL` answered 403 or 405 on an id the home set lists, Graph's `ErrorFolderExists`, a People contactGroups.create answered 409 |
+| `addressbook-duplicate` | `addressbook create` refused on an address book the backend holds ("A collection created twice is refused"): a CardDAV `MKCOL` answered 403 or 405 on an id the home set lists, Graph's `ErrorFolderExists`, a People contactGroups.create answered 409; a `vdir rename` onto an entry the home holds |
 | `card-invalid` | a CardDAV write answered 400 or 403 whose body names the `valid-address-data` or `supported-address-data` precondition (RFC 6352 §6.3.2.1) or the vCard itself (`VCARD parse error`), the predicate cardamum's hint reads, so the two never disagree |
 | `precondition-failed` | a CardDAV write answered 412, the `If-Match` it sent naming a version the card no longer has |
 | `item-duplicate` | a CardDAV write refused for the address book's `no-uid-conflict` precondition (RFC 6352 §6.3.2.1), as calendula codes the CalDAV one |

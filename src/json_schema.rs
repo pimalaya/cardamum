@@ -168,7 +168,7 @@ pub fn registry() -> JsonSchemaRegistry {
         };
 
         refusable!("cardamum-jmap-address-book-get", JmapAddressBooksOutput);
-        refusable!("cardamum-jmap-address-book-create", JmapAddressBookOutput);
+        refusable!("cardamum-jmap-address-book-create", IdReceipt);
         // NOTE: an update the server answers with no changed property
         // prints its receipt.
         refusable!(

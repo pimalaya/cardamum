@@ -348,9 +348,15 @@ const CARDDAV: &[Row] = &[
 /// JMAP for Contacts (RFC 9610).
 const JMAP: &[Row] = &[
     (C::AddressbookList, Full),
-    (C::AddressbookCreate, Full),
+    (
+        C::AddressbookCreate,
+        Server("refused when the account states `mayCreateAddressBook: false`, as Fastmail's does"),
+    ),
     (C::AddressbookCreateId, Not(MINTED_ID)),
-    (C::AddressbookUpdate, Full),
+    (
+        C::AddressbookUpdate,
+        Server("the server may forbid renaming an addressbook, as Fastmail does"),
+    ),
     (C::AddressbookDelete, Full),
     (C::AddressbookDescription, Full),
     (
@@ -504,6 +510,16 @@ mod tests {
         assert!(require("jmap", &[C::CardDelete, C::CardDeleteIfMatch]).is_ok());
         assert!(require("msgraph", &[C::CardUpdate, C::CardUpdateIfMatch]).is_ok());
         assert!(require("msgraph", &[C::AddressbookUpdate]).is_ok());
+    }
+
+    /// A JMAP account may be forbidden to create or rename an address
+    /// book (`mayCreateAddressBook: false`), so neither reads `full`.
+    #[test]
+    fn jmap_address_book_writes_are_the_server_s() {
+        for capability in [C::AddressbookCreate, C::AddressbookUpdate] {
+            let support = support("jmap", capability);
+            assert_eq!(support.level(), CapabilityLevel::Server, "{capability}");
+        }
     }
 
     #[test]

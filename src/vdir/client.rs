@@ -4,6 +4,7 @@
 //! their paths under the vdir root.
 
 use std::{
+    fs,
     ops::{Deref, DerefMut},
     path::{Component, Path},
 };
@@ -67,6 +68,21 @@ pub(crate) fn check_collection_absent(root: &VdirPath, id: &str) -> Result<()> {
         }
         None => Ok(()),
     }
+}
+
+/// Refuses to rename the collection `id` to `new_id` when `root` holds
+/// `new_id` already, coded `addressbook-duplicate`: the rename would fail
+/// on a full directory with the raw OS error, and replace an empty one.
+/// A `new_id` that is not one directory name is left to io-vdir.
+pub(crate) fn check_rename_target_absent(root: &VdirPath, id: &str, new_id: &str) -> Result<()> {
+    let target = root.join(new_id);
+
+    if is_dir_name(new_id) && fs::symlink_metadata(target.as_str()).is_ok() {
+        let message = format!("Cannot rename collection `{id}` to `{new_id}`: it exists already");
+        return Err(CodedError::new(ErrorCode::AddressbookDuplicate, message).into());
+    }
+
+    Ok(())
 }
 
 /// Refuses to move or copy the item `id` into `target` when `target`

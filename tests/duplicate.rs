@@ -81,6 +81,42 @@ fn an_address_book_created_twice_is_a_duplicate() {
     }
 }
 
+/// A rename onto a collection the home holds, a full one or an empty
+/// directory, is refused before anything moves.
+#[test]
+fn a_collection_renamed_onto_another_is_a_duplicate() {
+    let dir = account();
+    let home = dir.path().join("home");
+    let perso = home.join("perso");
+    fs::create_dir_all(&perso).unwrap();
+    fs::write(
+        perso.join("x.vcf"),
+        "BEGIN:VCARD\r\nFN:Perso\r\nEND:VCARD\r\n",
+    )
+    .unwrap();
+    fs::create_dir_all(home.join("empty")).unwrap();
+
+    for target in ["perso", "empty"] {
+        let output = run(dir.path(), &["vdir", "rename", "work", target]);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(output.status.code(), Some(1), "{target}: {stdout}");
+
+        let json: Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(json["code"], "addressbook-duplicate", "{json}");
+        assert_eq!(
+            json["error"],
+            format!("Cannot rename collection `work` to `{target}`: it exists already"),
+            "{json}"
+        );
+
+        let name = fs::read_to_string(home.join("work").join("displayname")).unwrap();
+        assert_eq!(name, "Work");
+        assert!(home.join(target).is_dir(), "{target}");
+    }
+
+    assert!(perso.join("x.vcf").exists());
+}
+
 #[test]
 fn an_item_moved_or_copied_onto_a_same_id_item_is_a_duplicate() {
     let dir = account();

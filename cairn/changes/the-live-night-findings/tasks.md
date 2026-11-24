@@ -13,3 +13,4 @@ change: the-live-night-findings
 - [x] D6: `jmap address-book update` prints an id receipt, the `/set` `updated` value holding only what the server changed (RFC 8620 §5.3). Test: an `{}` or partial answer prints the id alone.
 - [x] D7: JMAP `addressbook.delete` declared `server`: Fastmail's Personal states `myRights.mayDelete: false` (read-only check, 2026-11-24). Test.
 - [ ] Next live run: iCloud contact in `card` (owner to allow), microsoft-pimdir contacts (add `msgraph.contacts` to the live neverest rc), the google and microsoft suites.
+- [x] D8: `gpeople other-contacts copy` sends the copy mask People accepts (names, emails, phones), not the read mask with `metadata` (live night 2, 2026-11-24: HTTP 400 `INVALID_ARGUMENT` on every copy). Test: `gpeople::other_contact::fields::tests::the_copy_mask_holds_only_names_emails_and_phones`, red before the fix. Live re-run: copy created a contact, deleted after.

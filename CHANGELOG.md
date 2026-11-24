@@ -209,6 +209,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- Fixed `gpeople other-contacts copy` failing on every contact with `HTTP 400 INVALID_ARGUMENT: Request field 'metadata' not allowed for other contacts mutate requests`: its copy mask reused the listings' read mask, `metadata` included; it now sends `names,emailAddresses,phoneNumbers`, the fields People copies.
 - Fixed the help of `addressbook delete` saying a Google People contact group goes with every card it holds: the group alone is deleted and its contacts stay in Contacts, a contact sitting in other groups too, which the help and the `addressbook.delete` detail of `account capability` now say.
 - Fixed `jmap address-book update --json` printing the `/set` reply's object, which states only what the server changed beyond the update, every other property as a default (`name: null`, every right `false`): it now always prints the id receipt `{"id"}`.
 - Fixed JMAP declaring `addressbook.delete` `full` when an address book may forbid its own deletion (`myRights.mayDelete: false`), as Fastmail's Personal does: `account capability` now says `server`.

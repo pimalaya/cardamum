@@ -9,7 +9,8 @@ use io_gpeople::v1::rest::people::vcard::GPEOPLE_PERSON_VCARD_FIELDS;
 use pimalaya_cli::printer::Printer;
 
 use crate::gpeople::{
-    client::GpeopleClient, other_contact::fields::OTHER_CONTACT_FIELDS, render::GpeoplePersonOutput,
+    client::GpeopleClient, other_contact::fields::OTHER_CONTACT_COPY_FIELDS,
+    render::GpeoplePersonOutput,
 };
 
 /// Copy an other contact into the user's contacts.
@@ -28,7 +29,7 @@ impl GpeopleOtherContactCopyCommand {
         let person = client
             .other_contact_copy(
                 &self.resource_name,
-                OTHER_CONTACT_FIELDS,
+                OTHER_CONTACT_COPY_FIELDS,
                 GPEOPLE_PERSON_VCARD_FIELDS,
                 &[],
             )?

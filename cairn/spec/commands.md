@@ -434,7 +434,7 @@ The vCard SHALL travel as `contents`, a string: the text when its bytes are vali
 - THEN it exits 1 coded `capability-missing` naming `addressbook.create.id`, nothing connected
 
 ### Requirement: The unified card search speaks the pimdir query language
-`cardamum card search <query>...`, built in with any backend, SHALL read its query as pimdir SEARCH §8, its words joined by spaces into one query, parsed by io-pimdir before any backend is reached. A query SEARCH §8.4 refuses SHALL fail with the code `query-refused` on every backend, as `pimdir search` draws and words it, nothing listed. The search SHALL cover every address book of the account, or the one `-k` names, a `-k` naming none of them failing coded `addressbook-not-found` with the ones the account holds. Its capability is `card.search`: `full` on pimdir, `partial` on vdir (every card of the scope matched by cardamum, the store terms refused), `none` on CardDAV, JMAP, Microsoft Graph and Google People until a search listing every card of the scope is measured there, the matching path being built for them already.
+`cardamum card search <query>...`, built in with any backend, SHALL read its query as pimdir SEARCH §8, its words joined by spaces into one query, parsed by io-pimdir before any backend is reached. A query SEARCH §8.4 refuses SHALL fail with the code `query-refused` on every backend, as `pimdir search` draws and words it, nothing listed. The search SHALL cover every address book of the account, or the one `-k` names, a `-k` naming none of them failing coded `addressbook-not-found` with the ones the account holds. Its capability is `card.search`: `full` on pimdir, `partial` on vdir, CardDAV, JMAP, Microsoft Graph and Google People (every card of the scope matched by cardamum, the store terms refused).
 
 #### Scenario: One refusal everywhere
 - GIVEN any account whose backend serves `card.search`
@@ -442,7 +442,7 @@ The vCard SHALL travel as `contents`, a string: the text when its bytes are vali
 - THEN the command exits 1 with the code `query-refused`, nothing listed
 
 ### Requirement: Every backend answers the same hit set
-On pimdir, `card search` SHALL answer from the store's index, the hits of `pimdir search` for the same query, scope and order. On vdir, and on CardDAV, JMAP, Microsoft Graph and Google People once they declare `card.search`, it SHALL read every card of the address books in scope, a Graph folder at any depth included, and match them with io-pimdir's matcher (`PimdirCard::read`, `PimdirQuery::match_cards`), so a query answers the hit set an indexed pimdir store holding the same cards answers, as a test checks on one query set. No backend SHALL answer a narrower or wider set by matching otherwise.
+On pimdir, `card search` SHALL answer from the store's index, the hits of `pimdir search` for the same query, scope and order. On vdir, CardDAV, JMAP, Microsoft Graph and Google People, it SHALL read every card of the address books in scope, a Graph folder at any depth included, and match them with io-pimdir's matcher (`PimdirCard::read`, `PimdirQuery::match_cards`), so a query answers the hit set an indexed pimdir store holding the same cards answers, as a test checks on one query set. No backend SHALL answer a narrower or wider set by matching otherwise.
 
 #### Scenario: A diacritic-free query finds an accented name
 - GIVEN a vdir address book holding a card with `FN:Élodie Martin`

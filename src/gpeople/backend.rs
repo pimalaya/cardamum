@@ -244,7 +244,7 @@ impl GpeopleBackend {
 
         loop {
             let params = GpeopleConnectionsListParams {
-                page_size: Some(100),
+                page_size: Some(1000),
                 page_token: page_token.as_deref(),
                 ..Default::default()
             };

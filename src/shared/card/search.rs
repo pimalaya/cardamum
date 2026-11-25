@@ -41,12 +41,12 @@ use crate::{
 /// is refused the same way everywhere (`query-refused`). It reads every
 /// address book of the account, or the one `-k` names.
 ///
-/// pimdir answers from the store's index, as `pimdir search` does. vdir
-/// reads every card of the address books in scope and matches each as an
-/// index holding them would: a term only a pimdir store answers (`tag:`,
-/// `flag:`, `is:`, `changed:`, `thread:`, `id:`, `linked:`, `account:`,
-/// `collection:`, `folder:`, `label:`, `property:`) is refused there whole,
-/// before anything is read (`query-unsupported`).
+/// pimdir answers from the store's index, as `pimdir search` does. Every
+/// other backend reads every card of the address books in scope and
+/// matches each as an index holding them would: a term only a pimdir store
+/// answers (`tag:`, `flag:`, `is:`, `changed:`, `thread:`, `id:`,
+/// `linked:`, `account:`, `collection:`, `folder:`, `label:`, `property:`)
+/// is refused there whole, before anything is read (`query-unsupported`).
 ///
 /// Hits are ordered by title (the display name), or by relevance on a
 /// backend ranking them (`card.search.sort`).

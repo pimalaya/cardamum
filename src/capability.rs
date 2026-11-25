@@ -294,11 +294,6 @@ const PIMDIR_QUEUED: &str = "queued for the next sync, and refused when a source
 /// Why a backend minting its own ids takes no `--id`.
 const MINTED_ID: &str = "the server mints the id of an addressbook, so `--id` is refused";
 
-/// Why a backend without versions takes no `--if-match`.
-/// Why a backend with a server serves no card search yet.
-const NO_SEARCH: &str = "not served yet: a search would list every card of the address books \
-     in scope, which is to be measured first";
-
 /// What a search matched over the cards themselves leaves out.
 const SEARCH_MATCHED: &str = "every card of the address books in scope matched by cardamum, the \
      terms only a pimdir store answers refused";
@@ -333,7 +328,7 @@ const CARDDAV: &[Row] = &[
     (C::AddressbookColor, Full),
     (C::CardList, Full),
     (C::CardRead, Full),
-    (C::CardSearch, Not(NO_SEARCH)),
+    (C::CardSearch, Partial(SEARCH_MATCHED)),
     (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
@@ -371,7 +366,7 @@ const JMAP: &[Row] = &[
     ),
     (C::CardList, Full),
     (C::CardRead, Full),
-    (C::CardSearch, Not(NO_SEARCH)),
+    (C::CardSearch, Partial(SEARCH_MATCHED)),
     (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
@@ -403,7 +398,7 @@ const MSGRAPH: &[Row] = &[
     ),
     (C::CardList, Full),
     (C::CardRead, Full),
-    (C::CardSearch, Not(NO_SEARCH)),
+    (C::CardSearch, Partial(SEARCH_MATCHED)),
     (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),
@@ -438,7 +433,7 @@ const GPEOPLE: &[Row] = &[
     ),
     (C::CardList, Full),
     (C::CardRead, Full),
-    (C::CardSearch, Not(NO_SEARCH)),
+    (C::CardSearch, Partial(SEARCH_MATCHED)),
     (C::CardSearchRelevance, Not(NO_RELEVANCE)),
     (C::CardAdd, Full),
     (C::CardUpdate, Full),

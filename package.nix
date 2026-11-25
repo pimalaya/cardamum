@@ -47,7 +47,7 @@ rustPlatform.buildRustPackage (finalAttrs: {
   inherit buildNoDefaultFeatures buildFeatures;
 
   pname = "cardamum";
-  version = "0.3.0";
+  version = "1.0.0";
   cargoHash = "";
 
   src = fetchFromGitHub {

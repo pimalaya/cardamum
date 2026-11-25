@@ -6,7 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-Cardamum 1 aligns on the other Pimalaya CLIs. The configuration wizard and the PACC and DNS discovery of a bare domain are gone, and a 0.x configuration is not carried over: start over from config.sample.toml. Every `--json` output is data described by `json-schema`, every failure carries a stable `code`, and a partial outcome exits 3. New commands search cards, report the pimdir store and drive its queue, list what an account serves, and serve the unified API in a REPL or over MCP.
+## [1.0.0] - 2026-11-25
+
+Cardamum 1 is the first stable release: a low-level CLI over a unified contacts API, the same commands on CardDAV, JMAP, Microsoft Graph, Google People, vdir and pimdir, the protocol-specific ones beside them, plain text for a glance and `--json` for scripts, frontends and AI agents. The offline side is the pimdir store Neverest syncs, which Cardamum reads and queues its writes into, and card editing is left to a composer such as tcard.
+
+The configuration wizard and the DNS discovery of a bare domain are gone, and a 0.x configuration is not carried over: start over from config.sample.toml. A pimdir store an earlier neverest wrote is refused `store-version`, never migrated.
 
 ### Added
 
@@ -447,7 +451,8 @@ Cardamum 1 aligns on the other Pimalaya CLIs. The configuration wizard and the P
 
 - Init repository
 
-[Unreleased]: https://github.com/pimalaya/cardamum/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/pimalaya/cardamum/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/pimalaya/cardamum/compare/v0.3.0...v1.0.0
 [0.3.0]: https://github.com/pimalaya/cardamum/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/pimalaya/cardamum/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/pimalaya/cardamum/compare/root...v0.1.0

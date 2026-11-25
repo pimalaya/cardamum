@@ -6,264 +6,252 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
+Cardamum 1 aligns on the other Pimalaya CLIs. The configuration wizard and the PACC and DNS discovery of a bare domain are gone, and a 0.x configuration is not carried over: start over from config.sample.toml. Every `--json` output is data described by `json-schema`, every failure carries a stable `code`, and a partial outcome exits 3. New commands search cards, report the pimdir store and drive its queue, list what an account serves, and serve the unified API in a REPL or over MCP.
+
 ### Added
 
-- Added `client.cert` and `client.key` to every `<backend>.tls` table, a PEM client certificate and its PEM private key presented when the server asks for one, both required once `client` is given.
-- Added the account-level `tls` table, each network backend's `tls` taking from it, field by field, what it leaves unset (`client` as one), as Himalaya's.
-- Added `tls` to each backend row of `account check --json`, `{provider, crypto, cert, clientCert}` as configured, `null` for a local backend or a cleartext connection; the text appends `, TLS` and its parts set.
-- Added `errors` to `pimdir queue list --json`: an item error coded `action-malformed` for each pending row whose payload does not decode, named by its handle and its address book, the other rows listed, the command exiting 3.
-- Added an `Exit status 3:` line to the `--help` of every `carddav`, `jmap`, `msgraph` and `gpeople` command.
-- Added `accounts`, a hidden alias of `account`.
-- Added `handle` to the `pimdir queue show` and `pimdir queue cancel` JSON, beside the integer `row`, as `pimdir queue list` prints it (pimalaya-cli's output.md): the handle given, or a bare id given named under the store's identity. Their text names the row by its handle.
-- Added `card search <query>...`, searching the account's cards in the pimdir query language over every address book, or the one `-k` names: pimdir answers from the store's index, vdir matches every card of the scope with io-pimdir's matcher, so a query answers one hit set on both. A term only a pimdir store answers (`tag:`, `flag:`, `is:`...) is refused on vdir with the new `--json` error code `query-unsupported`, never dropped; `--sort relevance` is pimdir's alone. The capabilities `card.search` and `card.search.relevance`, and the MCP tool `card_search`, come with it. CardDAV, JMAP, Microsoft Graph and Google People match every card of the scope as vdir does, `card.search` `partial` there (#25).
-- Added row handles to `pimdir queue show` and `pimdir queue cancel`: a row may be named `<store-id>.<incarnation>.<id>`, a handle of another store (a copy restored since) reading `reset` and refused by `cancel` coded `store-reset`; a bare row id is taken as before. `pimdir queue list` rows and `pimdir status` parked rows carry `handle`, printed in the text in place of the bare row, so a row picked from a listing is checked too.
+- Added `card search <QUERY>...`, searching the account's cards in the pimdir query language on every backend, and its MCP tool `card_search`.
 
-- Added the `--json` error codes `store-account-ambiguous`, `store-account-unknown`, `row-not-found`, `confirmation-required` and `page-token-invalid`, as Himalaya codes them: an unset `pimdir.account` on a store holding several accounts, a configured one the store does not hold, a `pimdir queue cancel` of a row the account's queue does not hold, one with no terminal and no `--yes`, and a `pimdir search` page token it did not print, each uncoded before.
-- Added `default` to every address book in `addressbook list --json` (pimdir draft-04): `true` on the one the server names the default, read on the pimdir backend from the role the sync engine recorded (`collections.role`), JMAP's `isDefault`, the default Contacts folder on Microsoft Graph and myContacts on Google People, `false` on CardDAV and vdir, which name none.
-- Added the common fields of a card to the `card list` and `card read` JSON: `uid`, `fullName`, `givenName`, `familyName`, every address in `emails` and number in `phones`, `organization`, `organizationUnits`, `title` and `note`, read through the decoded vCard.
-- Added `--if-match` to `card delete`: CardDAV sends it as `If-Match`, pimdir checks it against the card's version, Microsoft Graph and JMAP compare it with the version they read first, and the backends that cannot gate a delete (vdir, People) refuse it.
-- Added `--if-match` on Microsoft Graph and JMAP to `card update` and `card delete`, where it was refused: compared with the contact's `changeKey` or the card's hash read just before the write, a card changed since failing `precondition-failed` before anything is sent, as calendula guards a Graph event. `account capability` says `partial`, a write landing between that read and the write not being caught. `card update` with no vCard source now guards with the version it read there too, at no extra request.
-- Added the `--json` error codes `store-not-current`, `sync-version`, `store-owned`, `store-staging`, `store-in-flight`, `store-reset`, `flag-invalid`, `conflict-unread`, `no-performer`, `ambiguous-performer`, `index-zone-unknown` and `tag-refused`: cardamum relays every pimdir code Himalaya relays.
-- Added the `--json` error code `addressbook-default-missing`: a card or address book command given no `-k` over an account setting no `addressbook.default` fails with it, naming the flag and the key, where it failed uncoded, as calendula codes `calendar-default-missing`.
-- Added `-V` and `--version` to `repl` lines, printing the version as the command line does.
-- Added a stable `code` to the `--json` error output for failures a caller acts on: `body-pending`, `precondition-failed`, and on pimdir the code io-pimdir names for a store or a write it refuses: `store-uncreated`, `store-version`, `store-foreign`, `store-corrupt`, `store-hash-algo`, `store-exposed`, `store-busy`, `lock-replaced`, `unsupported`, `item-duplicate`, `action-malformed`.
-- Added `pimdir status`, reporting the local pimdir store behind the account: its address books, how many of their cards are downloaded and how many creations are queued, every write the sync engine parked rather than applied, with its queue row, its kind and the reason, and every card a server refused for good (pimdir storage-draft-13), with its source and the server's reason, `refused: [{addressbookId, itemId, source, reason, refusedAt}]` under `--json`: the store applied the write, the server refused the change it led to, and the sync engine holds that change until the card is edited or removed.
-- Added `pimdir search`, searching the account's cards in the pimdir query language through the store's search index.
+  pimdir answers from the store's index, the other backends match every card of the scope. A term only pimdir answers (`tag:`, `label:`, `property:`...) is refused elsewhere coded `query-unsupported`. `--sort` takes `title`, the default, or `relevance` where the backend ranks.
 
-  The sync engine builds and refreshes the index, cardamum only reads it. A hit carries the `card list` fields, its address book, what matched and a snippet; `-k` narrows to one address book, `--sort name|relevance` orders. It pages as every listing does, as in Himalaya: `nextPage` under `--json`, io-pimdir's cursor token or `null` on the last page, taken back by `--page-token`, so a card arriving between two pages neither repeats nor hides another (`--page` walks the cursor, `--page-size` stays), and a card the store cannot read, or whose body cannot be read or reads as no vCard, is an `errors` entry alone, coded `card-unreadable` unless the store names its own code, the command then exiting 3: `{hits, nextPage, coverage, errors}`. The text is one line per card under `Account:`, `Query:`, `Page:` and `Next page:`, as `card list` prints, then the `Error:` lines. The answer carries its coverage, `{complete, bodiless, missing, unparseable, unindexed, behind, filling}` under `--json` and an `Incomplete:` line above the cards otherwise: the cards whose body is not local or whose body the index could not read or parse, each counted when a term of the query reads card bodies, and the index lagging the store. An option is read wherever it stands, after the query words too; a word starting with `-`, a negated term, goes after `--`.
-- Added `pimdir count`, counting the cards a pimdir query matches, with the same coverage and the same query.
-- Added `pimdir queue list`, `pimdir queue show` and `pimdir queue cancel`, as Himalaya's: the cards queued for creation, which no listing shows before a sync applies them, and the rows the sync engine parked, each as the family's queue row under `--json`, pending or parked, `{row, kind, collection, linkId, itemId, producer, queuedAt, attempts, unconfirmed, error}` plus `fullName`, every key printed (pimalaya-cli's output.md); where one row stands (`pending`, `parked`, `unconfirmed`, `applied` with the card it acted on and the refusals standing there, `refusals: [{collection, source, reason, refusedAt}]` under `--json` and a `Refused by <source> in <collection> at <instant>: <reason>` line each in text, `unknown`); and the way to retract one, taking the store owner's role for that one write and refused while a sync holds it.
-- Added the `--json` error codes `index-missing`, `index-outdated`, `index-version`, `index-fts5-missing`, `query-refused` and `query-unanswerable`, raised by `pimdir search` and `pimdir count`.
-- Added a welcome for a first run: a person at a terminal meeting no configuration is shown the commands creating it from the shipped sample, then the first command to run.
-- Added `nextPage` to `card list --json`, the next page number while cards follow and `null` on the last page, and `--page-token`, taking it back.
-- Added `nextPage` to `jmap contact-card query --json`, the position the next page starts at while the query holds more cards than the page, `null` otherwise, and `--page-token`, sending it back as the query's `position`.
+- Added `pimdir search`, searching the account's cards through the search index the sync engine builds.
+
+  A hit carries the `card list` row, `matched` and a snippet: `{hits, nextPage, coverage, errors}` under `--json`. `coverage` says what the answer could not see (cards not downloaded or not indexed, an index behind the store), an `Incomplete:` line in text.
+
+  It pages by `--page-token`, taking back the token `nextPage` holds, so a card arriving between two pages neither repeats nor hides another.
+
+- Added `pimdir count`, counting the cards a pimdir query matches, with the same coverage.
+- Added `pimdir status`, reporting the store behind the account: its address books with their downloaded and queued cards, the writes the sync engine parked, and the cards a server refused for good.
+- Added `pimdir queue list`, `show` and `cancel`, listing, inspecting and retracting the writes queued for the next sync and the rows the sync engine parked.
+
+  A row is named by its id or its handle `<store-id>.<incarnation>.<id>`, a handle of another store refused coded `store-reset`. `queue list --json` prints `{actions, parked, errors}`; `queue show` says whether a row is `pending`, `parked`, `unconfirmed`, `applied` or `unknown`.
+
+  `cancel` asks first, and is refused with no terminal and no `--yes` coded `confirmation-required`, or while a sync holds the row.
+
+- Added `account capability`, listing what an account serves of the unified API without connecting, `{account, capabilities: [{name, backend, level, detail}]}` under `--json`.
+
+  The unified commands refuse a verb or a flag the backend does not serve before connecting, coded `capability-missing`.
+
+- Added `repl`, a session running the CLI's commands over one account, the backend connecting once.
+- Added `mcp`, a Model Context Protocol server over stdio exposing the unified API as tools, the writes listed under `--allow-write` only.
+- Added a stable `code` to the `--json` failure object, `null` when none applies, and its schema `cardamum-error`.
+
+  Accounts and command line: `account-missing`, `account-default-missing`, `account-default-several`, `addressbook-default-missing`, `backend-not-built`, `capability-missing`, `usage-invalid`, `stdin-taken`, `confirmation-required`.
+
+  Address books and cards: `addressbook-not-found`, `addressbook-duplicate`, `card-not-found`, `card-unreadable`, `card-invalid`, `body-pending`, `precondition-failed`, `item-duplicate`, `page-token-invalid`, `request-origin`, and from a server's refusal `permission-denied`, `quota-exceeded`, `rate-limited`.
+
+  pimdir store: `store-uncreated`, `store-version`, `store-foreign`, `store-corrupt`, `store-hash-algo`, `store-exposed`, `store-busy`, `store-not-current`, `store-owned`, `store-staging`, `store-in-flight`, `store-reset`, `store-account-ambiguous`, `store-account-unknown`, `sync-version`, `lock-replaced`.
+
+  pimdir writes and queue: `unsupported`, `action-malformed`, `no-performer`, `ambiguous-performer`, `flag-invalid`, `conflict-unread`, `tag-refused`, `row-not-found`.
+
+  Search index and queries: `index-missing`, `index-outdated`, `index-version`, `index-fts5-missing`, `index-zone-unknown`, `query-refused`, `query-unanswerable`, `query-unsupported`.
+
+- Added `errors` to `addressbook list` and `card list`, one item error `{id, code, error, sources}` per entry the listing could not read, described by the schema `cardamum-item-error`.
+
+  The other entries are listed and the command exits 3. The text ends with one `Error:` line each, and the MCP `card_list` and `addressbook_list` tools return them with `isError: true`.
+
+- Added the common fields of a card to the `card list` and `card read` JSON: `uid`, `fullName`, `givenName`, `familyName`, `emails`, `phones`, `organization`, `organizationUnits`, `title` and `note`.
+- Added `default` to each address book of `addressbook list --json`, `true` on the one the server names the default.
+
+  JMAP, Microsoft Graph, Google People and pimdir state one; CardDAV and vdir name none, always `false`.
+
+- Added `nextPage` to `card list --json`, `null` on the last page, and `--page-token` to take it back.
+- Added `nextPage` to `jmap contact-card query --json`, the position the next page starts at, and `--page-token` to take it back.
+- Added `--if-match` to `card delete`, and to `card update` on Microsoft Graph and JMAP.
+
+  CardDAV sends it as `If-Match`, pimdir checks it against the card's `etag`, Graph and JMAP compare it with the version read just before the write, and vdir and People refuse it. A mismatch fails `precondition-failed` before anything is sent or queued.
+
+- Added `--id <ID>` to `addressbook create`, the vdir directory or CardDAV URL segment, `<NAME>` then the display name alone; the other backends refuse it coded `capability-missing`.
+- Added `carddav rmcol <ADDRESSBOOK>`, deleting an address book collection.
+- Added `client.cert` and `client.key` to every `tls` table, a PEM client certificate and its key presented to a server asking for one (mutual TLS).
+- Added the account-level `tls` table, each backend's `tls` taking from it what it leaves unset.
 - Added `carddav.alpn`, the ALPN identifiers offered to a CardDAV server, `["http/1.1"]` by default.
+- Added `notBuilt` to `account list --json`, the account's backends this build leaves out, marked `(not built)` in the text.
+- Added `accounts`, a hidden alias of `account`.
+- Added a welcome on a first run: a terminal meeting no configuration shows the commands creating one from the shipped sample.
 - Added config.sample.toml to releases and packages, installed as share/doc/cardamum/config.sample.toml.
-- Added `account capability`, listing what an account serves of the unified API without connecting: one row per capability, `{name, backend, level, detail}` under `--json`, the backend it resolves to (`null` when the account configures none `--backend` allows), its level and what the level leaves out. Its output is pimalaya-cli's, shared with Himalaya.
 - Added a `Backends:` section to the `--help` of each `addressbook` and `card` command, naming which backend serves what.
-- Added the `--json` error code `capability-missing`.
-- Added `repl`, a session running the CLI's commands over one account, the unified client connecting once.
-- Added `mcp`, a Model Context Protocol server exposing the unified API as tools, the writes listed under `--allow-write` only.
-- Added the `--json` error code `stdin-taken`, for a command reading stdin inside a session.
-- Added `code` to each backend of `account check --json`, the stable code of its failure (`store-busy`, `store-uncreated`...), `null` when it passed or the failure carries none.
-- Added an `errors` list to `addressbook list` and `card list`, under `--json` and in text: one item error `{id, code, error, sources}` per card the listing could not read, `[]` when there is none, described under `json-schema` as `cardamum-item-error`.
-
-  A card whose body is no vCard or not UTF-8 is an entry, as are a vdir file that cannot be read, a JMAP card that does not project, a pimdir body that cannot be read and a CardDAV row the server answered without the card's data, each left out of `cards`; a CardDAV listing the server truncated adds an entry with a `null` id. The text output prints each as an `Error:` line at its end, and the MCP `card_list` and `addressbook_list` tools return them beside `isError: true`.
-- Added the `--json` error codes `account-missing`, `account-default-missing` and `account-default-several`, for an account `-a` names that the configuration does not hold, and for no account or several marked `default = true`.
-- Added the `--json` error code `backend-not-built`: a command over an account whose backend this build leaves out fails naming the cargo feature to rebuild with, where it failed uncoded as if the account configured no backend.
-- Added `notBuilt` to `account list --json`, the account's backends this build leaves out, `backends` keeping the ones it carries; the text marks them `(not built)`.
-- Added the `--json` error codes `permission-denied`, `quota-exceeded` and `rate-limited`, read from the server's refusal on every network backend and in `account check` rows, and `card-not-found`, `addressbook-not-found`, `card-unreadable` and `card-invalid`, a card a CardDAV server refuses as no vCard it takes (a 400 or a 403 naming `valid-address-data`, `supported-address-data` or the vCard), with the hint naming `UID` and `N`, where such a 403 read `permission-denied`.
-- Added `--id <ID>` to `addressbook create`, as calendula's `calendar create <NAME> [--id <ID>]`: the vdir directory or the CardDAV URL segment of the address book, `<NAME>` then its display name alone, the name staying the id without it. JMAP, Microsoft Graph and Google People mint their own ids and pimdir creates none, so they refuse it before connecting, coded `capability-missing`; `account capability` lists it as `addressbook.create.id`.
-
-- Added `carddav rmcol <ADDRESSBOOK>`, deleting an address book collection, the counterpart of `mkcol`.
 
 ### Changed
 
-- **BREAKING**: Changed the pimdir store cardamum reads to storage-draft-17 and its search index to search-draft-17 (io-pimdir 0.20): a store an earlier neverest wrote is refused `store-version`, never migrated. Sync it with that neverest until nothing is queued, move its directory aside, and let a neverest of the same io-pimdir sync a new store and build its index (see the README).
-- **BREAKING**: Changed the query language of `card search`, `pimdir search` and `pimdir count` to search-draft-17: a word opening on `~` or `/`, or a value on `{`, is refused `query-refused` (`reserved-form`), quoted it is searched; `label:` and `property:` find the cards holding a label or property on pimdir and are refused `query-unsupported` elsewhere; `mid:`, an instant (`date:2026-08-01T10:00`) and the relative units `min`, `h` and `mo` are accepted.
-- Changed the dependencies to pimalaya-cli 0.8.1, which refuses a `--log-file` naming a link to an existing file, and io-gpeople 0.9.1, so `gpeople contact-groups list --sync-token` no longer fails on the `totalItems: -1` Google answers it with.
-- Changed `pimdir queue list`, `show` and `cancel` to list a `set-property` row another program queued as any row, naming the card it changes.
-- Changed `pimdir search --page <n>` to walk the pages before it on one opened index without reading their cards, and `card list` on pimdir to read no more rows than the page needs.
-- Changed the default `--sort` of `card search` and `pimdir search` to `title`, SEARCH §8.2's name of the display-name order; `name` stays a hidden alias of it.
-- Changed the dependency on io-pimdir to 0.20.0 (storage-draft-17); the network backends and vdir take its `contact` feature alone, so only the pimdir backend links SQLite, and the binary no longer links ical-rs and mime-rs.
-- **BREAKING**: Changed `account check --json` to pimalaya-cli's list of accounts, `{accounts: [{account, backends}]}`.
-- Changed the `account capability` names to the unified commands they stand for: `addressbook.rename` to `addressbook.update`, `addressbook.description` to `addressbook.update.description`, `addressbook.color` to `addressbook.update.color`, `card.remove` to `card.delete`, `card.remove.if-match` to `card.delete.if-match` and `card.search.relevance` to `card.search.sort`.
-- Changed `pimdir queue list --json` to `{actions, parked, errors}`, `actions` holding every pending row of every kind where `cards` held the creations alone.
-- Changed `pimdir queue show --json` to the row `pimdir queue list` prints, plus `state`, `appliedAt` and `refusals`.
+- **BREAKING**: Changed the pimdir backend to read stores of pimdir storage-draft-17 and search indexes of search-draft-17 alone.
 
-  `itemId` replaces `seq`. A row the account's queue does not hold fails coded `row-not-found` and a handle of another store `store-reset`, exit 1, where both printed a state.
-- Changed the parked rows of `pimdir status --json` to name their address book `collection`, as a queue row does, where they named it `addressbookId`.
-- Changed `pimdir search` to print its text cursor as `Next page: --page-token <token>`, the token `nextPage` holds.
-- Changed `addressbook create` on pimdir to fail `addressbook-duplicate` for an address book the store holds, before `capability-missing`.
-- Changed a bare `cardamum --json` to fail `usage-invalid`, exit 2, through pimalaya-cli.
-- **BREAKING**: Changed the io-pimdir dependency to 0.19.0, pimdir storage-draft-15: a store or a sync state of draft-14 is refused and never migrated.
-- Changed the pimalaya-cli dependency to 0.7.0.
-- Changed the vcard-rs dependency to 0.6.1, and ical-rs and mime-rs, through io-pimdir, to 0.7.3 and 0.2.1.
-- **BREAKING**: Changed the pimdir backend to count an undeclared collection, of the empty kind, as no address book: it is no longer listed, read or written, and its account no longer counts when cardamum derives the account from the store, where a sync predating kinds was assumed to have left it so (io-pimdir's ruling: an empty kind belongs to no application's kind).
-- Changed `msgraph request` and `gpeople request` to code a URL off the API origin `request-origin` under `--json`, where the refusal carried no code.
-- **BREAKING**: Changed the pimdir backend to io-pimdir 0.17.0, pimdir storage-draft-14: a store an earlier sync engine wrote is refused (`store-version`) and never migrated, its refusal now io-pimdir's one wording naming cardamum, which says to sync it with that engine until nothing is queued, then set it aside and sync a new store.
-- Changed `card search` and the MCP tool `card_search` to be built in with any backend, not only with `vdir` or `pimdir`: the CardDAV, JMAP, Microsoft Graph and Google People features pull io-pimdir's query matcher.
-- Changed a pimdir card write to drop every `X-PIMDIR-` property from the card before it is queued (pimdir STORAGE §18), so no instruction to a sync engine enters the queue unasked.
-- Changed the dependencies to pimalaya-cli 0.6.1, pimalaya-config 0.6.0 and io-jmap 0.10.1.
-- Changed `card list` on JMAP, Microsoft Graph and Google People to read the page it prints: JMAP asks its window (`position`, `limit`) in chunks the server takes, Graph sends `$skip` and `$top`, People stops once it holds the window, reading 1,000 connections a request where it read 100, where each read the whole address book (100 requests for page 1 of 10,000 Graph contacts, now 1). On JMAP an unreadable card's entry prints on the page holding it.
-- Changed `card add -k <unknown>` on CardDAV and JMAP to fail coded `addressbook-not-found`, a stale People `etag` to be `precondition-failed`, and a JMAP method error inside a typed call (`forbidden` on `card list`) to carry its code, where each was uncoded.
-- **Breaking:** changed `msgraph contacts create` and `update` to send the JSON as written and print what Graph answered as sent, where they went through io-msgraph's contact model: a key the model lacks was dropped from the request while Graph answered 200.
-- **Breaking:** changed `jmap contact-card query` to print the query's state as `queryState`, where it printed it as `state`, the key `contact-card get` prints and `contact-card changes` takes.
-- **Breaking:** changed a field flag to refuse a source holding anything after its first card, a partial second card included, where it dropped it.
-- Changed an invalid vdir card id (`a/b`) to fail coded `card-not-found`, where it was uncoded.
-- Changed `pimdir.account`, when unset, to be derived from the accounts holding address books alone, as Himalaya derives it from those holding mail: a store one account syncs contacts into and another mail no longer asks for it.
-- **Breaking:** changed a server's refusal inside the `carddav`, `jmap`, `msgraph` and `gpeople` namespaces, the `request` commands included, to print as the command's result and exit 3, as Himalaya's protocol namespaces do: `{"refusal": {"status", "reason", "message", "code", "retryAfter"}}`, where it printed the failure object and exited 1. A command getting no answer (network, TLS, a body that does not parse) still fails, exit 1, and the unified commands keep the failure object.
-- **Breaking:** changed `jmap contact-card copy` to print `{ids, errors}`, the copies made and one item error per card the server refused, exit 3 when one was, where it failed on the first refusal saying nothing of the copies made.
-- **Breaking:** changed `msgraph contacts get`, `msgraph contact-folders get`, `msgraph profile get`, `gpeople connections get`, `gpeople contact-groups get`, `gpeople profile get`, `jmap address-book get` and `jmap contact-card get` to print each resource as the provider sent it, every property kept, where they printed it through io-msgraph's, io-gpeople's and io-jmap's types, which dropped the properties they do not model and added defaults the server never sent.
-- **Breaking:** changed `pimdir queue cancel` to refuse a row it cannot cancel before asking, and to refuse to ask with no terminal and no `--yes`, coded `confirmation-required`, where it asked first.
-- Changed a JMAP HTTP 403, a JMAP HTTP 429 and a JMAP method error `forbidden` to carry `permission-denied` and `rate-limited`, as Himalaya codes them.
-- **Breaking:** changed `carddav delete` to require its card id: `carddav delete <ADDRESSBOOK>` deleted the whole address book, so an unset shell variable deleted every card. Delete a collection with `carddav rmcol`. `carddav put --if-none-match` now takes `*` alone, where any value sent `*`.
-- **Breaking:** changed `vdir item move` and `copy` to fail coded `item-duplicate` when the target holds an item of the same id, both left as they were, where the target's card was replaced.
-- **Breaking:** changed a pimdir write into an address book no source syncs to fail coded `no-performer`, as Himalaya and Calendula code it, where it carried no code.
-- **Breaking:** changed a CardDAV `server` naming a scheme to be read as written and refused when it does not parse, where `https://` was prefixed to it (`https://host:99999` read as the host `https`), and the `.well-known/carddav` redirect to be followed over https only.
-- **Breaking:** changed `card read`, `update` and `delete` on JMAP, Microsoft Graph and Google People to act only on a card the address book `-k` names holds, answering `card-not-found` for one held elsewhere, where they read, rewrote or deleted it; a delete reads the card first.
-- **Breaking:** changed a pimdir card whose body the blob tree no longer holds (a `pimdir item erase`, a quarantine, a blob failing its name) to read as not downloaded, as pimdir's guide says and Himalaya reads a message: `card list` and `pimdir search` list it as usual, its summary preview and `etag` `null`, where it was a `card-unreadable` entry and the command exited 3; `card read` fails coded `body-pending` with the sentence of an unfetched card, where it failed uncoded with "Body blob missing". A sync brings the body back.
-- Changed `carddav.auth` to be optional: a block naming none sends no `Authorization` header, as `auth = "none"` does, for a server that asks for no credential (Radicale with `auth = none`, a server behind a VPN or an authenticating reverse proxy), where it failed "missing field `auth`". A server answering such a block 401 fails with "CardDAV server answered 401: it asks for credentials, and the account configures no `auth`", still uncoded, as carillon reads its DAV blocks.
-- Changed `msgraph contacts list`, `msgraph contact-folders list` and `msgraph contact-folders child-folders` to show `--top` long-only, as Himalaya's Graph listings: `-s` stays accepted as a hidden alias.
-- **Breaking:** renamed `card create` to `card add`, as Himalaya's `message add`, its `json-schema` key becoming `cardamum-card-add`; `card create` and `card new` stay hidden aliases, and the MCP tool is `card_add`.
-- **Breaking:** renamed `vdir item create` to `vdir item add`, as the family names the creation of an item (pimalaya-cli), its `json-schema` key becoming `cardamum-vdir-item-add`; `vdir item create` stays a hidden alias and `vdir item new` a visible one. No MCP tool reaches `vdir`.
-- Changed `addressbook delete` and `addressbook update` to take the address book as a positional, as Himalaya's `mailbox delete <MAILBOX>`: `-k/--addressbook` stays a hidden alias, both together refused as `usage-invalid`, and the MCP tools keep their `addressbook` property.
-- **Breaking:** changed the `gpeople` resource commands to the plural nouns of the People API, `connections`, `contact-groups` and `other-contacts`, as Himalaya's `gmail` names its resources, their `json-schema` keys following the plural paths; the singular names stay hidden aliases.
-- Changed the version a JMAP card reports (`etag`, and what `--if-match` is compared with) to the BLAKE3 digest of its JSON, stable across builds, where a hash from Rust's `DefaultHasher` could change with the Rust release a build used.
-- Changed the unified commands to refuse a verb or a flag the account's backend does not serve before connecting, with `capability-missing`, rather than once connected with an uncoded error.
-- Changed every dependency to name the features it needs, and base64 to base64-codec.
-- Changed config.sample.toml to one `[accounts.example]` table and one commented section per backend or provider, each tested to parse.
-- **Breaking:** changed `-c` to take one path per flag, never split on `:`, and stopped reading `CARDAMUM_CONFIG`.
-- **Breaking:** changed a command line the grammar refuses under `--json` to print on stdout the failure object coded `usage-invalid`, where clap printed its text on stderr; it still exits 2, the family exit contract (pimalaya-cli) keeping 2 for a refused command line and 3 for a partial outcome. A refused REPL line and an MCP tool call whose arguments the grammar refuses carry `usage-invalid` too.
+  A store an earlier neverest wrote is refused coded `store-version`, never migrated: drain its queue with that neverest, move it aside and let a current neverest sync a new one.
+
+- **BREAKING**: Changed every write to print a receipt under `--json`, where most printed `{"message"}`.
+
+  `card add`, `card delete`, `addressbook update` and `addressbook delete` print `{id, queued}`, `card update` `{id, keptProperties, queued}` and `addressbook create` `{id, name, queued}`. `queued` is `true` on pimdir, whose text says the write waits for the next sync.
+
+  The protocol writes print `{id}`, `jmap address-book create` and `update` included, `carddav put` `{id, etag}`, `gpeople contact-groups members` `{id, added, removed}` and `card build -o` `{path, size}`.
+
+- **BREAKING**: Changed `jmap contact-card copy` to print `{ids, errors}`, the copies made and one item error per card refused, exiting 3 when one was, where it failed on the first refusal.
+- **BREAKING**: Changed a server's refusal in the `carddav`, `jmap`, `msgraph` and `gpeople` commands to print as the result, `{"refusal": {status, reason, message, code, retryAfter}}`, and exit 3.
+
+  A command getting no answer (network, TLS, an unparsable body) still fails, exit 1, and the unified commands keep the failure object.
+
+- **BREAKING**: Changed a command line refused under `--json` to print the failure object coded `usage-invalid` on stdout, exit 2, where clap printed text on stderr.
+
+  A bare `cardamum --json`, a refused REPL line and an MCP tool call with refused arguments carry it too.
+
+- **BREAKING**: Changed `account check --json` to `{accounts: [{account, backends: [{backend, ok, code, error, tls}]}]}`, and a failed backend to exit 3, where it exited 0.
+
+  `tls` is the TLS configured, `null` for a local backend or a cleartext connection; the text appends `, TLS` and its parts.
+
+- **BREAKING**: Changed `card read --json` to print the `card list` row of the card plus its vCard.
+- **BREAKING**: Changed `card read`, `card build`, `carddav get`, `carddav report query`, `carddav report multiget` and `vdir item get` to carry `encoding` beside each vCard's `contents`.
+
+  `utf-8` when `contents` is the text, `base64` when the bytes are not UTF-8 and `contents` holds their base64, where such a card failed.
+
+- **BREAKING**: Changed every text output to plain text: no border, no colour, nothing sized to the terminal.
+
+  `card list` and `addressbook list` print one line per item under `Account:`, then `Next page:` and the `Error:` lines; `-s 0` lists every card. `table.preset`, `table.arrangement` and every `*-color` key are gone.
+
+- **BREAKING**: Changed the configuration to refuse an unknown key at the top level and in an account, where it ignored it.
+
+  The `table`, top-level `account`, `addressbook.list` and `card.list.table` tables are refused as unknown keys. The block of a backend the build leaves out still loads unread.
+
+- **BREAKING**: Changed `-c` to take one path per flag, never split on `:`, and stopped reading `CARDAMUM_CONFIG`.
 
   Without `-c`, every canonical path that exists is loaded, each deep-merged on top of the ones before.
-- **Breaking:** changed every text output to plain text: no border, no colour, nothing sized to the terminal.
 
-  `card list` prints one line per card, the account, the addressbook, the page and the next one above. `-s 0` lists every card. `table.preset`, `table.arrangement` and every `*-color` key are gone, their tables refused as unknown keys.
-- **Breaking:** changed the configuration to refuse a key it does not know at the top level and in an account, where it ignored it, as every backend and option table already did. The tables v0.3 read for tables and colours (`table`, the top-level `account`, `addressbook.list`, `card.list.table`) are refused as unknown keys. The block of a backend the build leaves out still loads unread.
-- **Breaking:** renamed `vdir.home-dir` to `vdir.root`, as `pimdir.root` names a store, its `~` and environment variables expanded as before; `vdir.home-dir` is refused as an unknown key. Calendula renames its key the same way.
-- **Breaking:** changed `addressbook list` and `card list` to exit 3 once they printed their result when a card could not be read (`errors` not empty), and the vdir and JMAP listings to list the other cards where one card failed the whole listing.
-- **Breaking:** changed `carddav report query` and `carddav report multiget` to print an `errors` list beside `cards` and `truncated`, one entry per card the server answered without its data, coded as `card list` codes a CardDAV row, an id `report multiget` named that the server does not hold `card-not-found`, and to exit 3 when it is not empty, where they dropped those cards and exited 0. A truncated result stays `truncated` alone.
-- Changed a card or an address book not found to fail with `card-not-found` or `addressbook-not-found`, where the failure carried no code.
-- Changed account resolution to refuse several accounts marked `default`, naming them.
-- **Breaking:** changed `-a default` to take the account named `default`, where it took the account marked `default = true`; omit `-a` to take that one. A missing `default` account says so (pimalaya-config d5a33cba).
-- **Breaking:** changed `--backend auto` to resolve to the first backend the account declares, whether the build carries it or not, failing with `backend-not-built` when it does not, where a reduced build took the next declared backend it carries. `--backend` naming a backend the build leaves out names its feature. `account check` reports such a backend as a failed row coded `backend-not-built`.
-- Changed `account list` to name an account's backends in the order `auto` resolves them (vdir, pimdir, carddav, jmap, msgraph, gpeople), where CardDAV came first.
-- Changed `account list` and `account check` to print pimalaya-cli's shared outputs, their JSON unchanged: the `account list` text has no header row, marks the default account `default` rather than `yes`, and names the built backends before those left out, as Himalaya and Calendula print it.
-- **Breaking:** changed `card read --json` to print the row `card list` prints for the card (`addressbookId` and the common fields join) plus its vCard, and the vCard of `card read` and `card build` to carry `encoding` beside `contents`: `utf-8` when `contents` is the text, `base64` when the bytes are not UTF-8 and `contents` holds their base64, where such a card failed. Calendula prints an item's bytes the same way.
-- Changed the protocol commands naming one card, `carddav get` and `delete`, `msgraph contacts get`, `update` and `delete`, `gpeople connections get`, `update` and `delete`, to fail `card-not-found` when the server holds no such card, as `card read` does, the server's message kept, where they carried no code.
-- Changed the protocol commands naming one contact folder, `msgraph contact-folders get`, `child-folders`, `rename` and `delete`, and `msgraph contacts list`, `create` and `delta` under `-f`, to fail `addressbook-not-found` when Graph holds no such folder, as `card list -k` does, Graph's message kept, where they carried no code, as calendula codes its Graph calendar commands `calendar-not-found`.
-- Changed `carddav create` to a hidden alias of `carddav mkcol`, where the help showed it, as calendula hides `caldav create`.
-- **Breaking:** changed the `carddav discover` text to print its endpoints as fields, `Server:`, `Principal:` and `Addressbook home-set:` with the values aligned, as calendula's `caldav discover` prints them, where it printed bare `server: …` lines; `--json` is unchanged.
-- Changed the help of `carddav propfind <ADDRESSBOOK>` to say it enumerates the cards through an `addressbook-query` REPORT asking `getetag` alone, as io-webdav does and calendula's `caldav propfind` says, where it named a PROPFIND.
-- Changed the text of `carddav propfind`, `vdir list` and `msgraph contacts` to print the fields an item holds and no other: `carddav propfind` and `vdir list` print the description and the colour their JSON carries, a property the server did not send prints no line where `Name:` and `Color:` printed empty, and a Graph contact prints every email and every phone, the business and home ones beside the mobile one.
-- Changed a CardDAV write refused 412 (a stale `--if-match`) to fail `precondition-failed`, and one refused for a `UID` the address book holds (`no-uid-conflict`) `item-duplicate`, where both carried no code, as calendula codes CalDAV.
-- Changed a card a vdir or JMAP account does not hold to fail as on the other backends, with cardamum's sentence and the backend's answer in `sources`, where the error was io-vdir's or JMAP's own text.
-- Changed the sentence of a card not found to name its address book on every backend, ``Card `<id>` not found in address book `<book>` ``, as Himalaya words a message not found in its mailbox, where it read ``Card `<id>` not found`` (``Card `<id>` not found in `<book>` `` on pimdir); the code stays `card-not-found`.
-- **Breaking:** changed `carddav get`, `carddav report query`, `carddav report multiget` and `vdir item get` to carry `encoding` beside each vCard's `contents`, as `card read` does and calendula's `caldav` and `vdir item get` reads do: `utf-8` when `contents` is the text, `base64` when the bytes are not UTF-8 and `contents` holds their base64, where `carddav get` and `vdir item get` failed on such a card; their text prints such a card as its bytes.
-- Changed the `addressbook list` text to print one line per address book under `Account: <name> (<backend>)`, `id  default  color  name` with no header row and `default` on the default one, as calendula's `calendar list` and Himalaya's `mailbox list` print theirs, where it printed an `ID DEFAULT COLOR NAME` header and `yes`; `--json` is unchanged.
-- Changed `vdir create <NAME>` to `vdir create <ID>`, adding `-n/--display-name <NAME>` for a display name apart from the directory, the id still when omitted, and named the arguments of `vdir rename <OLD-ID> <NEW-ID>` and `vdir delete <ID>`, as calendula names them; `addressbook update -n` takes a `<NAME>`, where it read `<TEXT>`.
-- Changed the summary of the `pimdir`, `vdir`, `jmap` and `gpeople` namespaces to read as Himalaya's and calendula's, `<API>-specific API`: `pimdir-specific API`, `vdir-specific API`, `JMAP-specific API`, `Google People-specific API`.
-- Changed the aliases `rm` of `addressbook delete` and `card delete`, `new` of `card add` and `folders` of `msgraph contact-folders` to hidden ones, as calendula shows none for their counterparts.
-- Changed the `-b/--backend` help to read as Himalaya's and list its values, `auto` then every backend an account may name, and a value outside them to be refused with the list, where it read `Invalid backend <value>`.
-- Changed a `repl` or `mcp` line inside a session to fail coded `usage-invalid`, refused by pimalaya-cli, where it carried no code.
-- Changed an MCP tool call missing an argument or giving a value the grammar refuses to name the argument as the tool takes it (``Missing argument `card-id` ``, ``Invalid value `-1` for `page-size`: …``), where it printed clap's usage text.
-- Bumped pimalaya-cli to 0.6.0: `Next page:` prints after the listing, one blank line below the items and above the `Error:` lines, as `Next page: --page 2`, and a listing's header values sit two spaces past its longest label (`Account:  work`).
-- Bumped io-gpeople to 0.8.1: an update of a contact still carrying its stash no longer reports as dropped the properties the stash keeps.
-- Bumped io-msgraph to 0.9.2.
-- **Breaking:** changed `msgraph request` and `gpeople request` to refuse a full URL off the provider's API origin (another host, scheme or port than `https://graph.microsoft.com` or `https://people.googleapis.com`) before sending it, so the account's bearer token never leaves for another host; a path and a URL on the origin (a next link, Graph's `beta`) are sent as before. `jmap request` takes no URL and posts to the session's `apiUrl` alone.
-- Bumped pimalaya-config to 0.5.2: an unknown key's error lists no removed key.
-- Changed the `pimdir` feature to build io-pimdir's search, adding ical-rs, mime-rs and ariadne to the binary.
-- **Breaking:** changed every write printing a confirmation to print a receipt instead of `{"message": ...}` under `--json`: `addressbook update|delete` and `card delete` print `{id, queued}`, the item acted on and whether the write waits for a sync, `card add` `{id, queued}`, `card update` `{id, keptProperties, queued}` and `addressbook create` `{id, name, queued}`, `queued` `true` on pimdir and `false` elsewhere; `carddav mkcol|proppatch|delete`, `vdir create|rename|delete`, `vdir item update|copy|move|delete`, `jmap address-book destroy`, `jmap contact-card destroy`, `msgraph contacts delete`, `msgraph contact-folders delete` and the `gpeople` deletes print `{id}`, a renamed collection's new id, as do `jmap address-book update` and `jmap contact-card update` when the server returns no object; `jmap contact-card copy` prints `{ids}`, `carddav put` `{id, etag}`, `gpeople contact-groups members` `{id, added, removed}` and `card build -o` `{path, size}`, its text `Saved <size> bytes to <path>` (pimalaya-cli's `SavedOutput`). The text form keeps its sentence. Every command now has a schema under `json-schema` (pimalaya-cli 0.3).
-- Bumped pimalaya-cli, pimalaya-config and pimalaya-stream to 0.4 and io-jmap to 0.9. The `--json` failure object always carries `code`, `null` when none applies.
+- **BREAKING**: Changed `-a default` to take the account named `default`, where it took the account marked `default = true`; omit `-a` to take that one.
+- **BREAKING**: Changed `--backend auto` to take the first backend the account declares, failing `backend-not-built` when the build leaves it out, where it took the next built one.
 
-- Bumped rustls-webpki to 0.103.16 and webpki-root-certs to 1.0.11, fixing RUSTSEC-2026-0382 and RUSTSEC-2026-0383.
-- Changed piped `--json` output to print one value per line, each schema of `json-schema` to carry an `$id` naming the contract version (`v0.3`), and added `cardamum-error`, the schema of the JSON failure object (pimalaya-cli `55b6693`). The wire objects of `gpeople`, `jmap` and `msgraph` are now described as JSON objects, and the abandoned arm of `card add` and `card update`, which `--json` never prints, is now `{}` rather than `null`.
-- **Breaking:** changed the `--json` output of `gpeople request`, `jmap request` and `msgraph request` to wrap the raw response as `{"response": …}`, so the payload is an object even when the server answers no body (`null`) or an array.
-- Changed `card list` on pimdir to stream the store rather than load it: it holds one batch of rows and the page it prints instead of every card body of the address book, reads the bodies of that page only, and stops once the page is full. The output is unchanged.
-- Changed io-pimdir to 0.16.0 (pimdir storage-draft-13, sync-draft-13 and search-draft-13; a hostile `VTIMEZONE` or recurrence `INTERVAL` no longer aborts a write or a search), io-msgraph to 0.9, io-gpeople to 0.8 and io-http to 0.8, so cardamum shares one io-pimdir and one store schema with neverest, himalaya and calendula: an empty mail date is stored as no date, a band round keeps undated mail, and opening a store creates the `items_by_sort_global` index a page across collections walks. A response whose head passes 64 KiB or whose body passes 256 MiB now fails the exchange with a typed error instead of growing the buffer without bound,, a connection closing mid-body fails rather than spinning, and People and Graph fold vCard lines over 75 octets.
-- Bumped io-webdav to 0.8. An address book outside the home set is listed and addressed by its path rather than its last segment, a request the server closed the connection on is resent once, and a CardDAV multistatus is parsed 3.4 to 9 times faster, without quadratic copies and nested 64 levels at most.
+  `--backend` naming a backend left out names its cargo feature, and `account check` reports it as a failed row.
 
-  A CardDAV answer that is not one whole multistatus document fails instead of listing fewer cards, and a weak ETag is kept whole.
-- Bumped io-webdav to 0.9.1.
+- **BREAKING**: Renamed `card create` to `card add`, its MCP tool `card_add` and its schema `cardamum-card-add`; `card create` and `card new` stay hidden aliases.
+- **BREAKING**: Renamed `vdir item create` to `vdir item add`, its schema `cardamum-vdir-item-add`; `create` stays a hidden alias and `new` a visible one.
+- **BREAKING**: Renamed the `gpeople` resource commands to `connections`, `contact-groups` and `other-contacts`, the singular names staying hidden aliases.
+- **BREAKING**: Renamed `vdir.home-dir` to `vdir.root`; `vdir.home-dir` is refused as an unknown key.
+- **BREAKING**: Changed the `gpeople` and `msgraph` listings to print the provider's cursor as `nextPage`, `null` on the last page, and to take it back through `--page-token`.
 
-  A card `card list`, `carddav report query` or `carddav report multiget` reads keeps its final CRLF, which iCloud and Fastmail escape and the listing trimmed, so it matches the body `card read` and `carddav get` return; a relative address book or card id is sent percent-encoded, a `\` no longer read as a separator.
-- **Breaking:** bumped io-webdav to 0.10.0: a CardDAV address book or card id prints percent-decoded when the decoding encodes back to it, in every listing (`addressbook list`, `card list`, `carddav propfind`, `report query` and `report multiget`) and in the id `card add` and `carddav put` print, so `addressbook create "My Book"` prints `My Book`, the id `addressbook list` then shows, where the listing printed `My%20Book`.
+  They printed `nextPageToken` or `@odata.nextLink`. The rest of the payload stays raw, `nextSyncToken` and the delta's `@odata.deltaLink` included.
 
-  A segment whose decoding would not be sent back as served (`%2F`, `%40`, lowercase hex) keeps its served form, and an id printed before still addresses its resource.
-- Bumped io-webdav to 0.11.0, whose client runs the two requests cardamum sent by hand (see Fixed).
-- Bumped io-vdir to 0.3.
+- **BREAKING**: Changed the `--json` output of `gpeople request`, `jmap request` and `msgraph request` to wrap the raw response as `{"response": …}`.
+- **BREAKING**: Changed `msgraph request` and `gpeople request` to refuse a full URL off the provider's API origin, coded `request-origin`, so the account's token never leaves for another host.
 
-  A vdir listing leaves out a card removed while it lists and holds regular files only, and an id that is empty or holds a path separator is refused.
+  Only an argument holding `://` is a full URL: a path, a custom method (`people:createContact`) and a URL on the origin are sent as before.
+
+- **BREAKING**: Changed the `get` commands of `msgraph`, `gpeople` and `jmap` to print each resource as the provider sent it, every property kept.
+
+  They dropped the properties cardamum did not model and added defaults the server never sent.
+
+- **BREAKING**: Changed `msgraph contacts create` and `update` to send the JSON as written and print what Graph answered, where a key cardamum did not model was dropped.
+- **BREAKING**: Changed `jmap contact-card query` to print the query's state as `queryState`, where it printed `state`.
+- **BREAKING**: Changed `carddav delete` to require its card id, where `carddav delete <ADDRESSBOOK>` deleted the whole address book; delete a collection with `carddav rmcol`.
+- **BREAKING**: Changed `carddav put --if-none-match` to take `*` alone, where any value sent `*`.
+- **BREAKING**: Changed `carddav report query` and `report multiget` to print an `errors` list beside `cards` and `truncated`, exiting 3 when it is not empty.
+
+  One entry per card answered without its data, and for `multiget` per id the server does not hold (`card-not-found`), where they dropped them and exited 0.
+
+- **BREAKING**: Changed `vdir item move` and `copy` to fail coded `item-duplicate` when the target holds an item of the same id, where the target's card was replaced.
+- **BREAKING**: Changed `addressbook create` and `vdir create` naming an existing address book to fail coded `addressbook-duplicate`, where vdir rewrote its metadata and succeeded.
+- **BREAKING**: Changed `card read`, `update` and `delete` on JMAP, Microsoft Graph and Google People to act only on a card the address book `-k` names holds, answering `card-not-found` otherwise.
+- **BREAKING**: Changed a CardDAV `server` naming a scheme to be read as written and refused when it does not parse, where `https://` was prefixed to it.
+
+  The `.well-known/carddav` redirect is followed over https only.
+
+- **BREAKING**: Changed a CardDAV address book or card id to print percent-decoded when the decoding encodes back to it: `My Book` where it printed `My%20Book`.
+
+  A segment that would not round-trip (`%2F`, `%40`, lowercase hex) keeps its served form, and an id printed before still addresses its resource.
+
+- **BREAKING**: Changed a field flag to refuse a source holding anything after its first card, a partial second card included, where it dropped it.
+- **BREAKING**: Changed the pimdir backend to count a collection of the empty kind as no address book: it is no longer listed, read or written.
+- **BREAKING**: Changed an unset `pimdir.account` to be derived from the one account holding address books in the store, refused when several do, naming them.
+
+  A `pimdir.account` naming none of the store's accounts fails naming those it holds.
+
+- **BREAKING**: Changed a pimdir card whose body the store no longer holds to read as not downloaded: listed with a `null` preview and `etag`, `card read` failing `body-pending`.
+
+  A sync brings the body back.
+
+- **BREAKING**: Changed a pimdir write into an address book no source syncs to be refused coded `no-performer` before anything is staged, where it was queued and never pushed.
+- Changed `card update` and `card delete` on pimdir to queue the version of the card they were made against.
+
+  The sync engine parks a write over a card a sync changed since, or over a conflicted card, rather than applying it; `pimdir status` and `pimdir queue list` show it.
+
+- Changed a pimdir write to be refused before it is queued when a source of the store does not support it, naming the capability, the source and why.
+- Changed a pimdir card write to drop every `X-PIMDIR-` property from the card before it is queued.
+- Changed `account check` on pimdir to probe the store's staging lock too, writing nothing, so a store a sync holds fails at once `store-busy`.
+- Changed `addressbook delete` and `addressbook update` to take the address book as a positional, `-k/--addressbook` staying a hidden alias.
+- Changed `vdir create <NAME>` to `vdir create <ID>`, adding `-n/--display-name <NAME>` for a display name apart from the directory.
+- Changed `carddav.auth` to be optional: a block naming none sends no `Authorization` header, as `auth = "none"` does.
+- Changed `msgraph contacts list`, `msgraph contact-folders list` and `child-folders` to show `--top` long-only, `-s` staying a hidden alias.
+- Changed the aliases `rm` of `addressbook delete` and `card delete`, `folders` of `msgraph contact-folders` and `carddav create` of `carddav mkcol` to hidden ones.
+- Changed `account list` to name an account's backends in the order `auto` resolves them (vdir, pimdir, carddav, jmap, msgraph, gpeople), its text marking the default account `default`.
+- Changed the `carddav discover` text to print `Server:`, `Principal:` and `Addressbook home-set:` as aligned fields.
+- Changed the text of `carddav propfind`, `vdir list` and `msgraph contacts` to print the fields an item holds, every email and phone of a Graph contact included, and no empty line otherwise.
+- Changed `card list` to read only the page it prints on pimdir, JMAP, Microsoft Graph and Google People, where it read the whole address book.
+- Changed the version of a JMAP card (`etag`, what `--if-match` compares) to the BLAKE3 digest of its JSON, stable across builds.
 - Changed `carddav put` to print the id the write answered, as a listing shows it, where it echoed its argument.
-- Changed a JMAP set error of a type io-jmap does not model to be named as the server sent it, where it read `unknown`.
-- Bumped vcard-rs to 0.6.
-
-  A 3.0 or 4.0 line longer than 75 octets that `card build`, `card add` or `card update` writes or edits is now folded.
-
-- Changed the pimdir `update_card` and `delete_card` to honour `--if-match` against the `etag` they report, the store's hash of the card's body: a write naming a version the card no longer has is refused before anything is queued, with an error starting `Precondition failed:`.
-- Changed `card update` and `card delete` on pimdir to name, on the write they queue, the version `--if-match` matched (pimdir STORAGE §15.3): a write queued over a card a sync changes before applying it is parked rather than applied, and shows in `pimdir status`.
-- Changed a `card update` or a `card delete` of a conflicted pimdir card to be parked by the sync engine, the card and its diverging body kept, where a delete settled the conflict: cardamum decides no conflict, a client showing it or the server does.
-- Changed the pimdir writes to be refused before they are queued when a source of the store does not support them, naming the capability, the source and why (pimdir draft-03, STORAGE §15.6). A write a source supports only in part logs a warning.
-- Changed `card add`, `card update` and `card delete` on pimdir to say the write is queued for the next sync instead of reporting it done; the `--json` output is unchanged.
-
-  A queued create reports the card's link id, its `UID`, and is not listed until the sync applies it.
-
-- **Breaking:** changed pimdir with `pimdir.account` unset to read the one account the store groups its collections under, and to refuse a store grouping several, naming them.
-- Changed `account check` on pimdir to probe a producer as well as the reader, so a store whose staging lock cannot be taken fails the check rather than the first write; a sync collecting the store fails it at once with `store-busy`, and the check writes nothing into the store.
-- Changed the refusal of a pimdir store cardamum cannot read to say what it asks instead of deleting the store, which loses the queued writes a resync never restores: a store of another format version is reinstalled through neverest, its queue drained first, or asks for a cardamum upgrade.
-- **Breaking:** changed the pimdir backend to read a store of pimdir storage-draft-13 alone: a store any earlier neverest wrote, a draft-11 one included, is refused with `store-version` until neverest rebuilds it on draft-13, a search index of an earlier draft with `index-version` until the sync engine rebuilds it, and a store another user can read is refused with `store-exposed`.
-- Changed the `addressbook delete` refusal on pimdir to name the server route only, no longer advising to remove the store directory, which loses the queued writes.
-- **Breaking:** changed `addressbook create` naming an address book the backend holds to fail coded `addressbook-duplicate`, ``Cannot create address book `<name>`: it exists already``, as the family codes a collection created twice: on vdir, where it rewrote the existing one's metadata and succeeded, and `vdir create` too; on CardDAV, a `MKCOL` refused 403 or 405 on an id the home set then lists, where it read `permission-denied` or carried no code; on Microsoft Graph, `ErrorFolderExists`, and on Google People, the 409 of a group name held, both uncoded before. JMAP lets two address books share a name and pimdir creates none.
-- **Breaking:** changed `gpeople connections list`, `gpeople other-contacts list`, `gpeople contact-groups list`, `msgraph contacts list`, `msgraph contact-folders list`, `msgraph contact-folders child-folders` and `msgraph contacts delta` to print the provider's cursor as `nextPage`, `null` on the last page, where they printed `nextPageToken` or `@odata.nextLink`, and to take it back through `--page-token`, as the family pages a protocol listing; the rest of the payload stays raw, `nextSyncToken` and the delta's `@odata.deltaLink` included, which `--delta-link` still takes. The text prints a `Next page:` line where it told to follow the token or raise `--top`.
+- Changed a CardDAV address book outside the home set to be listed and addressed by its path rather than its last segment.
+- Changed a JMAP set error of a type cardamum does not model to be named as the server sent it, where it read `unknown`.
+- Changed a vdir listing to hold regular files only and to leave out a card removed while it lists.
+- Changed piped `--json` output to one value per line, and each `json-schema` schema to carry an `$id` naming the contract version.
+- Changed `--log-file` to refuse a path naming a link to an existing file.
+- Changed an HTTP response whose head passes 64 KiB or whose body passes 256 MiB to fail the exchange.
+- Changed config.sample.toml to one `[accounts.example]` table and one commented section per backend or provider.
 
 ### Removed
 
-- **Breaking:** removed `fnValue`, `email` and `tel` from the cards of `card list` under `--json`, and from the row `card read` and `pimdir search` print: read `fullName`, the first of `emails` and the first of `phones`, which the text columns now print too, an escape decoded and a `tel:` URI as its number where the removed keys kept them as written.
-- Removed IDNA for server and proxy hosts: an `http` or `https` URL with a non-ASCII host is refused, its Punycode form working.
-- **Breaking:** removed the `configure` command and its `wizard` alias, with the `wizard` cargo feature.
+- **BREAKING**: Removed the `configure` command, its `wizard` alias and the `wizard` cargo feature.
 
-  A bare `cardamum` prints the help, and a command meeting no configuration fails naming the path it looked at and the documented sample.
-- **Breaking:** removed the `discover` route of the `[carddav]` block, which resolved a bare domain on every run through PACC and RFC 6764 SRV and TXT records. Name the server in `carddav.server` (a bare host still goes through its `.well-known/carddav`), or the address book home in `carddav.home`, as Google needs. A configuration holding `carddav.discover` is refused as an unknown key.
-- Removed the io-pim-discovery dependency, and with it the DNS stack only it pulled (domain, octseq, psl, resolv-conf, ipconfig).
+  A bare `cardamum` prints the help, and a command meeting no configuration fails naming the path it looked at and the sample.
+
+- **BREAKING**: Removed the `discover` route of the `[carddav]` block, resolving a bare domain through PACC and DNS SRV and TXT records.
+
+  Name the server in `carddav.server` (a bare host still goes through its `.well-known/carddav`), or the address book home in `carddav.home` as Google needs. `carddav.discover` is refused as an unknown key.
+
+- **BREAKING**: Removed `fnValue`, `email` and `tel` from the card rows under `--json`: read `fullName`, `emails` and `phones`.
+- Removed IDNA for server and proxy hosts: a non-ASCII host is refused, naming it, its Punycode form (`xn--...`) working.
 
 ### Fixed
 
-- Fixed `gpeople other-contacts copy` failing on every contact with `HTTP 400 INVALID_ARGUMENT: Request field 'metadata' not allowed for other contacts mutate requests`: its copy mask reused the listings' read mask, `metadata` included; it now sends `names,emailAddresses,phoneNumbers`, the fields People copies.
-- Fixed the help of `addressbook delete` saying a Google People contact group goes with every card it holds: the group alone is deleted and its contacts stay in Contacts, a contact sitting in other groups too, which the help and the `addressbook.delete` detail of `account capability` now say.
-- Fixed `jmap address-book update --json` printing the `/set` reply's object, which states only what the server changed beyond the update, every other property as a default (`name: null`, every right `false`): it now always prints the id receipt `{"id"}`.
-- Fixed JMAP declaring `addressbook.delete` `full` when an address book may forbid its own deletion (`myRights.mayDelete: false`), as Fastmail's Personal does: `account capability` now says `server`.
-- Fixed JMAP declaring `addressbook.create` and `addressbook.update` `full` when a server may forbid both, as Fastmail does: `account capability` now says `server`, and `addressbook create` on an account whose session states `mayCreateAddressBook: false` fails coded `permission-denied` before any request.
-- Fixed `jmap address-book create --json` printing every property the server's reply left out as a default (`name: null`, every right `false`): it now prints the id receipt `{"id"}`, the id the server minted.
-- Fixed `vdir rename` onto a collection the root holds already failing with the raw "Directory not empty (os error 39)", or replacing an empty directory: it is refused coded `addressbook-duplicate`, ``Cannot rename collection `<id>` to `<new-id>`: it exists already``, nothing moved.
-- Fixed `jmap contact-card get` and `jmap address-book get` dropping the ids the server found nothing for (`notFound`) and exiting 0: each is now an `errors` entry coded `card-not-found` or `addressbook-not-found`, the command exiting 3.
-- Fixed `gpeople connections update` replacing the `etag` its JSON names with the person's current one, which let a stale write overwrite a newer person: the JSON's etag is now sent as the guard, the current one fetched only when it names none.
-- Fixed `gpeople request` refusing a path naming a custom method on a collection (`people:createContact`, `contactGroups:batchGet`) as off the API origin: only an argument holding `://` is a full URL now, any other joining onto the People base.
-- Fixed the text of a refused query, which read `Error: [unknown-field] Error: Query refused`: the second `Error:` is gone, as in Himalaya.
-- Fixed a pimdir `card add` of a card with no `UID` and an `X-PIMDIR-` property queueing it under the `hash:` key of the bytes before that property was dropped, a key naming a body the store never holds: the key is now the one io-pimdir derives from the queued body, the id reported (io-pimdir 0.19.0 refuses the former with `hash-key-mismatch`).
-- Fixed `card list` and `jmap contact-card query` to code a page token they did not print `page-token-invalid`.
-- Fixed the composer refused inside a session to be coded `stdin-taken`, and a source neither a readable file nor vCard contents `card-invalid`.
-- Fixed `card read` on a vdir file or a pimdir body that cannot be read failing uncoded with the bare system error: it fails coded `card-unreadable`, ``Cannot read card `<id>` in address book `<addressbook>` ``, the error in `sources`, as `card list` names such a card, and so do `card update` starting from the card and a pimdir `card update` or `card delete` given `--if-match`. A pimdir update or delete given no version no longer reads the body, so such a card can be replaced or removed.
-- Fixed `addressbook list` on Microsoft Graph showing the top-level contact folders alone: every folder is listed whatever its depth, keyed by its id and named by its display name, as neverest lists them.
-- Fixed a shell composer failing to open its draft on Windows: the path is double-quoted there, where the line runs under `cmd /C`, and single-quoted elsewhere as before.
-- Fixed the `-b` help saying only the unified commands read the flag and that `auto` picks a backend the command supports: `account`, `repl` and `mcp` read it too, and `auto` takes the first configured backend, refusing a command it does not serve with `capability-missing`.
-- Fixed the file a composer edits being readable by other users under a permissive umask: it is created 0600 on Unix, and a file or a symbolic link planted at its path is refused rather than written through.
-- Fixed install.sh saving an HTTP error page as the archive, then failing to extract it: the download fails on an HTTP error (`curl -f`).
-- Fixed `--phone tel:+33...` writing `TEL;TYPE=tel:+33...`: a `tel:` or `mailto:` scheme is no type, the number or address written without it.
-- Fixed a field flag writing CRLF lines into an LF card.
-- Fixed a `pimdir.account` naming none of the store's accounts reading as an empty account: it fails naming the accounts the store holds, as Calendula does.
-- Fixed `card list` printing vCard 2.1 quoted-printable values undecoded (`Andr=C3=A9`), a foreign `CHARSET` now transcoded too.
-- Fixed a name flag of `card update` dropping the parameters of `N` (`SORT-AS`, `LANGUAGE`, `ALTID`) and writing a 2.1 quoted-printable family name back as literal text.
-- Fixed the card verbs on vdir reading an `.ics` item as a card, `card update` creating a `.vcf` beside it and `card delete` removing it: they answer `card-not-found`. A file opening no `BEGIN:VCARD` lists as a `card-unreadable` entry, no longer a row of nulls.
-- Fixed `carddav.server = "https://<non-ASCII host>/..."` being read as the host `https`, the URL prefixed with `https://` once it failed to parse: a CardDAV `server` or `home`, or a JMAP `server`, whose host is not ASCII is refused with "Host `bücher.de` is not ASCII: write it in its Punycode form (xn--...)", naming the host, where `home` and the JMAP `server` failed "invalid international domain name".
-- Fixed `card add -k <group>` on Google People leaving a contact in myContacts when the group does not exist: it created the contact, then failed adding the membership with a bare 404, so a retry made a second one. Every card command on People now reads the group it names first, and an unknown one fails `addressbook-not-found` before anything is written; a membership refused after the create says the card stays in Contacts.
-- Fixed `card list -k <group>` on Google People listing an unknown group as empty with exit 0: it fails `addressbook-not-found`, as vdir and pimdir do. `card read`, `update` and `delete`, which ignored the group, check it too, and `addressbook update` and `delete` code a group People does not hold the same way.
-- Fixed `card read` printing a card's control characters as is, which could drive the terminal: the text view replaces them, CRLF read as LF, and `--json` keeps the bytes.
-- Fixed the write confirmations printing a server-given id as is.
-- Fixed a unified command spawning its secret commands again when it reopened its backend after the composer.
-- Fixed `account check` exiting 0 when a backend failed: it now prints its report and exits 3.
-- Fixed pimdir accepting writes into an address book no source syncs, which no sync would ever push: they are now refused before anything is staged.
-- Fixed a pimdir card whose body blob is missing reporting an `etag`, which an `--if-match` could then match.
-- Fixed a year-less birthday (`BDAY:--MMDD`) on the gpeople backend being stashed instead of becoming a People birthday, so Google now shows it and creates its yearly calendar event (io-gpeople `e507d82`, [#26](https://github.com/pimalaya/cardamum/issues/26)).
-- Fixed pimdir recognising an address book only by the exact kind `text/vcard`: a kind carrying parameters now counts.
-- Fixed `card add` on pimdir reporting as queued a card whose `UID` the address book already holds, synced or queued, which the sync then parked: it is now refused with `item-duplicate`, leaving nothing in the store, and `-i` keeps the composer file.
-- Fixed a pimdir `card update` made from the card it read (no vCard source, or `--if-match`) overwriting, unmerged, a server change a sync brought in before applying it: the queued update now names the body it was made against, and the sync engine parks it instead.
-- Fixed `card update` on Google People erasing what a vCard cannot show of the fields it changes: a further organization, a relation of another type, a custom type, a sub-field without a vCard slot.
-- Fixed `card add` and `card update` on Google People leaving out a property longer than 8 KiB without a word: a warning names it.
-- Fixed `addressbook update --description ""` on JMAP leaving the description in place: it is cleared.
+- Fixed the vdir backend reaching out of its root: an address book id that is empty, `.`, `..` or holds a separator, which let `addressbook delete -k ..` delete the root's parent, is now `addressbook-not-found`.
+- Fixed a CardDAV address book or card id that is empty or holds an empty, `.` or `..` segment reaching another resource, the server root or the home set: it fails before connecting.
+- Fixed `card update` on Microsoft Graph and JMAP failing with no `--if-match`, where the version read was sent as a guard those backends do not take.
+- Fixed the card commands on Google People acting on a group that does not exist: they fail `addressbook-not-found` before writing anything.
+- Fixed `card list -k <addressbook>` on CardDAV, JMAP and Microsoft Graph failing with the server's bare refusal for an address book it does not hold, and on Google People listing it as empty.
+- Fixed `card add` on pimdir queueing a card whose `UID` the address book already holds, which the sync then parked: it fails `item-duplicate`.
+- Fixed `card update` on Google People erasing what a vCard cannot show of the fields it changes: a further organization, a relation of another type, a custom type.
+- Fixed `card update` on Google People reporting as dropped the properties its stash keeps.
+- Fixed `card add` and `card update` on Google People leaving out a property longer than 8 KiB without a warning.
+- Fixed a year-less birthday (`BDAY:--MMDD`) on Google People being stashed instead of becoming a People birthday ([#26](https://github.com/pimalaya/cardamum/issues/26)).
+- Fixed `gpeople connections update` replacing the `etag` its JSON names with the person's current one, letting a stale write overwrite a newer person.
+- Fixed `gpeople other-contacts copy` failing on every contact with `HTTP 400 INVALID_ARGUMENT`.
+- Fixed `gpeople contact-groups list --sync-token` failing on the `totalItems: -1` Google answers with.
+- Fixed the `addressbook delete` help saying a Google People group is deleted with its contacts: the group alone goes.
+- Fixed `addressbook list` on Microsoft Graph showing the top-level contact folders alone: every folder is listed whatever its depth.
 - Fixed the Microsoft Graph listings following a next page link off the Graph origin with the account's token: such a link is refused.
-- Fixed a credential command prompting for a password (`systemd-ask-password`) hanging the run: it now reads the terminal when cardamum runs in one (pimalaya-config 0.4.1).
-- Fixed `account check` passing a CardDAV account that names `carddav.home` whatever its credential, as the home route connected without a request: the check now sends the home one `PROPFIND`, so a refused credential fails its row as with `carddav.server`.
-- Fixed `card list` printing a card it could not read as a row of empty fields (a pimdir one as its preview) beside its `errors` entry: the card is in `errors` alone, under `--json` and in text, and keeps its place in the pages.
-- Fixed a data loss on vdir: an addressbook id that is not one directory name reached out of the home, so `addressbook delete -k ..` deleted everything in the directory holding the home, the home and its siblings included, `-k ../<name>` a directory beside the home, `-k .` and `-k <book>/..` every addressbook of the home, and `vdir delete ""` the home itself. Such an id (empty, `.`, `..`, holding a separator) is now not found: every vdir command fails `addressbook-not-found` before reading or writing anything, `vdir delete`, `vdir rename` and `vdir item` included, and `addressbook create` and `vdir create` refuse such a name rather than write out of the home. An empty `-k` is coded `addressbook-not-found` on every backend.
-- Fixed `card update` with field flags or `-i` and no `--if-match` failing at once on Microsoft Graph ("Microsoft Graph does not support If-Match guarded updates") and on JMAP, sending nothing: the version of the card it read guarded the write on backends that take no guard. There it now sends the plain update, the version it read compared first (see `--if-match` on Graph and JMAP).
-- Fixed `card read` failing, with no code, on a card whose bytes are not UTF-8, and `card build` on such a source: see `encoding`.
-- Fixed the name, email and phone columns of `card list` misreading a card's lines: a property with parameters (Fastmail's `FN;DERIVED=TRUE`) listed nameless, a folded line (RFC 6350 §3.2) was cut at its fold (`alan@examp` on Fastmail's JMAP cards), a grouped one (`item1.EMAIL`) was skipped and a `TELEX` was read as a `TEL`. The columns read the decoded vCard, a folded line whole and a property whatever its group and parameters.
-- Fixed `card read` and the `jmap`, `msgraph` and `gpeople` `request` text ending without a newline, the shell prompt landing on its last line: a card whose last line lacks one (a CardDAV `REPORT` body) included.
-- Fixed `card list` naming an address book a CardDAV server, JMAP or Microsoft Graph does not hold failing with the server's bare refusal and no code: it fails `addressbook-not-found` naming it, the server's answer in `sources`, as vdir, pimdir and People do. On JMAP a query that fails or finds nothing is checked with one `AddressBook/get`; on CardDAV a 404 or 410 of the collection is read so, on Graph a 404 or a malformed folder id, `card add` included; `addressbook update` and `delete` on CardDAV and Graph too.
-- Fixed a CardDAV address book or card id addressing another resource reaching the server: `addressbook delete ..` could send a DELETE to the parent of the home set, `/` to the server root and `""` to the home set, `addressbook update` a PROPPATCH there. An id that is empty or holds an empty, `.` or `..` segment now fails before the account's secret is resolved or anything connects, on every unified and `carddav` command: an address book id `addressbook-not-found`, a card id `card-not-found`, as vdir refuses an id that is not one directory name, and a name `addressbook create` or `carddav mkcol` cannot give a collection uncoded.
-- Fixed `carddav report raw` counting a card two bytes short in `dataBytes` when the server escapes its final CRLF, and building its path by hand: the REPORT goes to the path io-webdav builds, percent-encoded, an id out of the home refused.
-- Fixed `carddav report raw` and the `PROPFIND` `account check` sends a `carddav.home` failing with `reached unexpected EOF` when the server had closed the connection (a keep-alive timed out, `Connection: close`): sent by hand over the client's stream, they missed the resend every other CardDAV request gets. Both now run through io-webdav's client, which sends the request again once on a fresh connection, and a refused `report raw` carries the code a CardDAV refusal carries (`permission-denied`, `quota-exceeded`, `rate-limited`), as `report query` does, where it carried none.
+- Fixed `addressbook update --description ""` on JMAP leaving the description in place.
+- Fixed `jmap contact-card get` and `jmap address-book get` dropping the ids the server found nothing for: each is an `errors` entry, the command exiting 3.
+- Fixed `vdir rename` onto an existing collection failing with a raw OS error or replacing an empty directory: it fails `addressbook-duplicate`, nothing moved.
+- Fixed the card verbs on vdir reading an `.ics` item as a card: they answer `card-not-found`.
+- Fixed pimdir recognising an address book only by the exact kind `text/vcard`: a kind carrying parameters counts.
+- Fixed the name, email and phone columns of `card list` misreading a property with parameters, a folded line, a grouped property (`item1.EMAIL`) and `TELEX`.
+- Fixed `card list` printing vCard 2.1 quoted-printable values undecoded, a foreign `CHARSET` now transcoded too.
+- Fixed a name flag of `card update` dropping the parameters of `N` and writing a 2.1 quoted-printable family name back as literal text.
+- Fixed `--phone tel:+33...` writing `TEL;TYPE=tel:+33...`: a `tel:` or `mailto:` scheme is no type.
+- Fixed a field flag writing CRLF lines into an LF card.
+- Fixed `card build`, `card add` and `card update`, and the Google People and Microsoft Graph cards, leaving vCard lines longer than 75 octets unfolded.
+- Fixed `card read` and the write confirmations printing control characters as is, which could drive the terminal: `--json` keeps the bytes.
+- Fixed `card read` and the `request` text ending without a newline.
+- Fixed a CardDAV listing trimming a card's final CRLF, so it matches the body `card read` and `carddav get` return.
+- Fixed a CardDAV answer that is not one whole multistatus document listing fewer cards instead of failing, and a weak ETag being cut.
+- Fixed a CardDAV relative id being sent unencoded, a `\` read as a separator.
+- Fixed a CardDAV request failing with `reached unexpected EOF` when the server had closed the connection: it is sent again once on a fresh one.
+- Fixed `carddav report raw` counting a card two bytes short in `dataBytes` when the server escapes its final CRLF.
+- Fixed a connection closing mid-body spinning rather than failing.
+- Fixed `account check` passing a CardDAV account naming `carddav.home` whatever its credential: the home is sent one `PROPFIND`.
+- Fixed a credential command prompting for a password (`systemd-ask-password`) hanging the run: it reads the terminal when there is one.
+- Fixed a unified command spawning its secret commands again when it reopened its backend after the composer.
+- Fixed a shell composer failing to open its draft on Windows.
+- Fixed the composer's file being readable by other users under a permissive umask: it is created 0600 on Unix, a file or link planted at its path refused.
+- Fixed install.sh saving an HTTP error page as the archive.
+
+### Security
+
+- Bumped rustls-webpki to 0.103.16 and webpki-root-certs to 1.0.11, fixing RUSTSEC-2026-0382 and RUSTSEC-2026-0383.
 
 ## [0.3.0] - 2026-10-02
 

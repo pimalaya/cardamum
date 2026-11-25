@@ -1,16 +1,63 @@
-# 📇 Cardamum [![crates.io](https://img.shields.io/crates/v/cardamum.svg)](https://crates.io/crates/cardamum) [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya) [![Sponsor](https://img.shields.io/badge/sponsor-pink?style=flat&logo=github-sponsors&logoColor=white)](https://pimalaya.org/sponsor/)
+# 📇 Cardamum [![Matrix](https://img.shields.io/badge/chat-%23pimalaya-blue?style=flat&logo=matrix&logoColor=white)](https://matrix.to/#/#pimalaya:matrix.org) [![Mastodon](https://img.shields.io/badge/news-%40pimalaya-blue?style=flat&logo=mastodon&logoColor=white)](https://fosstodon.org/@pimalaya) [![Sponsor](https://img.shields.io/badge/sponsor-pink?style=flat&logo=github-sponsors&logoColor=white)](https://pimalaya.org/sponsor/)
 
-CLI to manage contacts, written in Rust
+CLI to manage contacts
 
-> [!CAUTION]
-> Cardamum is `v0.x`: expect breaking changes between releases until it stabilises.
+```sh
+$ cardamum card list --json
+```
+
+```json
+{
+  "cards": [
+    {
+      "id": "ada",
+      "addressbookId": "personal",
+      "etag": null,
+      "uid": "ada",
+      "fullName": "Ada Lovelace",
+      "givenName": "Ada",
+      "familyName": "Lovelace",
+      "emails": ["ada@example.org"],
+      "phones": ["+44 20 7946 0000"],
+      "organization": null,
+      "organizationUnits": [],
+      "title": null,
+      "note": null
+    },
+    {
+      "id": "alan",
+      "addressbookId": "personal",
+      "etag": null,
+      "uid": "alan",
+      "fullName": "Alan Turing",
+      "givenName": "Alan",
+      "familyName": "Turing",
+      "emails": ["alan@example.org"],
+      "phones": [],
+      "organization": null,
+      "organizationUnits": [],
+      "title": null,
+      "note": null
+    }
+  ],
+  "nextPage": null,
+  "errors": []
+}
+```
 
 ## Table of contents
 
 - [Features](#features)
+- [RFC coverage](#rfc-coverage)
 - [Installation](#installation)
 - [Configuration](#configuration)
+  - [Google](#google)
+  - [Microsoft](#microsoft)
+  - [Fastmail](#fastmail)
+  - [Posteo](#posteo)
+  - [iCloud](#icloud)
 - [Usage](#usage)
+- [Alternatives](#alternatives)
 - [AI policy](https://github.com/pimalaya/.github/blob/master/AI_POLICY.md)
 - [License](#license)
 - [Social](#social)
@@ -19,255 +66,273 @@ CLI to manage contacts, written in Rust
 
 ## Features
 
-- **Unified API**: `addressbook` and `card` work the same whichever backend serves the account, each backend declaring what it serves: `account capability` lists it, every command's `--help` names it, and a verb a backend does not serve is refused before connecting.
-- **Protocol-specific APIs**: `carddav`, `jmap`, `msgraph`, `gpeople` and `vdir` each expose what only that backend has, down to a raw request escape hatch.
-- **Offline store report, queue and search**: `pimdir status` shows what the local pimdir store holds for the account, `pimdir queue list` the cards queued for creation and the writes its sync engine parked rather than applied, which `pimdir queue cancel` retracts; `pimdir search` and `pimdir count` find cards by any word of them through the store's search index.
-- **Multi-account**: one TOML file, one block per account, several files deep-merged when you want secrets apart.
-- **JSON output**: every command switches to JSON with `--json`, and `cardamum json-schema` describes what each one emits, for scripts and other tools.
-- **REPL and MCP**: `cardamum repl` runs commands over one account in a session, and `cardamum mcp` serves the unified API to an AI agent over the Model Context Protocol, reads only unless `--allow-write`.
-- Full standard, blocking client with **TLS** support:
-  - [Rustls](https://crates.io/crates/rustls) with ring crypto (requires `rustls-ring` feature, enabled by default)
-  - [Rustls](https://crates.io/crates/rustls) with aws crypto (requires `rustls-aws` feature)
-  - [Native TLS](https://crates.io/crates/native-tls) (requires `native-tls` feature)
+- **Unified API** for addressbooks and cards, the same on every backend
+- **Protocol-specific APIs** exposing the full surface of CardDAV, JMAP, Microsoft Graph, Google People and vdir
+- **Local stores**: vdir and pimdir, the offline store [Neverest](https://github.com/pimalaya/neverest) syncs
+- **One query language** to search cards, whatever the backend
+- **Card editing** from field flags, a vCard file or your own editor
+- **REPL** and **MCP server** running commands over a connection kept for the session
+- **JSON output** of every command, described by `cardamum json-schema`
+- **TLS** via Rustls (`rustls-ring` default, `rustls-aws`) or Native TLS (`native-tls`), client certificates included
 
-> [!TIP]
-> Each backend sits behind its own cargo feature. `carddav`, `jmap`, `msgraph`, `gpeople`, `vdir` and `pimdir` are all enabled by default. Build with `--no-default-features` and pick the ones you need. A configuration naming a backend the build leaves out still loads, and a command reaching that backend fails naming the feature to rebuild with.
->
-> The default `vendored` feature builds SQLite and OpenSSL from source; leave it out (`--no-default-features --features …`) to link the system ones.
+## RFC coverage
+
+| RFC    | What is covered                                                                                    |
+|--------|----------------------------------------------------------------------------------------------------|
+| [2426] | vCard 3.0: cards minted at that version, for the servers still storing it                          |
+| [4918] | WebDAV: the PROPFIND, PROPPATCH, GET, PUT and DELETE methods CardDAV builds on                     |
+| [5397] | Current-user-principal, the first step of the CardDAV discovery walk                               |
+| [5689] | Extended MKCOL: creating an addressbook                                                            |
+| [6350] | vCard 4.0: parsing, building and editing cards                                                     |
+| [6352] | CardDAV: addressbook collections, address object resources, and the query and multiget reports     |
+| [6578] | Collection synchronization, whose sync token a CardDAV addressbook listing reports                  |
+| [6750] | HTTP Bearer authentication, for a provider-issued or broker-refreshed API token                    |
+| [7617] | HTTP Basic authentication                                                                          |
+| [8620] | JMAP core: the session, its capabilities and the method calls the JMAP backend sends               |
+| [9553] | JSContact: the JMAP backend's cards, converted to and from vCard                                   |
+| [9555] | JSContact and vCard conversion: the properties with no JSContact slot kept as they are             |
+| [9610] | JMAP for Contacts: address books and contact cards                                                 |
+
+[2426]: https://www.rfc-editor.org/rfc/rfc2426
+[4918]: https://www.rfc-editor.org/rfc/rfc4918
+[5397]: https://www.rfc-editor.org/rfc/rfc5397
+[5689]: https://www.rfc-editor.org/rfc/rfc5689
+[6350]: https://www.rfc-editor.org/rfc/rfc6350
+[6352]: https://www.rfc-editor.org/rfc/rfc6352
+[6578]: https://www.rfc-editor.org/rfc/rfc6578
+[6750]: https://www.rfc-editor.org/rfc/rfc6750
+[7617]: https://www.rfc-editor.org/rfc/rfc7617
+[8620]: https://www.rfc-editor.org/rfc/rfc8620
+[9553]: https://www.rfc-editor.org/rfc/rfc9553
+[9555]: https://www.rfc-editor.org/rfc/rfc9555
+[9610]: https://www.rfc-editor.org/rfc/rfc9610
 
 ## Installation
 
-### Pre-built binary
+<details>
+  <summary>Debian, Ubuntu</summary>
 
-As root:
+  Cardamum is not in the official repositories yet, but the signed APT repository of [pkg.pimalaya.org](https://pkg.pimalaya.org) ships the latest release with its man pages and shell completions. Add the repository once:
 
-```sh
-curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | sudo sh
-```
+  ```sh
+  sudo install -d -m 0755 /etc/apt/keyrings
+  curl -fsSL https://pkg.pimalaya.org/pimalaya.asc | sudo tee /etc/apt/keyrings/pimalaya.asc >/dev/null
+  sudo tee /etc/apt/sources.list.d/pimalaya.sources >/dev/null <<EOF
+  Types: deb
+  URIs: https://pkg.pimalaya.org/apt
+  Suites: stable
+  Components: main
+  Signed-By: /etc/apt/keyrings/pimalaya.asc
+  EOF
+  sudo apt update
+  ```
 
-As a regular user:
+  Then install Cardamum:
 
-```sh
-curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | PREFIX=~/.local sh
-```
+  ```sh
+  sudo apt install cardamum
+  ```
+</details>
 
-These commands install the latest binary from the GitHub [releases](https://github.com/pimalaya/cardamum/releases) section.
+<details>
+  <summary>Fedora, RHEL, Rocky Linux, AlmaLinux</summary>
 
-For a more up-to-date version, check the [releases](https://github.com/pimalaya/cardamum/actions/workflows/releases.yml) workflow and look for the *Artifacts* section: those are built from `master`, with the default cargo features.
+  Cardamum is not in the official repositories yet, but the signed DNF repository of [pkg.pimalaya.org](https://pkg.pimalaya.org) ships the latest release with its man pages and shell completions:
 
-### Cargo
+  ```sh
+  sudo curl -fsSL -o /etc/yum.repos.d/pimalaya.repo https://pkg.pimalaya.org/pimalaya.repo
+  sudo dnf install cardamum
+  ```
+</details>
 
-```sh
-cargo install --locked --git https://github.com/pimalaya/cardamum.git
-```
+<details>
+  <summary>Homebrew (macOS, Linux)</summary>
 
-With CardDAV and vdir support only:
+  Cardamum is not in homebrew-core yet, but the [pimalaya/tap](https://github.com/pimalaya/homebrew-tap) formula installs the latest release with its man pages and shell completions:
 
-```sh
-cargo install --locked --git https://github.com/pimalaya/cardamum.git \
-  --no-default-features \
-  --features carddav,vdir,rustls-ring
-```
+  ```sh
+  brew install pimalaya/tap/cardamum
+  ```
+</details>
 
-### Nix
+<details>
+  <summary>Pre-built binary</summary>
 
-If you have the [Flakes](https://nixos.wiki/wiki/Flakes) feature enabled:
+  For other systems, Cardamum can be installed with the installer:
 
-```sh
-nix profile install github:pimalaya/cardamum
-```
+  *As root:*
 
-Or run without installing:
+  ```sh
+  curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | sudo sh
+  ```
 
-```sh
-nix run github:pimalaya/cardamum
-```
+  *As a regular user:*
 
-### Sources
+  ```sh
+  curl -sSL https://raw.githubusercontent.com/pimalaya/cardamum/master/install.sh | PREFIX=~/.local sh
+  ```
 
-```sh
-git clone https://github.com/pimalaya/cardamum
-cd cardamum
-nix run
-```
+  These commands install the latest [release](https://github.com/pimalaya/cardamum/releases), built with the default cargo features. For a build of `master`, check out the [releases](https://github.com/pimalaya/cardamum/actions/workflows/releases.yml) GitHub workflow and look for the *Artifacts* section.
+</details>
+
+<details>
+  <summary>Cargo</summary>
+
+  ```sh
+  cargo install --locked cardamum
+  ```
+
+  For a build of `master`:
+
+  ```sh
+  cargo install --locked --git https://github.com/pimalaya/cardamum.git
+  ```
+</details>
+
+<details>
+  <summary>Nix</summary>
+
+  ```sh
+  nix profile install github:pimalaya/cardamum
+  ```
+</details>
+
+<details>
+  <summary>Sources</summary>
+
+  Requires [Rust](https://www.rust-lang.org/tools/install) 1.89 or later:
+
+  ```sh
+  git clone https://github.com/pimalaya/cardamum
+  cd cardamum
+  cargo build --release --locked
+  ```
+
+  The binary lands at target/release/cardamum.
+</details>
 
 ## Configuration
 
-Cardamum reads a TOML configuration you write, and never writes one. [config.sample.toml](./config.sample.toml) holds one account: the options every account shares with their values, then one commented section per backend or provider, yours to uncomment: CardDAV, CardDAV without credentials, Google CardDAV, JMAP, Fastmail, Microsoft Graph, Google People, vdir and pimdir. The OAuth 2.0 sections read their token from [Ortie](https://github.com/pimalaya/ortie), whose sample has the matching sections. Releases and packages ship it as share/doc/cardamum/config.sample.toml.
+A TOML configuration is loaded from every existing path among the following, each one deep-merged on top of the ones before:
 
-Run without a configuration at a terminal, Cardamum welcomes you with the commands copying the shipped sample in place, or downloading it when none ships, then the first command to run. Under `--json` or in a script, it fails naming the path it looked at and the sample.
+- `$XDG_CONFIG_HOME/cardamum/config.toml`
+- `$HOME/.config/cardamum/config.toml`
+- `$HOME/.cardamumrc`
 
-A configuration is loaded from every existing path among the following, each one deep-merged on top of the ones before, so /.cardamumrc overrides the others:
+Override the path with `-c <PATH>`, repeated to merge several files.
 
-- /cardamum/config.toml
-- /.config/cardamum/config.toml
-- /.cardamumrc
+> [!TIP]
+> See [config.sample.toml](./config.sample.toml) for a complete configuration of one example account with commented fields; rename the account and uncomment what you need, or start from a provider below.
 
-At most one account may be marked `default = true` across them.
-
-Override those paths with `-c <PATH>`. Repeat it to merge several files, such as `-c public.toml -c private.toml`: the first one is the base and the next ones are deep-merged on top. Each `-c` takes one path, never split, and no environment variable is read.
-
-To add an account, add an `[accounts.<name>]` table to your configuration. `cardamum account list` and `cardamum account check` inspect and validate the accounts declared.
-
-Secrets come from an OS keyring, a token broker such as [Ortie](https://github.com/pimalaya/ortie), any command or a raw value. Cardamum reads them but never issues or refreshes them, so a provider on OAuth 2.0 needs a broker. Ready-made blocks for common providers follow.
-
-### Apple
-
-Apple exposes contacts via CardDAV, but you cannot use your regular password. You need to generate an [app-specific password](https://support.apple.com/en-us/HT204397) (required once two-factor authentication is on):
-
-```toml
-[accounts.example]
-carddav.server = "https://contacts.icloud.com/"
-# The home URL is usually of this shape:
-#carddav.home = "https://contacts.icloud.com/<id>/principal/"
-
-carddav.auth.basic.username = "example@icloud.com"
-carddav.auth.basic.password.raw = "***"
-
-addressbook.default = "card"
-```
+An account reads a vdir home, or the pimdir store Neverest syncs, with no server: point `vdir.root` or `pimdir.root` at it. Cardamum never issues nor refreshes an OAuth 2.0 token, so Google and Microsoft accounts read theirs from [Ortie](https://github.com/pimalaya/ortie).
 
 ### Google
 
-Use the `gpeople` backend, which speaks the [People API](https://developers.google.com/people) directly and is richer than Google's CardDAV bridge. Contact groups map to addressbooks, the `myContacts` group listing as Contacts.
-
-Both routes need [OAuth 2.0](https://developers.google.com/identity/protocols/oauth2), and an access token expires within the hour, so point the token at a broker rather than pasting one in:
+Use the Google People API, richer than Google's CardDAV bridge, with a token from Ortie's Google account. Contact groups are addressbooks, `myContacts` listing as Contacts.
 
 ```toml
-[accounts.example]
-gpeople.auth.token.command = ["ortie", "token", "show"]
+[accounts.google]
+
+gpeople.auth.token.command = ["ortie", "token", "show", "-a", "google"]
 addressbook.default = "myContacts"
 ```
 
-Google models contacts as JSON and exposes no vCard representation, so cardamum synthesizes the document you read and re-projects what you write.
-
-Properties with a well-defined vCard slot are authoritative in both directions, and everything else is stashed verbatim on the server so it round-trips instead of being dropped on the next write.
-
-CardDAV works too, with a bearer token and the address book home addressed by hand, its discovery entry point being off-spec:
-
-```toml
-[accounts.example]
-carddav.home = "https://www.googleapis.com/carddav/v1/principals/example@gmail.com/lists"
-carddav.auth.bearer.token.command = ["ortie", "token", "show"]
-addressbook.default = "default"
-```
-
-The two routes need different scopes, which are not interchangeable: `auth/carddav` authorizes CardDAV, `auth/contacts` the People API.
-
 ### Microsoft
 
-Microsoft offers no CardDAV, only the [Graph API](https://learn.microsoft.com/en-us/graph/api/resources/contact), which takes an OAuth 2.0 bearer token and nothing else. Contact folders map to addressbooks, the default folder listing under the `contacts` id:
+Microsoft serves contacts over Microsoft Graph alone, with a token from Ortie's Graph account. Contact folders are addressbooks, the default one under the `contacts` id.
 
 ```toml
-[accounts.example]
-msgraph.auth.token.command = ["ortie", "token", "show"]
+[accounts.microsoft]
+
+msgraph.auth.token.command = ["ortie", "token", "show", "-a", "microsoft-graph"]
 addressbook.default = "contacts"
 ```
 
-As with Google, contacts are JSON: the vCard is synthesized on read and re-projected on write, with the unmapped properties stashed server-side so they survive.
-
 ### Fastmail
 
-Standard CardDAV with the mailbox address and its [app password](https://www.fastmail.help/hc/en-us/articles/360058752854-App-passwords):
+Use JMAP with a token from Ortie or an [API token](https://www.fastmail.help/hc/en-us/articles/5254602856719), or CardDAV with an [app password](https://www.fastmail.help/hc/en-us/articles/360058752854), replacing the block. Fastmail refuses to create, rename or delete an addressbook over JMAP.
 
 ```toml
-[accounts.example]
-carddav.server = "https://carddav.fastmail.com/dav/"
-# The home URL is usually of this shape:
-#carddav.home = "https://carddav.fastmail.com/dav/addressbooks/user/<email>/"
+[accounts.fastmail]
 
-carddav.auth.basic.username = "example@fastmail.com"
-carddav.auth.basic.password.raw = "***"
+jmap.server = "https://api.fastmail.com/jmap/session"
+jmap.auth.bearer.token.command = ["ortie", "token", "show", "-a", "fastmail"]
 
-addressbook.default = "Default"
-```
-
-Fastmail also serves JMAP, bearer-token only, the token coming from the [Fastmail settings](https://www.fastmail.com/settings/security/tokens). It forbids creating, updating and destroying an address book, so the `addressbook` write commands fail there by design:
-
-```toml
-[accounts.example]
-jmap.server = "fastmail.com"
-jmap.auth.bearer.token.raw = "***"
+# carddav.server = "https://carddav.fastmail.com/dav/"
+# carddav.auth.basic.username = "example@fastmail.com"
+# carddav.auth.basic.password.command = "pass show fastmail"
+# addressbook.default = "Default"
 ```
 
 ### Posteo
 
-Standard CardDAV with the mailbox address and its password:
+Standard CardDAV with the account password.
 
 ```toml
-[accounts.example]
+[accounts.posteo]
+
 carddav.server = "https://posteo.de:8843/"
-# The home URL is usually of this shape:
-#carddav.home = "https://posteo.de:8843/addressbooks/<username>/"
-
 carddav.auth.basic.username = "example@posteo.net"
-carddav.auth.basic.password.raw = "***"
-
+carddav.auth.basic.password.command = "pass show posteo"
 addressbook.default = "default"
 ```
 
-### Proton
+### iCloud
 
-Not supported: Proton exposes no contacts API, neither CardDAV nor through [Proton Bridge](https://proton.me/mail/bridge), which proxies mail only. Contacts are reachable only from Proton's own web and mobile apps.
-
-### Local addressbooks
-
-No server is involved, so nothing needs discovering. Point cardamum at a directory and it works offline.
-
-A [vdir](https://vdirsyncer.pimutils.org/en/stable/vdir.html) home is one directory per addressbook, holding one `.vcf` file per card. This is what vdirsyncer writes, and what most local tools read:
+Use an [app-specific password](https://support.apple.com/en-us/HT204397), your account password being refused.
 
 ```toml
-[accounts.local]
-vdir.root = "~/.local/share/vdirsyncer/contacts"
-addressbook.default = "personal"
+[accounts.icloud]
+
+carddav.server = "https://contacts.icloud.com/"
+carddav.auth.basic.username = "example@icloud.com"
+carddav.auth.basic.password.command = "pass show icloud"
+addressbook.default = "card"
 ```
-
-A [pimdir](https://github.com/pimalaya/pimdir) store is the offline cache a sync engine fills: a SQLite index plus content-addressed bodies, shared with the other Pimalaya clients reading the same store.
-
-Cardamum reads it and stages card writes onto its queue, leaving the store to its owner, the sync, so a listing never waits on a sync in flight and never keeps one out.
-
-It is a cache, not a server, so the store must already exist, addressbooks come from the sync and the collection verbs refuse here:
-
-```toml
-[accounts.cached]
-pimdir.root = "~/.local/state/neverest/example"
-# Required by a store grouping several accounts; unset reads the only one.
-#pimdir.account = "personal"
-```
-
-A card that is listed but not downloaded reads as "body not fetched" until a sync hydrates it. Every write is queued and reaches the server on the next sync, and the commands say so. A queued update or deletion shows in the listing straight away; a queued create is not listed until the sync applies it (`pimdir queue list` shows it meanwhile), and `card add` reports its link id (its `UID`), not an id the other card commands take: the card gets one when the sync applies it. An addressbook no source syncs refuses writes, since nothing would carry them to a server. A create whose `UID` the addressbook already holds, synced or queued, is refused (`item-duplicate` under `--json`): update that card instead. An update made from the card it read (`card update` with no vCard source, or `--if-match`) is not applied over a server change the sync brings in first: the sync engine parks it instead, as it parks a `card delete --if-match` of a card changed since, and any update or delete of a card in conflict, which a client showing the conflict or the server settles. `cardamum pimdir queue list` lists every parked write of the account with its queue row and the reason, `cardamum pimdir queue cancel <ROW>` retracts one, and `cardamum pimdir status` says how much of each addressbook is downloaded and how many creates are queued. A write the store applied can still be refused for good by the server (a value it does not store): `pimdir status` lists each such card with the server's reason, `pimdir queue show <ROW>` shows it on the row, and the sync engine holds the change until the card is edited or removed. A store of another pimdir format version than the one cardamum builds against is refused (`store-version`): one an earlier neverest wrote is reinstalled through neverest, its queued writes synced first, and a later one asks for a cardamum upgrade. A store another user can read is refused too (`store-exposed`).
-
-> **Starting over after an upgrade.** This cardamum reads pimdir stores of storage-draft-17 alone (io-pimdir 0.20). A store an earlier neverest wrote is refused with `store-version` and never migrated. To move on: (1) with the old neverest, sync until nothing is queued (the old cardamum's `pimdir queue list` lists nothing), so no write is left behind; (2) move the store directory aside (`pimdir.root`), keeping it until the new one is filled; (3) with a neverest built on the same io-pimdir as this cardamum, sync a new store at `pimdir.root`, which also builds its search index. Cardamum never builds the index: until that sync runs, `pimdir search` fails `index-missing`.
-
-`cardamum pimdir search <query>` searches the account's cards through the store's search index, which the sync engine builds and refreshes after each run: free text reaches names, organization, notes and phone numbers, and the pimdir query language adds terms such as `email:@example.org`, `has:phone`, `has:birthday`, `category:friends` and `and`, `or`, `not`. It spans every addressbook of the account unless `-k` names one, sorts by title (the full name) unless `--sort relevance`, `label:vip` and `property:<namespace>/<name>=<value>` find the cards a label or property is set on, a word opening on `~` or `/` is quoted to be searched, and `pimdir count` takes the same query. The answer is the store as of the last refresh, so a queued write is not in it, and a line under the hits says what it could not see: cards whose body is not local, or that the index could not read or parse, matched on their summary alone when a term of the query reads card bodies (free text, `has:phone`, `category:friends`), or an index lagging the store. Cardamum never builds the index: a store without one fails with `index-missing` until the sync engine runs, and a refused query is drawn with its fault (`query-refused`).
 
 ## Usage
 
-Run `cardamum --help` for the full command tree, and `cardamum <command> --help` for any subcommand's arguments and its JSON output shape (printed when the global `--json` flag is set).
+**Step 1**: once your first account is configured, check that every backend answers:
 
-A few real command lines:
+```sh
+cardamum account check
+```
+
+**Step 2**: list the addressbooks:
 
 ```sh
 cardamum addressbook list
-cardamum card list --addressbook personal
-cardamum card read --addressbook personal <CARD-ID>
-cardamum card add --addressbook personal ada.vcf
-cardamum -a work -b carddav card list
-cardamum carddav report sync personal
-cardamum jmap contact-card changes <SINCE-STATE>
-cardamum gpeople connections list --sync-token <TOKEN>
-cardamum msgraph contacts delta --folder contacts
 ```
 
-Logs go to stderr, so they can be redirected to a file while the command output stays on stdout:
+**Step 3**: list the cards of the default addressbook, or of the one `-k` names:
 
 ```sh
-cardamum card list --log-level debug 2>/tmp/cardamum.log
+cardamum card list
 ```
 
-Use `--log-file <PATH>` to append them to a file directly. When `--log-level` is omitted the `RUST_LOG` environment variable is consulted, and `RUST_BACKTRACE=1` adds the full error backtrace.
+Every command runs on the default account unless `-a` names another, and its `--help` details its flags, exit codes and JSON output. More use cases:
 
-The exit status is `0` on success and `1` on a failure, printed on stdout as the failure object under `--json`, its `code` naming it when a caller can act on it. `2` is a command line Cardamum refuses (an unknown flag, a missing argument, a bad value): clap's message goes to stderr, or, with `--json`, the failure object coded `usage-invalid` to stdout. `3` means the command printed its result without fully succeeding: an `account check` with a failed backend, or an `addressbook list`, `card list`, `carddav report query` or `carddav report multiget` whose `errors` names a card it could not read.
+```sh
+# Read a card, its raw vCard included
+cardamum card read ada
+
+# Add a card from a vCard file
+cardamum card add ada.vcf
+
+# Search the cards of every addressbook
+cardamum card search lovelace email:@example.org
+
+# Send a CardDAV sync report
+cardamum carddav report sync personal
+
+# Serve the account to an AI agent, writes allowed
+cardamum mcp --allow-write
+```
+
+## Alternatives
+
+- [khard](https://github.com/lucc/khard): a contacts CLI over a vdir, a sync tool such as vdirsyncer reaching the server
+- [abook](https://abook.sourceforge.io/): a terminal address book in its own file format, local only
 
 ## License
 

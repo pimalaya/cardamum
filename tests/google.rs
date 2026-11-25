@@ -9,7 +9,8 @@
 //! `CARDAMUM_GOOGLE_SERVICE_ACCOUNT_KEY_FILE` names. It only reads.
 //!
 //! Both accounts are sections of config.sample.toml: Google People, and
-//! Google CardDAV, its address book home the subject's in `credentialed`.
+//! CardDAV with its bearer token and its address book home on Google, the
+//! subject's in `credentialed`.
 //!
 //! Run with `cargo test --test google -- --ignored`. A failure never shows
 //! a token: the binary reads it from its environment only.
@@ -29,17 +30,17 @@ fn write_people_account(dir: &Path) -> PathBuf {
     write_config(dir, "google", &sample_section("Google People", &token))
 }
 
-/// Writes the sample's Google CardDAV account, its bearer token read
-/// through [`TOKEN_COMMAND`] and, given a `user`, its address book home
-/// that user's rather than the sample's.
+/// Writes the sample's CardDAV account on Google, its bearer token read
+/// through [`TOKEN_COMMAND`] and its address book home `user`'s,
+/// `alice@gmail.com` by default.
 fn write_carddav_account(dir: &Path, user: Option<&str>) -> PathBuf {
-    let home = user
-        .map(|user| format!("\"https://www.googleapis.com/carddav/v1/principals/{user}/lists\""));
-    let mut overrides = vec![("carddav.auth.bearer.token.command", TOKEN_COMMAND)];
-    if let Some(home) = &home {
-        overrides.push(("carddav.home", home.as_str()));
-    }
-    write_config(dir, "google", &sample_section("Google CardDAV", &overrides))
+    let user = user.unwrap_or("alice@gmail.com");
+    let home = format!("\"https://www.googleapis.com/carddav/v1/principals/{user}/lists\"");
+    let overrides = [
+        ("carddav.auth.bearer.token.command", TOKEN_COMMAND),
+        ("carddav.home", home.as_str()),
+    ];
+    write_config(dir, "google", &sample_section("CardDAV", &overrides))
 }
 
 mod anonymous {

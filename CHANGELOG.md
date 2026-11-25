@@ -190,7 +190,7 @@ Cardamum 1 aligns on the other Pimalaya CLIs. The configuration wizard and the P
 - Changed piped `--json` output to one value per line, and each `json-schema` schema to carry an `$id` naming the contract version.
 - Changed `--log-file` to refuse a path naming a link to an existing file.
 - Changed an HTTP response whose head passes 64 KiB or whose body passes 256 MiB to fail the exchange.
-- Changed config.sample.toml to one `[accounts.example]` table and one commented section per backend or provider.
+- Changed config.sample.toml to Himalaya's shape: one `[accounts.example]` table, one commented key per line, alternatives in brackets, one section per backend, the provider sections left to the README's recipes.
 
 ### Removed
 

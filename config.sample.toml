@@ -1,97 +1,55 @@
 [accounts.example]
 default = true				# the account commands run on without -a
-
-card.list.page-size = 25		# cards per page, absent -s, 0 listing every card
+#card.list.page-size = 25		# cards per page, absent -s, 0 listing every card
 #card.composer = "tcard edit"		# the command -i edits a card through, on its path
 #card.composer = ["tcard", "edit"]	# the same, as a program and its arguments
 #addressbook.default = "Contacts"	# the addressbook the card commands take without -k
 
-#proxy.url = "socks5h://localhost:1080"	# a SOCKS5 proxy for every network backend
-#proxy.url = "http://localhost:3128"	# an HTTP one, all_proxy and https_proxy otherwise
+#proxy.url = "socks5h://localhost:1080"	# a socks5, socks5h or http proxy for every network backend, all_proxy and https_proxy otherwise [http://localhost:3128]
+#proxy.username = "alice"		# its username
+#proxy.password.command = "exit 127"	# prints its password
 
-#proxy = { url = "socks5h://localhost:1080", username = "alice", password.command = "exit 127" }	# with credentials
-
-#tls.provider = "rustls"			# the build's first otherwise, for every network backend
-#tls.rustls.crypto = "ring"			# the build's first otherwise
+#tls.provider = "rustls"			# the build's first otherwise, for every network backend [native-tls]
+#tls.rustls.crypto = "ring"			# the build's first otherwise [aws]
 #tls.cert = "/path/to/cert.pem"			# a PEM certificate to trust
-#tls.client = { cert = "/path/to/client.pem", key = "/path/to/client.key.pem" }	# a PEM client certificate and its PEM key (PKCS#8 under native-tls), for mutual TLS
+#tls.client.cert = "/path/to/client.pem"	# a PEM client certificate, for mutual TLS
+#tls.client.key = "/path/to/client.key.pem"	# its PEM private key, PKCS#8 under native-tls
 
 # CardDAV
-#
-#carddav.server = "https://dav.example.org/dav"		# the DAV context root, where the principal walk starts
-##carddav.server = "dav.example.org"			# its /.well-known/carddav, over https
-##carddav.home = "https://dav.example.org/dav/alice/"	# the addressbook home set, skipping every discovery step
-#carddav.auth.basic.username = "alice@example.org"	# HTTP Basic; or bearer.token, or auth = "none"
+#carddav.server = "https://dav.example.org/dav"	# the DAV context root discovery starts from, its /.well-known/carddav tried when it names no path [dav.example.org]
+#carddav.auth.basic.username = "alice@example.org"	# HTTP Basic; no auth at all, or auth = "none", for a server asking for none
 #carddav.auth.basic.password.command = "exit 127"	# prints the password
-##carddav.auth.basic.password.raw = "secret"		# the password itself
-#carddav.alpn = ["http/1.1"]				# the ALPN id rustls offers
-##carddav.alpn = []					# none
-##carddav.tls.provider = "rustls"			# rustls, the build's first TLS otherwise
-##carddav.tls.provider = "native-tls"			# the platform's TLS
-##carddav.tls.rustls.crypto = "ring"			# rustls on ring, the build's first otherwise
-##carddav.tls.rustls.crypto = "aws"			# rustls on aws-lc-rs
-##carddav.tls.cert = "/path/to/cert.pem"		# the tls keys, for CardDAV alone, field by field
-##carddav.tls.client = { cert = "/path/to/client.pem", key = "/path/to/client.key.pem" }	# a client certificate and its key
-##carddav.proxy.url = "socks5h://localhost:1080"	# the proxy keys, for CardDAV alone
+#carddav.auth.basic.password.raw = "secret"	# the password itself
 
-# CardDAV without credentials
-#
-#carddav.server = "http://localhost:5232"	# a local server such as Radicale
-#carddav.auth = "none"				# no Authorization header, as no auth key at all
+#carddav.auth.bearer.token.command = "exit 127"	# prints a bearer token instead, an OAuth 2.0 one for Google
+#carddav.home = "https://dav.example.org/dav/alice/"	# the addressbook home set in place of server, nothing discovered; Google's is https://www.googleapis.com/carddav/v1/principals/<address>/lists
 
-# Google CardDAV
-#
-#carddav.home = "https://www.googleapis.com/carddav/v1/principals/alice@gmail.com/lists"	# the address book home of the account, addressed by hand
-#carddav.auth.bearer.token.command = ["ortie", "token", "show", "-a", "example"]	# an access token, from Ortie's Google section
+# Network, the same keys under jmap, msgraph and gpeople
+#carddav.alpn = ["http/1.1"]			# the ALPN ids rustls offers, empty for none
+#carddav.tls.cert = "/path/to/cert.pem"		# the tls keys, for CardDAV alone, field by field
+#carddav.proxy.url = "socks5h://localhost:1080"	# the proxy keys, for CardDAV alone
 
 # JMAP
-#
-#jmap.server = "https://jmap.example.org/jmap/session"	# the session URL, fetched as is
-##jmap.server = "jmap.example.org"			# its /.well-known/jmap, over https
-#jmap.auth.basic.username = "alice@example.org"		# HTTP Basic; or bearer.token, or header
-#jmap.auth.basic.password.command = "exit 127"		# prints the password
-##jmap.auth.basic.password.raw = "secret"		# the password itself
-#jmap.alpn = ["http/1.1"]				# the ALPN id rustls offers
-##jmap.alpn = []					# none
-##jmap.tls.provider = "native-tls"			# as carddav.tls
-##jmap.tls.rustls.crypto = "aws"			# as carddav.tls.rustls
-##jmap.tls.cert = "/path/to/cert.pem"			# as carddav.tls
-##jmap.proxy.url = "socks5h://localhost:1080"		# the proxy keys, for JMAP alone
+#jmap.server = "https://jmap.example.org/jmap/session"	# the session URL, fetched as is, a bare host going through its /.well-known/jmap [jmap.example.org]
 
-# Fastmail
-#
-#jmap.server = "https://api.fastmail.com/jmap/session"				# Fastmail's JMAP session
-#jmap.auth.bearer.token.command = ["ortie", "token", "show", "-a", "example"]	# Ortie's Fastmail token, or an API token
+#jmap.auth.basic.username = "alice@example.org"	# HTTP Basic
+#jmap.auth.basic.password.command = "exit 127"	# prints the password
+#jmap.auth.basic.password.raw = "secret"	# the password itself
+
+#jmap.auth.bearer.token.command = "exit 127"	# prints a bearer token, an OAuth 2.0 or a Fastmail API one; auth.header.command a whole Authorization value
 
 # Microsoft Graph
-#
-#msgraph.auth.token.command = ["ortie", "token", "show", "-a", "example"]	# an access token, from Ortie's Graph section
-##msgraph.auth.token.raw = "secret"						# the token itself, short-lived
-#msgraph.user-id = "me"					# the signed-in user's contacts
-##msgraph.user-id = "bob@example.org"			# another user's, by user id or principal name
-#msgraph.alpn = ["http/1.1"]				# the ALPN id rustls offers
-##msgraph.alpn = []					# none
-##msgraph.tls.provider = "native-tls"			# as carddav.tls
-##msgraph.tls.rustls.crypto = "aws"			# as carddav.tls.rustls
-##msgraph.tls.cert = "/path/to/cert.pem"		# as carddav.tls
-##msgraph.proxy.url = "socks5h://localhost:1080"	# the proxy keys, for Graph alone
+#msgraph.user-id = "me"				# the signed-in user's contacts, another's by user id or principal name [bob@example.org]
+#msgraph.auth.token.command = "exit 127"	# prints an OAuth 2.0 access token
+#msgraph.auth.token.raw = "secret"		# the token itself, short-lived
 
 # Google People
-#
-#gpeople.auth.token.command = ["ortie", "token", "show", "-a", "example"]	# an access token, from Ortie's Google section
-##gpeople.auth.token.raw = "secret"						# the token itself, short-lived
-#gpeople.alpn = ["http/1.1"]				# the ALPN id rustls offers
-##gpeople.alpn = []					# none
-##gpeople.tls.provider = "native-tls"			# as carddav.tls
-##gpeople.tls.rustls.crypto = "aws"			# as carddav.tls.rustls
-##gpeople.tls.cert = "/path/to/cert.pem"		# as carddav.tls
-##gpeople.proxy.url = "socks5h://localhost:1080"	# the proxy keys, for People alone
+#gpeople.auth.token.command = "exit 127"	# prints an OAuth 2.0 access token
+#gpeople.auth.token.raw = "secret"		# the token itself, short-lived
 
 # vdir
-#
-#vdir.root = "~/.local/share/vdirsyncer/contacts"	# a directory per addressbook, a .vcf file per card
+#vdir.root = "~/Contacts"	# a directory per addressbook, a .vcf file per card
 
 # pimdir
-#
-#pimdir.root = "~/.local/state/neverest"	# the store neverest syncs, on Linux
-##pimdir.account = "example"		# the account to read, for a store holding several
+#pimdir.root = "/path/to/store"	# the pimdir store a sync engine fills, which must exist
+#pimdir.account = "example"	# the account to read, for a store holding several

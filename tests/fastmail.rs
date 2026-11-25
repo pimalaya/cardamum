@@ -1,11 +1,11 @@
 //! # Fastmail live suite
 //!
 //! The binary against Fastmail's JMAP and CardDAV servers, with a made-up
-//! credential: the Fastmail section of config.sample.toml with a bearer
-//! token, and its CardDAV section pointed at Fastmail with a password,
-//! Fastmail's CardDAV server taking Basic only. Only a browser consent
-//! issues a Fastmail token, so the suite is `anonymous` only and touches
-//! no account.
+//! credential: the JMAP section of config.sample.toml pointed at Fastmail
+//! with a bearer token, and its CardDAV section pointed at Fastmail with a
+//! password, Fastmail's CardDAV server taking Basic only. Only a browser
+//! consent issues a Fastmail token, so the suite is `anonymous` only and
+//! touches no account.
 //!
 //! Run with `cargo test --test fastmail -- --ignored`.
 
@@ -23,11 +23,17 @@ mod anonymous {
     /// Fastmail's CardDAV host, found through its `/.well-known/carddav`.
     const CARDDAV_SERVER: &str = r#""carddav.fastmail.com""#;
 
-    /// Writes the sample's Fastmail account, its token read through
-    /// [`TOKEN_COMMAND`].
+    /// Fastmail's JMAP session URL.
+    const JMAP_SERVER: &str = r#""https://api.fastmail.com/jmap/session""#;
+
+    /// Writes the sample's JMAP account on Fastmail, its bearer token read
+    /// through [`TOKEN_COMMAND`].
     fn write_jmap_account(dir: &Path) -> PathBuf {
-        let token = [("jmap.auth.bearer.token.command", TOKEN_COMMAND)];
-        write_config(dir, "fastmail", &sample_section("Fastmail", &token))
+        let overrides = [
+            ("jmap.server", JMAP_SERVER),
+            ("jmap.auth.bearer.token.command", TOKEN_COMMAND),
+        ];
+        write_config(dir, "fastmail", &sample_section("JMAP", &overrides))
     }
 
     /// Writes the sample's CardDAV account on Fastmail, the sample's user

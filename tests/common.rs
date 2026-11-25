@@ -1,7 +1,7 @@
 //! # Shared test helpers
 //!
 //! The account configuration the live suites write, the built binary run
-//! against it with an access token in its environment, the provider
+//! against it with an access token in its environment, the backend
 //! sections of config.sample.toml, and the environment the credentialed
 //! suites read their secrets from.
 
@@ -166,23 +166,60 @@ pub fn assert_cards(list: &Value, book: &str, size: usize) {
     }
 }
 
-/// The commented section `name` of config.sample.toml, uncommented,
-/// each line setting a key of `overrides` set to its value instead.
+/// The section `name` of config.sample.toml, from its `# name` heading to
+/// the next, uncommented: the first line setting each field, a secret's
+/// later alternative and a paragraph offering another auth left out, the
+/// latter taken instead when `overrides`, each set to its value, name it.
 pub fn sample_section(name: &str, overrides: &[(&str, &str)]) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("config.sample.toml");
     let sample = fs::read_to_string(path).unwrap();
     let heading = format!("# {name}");
 
-    let mut lines = sample.lines().skip_while(|line| *line != heading).skip(2);
+    let lines = sample.lines().skip_while(|line| *line != heading).skip(1);
+    let lines: Vec<_> = lines.take_while(|line| !line.starts_with("# ")).collect();
+    let mut kept: Vec<Vec<(&str, &str)>> = Vec::new();
+
+    for paragraph in lines.split(|line| line.is_empty()) {
+        let code: Vec<_> = paragraph
+            .iter()
+            .filter_map(|line| sample_code(line))
+            .collect();
+
+        let Some((first, _)) = code.first() else {
+            continue;
+        };
+
+        let table = sample_table(first);
+        let other = kept
+            .iter()
+            .position(|p| p.iter().any(|(key, _)| sample_table(key) == table));
+        let named = code
+            .iter()
+            .any(|(key, _)| overrides.iter().any(|(k, _)| k == key));
+
+        match other {
+            None => kept.push(code),
+            Some(i) if named => kept[i] = code,
+            Some(_) => {}
+        }
+    }
+
+    let mut fields = Vec::new();
     let mut section = String::new();
 
-    for line in lines.by_ref().take_while(|line| !line.is_empty()) {
-        let line = line.strip_prefix('#').unwrap_or(line);
-        let key = line.split(" = ").next().unwrap_or_default();
+    for (key, code) in kept.into_iter().flatten() {
+        let secret = key.strip_suffix(".raw").or(key.strip_suffix(".command"));
+        let field = secret.unwrap_or(key);
+
+        if fields.contains(&field) {
+            continue;
+        }
+
+        fields.push(field);
 
         match overrides.iter().find(|(k, _)| *k == key) {
             Some((key, value)) => section.push_str(&format!("{key} = {value}\n")),
-            None => section.push_str(&format!("{line}\n")),
+            None => section.push_str(&format!("{code}\n")),
         }
     }
 
@@ -191,6 +228,22 @@ pub fn sample_section(name: &str, overrides: &[(&str, &str)]) -> String {
         "no {name} section in config.sample.toml"
     );
     section
+}
+
+/// The key and the code of a sample line, one `#` and its comment off,
+/// none for prose.
+fn sample_code(line: &str) -> Option<(&str, &str)> {
+    let code = line.split('\t').next().unwrap_or_default();
+    let code = code.strip_prefix('#').unwrap_or(code);
+    let (key, _) = code.split_once(" = ")?;
+    Some((key, code))
+}
+
+/// The first two segments of `key`, the table two auths share
+/// (`jmap.auth`).
+fn sample_table(key: &str) -> &str {
+    let end = key.match_indices('.').nth(1).map_or(key.len(), |(i, _)| i);
+    &key[..end]
 }
 
 /// The environment variable `name`, an empty value counting as unset,

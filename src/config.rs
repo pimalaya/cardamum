@@ -846,6 +846,8 @@ fn host_of(input: &str) -> &str {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     #[cfg(any(
         feature = "carddav",
         feature = "jmap",
@@ -1034,82 +1036,221 @@ mod tests {
         assert_eq!(carddav.url, "socks5h://localhost:1080");
         assert_eq!(jmap.url, "http://proxy.example.org:3128");
     }
-    /// The commented sections of config.sample.toml, each a provider or a
-    /// backend a user uncomments.
-    #[cfg(all(
-        feature = "carddav",
-        feature = "jmap",
-        feature = "msgraph",
-        feature = "gpeople",
-        feature = "vdir",
-        feature = "pimdir"
-    ))]
-    const SECTIONS: [&str; 9] = [
-        "# CardDAV",
-        "# CardDAV without credentials",
-        "# Google CardDAV",
-        "# JMAP",
-        "# Fastmail",
-        "# Microsoft Graph",
-        "# Google People",
-        "# vdir",
-        "# pimdir",
-    ];
 
-    /// Checks config.sample.toml: one `[accounts.example]` table and no
-    /// other, its sections each parsed through the loader `-c` uses with
-    /// every variant on top, `example` resolving as the default account
-    /// and declaring a backend.
-    #[cfg(all(
-        feature = "carddav",
-        feature = "jmap",
-        feature = "msgraph",
-        feature = "gpeople",
-        feature = "vdir",
-        feature = "pimdir"
-    ))]
+    /// Checks config.sample.toml parses as written and once per rank fully
+    /// uncommented, `example` its only account and the default each time,
+    /// declaring a backend once uncommented.
     #[test]
     fn the_sample_configuration_parses_with_each_variant() {
-        use std::{fs, io::Write};
-
-        use pimalaya_config::{
-            sample::{Variant, variants},
-            toml::TomlConfig,
-        };
-        use tempfile::NamedTempFile;
-
-        use super::Config;
+        use std::{fs, path::PathBuf};
 
         let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("config.sample.toml");
         let sample = fs::read_to_string(&path).unwrap();
         let headers: Vec<_> = sample.lines().filter(|l| l.starts_with('[')).collect();
         assert_eq!(headers, ["[accounts.example]"]);
 
-        for Variant { name, text } in variants(&sample, &SECTIONS) {
-            let context = format!("config.sample.toml with {name} uncommented");
+        load_sample(&sample, "as written");
 
-            let mut file = NamedTempFile::new().unwrap();
-            file.write_all(text.as_bytes()).unwrap();
+        let paragraphs = sample_paragraphs(&sample);
 
-            let mut config = Config::load(&[file.path().to_path_buf()])
-                .unwrap_or_else(|err| panic!("{context}: {err:?}"));
-            let (account, account_config) = config
-                .take_account(None)
-                .unwrap_or_else(|err| panic!("{context}: {err:?}"));
-
-            let blocks = [
-                account_config.carddav.is_some(),
-                account_config.jmap.is_some(),
-                account_config.msgraph.is_some(),
-                account_config.gpeople.is_some(),
-                account_config.vdir.is_some(),
-                account_config.pimdir.is_some(),
-            ];
-
-            assert_eq!(account, "example", "{context}");
-            assert!(blocks.contains(&true), "{context}: no backend declared");
+        for rank in 1..=sample_ranks(&paragraphs) {
+            let text = sample_variant(&paragraphs, rank);
+            let backends = load_sample(&text, &format!("variant {rank}"));
+            assert!(!backends.is_empty(), "variant {rank}: no backend declared");
         }
     }
+
+    /// One line of config.sample.toml.
+    struct SampleLine<'a> {
+        /// The line as written.
+        line: &'a str,
+        /// The code before the comment, one `#` off when commented.
+        code: &'a str,
+        /// Whether the code is commented.
+        commented: bool,
+        /// The field the code sets, a secret's `raw` and `command` being
+        /// one.
+        field: Option<&'a str>,
+        /// The other values the comment lists in brackets.
+        values: Vec<&'a str>,
+    }
+
+    impl<'a> SampleLine<'a> {
+        fn parse(line: &'a str) -> Self {
+            let (code, comment) = line.split_once('\t').unwrap_or((line, ""));
+            let commented = code.starts_with('#');
+            let code = code.strip_prefix('#').unwrap_or(code);
+
+            let field = code
+                .split_once(" = ")
+                .map(|(key, _)| key)
+                .filter(|key| {
+                    key.chars()
+                        .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+                })
+                .map(|key| {
+                    let secret = key.strip_suffix(".raw").or(key.strip_suffix(".command"));
+                    secret.unwrap_or(key)
+                });
+
+            let values = comment
+                .trim_end()
+                .strip_suffix(']')
+                .and_then(|comment| comment.rsplit_once('['))
+                .map(|(_, values)| values.split(", ").collect())
+                .unwrap_or_default();
+
+            Self {
+                line,
+                code,
+                commented,
+                field,
+                values,
+            }
+        }
+
+        /// The first two segments of the field, the table a replacing
+        /// paragraph shares with the one above it (`carddav.auth`).
+        fn table(&self) -> Option<&'a str> {
+            let field = self.field?;
+            let end = field
+                .match_indices('.')
+                .nth(1)
+                .map_or(field.len(), |(i, _)| i);
+            Some(&field[..end])
+        }
+
+        /// The values the line offers: its code as written, then each
+        /// bracketed value in its place, typed like the written one.
+        fn options(&self) -> Vec<String> {
+            let (key, value) = self.code.split_once(" = ").unwrap();
+            let mut options = vec![self.code.to_owned()];
+
+            for other in &self.values {
+                if value.starts_with('"') {
+                    options.push(format!("{key} = \"{other}\""));
+                } else {
+                    options.push(format!("{key} = {other}"));
+                }
+            }
+
+            options
+        }
+    }
+
+    /// Loads `text` through the loader `-c` uses, into the backends its
+    /// default account, `example`, declares.
+    fn load_sample(text: &str, name: &str) -> Vec<&'static str> {
+        use std::io::Write;
+
+        use pimalaya_config::toml::TomlConfig;
+        use tempfile::NamedTempFile;
+
+        use super::Config;
+
+        let context = format!("config.sample.toml, {name}");
+
+        let mut file = NamedTempFile::new().unwrap();
+        file.write_all(text.as_bytes()).unwrap();
+
+        let mut config = Config::load(&[file.path().to_path_buf()])
+            .unwrap_or_else(|err| panic!("{context}: {err:?}\n{text}"));
+        let (account, config) = config
+            .take_account(None)
+            .unwrap_or_else(|err| panic!("{context}: {err:?}"));
+
+        assert_eq!(account, "example", "{context}");
+        config.backends()
+    }
+
+    fn sample_paragraphs(sample: &str) -> Vec<Vec<SampleLine<'_>>> {
+        let paragraphs = sample.split("\n\n");
+        let paragraphs = paragraphs.map(|p| p.lines().map(SampleLine::parse).collect());
+        paragraphs.collect()
+    }
+
+    /// Whether `below`, all commented, replaces `above`, setting keys under
+    /// a table one of its lines sets.
+    fn sample_replaces(above: &[SampleLine], below: &[SampleLine]) -> bool {
+        let mut code = below.iter().filter(|line| line.field.is_some());
+        let Some(first) = code.next() else {
+            return false;
+        };
+
+        if !first.commented || code.any(|line| !line.commented) {
+            return false;
+        }
+
+        above
+            .iter()
+            .filter_map(SampleLine::table)
+            .any(|t| Some(t) == first.table())
+    }
+
+    /// The values each field takes in turn, the lines setting it in their
+    /// order, each followed by its bracketed values.
+    fn sample_options<'a>(lines: &[&'a SampleLine<'a>]) -> HashMap<&'a str, Vec<String>> {
+        let mut options: HashMap<&str, Vec<String>> = HashMap::new();
+
+        for line in lines {
+            if let Some(field) = line.field {
+                options.entry(field).or_default().extend(line.options());
+            }
+        }
+
+        options
+    }
+
+    /// How many variants give every value its turn: the most values of
+    /// one field, two when a paragraph replaces another.
+    fn sample_ranks(paragraphs: &[Vec<SampleLine>]) -> usize {
+        let lines: Vec<&SampleLine> = paragraphs.iter().flatten().collect();
+        let options = sample_options(&lines);
+        let values = options.values().map(Vec::len).max().unwrap_or(0);
+
+        let replaces = paragraphs.windows(2).any(|w| sample_replaces(&w[0], &w[1]));
+
+        if replaces { values.max(2) } else { values }
+    }
+
+    /// The sample at `rank`, every line uncommented, each field set to its
+    /// value of that rank (the last when it has fewer).
+    ///
+    /// A replacing paragraph stays out at rank 1 and replaces the one
+    /// above it from rank 2.
+    fn sample_variant(paragraphs: &[Vec<SampleLine>], rank: usize) -> String {
+        let mut dropped = vec![false; paragraphs.len()];
+
+        for i in 1..paragraphs.len() {
+            if sample_replaces(&paragraphs[i - 1], &paragraphs[i]) {
+                let i = if rank == 1 { i } else { i - 1 };
+                dropped[i] = true;
+            }
+        }
+
+        let kept = paragraphs
+            .iter()
+            .zip(&dropped)
+            .filter(|(_, dropped)| !**dropped);
+        let lines: Vec<&SampleLine> = kept.flat_map(|(lines, _)| lines).collect();
+
+        let mut options = sample_options(&lines);
+        let mut text = Vec::with_capacity(lines.len());
+
+        for line in lines {
+            let Some(field) = line.field else {
+                text.push(line.line.to_owned());
+                continue;
+            };
+
+            if let Some(values) = options.remove(field) {
+                text.push(values[rank.min(values.len()) - 1].clone());
+            }
+        }
+
+        text.join("\n")
+    }
+
     /// A host is ASCII: an `https` server naming a non-ASCII one is refused
     /// when parsed, its Punycode form working.
     #[cfg(feature = "jmap")]

@@ -61,14 +61,16 @@ Run top to bottom. Every cargo command: `nix develop --command`, `CARGO_TARGET_D
 ## J. Tests beyond the suite
 
 - [x] J1 Cross-app, after neverest's lane lands 7f16b27: neverest syncs a local Radicale address book (under the `servers` lock) into a scratch store; cardamum `card list`, `pimdir search`, `card add`; neverest syncs again; Radicale holds the card, `pimdir queue list` is empty.
-- [ ] J2 Live (owner grant): `cargo test --test google -- --ignored anonymous::`; the credentialed suites as the owner runs them weekly.
+- [x] J2 Live (owner grant): `cargo test --test google -- --ignored anonymous::`; the credentialed suites as the owner runs them weekly. Run on the live nights: google 10 and microsoft 5 on 2026-11-24, google 10/10, microsoft 5/5 and fastmail 4/4 on 2026-11-25 (.lanes/live/report-2.md, report-3.md).
 
 ## K. Release readiness (the owner's)
 
-- [ ] K1 io-pimdir 0.20.0 published by its tag workflow; pimdir tags if the owner cuts them.
-- [ ] K2 Every CLI (neverest, himalaya, cardamum, calendula, carillon) on that one revision before any release.
-- [ ] K3 Swap the pin for `io-pimdir = { version = "0.20.0", ... }`, drop `[patch.crates-io]`, gate G; then cardamum's own release (v1.0.0) by its tag.
+Superseded by io-pimdir 1.0.0 (log 2026-11-26-follows-pimdir-v1): cardamum followed io-pimdir 0.20.1 to 0.20.4 from crates.io, then 1.0.0 (7bab05c).
+
+- [x] K1 io-pimdir 0.20.0 published by its tag workflow; pimdir tags if the owner cuts them. 0.20.0 to 0.20.4 were published, then io-pimdir 1.0.0 on pimdir v1.
+- [x] K2 Every CLI (neverest, himalaya, cardamum, calendula, carillon) on that one revision before any release. All five name io-pimdir `version = "1.0.0"` from crates.io (checked 2026-11-26).
+- [x] K3 Swap the pin for `io-pimdir = { version = "0.20.0", ... }`, drop `[patch.crates-io]`, gate G; then cardamum's own release (v1.0.0) by its tag. Cargo.toml names `version = "1.0.0"` with no `[patch.crates-io]` (7bab05c); the v1.0.0 tag stays the owner's.
 
 ## L. Report
 
-- [ ] L1 report.md: what landed, the parked items, the measures, decisions D1 to D7 for the owner.
+- [x] L1 report.md: what landed, the parked items, the measures, decisions D1 to D7 for the owner.

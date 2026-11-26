@@ -1,11 +1,13 @@
 ---
 cairn: change
 id: the-live-night-findings
-status: active
+status: landed
 created: 2026-11-24
 ---
 
 # The live night findings
+
+> Landed on 2026-11-24 (logs 2026-11-24-the-live-night-findings, -night-2 and -round-2): D1 to D8 fixed, the next live run done the same night.
 
 The live test night of 2026-11-23 (workspace .lanes/live/report.md) ran every cardamum command on 17 accounts. 7f7043c fixed a stale People etag overwriting a newer contact, JMAP `notFound` ids dropped, and People custom methods refused.
 

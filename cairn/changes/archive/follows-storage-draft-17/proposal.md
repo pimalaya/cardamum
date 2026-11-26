@@ -1,11 +1,13 @@
 ---
 cairn: change
 id: follows-storage-draft-17
-status: active
+status: landed
 created: 2026-11-23
 ---
 
 # cardamum follows storage-draft-17
+
+> Landed on 2026-11-23 (log 2026-11-23-follows-storage-draft-17); its 0.20.0 release steps K1 to K3 were superseded by the move to io-pimdir 1.0.0 (log 2026-11-26-follows-pimdir-v1).
 
 The shared frame (target, edits, git, CPUs, locks, accounts, decision rules) is pimdir cairn/changes/the-consumers-follow-draft-17/frame.md; this file holds what is cardamum's alone. Every figure cited is in inventory.md.
 

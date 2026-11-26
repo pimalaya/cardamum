@@ -129,6 +129,9 @@ pub enum ErrorCode {
     /// The pimdir store is not the one that answered the queue row's
     /// handle, a copy restored since: nothing was done with the row.
     StoreReset,
+    /// The pimdir store was bound to an empty source id, which no row may
+    /// hold: nothing was done.
+    SourceEmpty,
     /// Another writer held the pimdir store: past the wait on a write, at
     /// once on a check, which does not wait. The caller tries again.
     StoreBusy,
@@ -224,6 +227,7 @@ const PIMDIR_CODES: &[(&str, ErrorCode)] = &[
     ("store-in-flight", ErrorCode::StoreInFlight),
     ("store-exposed", ErrorCode::StoreExposed),
     ("store-reset", ErrorCode::StoreReset),
+    ("source-empty", ErrorCode::SourceEmpty),
     ("lock-replaced", ErrorCode::LockReplaced),
     ("item-duplicate", ErrorCode::ItemDuplicate),
     ("flag-invalid", ErrorCode::FlagInvalid),
@@ -587,6 +591,7 @@ mod tests {
                 capability: "calendar-reply".into(),
                 candidates: vec!["a".into(), "b".into()],
             },
+            PimdirError::SourceEmpty,
             PimdirError::IndexZone("Mars/Olympus".into()),
         ];
 

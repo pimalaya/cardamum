@@ -345,7 +345,7 @@ A failure a caller is expected to act on SHALL carry a stable code, printed unde
 | `conflict-unread` | a pimdir conflict holds a body nobody has read; fetch it first |
 | `no-performer` | no source of the pimdir store can perform the intent |
 | `ambiguous-performer` | several sources of the pimdir store can perform the intent and none is chosen |
-| `index-missing` | the pimdir store has no search index yet (`pimdir search`, `pimdir count`); its sync engine builds it |
+| `source-empty` | a pimdir store handle was bound to a source of an empty id, which no row may hold; nothing was written || `index-missing` | the pimdir store has no search index yet (`pimdir search`, `pimdir count`); its sync engine builds it |
 | `index-outdated` | the pimdir search index was built otherwise or from another store; its sync engine rebuilds it |
 | `index-version` | the pimdir search index is of another format version or shape; its sync engine rebuilds one of an earlier version and leaves any other |
 | `index-zone-unknown` | the zone the pimdir search index reads floating times in is not an IANA zone |

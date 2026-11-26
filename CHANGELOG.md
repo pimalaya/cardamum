@@ -46,7 +46,7 @@ The configuration wizard and the DNS discovery of a bare domain are gone, and a 
 
   pimdir store: `store-uncreated`, `store-version`, `store-foreign`, `store-corrupt`, `store-hash-algo`, `store-exposed`, `store-busy`, `store-not-current`, `store-owned`, `store-staging`, `store-in-flight`, `store-reset`, `store-account-ambiguous`, `store-account-unknown`, `sync-version`, `lock-replaced`.
 
-  pimdir writes and queue: `unsupported`, `action-malformed`, `no-performer`, `ambiguous-performer`, `flag-invalid`, `conflict-unread`, `tag-refused`, `row-not-found`.
+  pimdir writes and queue: `unsupported`, `action-malformed`, `no-performer`, `ambiguous-performer`, `source-empty`, `flag-invalid`, `conflict-unread`, `tag-refused`, `row-not-found`.
 
   Search index and queries: `index-missing`, `index-outdated`, `index-version`, `index-fts5-missing`, `index-zone-unknown`, `query-refused`, `query-unanswerable`, `query-unsupported`.
 

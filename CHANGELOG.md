@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-11-25
+## [1.0.0] - 2026-11-26
 
 Cardamum 1 is the first stable release: a low-level CLI over a unified contacts API, the same commands on CardDAV, JMAP, Microsoft Graph, Google People, vdir and pimdir, the protocol-specific ones beside them, plain text for a glance and `--json` for scripts, frontends and AI agents. The offline side is the pimdir store Neverest syncs, which Cardamum reads and queues its writes into, and card editing is left to a composer such as tcard.
 

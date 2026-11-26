@@ -377,7 +377,7 @@ pub fn pimdir_page(
     backend: &crate::pimdir::backend::PimdirBackend,
     search: &CardSearch,
 ) -> Result<CardSearchPage> {
-    use io_pimdir::client::search::{PimdirSearchCursor, PimdirSearchSort};
+    use io_pimdir::search::plan::{PimdirSearchCursor, PimdirSearchSort};
 
     let sort = match search.sort {
         CardSearchSort::Title => PimdirSearchSort::Title,

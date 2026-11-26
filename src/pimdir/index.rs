@@ -10,12 +10,13 @@ use io_pimdir::{
     client::{
         reader::PimdirItem,
         search::{
-            PimdirIndex, PimdirSearchClock, PimdirSearchCursor, PimdirSearchHit,
-            PimdirSearchMatched, PimdirSearchOptions,
+            PimdirIndex, PimdirSearchClock, PimdirSearchHit, PimdirSearchMatched,
+            PimdirSearchOptions,
         },
     },
     search::{
         coverage::{PimdirSearchCoverage, PimdirSearchTemporal},
+        plan::PimdirSearchCursor,
         query::{PimdirQuery, PimdirQueryKind},
     },
     summary::{PimdirSummary, contact::PimdirContactSummary},
@@ -400,7 +401,7 @@ mod tests {
     /// and grouped under `account` when one is named, as a first sync
     /// finding it empty leaves it: a checkpoint and a closed round.
     fn synced(root: &Path, source: &str, account: Option<&str>, collection: &str, kind: &str) {
-        let mut store = PimdirStore::open(root).unwrap().for_source(source);
+        let mut store = PimdirStore::open(root).unwrap().for_source(source).unwrap();
         if let Some(account) = account {
             store = store.for_account(account);
         }
@@ -440,6 +441,7 @@ mod tests {
         PimdirStore::open(root)
             .unwrap()
             .for_source("carddav")
+            .unwrap()
             .drain()
             .unwrap();
     }
@@ -459,6 +461,7 @@ mod tests {
         PimdirStore::open(root)
             .unwrap()
             .for_source(source)
+            .unwrap()
             .write(vec![PimdirWriteOp::UpsertPlacement(PimdirPlacement {
                 collection: PimdirCollectionId::from(collection),
                 handle: PimdirHandle(handle.into()),
@@ -583,7 +586,7 @@ mod tests {
 
     fn page(backend: &PimdirBackend, text: &str, addressbook: Option<&str>) -> PimdirCardPage {
         let options = PimdirSearchOptions {
-            sort: io_pimdir::client::search::PimdirSearchSort::Title,
+            sort: io_pimdir::search::plan::PimdirSearchSort::Title,
             ..Default::default()
         };
         backend
@@ -1022,7 +1025,7 @@ mod tests {
             assert_eq!(hits, indexed, "{text}");
 
             let options = PimdirSearchOptions {
-                sort: io_pimdir::client::search::PimdirSearchSort::Relevance,
+                sort: io_pimdir::search::plan::PimdirSearchSort::Relevance,
                 ..Default::default()
             };
             let mut ranked: Vec<String> = backend
@@ -1042,7 +1045,7 @@ mod tests {
     fn hits_come_in_name_order_and_pages() {
         let (_dir, backend) = indexed_store();
         let options = |after| PimdirSearchOptions {
-            sort: io_pimdir::client::search::PimdirSearchSort::Title,
+            sort: io_pimdir::search::plan::PimdirSearchSort::Title,
             limit: 2,
             after,
             ..Default::default()
@@ -1154,7 +1157,10 @@ mod tests {
     #[test]
     fn a_first_sync_still_listing_is_reported() {
         let (dir, backend) = indexed_store();
-        let mut store = PimdirStore::open(dir.path()).unwrap().for_source("carddav");
+        let mut store = PimdirStore::open(dir.path())
+            .unwrap()
+            .for_source("carddav")
+            .unwrap();
         store.ensure_collection("new", "text/vcard").unwrap();
         store
             .write(vec![PimdirWriteOp::SetCheckpoint {
@@ -1272,17 +1278,18 @@ mod tests {
         let (dir, backend) = indexed_store();
         let path = dir.path().join("index.db");
         assert!(!dir.path().join("index.db-wal").exists());
-        let mut db = std::fs::read(&path).unwrap();
-        let (from, to) = (FORMAT_VERSION.as_bytes(), b"search-draft-11");
-        let mut found = false;
-        for at in 0..=db.len() - from.len() {
-            if &db[at..at + from.len()] == from {
-                db[at..at + from.len()].copy_from_slice(to);
-                found = true;
-            }
-        }
-        assert!(found, "no draft in the index");
-        std::fs::write(&path, &db).unwrap();
+        let index = rusqlite::Connection::open(&path).unwrap();
+        let marked = index
+            .execute(
+                "UPDATE index_meta SET format_version = 'search-draft-11' \
+                 WHERE format_version = ?1",
+                [FORMAT_VERSION],
+            )
+            .unwrap();
+        assert_eq!(marked, 1, "no version in the index");
+        drop(index);
+        assert!(!dir.path().join("index.db-wal").exists());
+        let db = std::fs::read(&path).unwrap();
 
         let err = assert_refused(&backend, ErrorCode::IndexVersion);
         assert!(err.contains("search-draft-11"), "{err}");

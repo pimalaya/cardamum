@@ -1285,7 +1285,8 @@ mod tests {
 
         let mut store = io_pimdir::client::PimdirStore::open(root)
             .unwrap()
-            .for_source("carddav");
+            .for_source("carddav")
+            .unwrap();
         if let Some(account) = account {
             store = store.for_account(account);
         }
@@ -1318,6 +1319,7 @@ mod tests {
         io_pimdir::client::PimdirStore::open(dir.path())
             .unwrap()
             .for_source("carddav")
+            .unwrap()
             .drain()
             .unwrap();
     }
@@ -2089,7 +2091,8 @@ mod tests {
 
         let mut store = io_pimdir::client::PimdirStore::open(dir.path())
             .unwrap()
-            .for_source("carddav");
+            .for_source("carddav")
+            .unwrap();
         let hash = store.hash(body);
         let derived = contact::derive(body);
         store
@@ -2150,7 +2153,8 @@ mod tests {
 
         let mut owner = io_pimdir::client::PimdirStore::open(dir.path())
             .unwrap()
-            .for_source("carddav");
+            .for_source("carddav")
+            .unwrap();
         let report = owner.drain().unwrap();
         assert_eq!((report.applied, report.parked), (0, 1), "{report:?}");
         assert_eq!(
@@ -2182,7 +2186,8 @@ mod tests {
 
         let mut owner = io_pimdir::client::PimdirStore::open(dir.path())
             .unwrap()
-            .for_source("carddav");
+            .for_source("carddav")
+            .unwrap();
         let report = owner.drain().unwrap();
         assert_eq!((report.applied, report.parked), (0, 1), "{report:?}");
         assert_eq!(backend.get_card("book", &id).unwrap().contents, renamed);
@@ -2216,7 +2221,8 @@ mod tests {
         let pull = |source: &str, handle: &str, body: &[u8], revision: &str| {
             let mut store = io_pimdir::client::PimdirStore::open(dir.path())
                 .unwrap()
-                .for_source(source);
+                .for_source(source)
+                .unwrap();
             let hash = store.hash(body);
             let derived = contact::derive(body);
             store
@@ -2275,7 +2281,8 @@ mod tests {
 
         let mut owner = io_pimdir::client::PimdirStore::open(dir.path())
             .unwrap()
-            .for_source("carddav");
+            .for_source("carddav")
+            .unwrap();
         let report = owner.drain().unwrap();
         assert_eq!((report.applied, report.parked), (0, 2), "{report:?}");
         assert_eq!(
@@ -2324,7 +2331,8 @@ mod tests {
         }
         let mut owner = io_pimdir::client::PimdirStore::open(dir.path())
             .unwrap()
-            .for_source("carddav");
+            .for_source("carddav")
+            .unwrap();
         assert_eq!(owner.drain().unwrap().parked, 2);
         drop(owner);
 
@@ -2389,6 +2397,7 @@ mod tests {
         io_pimdir::client::PimdirStore::open(dir.path())
             .unwrap()
             .for_source("carddav")
+            .unwrap()
             .write(vec![PimdirWriteOp::RefusePlacement {
                 collection: PimdirCollectionId::from("book"),
                 handle: PimdirHandle("jane.vcf".into()),
@@ -2567,8 +2576,16 @@ mod tests {
         std::fs::write(&path, db).unwrap();
     }
 
-    /// A store of another format version, here a draft-11 one an earlier
-    /// sync engine wrote, carries `store-version` in io-pimdir's one wording,
+    /// Marks the closed store at `root` with the format version `marker`,
+    /// as the sync engine that wrote it would have.
+    fn remark(root: &std::path::Path, marker: &str) {
+        let db = rusqlite::Connection::open(root.join("pimdir.db")).unwrap();
+        db.execute("UPDATE store_meta SET format_version = ?1", [marker])
+            .unwrap();
+    }
+
+    /// A store of another format version, here a draft-11 one a 0.x sync
+    /// engine wrote, carries `store-version` in io-pimdir's one wording,
     /// cardamum named: drained by its engine, then set aside, never removed.
     #[test]
     fn a_store_of_an_earlier_version_is_drained_then_set_aside() {
@@ -2576,7 +2593,7 @@ mod tests {
 
         let (dir, backend) = store();
         drop(backend);
-        rewrite(dir.path(), FORMAT_VERSION, "storage-draft-11");
+        remark(dir.path(), "storage-draft-11");
 
         let err = match PimdirBackend::new(PimdirConfig {
             root: dir.path().to_path_buf(),
@@ -2603,7 +2620,7 @@ mod tests {
 
         let (dir, backend) = store();
         drop(backend);
-        rewrite(dir.path(), FORMAT_VERSION, "storage-draft-99");
+        remark(dir.path(), "storage-v2");
 
         let err = match PimdirBackend::new(PimdirConfig {
             root: dir.path().to_path_buf(),

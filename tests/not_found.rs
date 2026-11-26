@@ -129,7 +129,10 @@ fn pimdir(home: &Path) -> String {
     let root = home.join("store");
     fs::create_dir(&root).unwrap();
 
-    let mut store = PimdirStore::open(&root).unwrap().for_source("carddav");
+    let mut store = PimdirStore::open(&root)
+        .unwrap()
+        .for_source("carddav")
+        .unwrap();
     store.ensure_collection("book", "text/vcard").unwrap();
     store
         .write(vec![PimdirWriteOp::SetCheckpoint {

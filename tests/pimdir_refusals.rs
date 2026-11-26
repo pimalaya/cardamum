@@ -34,7 +34,10 @@ static STORE: Mutex<()> = Mutex::new(());
 /// under `account` when one is named.
 fn synced(root: &Path, account: Option<&str>, book: &str) {
     let _held = STORE.lock().unwrap_or_else(|err| err.into_inner());
-    let mut store = PimdirStore::open(root).unwrap().for_source("carddav");
+    let mut store = PimdirStore::open(root)
+        .unwrap()
+        .for_source("carddav")
+        .unwrap();
     if let Some(account) = account {
         store = store.for_account(account);
     }

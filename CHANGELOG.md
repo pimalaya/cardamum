@@ -78,7 +78,7 @@ The configuration wizard and the DNS discovery of a bare domain are gone, and a 
 
 ### Changed
 
-- **BREAKING**: Changed the pimdir backend to read stores of pimdir storage-draft-17 and search indexes of search-draft-17 alone.
+- **BREAKING**: Changed the pimdir backend to read stores of pimdir storage-v1 and search indexes of search-v1 alone, through io-pimdir 1.0.0.
 
   A store an earlier neverest wrote is refused coded `store-version`, never migrated: drain its queue with that neverest, move it aside and let a current neverest sync a new one.
 

@@ -8,10 +8,11 @@ use std::fmt;
 use anyhow::Result;
 use clap::{Parser, ValueEnum};
 use io_pimdir::{
-    client::search::{
-        PimdirSearchClock, PimdirSearchCursor, PimdirSearchOptions, PimdirSearchSort,
+    client::search::{PimdirSearchClock, PimdirSearchOptions},
+    search::{
+        plan::{PimdirSearchCursor, PimdirSearchSort},
+        query::PimdirQuery,
     },
-    search::query::PimdirQuery,
 };
 use pimalaya_cli::{
     clap::args::PageTokenArg,
